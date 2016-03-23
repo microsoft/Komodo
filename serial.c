@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include "serial.h"
 
 #define UART0_BASE      0x3f201000
@@ -30,9 +31,6 @@
  * not the default. */
 #define PI2_UART_CLOCK  16000000 // 16MHz
 #define CONFIG_BAUDRATE 912600 // (again, just matching Windows)
-
-// XXX: stdint.h
-typedef unsigned int uint32_t;
 
 static void write_reg_u32(void *addr, uint32_t val)
 {

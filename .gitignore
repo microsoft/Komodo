@@ -1,4 +1,5 @@
 *.o
+*.a
 kernel7.elf
 kernel7.img
 
