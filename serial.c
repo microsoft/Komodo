@@ -89,13 +89,3 @@ void serial_putc(char c)
     // send character
     uart0_reg_write(PL011_DR, c);
 }
-
-void serial_puts(const char *s)
-{
-    for (char c = *s; c != '\0'; c = *++s) {
-        if (c == '\n') {
-            serial_putc('\r');
-        }
-        serial_putc(c);
-    }
-}

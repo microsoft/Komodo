@@ -2,6 +2,7 @@
 #include <stdio.h>
 
 #include "serial.h"
+#include "console.h"
 
 #define ARM_SCR_C       0x4 /* cache enable */
 #define ARM_SCR_I       0x1000 /* icache enable */
@@ -31,18 +32,16 @@ static void cpu_init(void)
 static void secure_init(void)
 {
     uint32_t val;
-    char buf[128];
 
     __asm("mrc p15, 0, %0, c1, c1, 0" : "=r" (val));
-    sprintf(buf, "Initial SCR: 0x%lx\n", val);
-    serial_puts(buf);
+    console_printf("Initial SCR: 0x%lx\n", val);
 }
 
 void __attribute__((noreturn)) main(void)
 {
     cpu_init();
     serial_init();
-    serial_puts("Hello world\n");
+    console_puts("Hello world\n");
 
     secure_init();
     while (1) {}

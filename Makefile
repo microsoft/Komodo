@@ -10,19 +10,25 @@ CFLAGS = -Wall -Werror -ffreestanding -march=armv7-a -std=c99 -g -I pdclib/inclu
 LDFLAGS = -nostdlib
 
 KERNELBASE=0
-
 INSTALLDIR ?= /cygdrive/f
+OBJS=entry.o main.o serial.o console.o
 
 kevlar.img: kevlar.elf
 	$(OBJCOPY) $< -O binary $@
 
-kevlar.elf: entry.o main.o serial.o pdclib.a
+kevlar.elf: $(OBJS) pdclib.a
 	$(LD) $(LDFLAGS) -o $@ -Ttext=$(KERNELBASE) $^ $(LIBGCC)
+
+-include $(OBJS:.o=.d)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) -MM $(CFLAGS) -c $< -o $*.d
 
 .PHONY: clean install qemu qemugdb
 
 clean::
-	$(RM) kevlar.elf kevlar.img *.o *.a
+	$(RM) kevlar.elf kevlar.img *.o *.d *.a
 
 install: kevlar.img config.txt
 	cp -uv $^ $(INSTALLDIR)

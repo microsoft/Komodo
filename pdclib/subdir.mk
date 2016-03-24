@@ -227,9 +227,11 @@ PDCLIB_OBJS = \
 #    pdclib/platform/_PDCLIB/_PDCLIB_Exit.o \
 #    pdclib/platform/_PDCLIB/_PDCLIB_open.o
 
+-include $(PDCLIB_OBJS:.o=.d)
+
 pdclib.a: $(PDCLIB_OBJS)
 	$(AR) rcs $@ $^
 
 clean::
-	$(RM) $(PDCLIB_OBJS)
+	$(RM) $(PDCLIB_OBJS) $(PDCLIB_OBJS:.o=.d)
 	$(RM) pdclib.a
