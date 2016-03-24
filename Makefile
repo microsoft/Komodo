@@ -9,21 +9,28 @@ LIBGCC = $(shell $(CC) -print-libgcc-file-name)
 CFLAGS = -Wall -Werror -ffreestanding -march=armv7-a -std=c99 -g -I pdclib/include -D_PDCLIB_EXTENSIONS
 LDFLAGS = -nostdlib
 
-KERNELBASE=0x8000
+KERNELBASE=0
 
-kernel7.img: kernel7.elf
+INSTALLDIR ?= /cygdrive/f
+
+kevlar.img: kevlar.elf
 	$(OBJCOPY) $< -O binary $@
 
-kernel7.elf: entry.o main.o serial.o pdclib.a
+kevlar.elf: entry.o main.o serial.o pdclib.a
 	$(LD) $(LDFLAGS) -o $@ -Ttext=$(KERNELBASE) $^ $(LIBGCC)
 
-clean::
-	$(RM) kernel7.elf kernel7.img *.o
+.PHONY: clean install qemu qemugdb
 
-qemu: kernel7.img
+clean::
+	$(RM) kevlar.elf kevlar.img *.o *.a
+
+install: kevlar.img config.txt
+	cp -uv $^ $(INSTALLDIR)
+
+qemu: kevlar.img
 	qemu-system-arm -M raspi2 -nographic -bios $< -gdb tcp:127.0.0.1:1234 -S
 
-qemugdb: kernel7.elf
+qemugdb: kevlar.elf
 	$(PREFIX)gdb --symbols=$< -ex 'target remote :1234'
 
 include pdclib/subdir.mk
