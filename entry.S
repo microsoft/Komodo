@@ -27,8 +27,9 @@ reset: /* Start of day reset entry */
 	cmp     r0, #0                  // if zero, we're the primary
 	beq     2f
 
-        /* spin if core != 0 */
-1:      yield
+        /* block forever if core != 0 */
+1:      wfi
+        yield
         b       1b
 
 2:      ldr     sp, =stack_top
