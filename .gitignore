@@ -1,5 +1,5 @@
 *.o
 *.a
 *.d
-kevlar.elf
-kevlar.img
+piloader/piloader.elf
+piimage/kevlar.img
