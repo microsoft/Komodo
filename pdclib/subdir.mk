@@ -234,6 +234,4 @@ $(PDCLIB_OBJS): CFLAGS_LOCAL := -I $(dir)/include -D_PDCLIB_EXTENSIONS
 $(dir)/pdclib.a: $(PDCLIB_OBJS)
 	$(AR) rcs $@ $^
 
-clean::
-	$(RM) $(PDCLIB_OBJS) $(PDCLIB_OBJS:.o=.d)
-	$(RM) $(dir)/pdclib.a
+CLEAN := $(CLEAN) $(PDCLIB_OBJS) $(PDCLIB_OBJS:.o=.d) $(dir)/pdclib.a

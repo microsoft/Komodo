@@ -25,7 +25,12 @@ dir := piloader
 include $(dir)/subdir.mk
 dir := piimage
 include $(dir)/subdir.mk
+dir := monitor
+include $(dir)/subdir.mk
 
 %.o: %.c
 	$(CC) $(CFLAGS_ALL) $(CFLAGS_LOCAL) -c $< -o $@
 	$(CC) -MM $(CFLAGS_ALL) $(CFLAGS_LOCAL) -c $< -o $*.d
+
+clean:
+	$(RM) $(CLEAN)

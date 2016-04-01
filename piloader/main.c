@@ -4,14 +4,6 @@
 #include "serial.h"
 #include "console.h"
 
-#define ARM_SCTLR_C     0x4 /* cache enable */
-#define ARM_SCTLR_I     0x1000 /* icache enable */
-#define ARM_ACR_SMP     0x40 /* SMP */
-#define ARM_SCR_AW      0x20
-#define ARM_SCR_FW      0x10
-#define ARM_SCR_NS      0x01
-#define RASPI_TIMER_FREQ 19200000
-
 typedef union {
     struct {
         uint32_t type:2; // 0x0
@@ -79,6 +71,7 @@ typedef union {
     uint32_t raw;
 } armpte_short_l2;
 
+#if 0
 static armpte_short_l1 *pagetable_l1[4096] __attribute__((aligned(4096)));
 static armpte_short_l2 *pagetable_l2[256] __attribute__((aligned(1024)));
 
@@ -121,6 +114,7 @@ static void paging_init(void)
     /* TODO: init control regs */
     /* TODO: map UART */
 }
+#endif
 
 static void secure_init(void)
 {
@@ -135,7 +129,7 @@ void __attribute__((noreturn)) main(void)
     serial_init();
     console_puts("Hello world\n");
 
-    paging_init();
+    //paging_init();
     secure_init();
     while (1) {}
 }

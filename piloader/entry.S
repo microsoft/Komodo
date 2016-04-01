@@ -12,10 +12,11 @@
 
 #define RASPI_TIMER_FREQ 19200000
 
-        .section .text
+        .section entry, "x"
         .global _start
 
         /* Vector table */
+        .align 5
 _start:
         b reset
 undef:
@@ -33,7 +34,7 @@ irq:
 fiq:
         b fiq
 
-
+        .section .text
 reset: /* Start of day reset entry (all cores) */
         /* Enable dcache and icache bits in system control register */
         mrc     p15, 0, r0, c1, c0, 0
@@ -58,7 +59,7 @@ reset: /* Start of day reset entry (all cores) */
         mcr     p15, 0, r0, c1, c1, 2
 
         /* Setup MVBAR */
-        adr     r0, _start
+        ldr     r0, =_start
         mcr     p15, 0, r0, c12, c0, 1
 
         /* call into monitor mode (secure_monitor handler) */

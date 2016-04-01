@@ -1,12 +1,19 @@
 INSTALLDIR ?= /cygdrive/f
-#GUEST_KERNEL ?= /cygdrive/e/raspi/kernel.img
+GUEST_KERNEL ?= e:/raspi/raspbian-boot/kernel7.img
 
-# TODO: append guest kernel and kevlar image using linker script
-$(dir)/kevlar.img: piloader/piloader.elf
+PIIMAGE_LINKER_SCRIPT := $(dir)/kevlar.lds
+PIIMAGE_ELF_INPUTS := piloader/piloader.elf $(dir)/kernelblob.elf monitor/monitor.elf
+
+$(dir)/kernelblob.elf: $(GUEST_KERNEL)
+	$(OBJCOPY) -I binary -O elf32-littlearm -B arm $< $@
+
+$(dir)/kevlar.elf: $(PIIMAGE_ELF_INPUTS) $(PIIMAGE_LINKER_SCRIPT)
+	$(LD) $(LDFLAGS_ALL) -T $(PIIMAGE_LINKER_SCRIPT) -o $@ $(PIIMAGE_ELF_INPUTS)
+
+$(dir)/kevlar.img: $(dir)/kevlar.elf
 	$(OBJCOPY) $< -O binary $@
 
-clean::
-	$(RM) $(dir)/kevlar.img
+CLEAN := $(CLEAN) $(dir)/kevlar.elf $(dir)/kevlar.img
 
 .PHONY: install
 
