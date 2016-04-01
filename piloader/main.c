@@ -79,8 +79,8 @@ typedef union {
     uint32_t raw;
 } armpte_short_l2;
 
-static armpte_short_l1 pagetable_l1[4096] __attribute__((aligned(4096)));
-static armpte_short_l2 pagetable_l2[256] __attribute__((aligned(1024)));
+static armpte_short_l1 *pagetable_l1[4096] __attribute__((aligned(4096)));
+static armpte_short_l2 *pagetable_l2[256] __attribute__((aligned(1024)));
 
 static void paging_init(void)
 {
@@ -122,25 +122,6 @@ static void paging_init(void)
     /* TODO: map UART */
 }
 
-static void cpu_init(void)
-{
-    uint32_t reg;
-
-    /* Enable dcache and icache bits in system control register */
-    __asm volatile("mrc p15, 0, %0, c1, c0, 0" : "=r" (reg));
-    reg |= ARM_SCTLR_C | ARM_SCTLR_I;
-    __asm volatile("mcr p15, 0, %0, c1, c0, 0" : : "r" (reg));
-
-    /* Enable cache coherence (SMP bit) in auxiliary control register */
-    __asm volatile("mrc p15, 0, %0, c1, c0, 1" : "=r" (reg));
-    reg |= ARM_ACR_SMP;
-    __asm volatile("mcr p15, 0, %0, c1, c0, 1" : : "r" (reg));
-
-    /* Set timer frequency */
-    reg = RASPI_TIMER_FREQ;
-    __asm volatile("mcr p15, 0, %0, c14, c0, 0" : : "r" (reg));
-}
-
 static void secure_init(void)
 {
     uint32_t val;
@@ -151,7 +132,6 @@ static void secure_init(void)
 
 void __attribute__((noreturn)) main(void)
 {
-    cpu_init();
     serial_init();
     console_puts("Hello world\n");
 

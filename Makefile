@@ -16,7 +16,7 @@ all: piimage/kevlar.img
 qemu: piimage/kevlar.img
 	qemu-system-arm -M raspi2 -nographic -bios $< -gdb tcp:127.0.0.1:1234 -S
 
-qemugdb: piloader/kevlar.elf
+qemugdb: piloader/piloader.elf
 	$(PREFIX)gdb --symbols=$< -ex 'target remote :1234'
 
 dir := pdclib
