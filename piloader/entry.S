@@ -15,30 +15,21 @@
 #define RASPI_TIMER_FREQ 19200000
 #define STACK_SIZE 0x2000
 
-        .section entry, "ax"
-        .global _start
-
         /* Vector table */
+        .section entry, "ax"
         .align 5
-_start:
-        b reset
-undef:
-        b undef
-svcsmc:
-        movs    pc,  lr /* return immediately */
-prefetch_abort:
-        b prefetch_abort
-data_abort:
-        b data_abort
-reserved:
-        b reserved
-irq:
-        b irq
-fiq:
-        b fiq
+        b       _start  /* reset */
+1:      b       1b      /* undef */
+        movs    pc,  lr /* SVC/SMC: return immediately */
+1:      b       1b      /* prefetch_abort */
+1:      b       1b      /* data_abort */
+1:      b       1b      /* reserved */
+1:      b       1b      /* irq */
+1:      b       1b      /* fiq */
 
         .section .text
-reset: /* Start of day reset entry (all cores) */
+        .global _start
+_start: /* Start of day reset entry (all cores) */
         /* Enable dcache and icache bits in system control register */
         mrc     p15, 0, r0, c1, c0, 0
         orr     r0, r0, #ARM_SCTLR_C

@@ -3,6 +3,7 @@
 
 #include "serial.h"
 #include "console.h"
+#include "atags.h"
 
 typedef union {
     struct {
@@ -130,12 +131,7 @@ void __attribute__((noreturn)) main(void)
     serial_putc('H');
     console_puts("ello world\n");
 
-    for (uint32_t *t = (uint32_t *)0x100; (uintptr_t)t < 0x400; t += t[0]) {
-        console_printf("tag type %lx at %p size %lx\n", t[1], t, t[0]);
-        if (t[1] == 0) {
-            break;
-        }
-    }
+    atags_dump((void *)0x100);
 
     //paging_init();
     secure_init();
