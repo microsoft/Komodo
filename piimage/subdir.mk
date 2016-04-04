@@ -1,4 +1,4 @@
-INSTALLDIR ?= /cygdrive/f
+INSTALLDIR ?= g:/
 GUEST_KERNEL ?= e:/raspi/raspbian-boot/kernel7.img
 
 PIIMAGE_LINKER_SCRIPT := $(dir)/kevlar.lds

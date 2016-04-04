@@ -2,4 +2,4 @@ init_uart_clock=16000000
 kernel=kevlar.img
 kernel_address=0
 kernel_old=1
-disable_commandline_tags=1
+#disable_commandline_tags=1

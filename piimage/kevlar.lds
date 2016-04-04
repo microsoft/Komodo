@@ -1,6 +1,5 @@
 OUTPUT_FORMAT("elf32-littlearm")
 OUTPUT_ARCH("arm")
-
 ENTRY(_start)
 
 SECTIONS {
@@ -8,12 +7,13 @@ SECTIONS {
         loader.entry 0 :
         {
                 */piloader.elf(entry);
+                ASSERT ((. < 0x100), "Error: entry is too big to fit before ATAGs");
         }
 
         atags_start = 0x100;
         
         /* now skip forward, hopefully leaving enough space for atags */
-        . = 0x300;
+        . = 0x400;
         loader.text . :
         {
                 */piloader.elf(.text);
@@ -65,4 +65,10 @@ SECTIONS {
                 */monitor.elf(.bss);
         }
         monitor_end = .;
+
+        /DISCARD/ :
+        {
+                *(.ARM.exidx);
+                *(.ARM.attributes);
+        }
 }

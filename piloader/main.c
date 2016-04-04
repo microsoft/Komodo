@@ -127,7 +127,15 @@ static void secure_init(void)
 void __attribute__((noreturn)) main(void)
 {
     serial_init();
-    console_puts("Hello world\n");
+    serial_putc('H');
+    console_puts("ello world\n");
+
+    for (uint32_t *t = (uint32_t *)0x100; (uintptr_t)t < 0x400; t += t[0]) {
+        console_printf("tag type %lx at %p size %lx\n", t[1], t, t[0]);
+        if (t[1] == 0) {
+            break;
+        }
+    }
 
     //paging_init();
     secure_init();
