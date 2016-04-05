@@ -35,15 +35,16 @@ void atags_dump(void *atags_ptr)
 
 uintptr_t atags_reserve_physmem(void *atags_ptr, size_t bytes)
 {
-    for (struct atag_header *t = atags_ptr; ; t = (void *)((uintptr_t)t + t->size)) {
+    for (struct atag_header *t = atags_ptr; ; t = (void *)((uint32_t *)t + t->size)) {
         if (t->tag == ATAG_NONE) {
             console_printf("Fatal: ATAG_MEM not found!\n");
+            // TODO: on qemu, we should just fake it out
             while (1) {} // TODO: panic
         } else if (t->tag == ATAG_MEM) {
             struct atag_mem *mem = (void *)&t[1];
             uintptr_t result = mem->start + mem->size - bytes;
             mem->size -= bytes;
-            console_printf("reserved %z bytes starting at %lx\n", result);
+            console_printf("reserved %lx bytes starting at %lx\n", bytes, result);
             return result;
         }
     }

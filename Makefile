@@ -6,7 +6,7 @@ AR = $(PREFIX)ar
 OBJCOPY = $(PREFIX)objcopy
 LIBGCC = $(shell $(CC) -print-libgcc-file-name)
 
-CFLAGS_ALL = -Wall -Werror -ffreestanding -march=armv7-a -std=c99 -g
+CFLAGS_ALL = -Wall -Werror -ffreestanding -march=armv7-a -std=c99 -g -O -I include
 LDFLAGS_ALL = -nostdlib
 
 all: piimage/kevlar.img

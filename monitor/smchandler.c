@@ -1,3 +1,3 @@
-void smc_handler(void)
+void smchandler(void)
 {
 }

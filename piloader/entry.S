@@ -13,14 +13,17 @@
 #define ARM_SCR_NS      0x01 // non-secure bit
 
 #define RASPI_TIMER_FREQ 19200000
-#define STACK_SIZE 0x2000
+
+#define NCORES          4
+#define STACK_SHIFT     12 // 4kB stack per-core
+#define STACK_SIZE      (1<<STACK_SHIFT)
 
         /* Vector table */
         .section entry, "ax"
         .align 5
-        b       _start  /* reset */
+        b       _loader_start /* reset */
 1:      b       1b      /* undef */
-        movs    pc,  lr /* SVC/SMC: return immediately */
+1:      b       1b      /* svc */
 1:      b       1b      /* prefetch_abort */
 1:      b       1b      /* data_abort */
 1:      b       1b      /* reserved */
@@ -28,14 +31,12 @@
 1:      b       1b      /* fiq */
 
         .section .text
-        .global _start
-_start: /* Start of day reset entry (all cores) */
+        .global _loader_start
+_loader_start: /* Start of day reset entry (all cores) */
         /* Enable dcache and icache bits in system control register */
         mrc     p15, 0, r0, c1, c0, 0
         orr     r0, r0, #ARM_SCTLR_C
         orr     r0, r0, #ARM_SCTLR_I
-        bic     r0, r0, #ARM_SCTLR_V
-        bic     r0, r0, #ARM_SCTLR_VE
         mcr     p15, 0, r0, c1, c0, 0
 
         /* Enable cache coherence (SMP bit) in auxiliary control register */
@@ -54,11 +55,6 @@ _start: /* Start of day reset entry (all cores) */
         ldr     r0, =0x63fff
         mcr     p15, 0, r0, c1, c1, 2
 
-        /* Setup MVBAR and (secure) VBAR */
-        ldr     r0, =_start
-        mcr     p15, 0, r0, c12, c0, 0  // VBAR
-        mcr     p15, 0, r0, c12, c0, 1  // MVBAR
-
         /* retrieve core ID */
 	mrc     p15, 0, r0, c0, c0, 5   // get core ID
 	ubfx    r0, r0, #0, #2          // extract LSB
@@ -72,27 +68,25 @@ _start: /* Start of day reset entry (all cores) */
         /* set SCR bits AW, FW */
         orr     r1, r1, #(ARM_SCR_AW|ARM_SCR_FW)
 
+#if 0
         /* set SCR bit NS (non-secure) on non-primary cores only */
 	cmp     r0, #0                  // if zero, we're the primary core
 	beq     1f
         orr     r1, r1, #ARM_SCR_NS
+#endif
 
 1:      /* write SCR */
         mcr     p15, 0, r1, c1, c1, 0
 
-        /* park secondary cores, waiting for a jump address in mailbox 3 */
+#if 0   /* park secondary cores */
 	cmp     r0, #0                  // if zero, we're the primary core
-	beq     2f
-        ldr	r5, =0x400000CC	        // mailbox 3 read/clear base
-1:      yield
-        ldr	r3, [r5, r0, lsl #4]    // read mailbox for our core
-	cmp	r3, #0                  // spin while zero
-	beq	1b
-        str	r3, [r5, r0, lsl #4]    // clear mailbox
-        bx      r3                      // jump
+	bne     park_secondary_cores
+#endif
 
-        /* primary core enters C loader */
-2:      ldr     sp, =loader_stack + STACK_SIZE
+        /* enter C loader */
+        add     r0, #1
+        ldr     sp, =loader_stacks
+        add     sp, r0, lsl #STACK_SHIFT
         b       main
 
 #if 0 /* blink LED -- handy to debug early boot issues */
@@ -118,6 +112,21 @@ blinky: ldr     r0, =0x3F200000 // gpio base
         b       1b
 #endif
 
+        .global park_secondary_cores
+park_secondary_cores: /* park caller, waiting for a jump address in mailbox 3 */
+        /* retrieve core ID */
+	mrc     p15, 0, r0, c0, c0, 5   // get core ID
+	ubfx    r0, r0, #0, #2          // extract LSB
+
+        ldr	r1, =0x400000CC	        // mailbox 3 read/clear base
+1:      yield
+        ldr	r3, [r1, r0, lsl #4]    // read mailbox for our core
+	cmp	r3, #0                  // spin while zero
+	beq	1b
+        str	r3, [r1, r0, lsl #4]    // clear mailbox
+        bx      r3                      // jump
+
+
         .section .bss
         .align 3 // 8-byte alignment
-        .lcomm loader_stack, STACK_SIZE
+        .lcomm loader_stacks, (STACK_SIZE * NCORES)

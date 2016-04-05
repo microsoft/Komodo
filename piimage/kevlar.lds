@@ -1,6 +1,6 @@
 OUTPUT_FORMAT("elf32-littlearm")
 OUTPUT_ARCH("arm")
-ENTRY(_start)
+ENTRY(_loader_start)
 
 SECTIONS {
         /* loader entry point (and vector table) must start at address 0 */
@@ -10,61 +10,49 @@ SECTIONS {
                 ASSERT ((. < 0x100), "Error: entry is too big to fit before ATAGs");
         }
 
-        atags_start = 0x100;
-        
+        /* atags_start = 0x100; */
+
         /* now skip forward, hopefully leaving enough space for atags */
         . = 0x400;
-        loader.text . :
+        loader . :
         {
                 */piloader.elf(.text);
-        }
-
-        loader.rodata . :
-        {
-                */piloader.elf(.rodata);
-        }
-
-        loader.data . :
-        {
+                */piloader.elf(.rodata*);
                 */piloader.elf(.data);
-        }
-
-        loader.bss . :
-        {
                 */piloader.elf(.bss);
+                ASSERT((. < 0x8000), "Error: loader is too big to fit below kernel");
         }
 
         /* place the unmodified kernel image at 0x8000 */
-        kernel_blob :
+        kernel_blob 0x8000 :
         {
-                ASSERT ((. < 0x8000), "Error: loader is too big to fit below kernel");
-                . = 0x8000;
                 */kernelblob.elf(*);
         }
 
         /* monitor image is immediately after the kernel, aligned to 4k */
         . = ALIGN(4k);
-        monitor_start = .;
-        monitor.text . :
+        monitor_image_start = .;
+        monitor.text :
         {
+                */monitor.elf(vectors);
                 */monitor.elf(.text);
+                */monitor.elf(.rodata*);
         }
 
-        monitor.rodata . :
-        {
-                */monitor.elf(.rodata);
-        }
-
+        . = ALIGN(4k);
+        monitor_image_data = .;
         monitor.data . :
         {
                 */monitor.elf(.data);
         }
 
+        /* TODO: figure out how to avoid including all the zero-bytes
+         * of the monitor BSS in the loaded image */
         monitor.bss . :
         {
                 */monitor.elf(.bss);
         }
-        monitor_end = .;
+        monitor_image_end = .;
 
         /DISCARD/ :
         {
