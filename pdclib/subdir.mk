@@ -227,7 +227,7 @@ PDCLIB_OBJS = \
 #    $(dir)/platform/_PDCLIB/_PDCLIB_Exit.o \
 #    $(dir)/platform/_PDCLIB/_PDCLIB_open.o
 
-$(PDCLIB_OBJS): CFLAGS_LOCAL := -I $(dir)/include -D_PDCLIB_EXTENSIONS
+$(PDCLIB_OBJS): CFLAGS_LOCAL := -I $(dir)/include -D_PDCLIB_EXTENSIONS -D_PDCLIB_SAVE_SPACE
 
 -include $(PDCLIB_OBJS:.o=.d)
 

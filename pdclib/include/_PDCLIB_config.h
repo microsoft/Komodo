@@ -314,7 +314,7 @@ typedef char * _PDCLIB_va_list;
 /* I/O ---------------------------------------------------------------------- */
 
 /* The default size for file buffers. Must be at least 256. */
-#define _PDCLIB_BUFSIZ 1024
+#define _PDCLIB_BUFSIZ 256
 
 /* The minimum number of files the implementation can open simultaneously. Must
    be at least 8. Depends largely on how the bookkeeping is done by fopen() /

@@ -20,6 +20,9 @@
 
 extern const _PDCLIB_fileops_t _PDCLIB_fileops;
 
+#ifdef _PDCLIB_SAVE_SPACE
+FILE *stdin, *stdout, *stderr, *_PDCLIB_filelist;
+#else
 /* In a POSIX system, stdin / stdout / stderr are equivalent to the (int) file
    descriptors 0, 1, and 2 respectively.
 */
@@ -75,6 +78,7 @@ FILE *stdout = &_PDCLIB_sout;
 FILE *stderr = &_PDCLIB_serr;
 
 FILE *_PDCLIB_filelist = &_PDCLIB_sin;
+#endif
 
 /* "C" locale - defaulting to ASCII-7.
    1 kByte (+ 4 byte) of <ctype.h> data.
@@ -371,6 +375,7 @@ struct _PDCLIB_locale _PDCLIB_global_locale = {
     },
     ._CType = &global_ctype[1],
     ._ErrnoStr = {
+#ifndef _PDCLIB_SAVE_SPACE
         "Success",
         "EPERM (operation not permitted)",
         "ENOENT (no such file or directory)",
@@ -503,6 +508,7 @@ struct _PDCLIB_locale _PDCLIB_global_locale = {
         "Unknown error",
         "EOWNERDEAD (owner dead)",
         "ENOTRECOVERABLE (state not recoverable)",
+#endif
     },
 };
 
