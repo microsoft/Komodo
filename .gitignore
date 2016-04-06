@@ -3,3 +3,4 @@
 *.d
 *.elf
 *.img
+config.mk

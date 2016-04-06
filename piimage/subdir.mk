@@ -1,6 +1,3 @@
-INSTALLDIR ?= g:/
-GUEST_KERNEL ?= e:/raspi/raspbian-boot/kernel7.img
-
 PIIMAGE_LINKER_SCRIPT := $(dir)/kevlar.lds
 PIIMAGE_ELF_INPUTS := piloader/piloader.elf $(dir)/kernelblob.elf monitor/monitor.elf
 

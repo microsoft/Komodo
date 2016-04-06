@@ -1,9 +1,15 @@
-PREFIX ?= arm-none-eabi-
+# config.mk can override any of the config variables below
+-include config.mk
+PREFIX ?= arm-eabi-
+INSTALLDIR ?= .
+GUEST_KERNEL ?= e:/raspi/raspbian-boot/kernel7.img
+
 AS = $(PREFIX)as
 CC = $(PREFIX)gcc
 LD = $(PREFIX)ld
 AR = $(PREFIX)ar
 OBJCOPY = $(PREFIX)objcopy
+
 LIBGCC = $(shell $(CC) -print-libgcc-file-name)
 
 CFLAGS_ALL = -Wall -Werror -ffreestanding -march=armv7-a -std=c99 -g -O -I include
