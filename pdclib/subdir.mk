@@ -37,8 +37,6 @@ PDCLIB_OBJS = \
     $(dir)/functions/stdio/fseek.o \
     $(dir)/functions/stdio/fsetpos.o \
     $(dir)/functions/stdio/ftell.o \
-    $(dir)/functions/stdio/ftrylockfile.o \
-    $(dir)/functions/stdio/funlockfile.o \
     $(dir)/functions/stdio/fwrite.o \
     $(dir)/functions/stdio/getc.o \
     $(dir)/functions/stdio/getchar.o \
@@ -187,6 +185,9 @@ PDCLIB_OBJS = \
     $(dir)/functions/_PDCLIB/_PDCLIB_utf8.o \
     $(dir)/platform/_PDCLIB/stdinit.o \
     $(dir)/platform/_PDCLIB/_PDCLIB_fileops.o \
+    $(dir)/platform/nothread/mtx_destroy.o \
+    $(dir)/platform/nothread/mtx_lock.o \
+    $(dir)/platform/_PDCLIB/_PDCLIB_Exit.o \
 #    $(dir)/functions/stdlib/qsort.o \
 #    $(dir)/functions/stdlib/rand.o \
 #    $(dir)/functions/stdlib/srand.o \
@@ -198,6 +199,8 @@ PDCLIB_OBJS = \
 #    $(dir)/functions/locale/_PDCLIB_unicodedata.o \
 #    $(dir)/functions/signal/raise.o \
 #    $(dir)/functions/signal/signal.o \
+#    $(dir)/functions/stdio/ftrylockfile.o \
+#    $(dir)/functions/stdio/funlockfile.o \
 #    $(dir)/functions/time/clock.o \
 #    $(dir)/functions/time/time.o \
 #    $(dir)/functions/time/timespec_get.o \
@@ -206,9 +209,7 @@ PDCLIB_OBJS = \
 #    $(dir)/platform/nothread/cnd_init.o \
 #    $(dir)/platform/nothread/cnd_signal.o \
 #    $(dir)/platform/nothread/cnd_wait.o \
-#    $(dir)/platform/nothread/mtx_destroy.o \
 #    $(dir)/platform/nothread/mtx_init.o \
-#    $(dir)/platform/nothread/mtx_lock.o \
 #    $(dir)/platform/nothread/mtx_timedlock.o \
 #    $(dir)/platform/nothread/mtx_trylock.o \
 #    $(dir)/platform/nothread/mtx_unlock.o \
@@ -224,7 +225,6 @@ PDCLIB_OBJS = \
 #    $(dir)/platform/_PDCLIB/allocpages.o \
 #    $(dir)/platform/_PDCLIB/freepages.o \
 #    $(dir)/platform/_PDCLIB/rename.o \
-#    $(dir)/platform/_PDCLIB/_PDCLIB_Exit.o \
 #    $(dir)/platform/_PDCLIB/_PDCLIB_open.o
 
 $(PDCLIB_OBJS): CFLAGS_LOCAL := -I $(dir)/include -D_PDCLIB_EXTENSIONS -D_PDCLIB_SAVE_SPACE

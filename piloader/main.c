@@ -1,7 +1,18 @@
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+#define assert(expression) \
+    do { if(!(expression)) { \
+        console_printf("Assertion failed: " _PDCLIB_symbol2string(expression)\
+                         ", function ", __func__,                         \
+                         ", file " __FILE__ \
+                         ", line " _PDCLIB_symbol2string( __LINE__ ) \
+                         "." _PDCLIB_endl ); \
+        while(1);                          \
+      } \
+    } while(0)
 
 #include "serial.h"
 #include "console.h"
@@ -11,8 +22,13 @@
 
 #define ROUND_UP(N, S) ((((N) + (S) - 1) / (S)) * (S))
 
+#define ARM_SCTLR_M     0x1 /* MMU enable */
+#define ARM_SCTLR_V     0x2000 /* vectors base (high vs VBAR) */
+#define ARM_SCTLR_VE    0x1000000 /* interrupt vectors enable */
+
+
 // defined in kevlar linker script
-extern char monitor_image_start, monitor_image_data, monitor_image_end;
+extern char monitor_image_start, monitor_image_data, monitor_image_end, _monitor_start;
 
 static inline uint8_t mycoreid(void)
 {
@@ -21,12 +37,44 @@ static inline uint8_t mycoreid(void)
     return val & 0xff;
 }
 
-static void secure_init(void)
+static void secure_world_init(uintptr_t ptbase, uintptr_t vbar)
 {
-    uint32_t val;
+    uint32_t reg;
 
-    __asm("mrc p15, 0, %0, c1, c1, 0" : "=r" (val));
-    console_printf("Initial SCR: 0x%lx\n", val);
+    __asm("mrc p15, 0, %0, c1, c1, 0" : "=r" (reg));
+    console_printf("Initial SCR: 0x%lx\n", reg);
+
+    /* setup secure-world page tables */
+
+    /* load the same page table base into both TTBR0 and TTBR1
+     * TTBR0 will change in the monitor's context switching code */
+    assert((ptbase & 0x3fff) == 0);
+    uintptr_t ttbr = ptbase | 0x6a; // XXX: cache pt walks, seems a good idea!
+    __asm volatile("mcr p15, 0, %0, c2, c0, 0" :: "r" (ttbr));
+    __asm volatile("mcr p15, 0, %0, c2, c0, 1" :: "r" (ttbr));
+
+    /* setup TTBCR for a 2G/2G address split, and enable both TTBR0 and TTBR1 */
+    __asm volatile("mcr p15, 0, %0, c2, c0, 2" :: "r" (7));
+
+    /* flush stuff */
+    __asm volatile("dsb");
+    __asm volatile("isb");
+    __asm volatile("mcr p15, 0, r0, c8, c7, 0"); // TLBIALL
+    
+    /* enable the MMU in the system control register
+     * (this should be ok, since we have a 1:1 map for low RAM) */
+    __asm volatile("mrc p15, 0, %0, c1, c0, 0" : "=r" (reg));
+    reg |= ARM_SCTLR_M;
+    // while we're here, ensure that there's no funny business with the VBAR
+    reg &= (ARM_SCTLR_V | ARM_SCTLR_VE);
+    __asm volatile("mcr p15, 0, %0, c1, c0, 0" : : "r" (reg));
+
+    /* setup secure VBAR and MVBAR */
+    __asm volatile("mcr p15, 0, %0, c12, c0, 0" :: "r" (vbar));
+    __asm volatile("mcr p15, 0, %0, c12, c0, 1" :: "r" (vbar));
+
+    /* flush again */
+    __asm volatile("isb");
 }
 
 static volatile bool global_barrier;
@@ -87,10 +135,11 @@ void __attribute__((noreturn)) main(void)
     console_puts("ello world\n");
 
     /* dump ATAGS, and reserve some high RAM for monitor etc. */
-    void *atags = (void *)0x100;
-    atags_dump(atags);
+    atags_init((void *)0x100);
+    atags_dump();
+
     uintptr_t monitor_physbase, ptbase;
-    monitor_physbase = atags_reserve_physmem(atags, KEVLAR_MON_PHYS_RESERVE);
+    monitor_physbase = atags_reserve_physmem(KEVLAR_MON_PHYS_RESERVE);
 
     /* copy the monitor image into place */
     console_printf("Copying monitor to %lx\n", monitor_physbase);
@@ -128,7 +177,18 @@ void __attribute__((noreturn)) main(void)
     map_l2_pages(l2pt, KEVLAR_MON_VBASE + monitor_executable_size,
                  monitor_physbase + monitor_executable_size,
                  monitor_image_bytes - monitor_executable_size, false);
-    
-    secure_init();
+
+    uintptr_t monitor_entry
+        = &_monitor_start - &monitor_image_start + KEVLAR_MON_VBASE;
+    secure_world_init(ptbase, KEVLAR_MON_VBASE);
+
+    /* call into the monitor's init routine
+     * this will return to us in non-secure world */
+    console_printf("entering monitor at %lx\n", monitor_entry);
+    typedef void entry_func(void);
+    ((entry_func *)monitor_entry)();
+
+    console_printf("returned from monitor!\n");
+
     while (1) {}
 }

@@ -1,7 +1,5 @@
 #define ARM_SCTLR_C     0x4 /* cache enable */
 #define ARM_SCTLR_I     0x1000 /* icache enable */
-#define ARM_SCTLR_V     0x2000 /* vectors base (high vs VBAR) */
-#define ARM_SCTLR_VE    0x1000000 /* interrupt vectors enable */
 #define ARM_ACR_SMP     0x40 /* SMP */
 
 #define ARM_SCR_NET     0x40 // no early termination
