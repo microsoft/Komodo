@@ -40,10 +40,6 @@ static inline uint8_t mycoreid(void)
 static void secure_world_init(uintptr_t ptbase, uintptr_t vbar)
 {
     uint32_t reg;
-
-    __asm("mrc p15, 0, %0, c1, c1, 0" : "=r" (reg));
-    console_printf("Initial SCR: 0x%lx\n", reg);
-
     /* setup secure-world page tables */
 
     /* load the same page table base into both TTBR0 and TTBR1
@@ -56,6 +52,9 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar)
     /* setup TTBCR for a 2G/2G address split, and enable both TTBR0 and TTBR1 */
     __asm volatile("mcr p15, 0, %0, c2, c0, 2" :: "r" (7));
 
+    /* set domain 0 to manager access (??) */
+    __asm volatile("mcr p15, 0, %0, c3, c0, 0" :: "r" (3));
+
     /* flush stuff */
     __asm volatile("dsb");
     __asm volatile("isb");
@@ -66,7 +65,8 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar)
     __asm volatile("mrc p15, 0, %0, c1, c0, 0" : "=r" (reg));
     reg |= ARM_SCTLR_M;
     // while we're here, ensure that there's no funny business with the VBAR
-    reg &= (ARM_SCTLR_V | ARM_SCTLR_VE);
+    reg &= ~(ARM_SCTLR_V | ARM_SCTLR_VE);
+    console_printf("updating SCR to %lx\n", reg);
     __asm volatile("mcr p15, 0, %0, c1, c0, 0" : : "r" (reg));
 
     /* setup secure VBAR and MVBAR */
@@ -103,7 +103,7 @@ static void direct_map_section(armpte_short_l1 *l1pt, uintptr_t addr)
 static void map_l2_pages(armpte_short_l2 *l2pt, uintptr_t vaddr, uintptr_t paddr,
                          size_t bytes, bool exec)
 {
-    for (uintptr_t idx = vaddr >> 12; bytes > 0; idx++) {
+    for (uintptr_t idx = (vaddr >> 12) & 0xff; bytes > 0; idx++) {
         l2pt[idx].raw = (armpte_short_l2) {
             .smallpage = {
                 .xn = exec ? 0 : 1,
@@ -134,6 +134,12 @@ void __attribute__((noreturn)) main(void)
     serial_putc('H');
     console_puts("ello world\n");
 
+    uintptr_t reg;
+    __asm("mrs %0, cpsr" : "=r" (reg));
+    console_printf("Initial CPSR: %lx\n", reg);
+    __asm("mrc p15, 0, %0, c1, c1, 0" : "=r" (reg));
+    console_printf("Initial SCR: %lx\n", reg);
+
     /* dump ATAGS, and reserve some high RAM for monitor etc. */
     atags_init((void *)0x100);
     atags_dump();
@@ -154,6 +160,8 @@ void __attribute__((noreturn)) main(void)
     armpte_short_l1 *l1pt = (void *)ptbase;
     armpte_short_l2 *l2pt = (void *)(ptbase + 16 * 1024);
 
+    console_printf("L1 %p L2 %p\n", l1pt, l2pt);
+    
     /* direct-map first 1MB of RAM and UART registers using section mappings */
     direct_map_section(l1pt, 0);
     direct_map_section(l1pt, 0x3f200000);
