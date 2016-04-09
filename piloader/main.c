@@ -25,6 +25,7 @@
 #define ARM_SCTLR_M     0x1 /* MMU enable */
 #define ARM_SCTLR_V     0x2000 /* vectors base (high vs VBAR) */
 #define ARM_SCTLR_VE    0x1000000 /* interrupt vectors enable */
+#define ARM_SCTLR_AFE   (1UL << 29) /* access flag enable -- simplified PTEs */
 
 
 // defined in kevlar linker script
@@ -63,7 +64,7 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar)
     /* enable the MMU in the system control register
      * (this should be ok, since we have a 1:1 map for low RAM) */
     __asm volatile("mrc p15, 0, %0, c1, c0, 0" : "=r" (reg));
-    reg |= ARM_SCTLR_M;
+    reg |= ARM_SCTLR_M | ARM_SCTLR_AFE;
     // while we're here, ensure that there's no funny business with the VBAR
     reg &= ~(ARM_SCTLR_V | ARM_SCTLR_VE);
     console_printf("updating SCR to %lx\n", reg);
@@ -104,13 +105,14 @@ static void map_l2_pages(armpte_short_l2 *l2pt, uintptr_t vaddr, uintptr_t paddr
                          size_t bytes, bool exec)
 {
     for (uintptr_t idx = (vaddr >> 12) & 0xff; bytes > 0; idx++) {
+        console_printf("map PA %lx at index %lx\n", paddr, idx);
         l2pt[idx].raw = (armpte_short_l2) {
             .smallpage = {
                 .xn = exec ? 0 : 1,
                 .type = 1,
                 .b = 0,
                 .c = 0,
-                .ap01 = 1, //PL1 only
+                .ap01 = 1, // access flag = 1 (already accessed)
                 .tex02 = 0,
                 .ap2 = exec ? 1 : 0,
                 .s = 0,
@@ -178,10 +180,15 @@ void __attribute__((noreturn)) main(void)
 
     // text and rodata
     size_t monitor_executable_size = &monitor_image_data - &monitor_image_start;
+    console_printf("mapping monitor executable at %lx-%lx\n",
+                   KEVLAR_MON_VBASE, KEVLAR_MON_VBASE + monitor_executable_size);
     map_l2_pages(l2pt, KEVLAR_MON_VBASE, monitor_physbase,
                  monitor_executable_size, true);
 
     // data and bss
+    console_printf("mapping monitor RW at %lx-%lx\n",
+                   KEVLAR_MON_VBASE + monitor_executable_size,
+                   KEVLAR_MON_VBASE + monitor_image_bytes);
     map_l2_pages(l2pt, KEVLAR_MON_VBASE + monitor_executable_size,
                  monitor_physbase + monitor_executable_size,
                  monitor_image_bytes - monitor_executable_size, false);
