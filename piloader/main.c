@@ -27,9 +27,12 @@
 #define ARM_SCTLR_VE    0x1000000 /* interrupt vectors enable */
 #define ARM_SCTLR_AFE   (1UL << 29) /* access flag enable -- simplified PTEs */
 
+#define ARM_SCR_NS      0x01 // non-secure bit
 
 // defined in kevlar linker script
 extern char monitor_image_start, monitor_image_data, monitor_image_end, _monitor_start;
+
+void park_secondary_cores(void);
 
 static inline uint8_t mycoreid(void)
 {
@@ -79,11 +82,22 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar)
 }
 
 static volatile bool global_barrier;
+static uintptr_t g_ptbase, g_mvbar;
 
 static void __attribute__((noreturn)) secondary_main(uint8_t coreid)
 {
     while (!global_barrier) __asm volatile("yield");
 
+    secure_world_init(g_ptbase, g_mvbar);
+
+    uintptr_t reg;
+    __asm volatile("mrc p15, 0, %0, c1, c1, 0" : "=r" (reg));
+    reg |= ARM_SCR_NS;
+    __asm volatile("mcr p15, 0, %0, c1, c1, 0" : : "r" (reg));
+    __asm volatile("isb");
+
+    park_secondary_cores();
+    
     /* TODO */
     while (1) {}
 }
@@ -195,7 +209,11 @@ void __attribute__((noreturn)) main(void)
 
     uintptr_t monitor_entry
         = &_monitor_start - &monitor_image_start + KEVLAR_MON_VBASE;
-    secure_world_init(ptbase, KEVLAR_MON_VBASE);
+
+    g_ptbase = ptbase;
+    g_mvbar = KEVLAR_MON_VBASE;
+
+    secure_world_init(g_ptbase, g_mvbar);
 
     /* call into the monitor's init routine
      * this will return to us in non-secure world */
@@ -204,6 +222,17 @@ void __attribute__((noreturn)) main(void)
     ((entry_func *)monitor_entry)();
 
     console_printf("returned from monitor!\n");
+
+    global_barrier = true;
+
+    __asm volatile("mrc p15, 0, %0, c1, c1, 0" : "=r" (reg));
+    reg |= ARM_SCR_NS;
+    __asm volatile("mcr p15, 0, %0, c1, c1, 0" : : "r" (reg));
+    __asm volatile("isb");
+
+    console_printf("exited secure world, entering kernel...\n");
+    typedef void kernel_entry(uintptr_t zero, uintptr_t boardid, void *atags);
+    ((kernel_entry *)0x8000)(0, 0xc43, (void *)0x100);
 
     while (1) {}
 }
