@@ -48,7 +48,7 @@ void atags_init(void *atags_ptr)
         struct atag_mem *mem = (struct atag_mem *)(core + 1);
         mem->h.size = 4;
         mem->h.tag = ATAG_MEM;
-        mem->size = 0x40000000ul; // XXX: 1024MB
+        mem->size = 0x3b000000ul; // XXX: 1024MB - 80MB framebuffer
         mem->start = 0;
 
         t = (struct atag_header *)(mem + 1);

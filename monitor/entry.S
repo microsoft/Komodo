@@ -11,8 +11,8 @@ _monitor_vectors:
 1:      b       1b      /* reset */
 1:      b       1b      /* undef */
         b       _smchandler
-1:      b       1b      /* prefetch_abort */
-1:      b       1b      /* data_abort */
+1:      b       blinky  /* prefetch_abort */
+1:      b       blinky  /* data_abort */
 1:      b       1b      /* reserved */
 1:      b       1b      /* irq */
 1:      b       1b      /* fiq */
@@ -59,6 +59,29 @@ _smchandler:
         ldm     sp, {sp,lr}
         movs    pc,  lr
 
+
+#if 1 /* blink LED -- handy to debug early boot issues */
+blinky: ldr     r0, =0x3F200000 // gpio base
+        // select GPIO register set
+        ldr     r1, [r0, #0x10]
+        orr     r1, #0x200000
+        str     r1, [r0, #0x10]
+        // clear LED bit
+        mov     r1, #0x8000
+1:      str     r1, [r0, #0x2c]
+        // delay
+        mov     r2, #0x600000
+2:      subs    r2, r2, #1
+        bne     2b
+        // set LED bit
+        str     r1, [r0, #0x20]
+        // delay
+        mov     r2, #0x600000
+2:      subs    r2, r2, #1
+        bne     2b
+        // loop
+        b       1b
+#endif
 
         .section .bss
         .align 3 // 8-byte alignment

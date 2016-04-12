@@ -20,13 +20,13 @@
         .section entry, "ax"
         .align 5
         b       _loader_start /* reset */
-1:      b       1b      /* undef */
-1:      b       1b      /* svc */
-1:      b       1b      /* prefetch_abort */
-1:      b       1b      /* data_abort */
-1:      b       1b      /* reserved */
-1:      b       1b      /* irq */
-1:      b       1b      /* fiq */
+1:      b       blinky      /* undef */
+1:      b       blinky      /* svc */
+1:      b       blinky      /* prefetch_abort */
+1:      b       blinky  /* data_abort */
+1:      b       blinky      /* reserved */
+1:      b       blinky      /* irq */
+1:      b       blinky      /* fiq */
 
         .section .text
         .global _loader_start
@@ -76,7 +76,7 @@ _loader_start: /* Start of day reset entry (all cores) */
 1:      /* write SCR */
         mcr     p15, 0, r1, c1, c1, 0
 
-#if 0   /* park secondary cores */
+#if 1   /* park secondary cores */
 	cmp     r0, #0                  // if zero, we're the primary core
 	bne     park_secondary_cores
 #endif
@@ -87,7 +87,7 @@ _loader_start: /* Start of day reset entry (all cores) */
         add     sp, r0, lsl #STACK_SHIFT
         b       main
 
-#if 0 /* blink LED -- handy to debug early boot issues */
+#if 1 /* blink LED -- handy to debug early boot issues */
 blinky: ldr     r0, =0x3F200000 // gpio base
         // select GPIO register set
         ldr     r1, [r0, #0x10]
@@ -109,6 +109,35 @@ blinky: ldr     r0, =0x3F200000 // gpio base
         // loop
         b       1b
 #endif
+
+_data_abort_handler:
+        mrc     p15, 0, r0, c6, c0, 0 // r0=dfar
+        bl      print_hex
+        mrc     p15, 0, r0, c5, c0, 0 // r0=dfsr
+        bl      print_hex
+
+        b       blinky
+
+        b       data_abort_handler
+
+        .global print_hex
+print_hex:
+        ldr     r2, =0x3f201000         // uart dr
+        mov     r3, #8                  // init counter
+1:      ubfx    r1, r0, #28, #4         // extract high 4 bits
+        cmp     r1, #0xa                // >= a?
+        bge     2f
+        add     r1, #'0'                // (<a) ch = '0' + val
+        b       3f
+2:      add     r1, #('a' - 0xa)        // (>= a) ch = 'a'+val - 0xa
+3:      ldr     ip, [r2, #0x18]         // poll uart FR
+        ands    ip, #0x20
+        bne     3b
+        str     r1, [r2]                // write to uart DR
+        lsl     r0, #4                  // shift left
+        subs    r3, #1
+        bne     1b
+        bx      lr
 
         .global park_secondary_cores
 park_secondary_cores: /* park caller, waiting for a jump address in mailbox 3 */

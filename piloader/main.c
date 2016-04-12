@@ -41,6 +41,8 @@ static inline uint8_t mycoreid(void)
     return val & 0xff;
 }
 
+extern void print_hex(uint32_t val);
+
 static void secure_world_init(uintptr_t ptbase, uintptr_t vbar)
 {
     uint32_t reg;
@@ -63,7 +65,7 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar)
     __asm volatile("dsb");
     __asm volatile("isb");
     __asm volatile("mcr p15, 0, r0, c8, c7, 0"); // TLBIALL
-    
+
     /* enable the MMU in the system control register
      * (this should be ok, since we have a 1:1 map for low RAM) */
     __asm volatile("mrc p15, 0, %0, c1, c0, 0" : "=r" (reg));
@@ -177,7 +179,7 @@ void __attribute__((noreturn)) main(void)
     armpte_short_l2 *l2pt = (void *)(ptbase + 16 * 1024);
 
     console_printf("L1 %p L2 %p\n", l1pt, l2pt);
-    
+
     /* direct-map first 1MB of RAM and UART registers using section mappings */
     direct_map_section(l1pt, 0);
     direct_map_section(l1pt, 0x3f200000);
@@ -213,6 +215,9 @@ void __attribute__((noreturn)) main(void)
     g_ptbase = ptbase;
     g_mvbar = KEVLAR_MON_VBASE;
 
+    //print_hex(0x4237);
+    //console_printf(" <-- Print_hex test\n"),
+
     secure_world_init(g_ptbase, g_mvbar);
 
     /* call into the monitor's init routine
@@ -233,6 +238,21 @@ void __attribute__((noreturn)) main(void)
     console_printf("exited secure world, entering kernel...\n");
     typedef void kernel_entry(uintptr_t zero, uintptr_t boardid, void *atags);
     ((kernel_entry *)0x8000)(0, 0xc43, (void *)0x100);
+
+    while (1) {}
+}
+
+void data_abort_handler(void)
+{
+    uintptr_t dfar, dfsr;
+
+    serial_putc('&');
+    console_puts("\nData abort!\n");
+
+    __asm("mrc p15, 0, %0, c5, c0, 0" : "=r" (dfsr));
+    __asm("mrc p15, 0, %0, c6, c0, 0" : "=r" (dfar));
+
+    console_printf ("DFAR %lx DFSR %lx\n", dfar, dfsr);
 
     while (1) {}
 }
