@@ -111,6 +111,16 @@ static void direct_map_section(armpte_short_l1 *l1pt, uintptr_t addr)
     l1pt[idx].raw = (armpte_short_l1) {
         .section = {
             .type = 1,
+            .b = 1, // write-back, write-allocate
+            .c = 0, // write-back, write-allocate
+            .xn = 0,
+            .domain = 0,
+            .ap0 = 1, // access flag = 1 (already accessed)
+            .ap1 = 0, // system
+            .tex = 5, // 0b101: cacheable, write-back, write-allocate
+            .ap2 = 0,
+            .s = 1, // shareable
+            .ng = 0, // global (ASID doesn't apply)
             .ns = 0, // secure-world PA, not that it makes a difference on Pi
             .secbase = idx,
         }
@@ -126,13 +136,14 @@ static void map_l2_pages(armpte_short_l2 *l2pt, uintptr_t vaddr, uintptr_t paddr
             .smallpage = {
                 .xn = exec ? 0 : 1,
                 .type = 1,
-                .b = 0,
-                .c = 0,
-                .ap01 = 1, // access flag = 1 (already accessed)
-                .tex02 = 0,
+                .b = 1, // write-back, write-allocate
+                .c = 0, // write-back, write-allocate
+                .ap0 = 1, // access flag = 1 (already accessed)
+                .ap1 = 0, // system
+                .tex = 5, // 0b101: cacheable, write-back, write-allocate
                 .ap2 = exec ? 1 : 0,
-                .s = 0,
-                .ng = 0, //?
+                .s = 1, // shareable
+                .ng = 0, // global (ASID doesn't apply)
                 .base = paddr >> 12
             }
         }.raw;
