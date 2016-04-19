@@ -152,6 +152,30 @@ static void map_l2_pages(armpte_short_l2 *l2pt, uintptr_t vaddr, uintptr_t paddr
     }
 }
 
+static uintptr_t smc(uint8_t imm, uintptr_t arg0, uintptr_t arg1, uintptr_t arg2)
+{
+    register uintptr_t r0 __asm("r0") = arg0;
+    register uintptr_t r1 __asm("r1") = arg1;
+    register uintptr_t r2 __asm("r2") = arg2;
+
+    __asm("smc %3"
+          : "+r" (r0), "+r" (r1), "+r" (r2)
+          : "M" (imm), "0" (r0), "1" (r1), "2" (r2)
+          : "r3"
+          );
+
+    return r0;
+}
+
+static void smc_test(void)
+{
+    console_printf("SMC test...\n");
+
+    uintptr_t ret = smc(0,0,0,0);
+
+    console_printf("SMC returned: %lx\n", ret);
+}
+
 void __attribute__((noreturn)) main(void)
 {
     uint8_t coreid = mycoreid();
@@ -246,7 +270,11 @@ void __attribute__((noreturn)) main(void)
     __asm volatile("mcr p15, 0, %0, c1, c1, 0" : : "r" (reg));
     __asm volatile("isb");
 
-    console_printf("exited secure world, entering kernel...\n");
+    console_printf("exited secure world\n");
+
+    smc_test();
+    
+    console_printf("entering kernel...\n");
     typedef void kernel_entry(uintptr_t zero, uintptr_t boardid, void *atags);
     ((kernel_entry *)0x8000)(0, 0xc43, (void *)0x100);
 

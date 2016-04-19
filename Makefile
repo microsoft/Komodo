@@ -12,7 +12,7 @@ OBJCOPY = $(PREFIX)objcopy
 
 LIBGCC = $(shell $(CC) -print-libgcc-file-name)
 
-CFLAGS_ALL = -Wall -Werror -ffreestanding -nostdinc -march=armv7-a -std=c99 -g -O -I include -I pdclib/include
+CFLAGS_ALL = -Wall -Werror -ffreestanding -nostdinc -mcpu=cortex-a7 -std=c99 -g -O -I include -I pdclib/include
 LDFLAGS_ALL = -nostdlib
 
 all: piimage/kevlar.img
@@ -27,8 +27,8 @@ qemu: piimage/kevlar.img
 qemugdb: piimage/kevlar.img
 	qemu-system-arm $(QEMU_ARGS) -bios $< -S
 
-gdb: piloader/piloader.elf
-	$(PREFIX)gdb --symbols=$< -ex 'target remote :1234'
+gdb: piimage/kevlar.elf
+	$(PREFIX)gdb -ex 'target remote :1234'
 
 dir := pdclib
 include $(dir)/subdir.mk

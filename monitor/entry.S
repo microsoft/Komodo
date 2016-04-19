@@ -33,9 +33,9 @@ _monitor_vectors:
 
 _monitor_start: /* start of day entry, invoked only by the loader */
         /* compute stack and switch to it */
-        getstackaddr ip, r4
-        stmdb   r4!, {sp,lr}
-        mov     sp, r4
+        getstackaddr ip, r3
+        stmdb   r3!, {sp,lr}
+        mov     sp, r3
 
         /* call C */
         bl      monitor_start
@@ -49,8 +49,9 @@ _smchandler:
         /* TODO: figure out calling convention, and which registers to pass/save */
        
         /* call C */
-        getstackaddr ip, r4
-        stmdb   r4!, {sp,lr}
+        getstackaddr ip, r3
+        stmdb   r3!, {sp,lr}
+        mov     sp, r3
         bl      smchandler
 
         /* TODO: scrub secrets from registers */
