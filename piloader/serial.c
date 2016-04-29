@@ -27,10 +27,9 @@
 #define CR_UARTEN       0x0001
 
 /* UART clock rate. This must match init_uart_clock in
- * config.txt. This is the value used by the Windows image, but maybe
- * not the default. */
-#define PI2_UART_CLOCK  16000000 // 16MHz
-#define CONFIG_BAUDRATE 912600 // (again, just matching Windows)
+ * config.txt. This is the default. */
+#define PI2_UART_CLOCK  3000000 // 3MHz
+#define CONFIG_BAUDRATE 115200
 
 static void write_reg_u32(void *addr, uint32_t val)
 {
