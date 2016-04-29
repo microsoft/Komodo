@@ -152,15 +152,15 @@ static void map_l2_pages(armpte_short_l2 *l2pt, uintptr_t vaddr, uintptr_t paddr
     }
 }
 
-static uintptr_t smc(uint8_t imm, uintptr_t arg0, uintptr_t arg1, uintptr_t arg2)
+static uintptr_t smc(uintptr_t arg0, uintptr_t arg1, uintptr_t arg2)
 {
     register uintptr_t r0 __asm("r0") = arg0;
     register uintptr_t r1 __asm("r1") = arg1;
     register uintptr_t r2 __asm("r2") = arg2;
 
-    __asm("smc %3"
+    __asm("smc #0"
           : "+r" (r0), "+r" (r1), "+r" (r2)
-          : "M" (imm), "0" (r0), "1" (r1), "2" (r2)
+          : "0" (r0), "1" (r1), "2" (r2)
           : "r3"
           );
 
@@ -171,7 +171,7 @@ static void smc_test(void)
 {
     console_printf("SMC test...\n");
 
-    uintptr_t ret = smc(0,0,0,0);
+    uintptr_t ret = smc(0, 0, 0);
 
     console_printf("SMC returned: %lx\n", ret);
 }
