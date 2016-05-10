@@ -5,6 +5,7 @@
 #include <linux/errno.h>
 #include <linux/cdev.h>
 #include <linux/slab.h>
+#include <kevlar/smcapi.h>
 
 MODULE_LICENSE("TBD");
 MODULE_DESCRIPTION("Kevlar driver");
@@ -15,6 +16,8 @@ static struct cdev *kevlar_cdev;
 struct kevlar_client {
     // TBD
 };
+
+asmlinkage u32 invoke_smc(u32 callno, u32 arg1, u32 arg2, u32 arg3);
 
 static int kevlar_open(struct inode *inode, struct file *filp)
 {
@@ -45,21 +48,40 @@ static struct file_operations kevlar_fops = {
     .release = kevlar_release,
 };
 
+static void __exit driver_exit(void)
+{
+    printk(KERN_INFO "Kevlar driver exiting\n");
+
+    if (kevlar_cdev != NULL) {
+        cdev_del(kevlar_cdev);
+        kevlar_cdev = NULL;
+    }
+
+    if (kevlar_dev != 0) {
+        unregister_chrdev_region(kevlar_dev, 1);
+        kevlar_dev = 0;
+    }
+}
+
 static int __init driver_init(void)
 {
     int r;
 
-    printk(KERN_NOTICE "Kevlar driver init\n");
+    printk(KERN_INFO "Kevlar driver init\n");
+
+    invoke_smc(0,0,0,0);
 
     r = alloc_chrdev_region(&kevlar_dev, 0, 1, "kevlar");
     if (r != 0) {
-        return r;
+        printk(KERN_ERR "kevlar: alloc_chrdev_region failed: %x\n", r);
+        goto fail;
     }
 
     kevlar_cdev = cdev_alloc();
     if (kevlar_cdev == NULL) {
-        // TODO: cleanup
-        return -ENOMEM;
+        printk(KERN_ERR "kevlar: cdev_alloc failed\n");
+        r = -ENOMEM;
+        goto fail;
     }
 
     kevlar_cdev->owner = THIS_MODULE;
@@ -67,24 +89,15 @@ static int __init driver_init(void)
 
     r = cdev_add(kevlar_cdev, kevlar_dev, 1);
     if (r < 0) {
-        // TODO: cleanup
-        return r;
+        printk(KERN_ERR "kevlar: cdev_add failed: %x\n", r);
+        goto fail;
     }
 
     return 0;
-}
 
-static void __exit driver_exit(void)
-{
-    printk(KERN_NOTICE "Kevlar driver exiting\n");
-
-    if (kevlar_cdev != NULL) {
-        cdev_del(kevlar_cdev);
-    }
-
-    if (kevlar_dev != 0) {
-        unregister_chrdev_region(kevlar_dev, 1);
-    }
+fail:
+    driver_exit();
+    return r;
 }
 
 module_init(driver_init);
