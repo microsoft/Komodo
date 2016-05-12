@@ -17,7 +17,7 @@ LDFLAGS_ALL = -nostdlib
 
 all: piimage/kevlar.img
 
-QEMU_ARGS = -M raspi2 -nographic -gdb tcp:127.0.0.1:1234
+QEMU_ARGS = -M raspi2 -display none -serial stdio -gdb tcp:127.0.0.1:1234
 
 .PHONY: clean qemu qemugdb
 
