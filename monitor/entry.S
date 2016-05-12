@@ -2,6 +2,8 @@
 #define STACK_SHIFT     14 // 16kB stack per-core
 #define STACK_SIZE      (1<<STACK_SHIFT)
 
+#define CPSRM_MONITOR   0x16 // value of CPSR.M for Monitor mode
+
         /* Vector table */
         .section vectors, "ax"
         .global _monitor_vectors
@@ -31,33 +33,75 @@ _monitor_vectors:
         .endm
 
 
-_monitor_start: /* start of day entry, invoked only by the loader */
-        /* compute stack and switch to it */
+_monitor_start: /* start of day entry, invoked by the loader in secure SVC mode */
+        /* compute monitor stack in r3 */
         getstackaddr ip, r3
-        stmdb   r3!, {sp,lr}
+
+        /* update monitor-mode's banked SP value for use in later SMCs */
+        /* FIXME: this causes an undefined instruction exception on
+	qemu, which doesn't seem to enable the virtualization
+	extension on its cortex-a15 model (as it should!)  */
+        // msr     sp_mon, r3
+
+        /* save our current stack (the loader's) */
+        ldr     r2, =loader_sp
+        str     sp, [r2]
+
+        /* update monitor-mode's banked LR and SPSR so that we can return to the caller in non-secure world */
+        //msr     lr_mon, lr
+        //mrs     r2, cpsr
+        //msr     spsr_mon, r2
+        mov     r2, lr
+        mrs     r1, cpsr
+
+        /* switch to monitor mode */
+        cps     #CPSRM_MONITOR
+
+        /* update the stack and return targets */
         mov     sp, r3
+        mov     lr, r2
+        // TODO mrs     spsr, r1
 
         /* call C */
         bl      monitor_start
 
-        /* return to caller */
-        ldm     sp, {sp,lr}
-1:      bx      lr
+        /* set NS bit, so we leave secure world when returning */
+        mrc     p15, 0, r3, c1, c1, 0
+        orr     r3, #1 // SCR.NS=1
+        mcr     p15, 0, r3, c1, c1, 0
+        isb // FIXME: is this needed?
 
+        /* restore the loader's stack pointer to the banked SP register */
+        ldr     r3, =loader_sp
+        ldr     r3, [r3]
+        msr     sp_svc, r3
+
+        /* scrub volatile registers */
+        mov     r0, #0
+        mov     r1, #0
+        mov     r2, #0
+        mov     r3, #0
+        mov     ip, #0        
+
+        /* return to caller (in normal-world supervisor mode) */
+        movs    pc, lr
 
 _smchandler:
-        /* TODO: figure out calling convention, and which registers to pass/save */
-       
         /* call C */
-        getstackaddr ip, r3
-        stmdb   r3!, {sp,lr}
-        mov     sp, r3
         bl      smchandler
 
-        /* TODO: scrub secrets from registers */
+        /* scrub secrets from registers */
+        mov     r1, #0
+        mov     r2, #0
+        mov     r3, #0
+
+        /* XXX: ARM's SMC calling convention (document DEN0028A) wants
+	 * us to preserve this register, but it is volatile
+	 * (intra-procedure call scratch) in all ABIs used on both sides
+	 * of the call so this makes no sense! */
+        mov     ip, #0
 
         /* return from monitor mode */
-        ldm     sp, {sp,lr}
         movs    pc,  lr
 
 
@@ -87,3 +131,4 @@ blinky: ldr     r0, =0x3F200000 // gpio base
         .section .bss
         .align 3 // 8-byte alignment
         .lcomm smc_stacks, (STACK_SIZE * NCORES)
+        .lcomm loader_sp, 4

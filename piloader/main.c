@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <kevlar/loaderblock.h>
 
 #define assert(expression) \
     do { if(!(expression)) { \
@@ -172,7 +173,7 @@ static void smc_test(void)
 {
     console_printf("SMC test...\n");
 
-    uintptr_t ret = smc(0, 0, 0);
+    uintptr_t ret = smc(1, 0, 0);
 
     console_printf("SMC returned: %lx\n", ret);
 }
@@ -206,13 +207,23 @@ void __attribute__((noreturn)) main(void)
     size_t monitor_image_bytes = &monitor_image_end - &monitor_image_start;
     memcpy((void *)monitor_physbase, &monitor_image_start, monitor_image_bytes);
 
+    /* Start filling out the loader block */
+    struct kevlar_loaderblock *loaderblock
+        = (void *)ROUND_UP(monitor_physbase + monitor_image_bytes, 8);
+
+    loaderblock->secure_phys_base = monitor_physbase;
+    loaderblock->secure_phys_size = KEVLAR_MON_PHYS_RESERVE;
+
     console_puts("Constructing page tables\n");
 
     /* L1 page table must be 16kB-aligned */
-    ptbase = monitor_physbase + ROUND_UP(monitor_image_bytes, 16 * 1024);
+    ptbase = ROUND_UP((uintptr_t)loaderblock + sizeof(*loaderblock), 16 * 1024);
 
     armpte_short_l1 *l1pt = (void *)ptbase;
     armpte_short_l2 *l2pt = (void *)(ptbase + 16 * 1024);
+
+    loaderblock->l1pt = l1pt;
+    loaderblock->l2pt = l2pt;
 
     console_printf("L1 %p L2 %p\n", l1pt, l2pt);
 
@@ -259,19 +270,12 @@ void __attribute__((noreturn)) main(void)
     /* call into the monitor's init routine
      * this will return to us in non-secure world */
     console_printf("entering monitor at %lx\n", monitor_entry);
-    typedef void entry_func(void);
-    ((entry_func *)monitor_entry)();
+    typedef void entry_func(void *);
+    ((entry_func *)monitor_entry)(loaderblock);
 
     console_printf("returned from monitor!\n");
 
     global_barrier = true;
-
-    __asm volatile("mrc p15, 0, %0, c1, c1, 0" : "=r" (reg));
-    reg |= ARM_SCR_NS;
-    __asm volatile("mcr p15, 0, %0, c1, c1, 0" : : "r" (reg));
-    __asm volatile("isb");
-
-    console_printf("exited secure world\n");
 
     smc_test();
     
