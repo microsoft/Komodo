@@ -130,8 +130,9 @@ static void direct_map_section(armpte_short_l1 *l1pt, uintptr_t addr)
 static void map_l2_pages(armpte_short_l2 *l2pt, uintptr_t vaddr, uintptr_t paddr,
                          size_t bytes, bool exec)
 {
+    assert((bytes & 0xfff) == 0);
     for (uintptr_t idx = (vaddr >> 12) & 0xff; bytes > 0; idx++) {
-        console_printf("map PA %lx at index %lx\n", paddr, idx);
+        //console_printf("map PA %lx at index %lx\n", paddr, idx);
         l2pt[idx].raw = (armpte_short_l2) {
             .smallpage = {
                 .xn = exec ? 0 : 1,
@@ -239,10 +240,10 @@ void __attribute__((noreturn)) main(void)
     // data and bss
     console_printf("mapping monitor RW at %lx-%lx\n",
                    KEVLAR_MON_VBASE + monitor_executable_size,
-                   KEVLAR_MON_VBASE + monitor_image_bytes);
+                   KEVLAR_MON_VBASE + ROUND_UP(monitor_image_bytes, 0x1000));
     map_l2_pages(l2pt, KEVLAR_MON_VBASE + monitor_executable_size,
                  monitor_physbase + monitor_executable_size,
-                 monitor_image_bytes - monitor_executable_size, false);
+                 ROUND_UP(monitor_image_bytes, 0x1000) - monitor_executable_size, false);
 
     uintptr_t monitor_entry
         = &_monitor_start - &monitor_image_start + KEVLAR_MON_VBASE;
