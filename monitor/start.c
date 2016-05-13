@@ -1,7 +1,11 @@
 #include <stdint.h>
+#include "monitor.h"
 #include <kevlar/loaderblock.h>
 
-void monitor_start(struct kevlar_loaderblock *loaderblock)
+/* start of day init for the monitor, executed on all CPUs */
+uintptr_t monitor_start(struct kevlar_loaderblock *loaderblock)
 {
-    /* TODO: start of day init for the monitor, executed on all CPUs */
+    pagedb_init(loaderblock);
+    
+    return 0;
 }

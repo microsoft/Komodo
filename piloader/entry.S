@@ -66,14 +66,7 @@ _loader_start: /* Start of day reset entry (all cores) */
         /* set SCR bits AW, FW */
         orr     r1, r1, #(ARM_SCR_AW|ARM_SCR_FW)
 
-#if 0
-        /* set SCR bit NS (non-secure) on non-primary cores only */
-	cmp     r0, #0                  // if zero, we're the primary core
-	beq     1f
-        orr     r1, r1, #ARM_SCR_NS
-#endif
-
-1:      /* write SCR */
+        /* write SCR */
         mcr     p15, 0, r1, c1, c1, 0
 
 #if 1   /* park secondary cores */

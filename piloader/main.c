@@ -154,16 +154,16 @@ static void map_l2_pages(armpte_short_l2 *l2pt, uintptr_t vaddr, uintptr_t paddr
     }
 }
 
-static uintptr_t smc(uintptr_t arg0, uintptr_t arg1, uintptr_t arg2)
+static uintptr_t smc(uintptr_t arg0, uintptr_t arg1, uintptr_t arg2, uintptr_t arg3)
 {
     register uintptr_t r0 __asm("r0") = arg0;
     register uintptr_t r1 __asm("r1") = arg1;
     register uintptr_t r2 __asm("r2") = arg2;
+    register uintptr_t r3 __asm("r3") = arg3;
 
     __asm("smc #0"
-          : "+r" (r0), "+r" (r1), "+r" (r2)
-          : "0" (r0), "1" (r1), "2" (r2)
-          : "r3"
+          : "+r" (r0), "+r" (r1), "+r" (r2), "+r" (r3)
+          : "0" (r0), "1" (r1), "2" (r2), "3" (r3)
           );
 
     return r0;
@@ -173,7 +173,7 @@ static void smc_test(void)
 {
     console_printf("SMC test...\n");
 
-    uintptr_t ret = smc(1, 0, 0);
+    uintptr_t ret = smc(1, 0, 0, 0);
 
     console_printf("SMC returned: %lx\n", ret);
 }
@@ -270,8 +270,10 @@ void __attribute__((noreturn)) main(void)
     /* call into the monitor's init routine
      * this will return to us in non-secure world (where MMUs are still off) */
     console_printf("entering monitor at %lx\n", monitor_entry);
-    typedef void entry_func(void *);
-    ((entry_func *)monitor_entry)(loaderblock);
+    uintptr_t monitor_loaderblock
+        = KEVLAR_MON_VBASE + (uintptr_t)loaderblock - monitor_physbase;
+    typedef void entry_func(uintptr_t loaderblock);
+    ((entry_func *)monitor_entry)(monitor_loaderblock);
 
     console_printf("returned from monitor!\n");
 
