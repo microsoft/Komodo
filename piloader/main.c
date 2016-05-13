@@ -268,7 +268,7 @@ void __attribute__((noreturn)) main(void)
     secure_world_init(g_ptbase, g_mvbar);
 
     /* call into the monitor's init routine
-     * this will return to us in non-secure world */
+     * this will return to us in non-secure world (where MMUs are still off) */
     console_printf("entering monitor at %lx\n", monitor_entry);
     typedef void entry_func(void *);
     ((entry_func *)monitor_entry)(loaderblock);

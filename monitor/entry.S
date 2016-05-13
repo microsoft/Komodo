@@ -80,7 +80,9 @@ _monitor_start: /* start of day entry, invoked by the loader in secure SVC mode 
 
 _smchandler:
         /* call C */
+        push    {lr}
         bl      smchandler
+        pop     {lr}
 
         /* scrub secrets from registers */
         mov     r1, #0
