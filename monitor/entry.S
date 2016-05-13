@@ -41,39 +41,31 @@ _monitor_start: /* start of day entry, invoked by the loader in secure SVC mode 
         /* FIXME: this causes an undefined instruction exception on
 	qemu, which doesn't seem to enable the virtualization
 	extension on its cortex-a15 model (as it should!)  */
-        // msr     sp_mon, r3
-
-        /* save our current stack (the loader's) */
-        ldr     r2, =loader_sp
-        str     sp, [r2]
+        msr     sp_mon, r3
 
         /* update monitor-mode's banked LR and SPSR so that we can return to the caller in non-secure world */
-        //msr     lr_mon, lr
-        //mrs     r2, cpsr
-        //msr     spsr_mon, r2
-        mov     r2, lr
-        mrs     r1, cpsr
+        msr     lr_mon, lr
+        mrs     r3, cpsr
+        msr     spsr_mon, r3
 
-        /* switch to monitor mode */
+        /* save our current stack (the loader's) in r3 */
+        mov     r3, sp
+
+        /* switch to monitor mode (also to its stack) */
         cps     #CPSRM_MONITOR
 
-        /* update the stack and return targets */
-        mov     sp, r3
-        mov     lr, r2
-        // TODO mrs     spsr, r1
-
-        /* call C */
+        /* call C, preserving LR and R3 (the loader's stack) */
+        push    {r3,lr}
         bl      monitor_start
+        pop     {r3,lr}
 
         /* set NS bit, so we leave secure world when returning */
-        mrc     p15, 0, r3, c1, c1, 0
-        orr     r3, #1 // SCR.NS=1
-        mcr     p15, 0, r3, c1, c1, 0
+        mrc     p15, 0, r0, c1, c1, 0
+        orr     r0, #1 // SCR.NS=1
+        mcr     p15, 0, r0, c1, c1, 0
         isb // FIXME: is this needed?
 
-        /* restore the loader's stack pointer to the banked SP register */
-        ldr     r3, =loader_sp
-        ldr     r3, [r3]
+        /* copy the loader's stack pointer to the banked SP register */
         msr     sp_svc, r3
 
         /* scrub volatile registers */
@@ -131,4 +123,3 @@ blinky: ldr     r0, =0x3F200000 // gpio base
         .section .bss
         .align 3 // 8-byte alignment
         .lcomm smc_stacks, (STACK_SIZE * NCORES)
-        .lcomm loader_sp, 4
