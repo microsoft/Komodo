@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <kevlar/loaderblock.h>
 
 #define assert(expression) \
     do { if(!(expression)) { \
@@ -56,8 +55,11 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar)
     __asm volatile("mcr p15, 0, %0, c2, c0, 0" :: "r" (ttbr));
     __asm volatile("mcr p15, 0, %0, c2, c0, 1" :: "r" (ttbr));
 
-    /* setup TTBCR for a 2G/2G address split, and enable both TTBR0 and TTBR1 */
-    __asm volatile("mcr p15, 0, %0, c2, c0, 2" :: "r" (7));
+    /* setup TTBCR for a 1G/3G address split, and enable both TTBR0 and TTBR1
+     * ref: B3.5.4 Selecting between TTBR0 and TTBR1, Short-descriptor
+     * translation table format and B4.1.153 TTBCR, Translation Table
+     * Base Control Register, VMSA */
+    __asm volatile("mcr p15, 0, %0, c2, c0, 2" :: "r" (2));
 
     /* set domain 0 to manager access (??) */
     __asm volatile("mcr p15, 0, %0, c3, c0, 0" :: "r" (3));
@@ -105,9 +107,9 @@ static void __attribute__((noreturn)) secondary_main(uint8_t coreid)
     while (1) {}
 }
 
-static void direct_map_section(armpte_short_l1 *l1pt, uintptr_t addr)
+static void map_section(armpte_short_l1 *l1pt, uintptr_t vaddr, uintptr_t paddr)
 {
-    uintptr_t idx = addr >> 20;
+    uintptr_t idx = vaddr >> ARM_L1_SECTION_BITS;
 
     l1pt[idx].raw = (armpte_short_l1) {
         .section = {
@@ -123,7 +125,7 @@ static void direct_map_section(armpte_short_l1 *l1pt, uintptr_t addr)
             .s = 1, // shareable
             .ng = 0, // global (ASID doesn't apply)
             .ns = 0, // secure-world PA, not that it makes a difference on Pi
-            .secbase = idx,
+            .secbase = paddr >> ARM_L1_SECTION_BITS,
         }
     }.raw;
 }
@@ -199,37 +201,45 @@ void __attribute__((noreturn)) main(void)
     atags_init((void *)0x100);
     atags_dump();
 
+    /* we need to reserve enough memory for the monitor image, plus
+     * alignment up to a 16kB boundary, plus the L1 page table (16kB
+     * in size), plus the L2 table (only 1kB in size, but we make it
+     * 4kB for page-alignment of the overall allocation)
+     */
+
     uintptr_t monitor_physbase, ptbase;
-    monitor_physbase = atags_reserve_physmem(KEVLAR_MON_PHYS_RESERVE);
+    size_t monitor_image_bytes = &monitor_image_end - &monitor_image_start;
+    size_t monitor_image_reserve = ROUND_UP(monitor_image_bytes, ARM_L1_PTABLE_BYTES);
+    
+    monitor_physbase = atags_reserve_physmem(monitor_image_reserve
+                                             + ARM_L1_PTABLE_BYTES
+                                             + KEVLAR_PAGE_SIZE
+                                             + KEVLAR_SECURE_RESERVE);
 
     /* copy the monitor image into place */
     console_printf("Copying monitor to %lx\n", monitor_physbase);
-    size_t monitor_image_bytes = &monitor_image_end - &monitor_image_start;
     memcpy((void *)monitor_physbase, &monitor_image_start, monitor_image_bytes);
-
-    /* Start filling out the loader block */
-    struct kevlar_loaderblock *loaderblock
-        = (void *)ROUND_UP(monitor_physbase + monitor_image_bytes, 8);
-
-    loaderblock->secure_phys_base = monitor_physbase;
-    loaderblock->secure_phys_size = KEVLAR_MON_PHYS_RESERVE;
 
     console_puts("Constructing page tables\n");
 
     /* L1 page table must be 16kB-aligned */
-    ptbase = ROUND_UP((uintptr_t)loaderblock + sizeof(*loaderblock), 16 * 1024);
+    ptbase = ROUND_UP(monitor_physbase + monitor_image_bytes, ARM_L1_PTABLE_BYTES);
 
     armpte_short_l1 *l1pt = (void *)ptbase;
-    armpte_short_l2 *l2pt = (void *)(ptbase + 16 * 1024);
+    armpte_short_l2 *l2pt = (void *)(ptbase + ARM_L1_PTABLE_BYTES);
 
-    loaderblock->l1pt = l1pt;
-    loaderblock->l2pt = l2pt;
+    uintptr_t secure_physbase = (uintptr_t)l2pt + KEVLAR_PAGE_SIZE;
 
     console_printf("L1 %p L2 %p\n", l1pt, l2pt);
 
     /* direct-map first 1MB of RAM and UART registers using section mappings */
-    direct_map_section(l1pt, 0);
-    direct_map_section(l1pt, 0x3f200000);
+    map_section(l1pt, 0, 0);
+    map_section(l1pt, 0x3f200000, 0x3f200000); // TODO: not-cacheable!?
+
+    /* direct-map phys memory in the 2-4G region for the monitor to use */
+    for (uintptr_t off = 0; off < KEVLAR_DIRECTMAP_SIZE; off += ARM_L1_SECTION_SIZE) {
+        map_section(l1pt, KEVLAR_DIRECTMAP_VBASE + off, off);
+    }
 
     /* install a second-level page table for the monitor image */
     l1pt[KEVLAR_MON_VBASE >> 20].raw = (armpte_short_l1){
@@ -270,10 +280,8 @@ void __attribute__((noreturn)) main(void)
     /* call into the monitor's init routine
      * this will return to us in non-secure world (where MMUs are still off) */
     console_printf("entering monitor at %lx\n", monitor_entry);
-    uintptr_t monitor_loaderblock
-        = KEVLAR_MON_VBASE + (uintptr_t)loaderblock - monitor_physbase;
-    typedef void entry_func(uintptr_t loaderblock);
-    ((entry_func *)monitor_entry)(monitor_loaderblock);
+    typedef void entry_func(uintptr_t);
+    ((entry_func *)monitor_entry)(secure_physbase);
 
     console_printf("returned from monitor!\n");
 

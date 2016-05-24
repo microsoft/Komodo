@@ -5,8 +5,6 @@
 // returns KVR_MAGIC
 uint32_t kvr_smc_query(void);
 
-#define KVR_SMC_GETPHYSBASE     2
-#define KVR_SMC_GETPHYSSIZE     3
+#define KVR_SMC_GETPHYSPAGES    2
 
-uint32_t kvr_smc_get_phys_base(void);
-uint32_t kvr_smc_get_phys_size(void);
+uint32_t kvr_smc_get_phys_pages(void);

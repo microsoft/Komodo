@@ -67,3 +67,12 @@ typedef union {
     } smallpage;
     uint32_t raw;
 } armpte_short_l2;
+
+
+// the level 1 table occupies 16kB, or 4096 entries
+#define ARM_L1_PTABLE_ENTRIES 0x1000
+#define ARM_L1_PTABLE_BYTES (ARM_L1_PTABLE_ENTRIES * sizeof(armpte_short_l1))
+
+// section mappings are 1MB each
+#define ARM_L1_SECTION_SIZE 0x100000
+#define ARM_L1_SECTION_BITS 20
