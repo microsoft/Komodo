@@ -48,7 +48,7 @@ static struct file_operations kevlar_fops = {
     .release = kevlar_release,
 };
 
-static void __exit driver_exit(void)
+static void driver_exit(void)
 {
     printk(KERN_INFO "Kevlar driver exiting\n");
 
@@ -66,10 +66,16 @@ static void __exit driver_exit(void)
 static int __init driver_init(void)
 {
     int r;
+    u32 magic;
 
     printk(KERN_INFO "Kevlar driver init\n");
 
-    invoke_smc(0,0,0,0);
+    magic = invoke_smc(KVR_SMC_QUERY,0,0,0);
+    if (magic != KVR_MAGIC) {
+        printk(KERN_ERR "kevlar: SMC to monitor failed: %x\n", magic);
+        r = -ENODEV;
+        goto fail;
+    }
 
     r = alloc_chrdev_region(&kevlar_dev, 0, 1, "kevlar");
     if (r != 0) {
