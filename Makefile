@@ -30,7 +30,7 @@ qemugdb: piimage/kevlar.img
 gdb: piloader/piloader.elf monitor/monitor.elf
 	$(PREFIX)gdb -ex 'target remote :1234' \
 		-ex 'add-symbol-file piloader/piloader.elf 0x400' \
-		-ex 'add-symbol-file monitor/monitor.elf 0x80000000'
+		-ex 'add-symbol-file monitor/monitor.elf 0x40000000'
 
 dir := pdclib
 include $(dir)/subdir.mk

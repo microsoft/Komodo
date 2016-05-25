@@ -4,7 +4,7 @@ OUTPUT_ARCH("arm")
 ENTRY(_monitor_start)
 
 SECTIONS {
-        .text 0x80000000 :
+        .text 0x40000000 :
         {
                 *(vectors);
                 *(.text);
