@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # exit on failure
-set -ex
+set -e
 
 if [[ $# != 3 ]]; then
     echo "Usage: $0 file image dest"
@@ -12,6 +12,8 @@ fi
 SECTOR=$(partx -g -r -n 2 -o START $2)
 
 TMP=$(mktemp)
+
+set -x
 
 # copy out the raw ext2 fs (assuming it runs to the end of the image)
 dd if=$2 of=$TMP bs=512 skip=$SECTOR
