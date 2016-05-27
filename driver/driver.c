@@ -70,8 +70,8 @@ static int __init driver_init(void)
 
     printk(KERN_INFO "Kevlar driver init\n");
 
-    magic = invoke_smc(KVR_SMC_QUERY,0,0,0);
-    if (magic != KVR_MAGIC) {
+    magic = invoke_smc(KEV_SMC_QUERY,0,0,0);
+    if (magic != KEV_MAGIC) {
         printk(KERN_ERR "kevlar: SMC to monitor failed: %x\n", magic);
         r = -ENODEV;
         goto fail;
