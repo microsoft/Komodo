@@ -66,9 +66,14 @@ static inline uintptr_t page_paddr(kev_secure_pageno_t pageno)
     return g_secure_physbase + pageno * KEVLAR_PAGE_SIZE;
 }
 
+static inline void *phys2monvaddr(uintptr_t phys)
+{
+    return (void *)(phys + KEVLAR_MON_VBASE);
+}
+
 static inline void *page_monvaddr(kev_secure_pageno_t pageno)
 {
-    return (void *)(page_paddr(pageno) + KEVLAR_MON_VBASE);
+    return phys2monvaddr(page_paddr(pageno));
 }
 
 #endif // _KEVLAR_MONITOR_H

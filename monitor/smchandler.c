@@ -98,7 +98,7 @@ kev_err_t kev_smc_init_l2table(kev_secure_pageno_t page,
 {
     kev_err_t err;
 
-    if (l1_index >= 1024) {
+    if (l1_index >= 256) {
         return KEV_ERR_INVALID_MAPPING;
     }
 
@@ -116,18 +116,93 @@ kev_err_t kev_smc_init_l2table(kev_secure_pageno_t page,
         return err;
     }
 
-    // TODO: sanity-check this. IIRC the L2 PTs are 1k each, so we
-    // need to map 4 of them
-    addrspace->l1pt[l1_index].raw = (armpte_short_l1){
+    // setup mappings in the top-level page table: since each L2 table
+    // is only 1kB in size (256 entries), we map four consecutive
+    // entries in the top-level table to fill our 4kB page with L2
+    // tables
+    armpte_short_l1 pte = {
         .pagetable = {
             .type = 1,
             .pxn = 0,
             .ns = 0,
             .ptbase = page_paddr(page) >> 10,
         }
-    }.raw;
+    };
+
+    addrspace->l1pt[l1_index * 4].raw = pte.raw;
+    pte.pagetable.ptbase++;
+    addrspace->l1pt[l1_index * 4 + 1].raw = pte.raw;
+    pte.pagetable.ptbase++;
+    addrspace->l1pt[l1_index * 4 + 2].raw = pte.raw;
+    pte.pagetable.ptbase++;
+    addrspace->l1pt[l1_index * 4 + 3].raw = pte.raw;
 
     return KEV_ERR_SUCCESS;
+}
+
+static armpte_short_l2 *lookup_pte(struct kev_addrspace *addrspace,
+                                   uint32_t mapping)
+{
+    // check that it's within the addressable region, and that the L2
+    // tables are present
+    uint32_t l1index = mapping >> 20;
+    if (l1index >= 1024 || addrspace->l1pt[l1index].pagetable.type != 1) {
+        return NULL;
+    }
+
+    armpte_short_l2 *l2pt
+        = phys2monvaddr(addrspace->l1pt[l1index].pagetable.ptbase << 10);
+    uint32_t l2index = (mapping >> 12) & 0xff;
+
+    if (l2pt == NULL) {
+        return NULL;
+    } else {
+        return &l2pt[l2index];
+    }
+}
+
+static kev_err_t is_valid_mapping_target(struct kev_addrspace *addrspace,
+                                         uint32_t mapping)
+{
+    if (addrspace->final) {
+        return KEV_ERR_ALREADY_FINAL;
+    }
+
+    // check for a supported combination of permissions: RO, RW, RX, RWX
+    if (!(mapping & KEV_MAPPING_R)) {
+        return KEV_ERR_INVALID_MAPPING;
+    }
+
+    // check that the target address is mappable and free
+    armpte_short_l2 *l2pte = lookup_pte(addrspace, mapping);
+    if (l2pte == NULL || l2pte->invalid.type != 0) {
+        return KEV_ERR_INVALID_MAPPING;
+    }
+
+    return KEV_ERR_SUCCESS;
+}
+
+static void map_page(struct kev_addrspace *addrspace, uint32_t mapping,
+                     uintptr_t paddr)
+{
+    armpte_short_l2 *pte = lookup_pte(addrspace, mapping);
+    //assert(pte != NULL);
+
+    pte->raw = (armpte_short_l2) {
+        .smallpage = {
+            .xn = !(mapping & KEV_MAPPING_X),
+            .type = 1,
+            .b = 1, // write-back, write-allocate
+            .c = 0, // write-back, write-allocate
+            .ap0 = 1, // access flag = 1 (already accessed)
+            .ap1 = 1, // user
+            .tex = 5, // 0b101: cacheable, write-back, write-allocate
+            .ap2 = !(mapping & KEV_MAPPING_W),
+            .s = 1, // shareable
+            .ng = 1, // not global XXX: TODO: ASID MANAGEMENT!
+            .base = paddr >> 12
+        }
+    }.raw;
 }
 
 kev_err_t kev_smc_map_secure(kev_secure_pageno_t page,
@@ -141,11 +216,10 @@ kev_err_t kev_smc_map_secure(kev_secure_pageno_t page,
         return KEV_ERR_INVALID_ADDRSPACE;
     }
 
-    if (addrspace->final) {
-        return KEV_ERR_ALREADY_FINAL;
+    err = is_valid_mapping_target(addrspace, mapping);
+    if (err != KEV_ERR_SUCCESS) {
+        return err;
     }
-
-    // TODO: check valididty of mapping, and that it's free
 
     // allocate the page
     err = allocate_page(page, addrspace, KEV_PAGE_DATA);
@@ -155,7 +229,7 @@ kev_err_t kev_smc_map_secure(kev_secure_pageno_t page,
 
     // no failures past this point!
 
-    // TODO: map!
+    map_page(addrspace, mapping, page_paddr(page));
 
     return KEV_ERR_SUCCESS;
 }
@@ -164,8 +238,28 @@ kev_err_t kev_smc_map_insecure(kev_secure_pageno_t addrspace_page,
                                uint32_t phys_pageno,
                                uint32_t mapping)
 {
-    // TODO
-    return KEV_ERR_INVALID;
+    kev_err_t err;
+
+    struct kev_addrspace *addrspace = get_addrspace(addrspace_page);
+    if (addrspace == NULL) {
+        return KEV_ERR_INVALID_ADDRSPACE;
+    }
+
+    err = is_valid_mapping_target(addrspace, mapping);
+    if (err != KEV_ERR_SUCCESS) {
+        return err;
+    }
+
+    // check that the page is not located in our secure region
+    if (page_paddr(phys_pageno) >= g_secure_physbase
+        && page_paddr(phys_pageno) < (g_secure_physbase
+                                      + page_paddr(KEVLAR_SECURE_NPAGES))) {
+        return KEV_ERR_INVALID_PAGENO;
+    }
+
+    map_page(addrspace, mapping, phys_pageno * KEVLAR_PAGE_SIZE);
+
+    return KEV_ERR_SUCCESS;
 }
 
 kev_err_t kev_smc_finalise(kev_secure_pageno_t addrspace_page)
