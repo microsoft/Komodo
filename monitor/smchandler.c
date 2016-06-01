@@ -143,22 +143,21 @@ kev_err_t kev_smc_init_l2table(kev_secure_pageno_t page,
 static armpte_short_l2 *lookup_pte(struct kev_addrspace *addrspace,
                                    uint32_t mapping)
 {
-    // check that it's within the addressable region, and that the L2
-    // tables are present
+    // check that it's within the addressable region
     uint32_t l1index = mapping >> 20;
-    if (l1index >= 1024 || addrspace->l1pt[l1index].pagetable.type != 1) {
+    if (l1index >= 1024) {
         return NULL;
     }
 
-    armpte_short_l2 *l2pt
-        = phys2monvaddr(addrspace->l1pt[l1index].pagetable.ptbase << 10);
+    // check that the L2 tables are present
+    armpte_short_l1 l1pte = addrspace->l1pt[l1index];
+    if (l1pte.pagetable.type != 1) {
+        return NULL;
+    }
+
+    armpte_short_l2 *l2pt = phys2monvaddr(l1pte.pagetable.ptbase << 10);
     uint32_t l2index = (mapping >> 12) & 0xff;
-
-    if (l2pt == NULL) {
-        return NULL;
-    } else {
-        return &l2pt[l2index];
-    }
+    return &l2pt[l2index];
 }
 
 static kev_err_t is_valid_mapping_target(struct kev_addrspace *addrspace,
