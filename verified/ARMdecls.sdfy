@@ -1,0 +1,9 @@
+var{:register var_r0()} r0:int;
+var{:register var_r1()} r1:int;
+var{:register var_r2()} r2:int;
+
+function{:operand} stack(slot:int):oprnd
+function{:operand} fromOperand(o:oprnd):oprnd
+
+procedure ADD(in{:operand} src1:int, in{:operand}, src2:int,
+	out{:operand} dst:int);
