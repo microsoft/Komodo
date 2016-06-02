@@ -64,6 +64,9 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar)
     /* set domain 0 to manager access (??) */
     __asm volatile("mcr p15, 0, %0, c3, c0, 0" :: "r" (3));
 
+    /* ensure that CONTEXTIDR (containing the current ASID) is set to 0 */
+    __asm volatile("mcr p15, 0, %0, c13, c0, 1" :: "r" (0));
+
     /* flush stuff */
     __asm volatile("dsb");
     __asm volatile("isb");

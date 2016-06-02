@@ -28,6 +28,7 @@ struct kev_pagedb_entry {
 
 struct kev_addrspace {
     armpte_short_l1 *l1pt;
+    uintptr_t l1pt_phys;
     uint32_t refcount;
     bool final;
 };
