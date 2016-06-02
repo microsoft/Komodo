@@ -16,7 +16,7 @@ function method var_r(n:int):operand
 	{ OVar(id_r(n)) }
 
 datatype ins =
-	ADD(dest:operand, src1:operand, src2:operand)
+	Add(dest:operand, src1:operand, src2:operand)
 
 datatype codes = CNil | sp_CCons(hd:code, tl:codes)
 
@@ -127,18 +127,17 @@ function evalOBool(s:state, o:obool):bool
 predicate ValidInstruction(s:state, ins:ins)
 {
 	match ins
-		case ADD(dest, src1, src2) => ValidOperand(s, src1) &&
+		case Add(dest, src1, src2) => ValidOperand(s, src1) &&
 			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
 }
 
 predicate evalIns(ins:ins, s:state, r:state, ok:bool)
 {
-    if !ValidInstruction(s, ins) then
-	!ok
-    else
-	match ins
-		case ADD(dst, src1, src2) => evalUpdate(s, dst,
-			(OperandContents(s, src1) + OperandContents(s, src2)), r, ok)
+    if !ValidInstruction(s, ins) then !ok
+    else match ins
+		case Add(dst, src1, src2) => evalUpdate(s, dst,
+			(OperandContents(s, src1) + OperandContents(s, src2) % MaxVal()),
+			r, ok)
 }
 
 predicate evalBlock(block:codes, s:state, r:state, ok:bool)
@@ -177,3 +176,5 @@ predicate evalCode(c:code, s:state, r:state, ok:bool)
                                            !ok
         case While(cond, body) => exists n:nat :: evalWhile(cond, body, n, s, r, ok)
 }
+
+predicate{:opaque} sp_eval(c:code, s:state, r:state, ok:bool) { evalCode(c, s, r, ok) }
