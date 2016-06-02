@@ -20,7 +20,10 @@ static kev_err_t allocate_page(kev_secure_pageno_t page,
         return KEV_ERR_ALREADY_FINAL;
     }
 
-    memset(page_monvaddr(page), 0, KEVLAR_PAGE_SIZE);
+    if (type != KEV_PAGE_DATA) {
+        memset(page_monvaddr(page), 0, KEVLAR_PAGE_SIZE);
+    }
+
     g_pagedb[page].type = type;
     g_pagedb[page].addrspace = addrspace;
     addrspace->refcount++;
@@ -211,9 +214,26 @@ static void map_page(struct kev_addrspace *addrspace, uint32_t mapping,
     }.raw;
 }
 
+// is the given physical (0-based) page number located in our secure region?
+static bool phys_page_is_secure(uintptr_t phys_pageno)
+{
+    uintptr_t paddr = phys_pageno * KEVLAR_PAGE_SIZE;
+    return paddr >= g_secure_physbase
+        && paddr < g_secure_physbase + page_paddr(KEVLAR_SECURE_NPAGES);
+}
+
+// is the given physical (0-based) page number located in memory, so
+// we can safely read it?
+static bool phys_page_is_ram(uintptr_t phys_pageno)
+{
+    // XXX: this is a pi-specific assumption
+    return phys_pageno * KEVLAR_PAGE_SIZE < g_secure_physbase;
+}
+
 kev_err_t kev_smc_map_secure(kev_secure_pageno_t page,
                              kev_secure_pageno_t addrspace_page,
-                             uint32_t mapping)
+                             uint32_t mapping,
+                             uint32_t phys_pageno)
 {
     kev_err_t err;
 
@@ -227,15 +247,28 @@ kev_err_t kev_smc_map_secure(kev_secure_pageno_t page,
         return err;
     }
 
+    // check the validity initial page we are being asked to copy
+    if (phys_pageno != 0 &&
+        !(phys_page_is_ram(phys_pageno) && !phys_page_is_secure(phys_pageno))) {
+        return KEV_ERR_INVALID_PAGENO;
+    }
+
     // allocate the page
     err = allocate_page(page, addrspace, KEV_PAGE_DATA);
     if (err != KEV_ERR_SUCCESS) {
         return err;
     }
 
-    // FIXME: need a way to populate the page with initial contents :)
-    
     // no failures past this point!
+
+    // initialise it
+    if (phys_pageno == 0) {
+        memset(page_monvaddr(page), 0, KEVLAR_PAGE_SIZE);
+    } else {
+        memcpy(page_monvaddr(page),
+               phys2monvaddr(phys_pageno * KEVLAR_PAGE_SIZE),
+               KEVLAR_PAGE_SIZE);
+    }
 
     map_page(addrspace, mapping, page_paddr(page));
 
@@ -259,9 +292,7 @@ kev_err_t kev_smc_map_insecure(kev_secure_pageno_t addrspace_page,
     }
 
     // check that the page is not located in our secure region
-    if (page_paddr(phys_pageno) >= g_secure_physbase
-        && page_paddr(phys_pageno) < (g_secure_physbase
-                                      + page_paddr(KEVLAR_SECURE_NPAGES))) {
+    if (phys_page_is_secure(phys_pageno)) {
         return KEV_ERR_INVALID_PAGENO;
     }
 
@@ -320,11 +351,13 @@ kev_err_t kev_smc_enter(kev_secure_pageno_t disp_page)
     switch_addrspace(addrspace);
 
     // TODO: dispatch into usermode :)
+    (void)dispatcher;
 
     return KEV_ERR_INVALID;
 }
 
-uintptr_t smchandler(uintptr_t callno, uintptr_t arg1, uintptr_t arg2, uintptr_t arg3)
+uintptr_t smchandler(uintptr_t callno, uintptr_t arg1, uintptr_t arg2,
+                     uintptr_t arg3, uintptr_t arg4)
 {
     switch (callno) {
     case KEV_SMC_QUERY:
@@ -343,7 +376,7 @@ uintptr_t smchandler(uintptr_t callno, uintptr_t arg1, uintptr_t arg2, uintptr_t
         return kev_smc_init_l2table(arg1, arg2, arg3);
 
     case KEV_SMC_MAP_SECURE:
-        return kev_smc_map_secure(arg1, arg2, arg3);
+        return kev_smc_map_secure(arg1, arg2, arg3, arg4);
 
     case KEV_SMC_MAP_INSECURE:
         return kev_smc_map_insecure(arg1, arg2, arg3);

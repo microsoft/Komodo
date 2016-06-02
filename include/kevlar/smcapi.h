@@ -60,7 +60,8 @@ kev_err_t kev_smc_init_l2table(kev_secure_pageno_t page,
 // map a secure page
 kev_err_t kev_smc_map_secure(kev_secure_pageno_t page,
                              kev_secure_pageno_t addrspace,
-                             uint32_t mapping);
+                             uint32_t mapping,
+                             uint32_t phys_pageno);
 
 // map any other (non-secure) physical page
 kev_err_t kev_smc_map_insecure(kev_secure_pageno_t addrspace,

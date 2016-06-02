@@ -17,7 +17,7 @@ struct kevlar_client {
     // TBD
 };
 
-asmlinkage u32 invoke_smc(u32 callno, u32 arg1, u32 arg2, u32 arg3);
+asmlinkage u32 invoke_smc(u32 callno, u32 arg1, u32 arg2, u32 arg3, u32 arg4);
 
 static int kevlar_open(struct inode *inode, struct file *filp)
 {
@@ -70,7 +70,7 @@ static int __init driver_init(void)
 
     printk(KERN_INFO "Kevlar driver init\n");
 
-    magic = invoke_smc(KEV_SMC_QUERY,0,0,0);
+    magic = invoke_smc(KEV_SMC_QUERY,0,0,0,0);
     if (magic != KEV_MAGIC) {
         printk(KERN_ERR "kevlar: SMC to monitor failed: %x\n", magic);
         r = -ENODEV;
