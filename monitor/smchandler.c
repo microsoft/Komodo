@@ -49,6 +49,12 @@ kev_err_t kev_smc_init_addrspace(kev_secure_pageno_t addrspace_page,
         return KEV_ERR_INVALID_PAGENO;
     }
 
+    // ARM requires that the level 1 page table be 16kB-aligned
+    // (even though our use of TTBCR only requires it to be 4kB in size)
+    if (l1pt_page % 4 != 0) {
+        return KEV_ERR_INVALID_PAGENO;
+    }
+
     if (!(page_is_free(addrspace_page) && page_is_free(l1pt_page))) {
         return KEV_ERR_PAGEINUSE;
     }
@@ -64,6 +70,7 @@ kev_err_t kev_smc_init_addrspace(kev_secure_pageno_t addrspace_page,
     g_pagedb[l1pt_page].addrspace = addrspace;
 
     addrspace->l1pt = page_monvaddr(l1pt_page);
+    addrspace->l1pt_phys = page_paddr(l1pt_page);
     addrspace->refcount = 0;
     addrspace->final = false;
 
@@ -198,7 +205,7 @@ static void map_page(struct kev_addrspace *addrspace, uint32_t mapping,
             .tex = 5, // 0b101: cacheable, write-back, write-allocate
             .ap2 = !(mapping & KEV_MAPPING_W),
             .s = 1, // shareable
-            .ng = 1, // not global XXX: TODO: ASID MANAGEMENT!
+            .ng = 1, // not global; TODO: ASID management!
             .base = paddr >> 12
         }
     }.raw;
@@ -226,6 +233,8 @@ kev_err_t kev_smc_map_secure(kev_secure_pageno_t page,
         return err;
     }
 
+    // FIXME: need a way to populate the page with initial contents :)
+    
     // no failures past this point!
 
     map_page(addrspace, mapping, page_paddr(page));
@@ -276,6 +285,45 @@ kev_err_t kev_smc_finalise(kev_secure_pageno_t addrspace_page)
     return KEV_ERR_SUCCESS;
 }
 
+static struct kev_addrspace *g_cur_addrspace;
+
+static void switch_addrspace(struct kev_addrspace *addrspace)
+{
+    if (g_cur_addrspace == addrspace) {
+        return;
+    }
+
+    /* load the page table base into TTBR0 */
+    uintptr_t ttbr = addrspace->l1pt_phys | 0x6a; // XXX: cache pt walks
+    __asm volatile("mcr p15, 0, %0, c2, c0, 0" :: "r" (ttbr));
+
+    /* instruction barrier for the TTBR0 write */
+    __asm volatile("isb");
+
+    /* flush non-global entries with ASID 0 (the only one we use at present) */
+    __asm volatile("mcr p15, 0, %0, c8, c7, 2" :: "r" (0)); // TLBIASID
+
+    g_cur_addrspace = addrspace;
+}
+
+kev_err_t kev_smc_enter(kev_secure_pageno_t disp_page)
+{
+    
+    if (!page_is_typed(disp_page, KEV_PAGE_DISPATCHER)) {
+        return KEV_ERR_INVALID_PAGENO;
+    }
+
+    struct kev_dispatcher *dispatcher = page_monvaddr(disp_page);
+    struct kev_addrspace *addrspace = g_pagedb[disp_page].addrspace;
+
+    // switch to target addrspace
+    switch_addrspace(addrspace);
+
+    // TODO: dispatch into usermode :)
+
+    return KEV_ERR_INVALID;
+}
+
 uintptr_t smchandler(uintptr_t callno, uintptr_t arg1, uintptr_t arg2, uintptr_t arg3)
 {
     switch (callno) {
@@ -304,8 +352,7 @@ uintptr_t smchandler(uintptr_t callno, uintptr_t arg1, uintptr_t arg2, uintptr_t
         return kev_smc_finalise(arg1);
 
     case KEV_SMC_ENTER:
-        // TODO!
-        return KEV_ERR_INVALID;
+        return kev_smc_enter(arg1);
         
     default:
         return KEV_ERR_INVALID;
