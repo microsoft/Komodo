@@ -8,15 +8,15 @@ datatype ocmp = OEq | ONe | OLe | OGe | OLt | OGt
 datatype obool = OCmp(cmp:ocmp, o1:operand, o2:operand)
 
 function method id_r(n:int): id
-	requires 0 < n <= 15
+	requires 0 <= n <= 15
 	{ IdARMReg(R(n)) }
 
 function method var_r(n:int):operand
-	requires 0 < n <= 15
+	requires 0 <= n <= 15
 	{ OVar(id_r(n)) }
 
 datatype ins =
-	Add(src1:operand, src2:operand, dest:operand)
+	ADD(dest:operand, src1:operand, src2:operand)
 
 datatype codes = CNil | sp_CCons(hd:code, tl:codes)
 
@@ -26,8 +26,8 @@ datatype code =
 | IfElse(ifCond:obool, ifTrue:code, ifFalse:code)
 | While(whileCond:obool, whileBody:code)
 
-datatype frame = Frame(decls:seq<id>, locals:map<id, int>)
-datatype state = State(decls:seq<id>, globals:map<id, int>, stack:seq<frame>, heap:map<int, int>)
+datatype frame = Frame(locals:map<id, int>)
+datatype state = State(globals:map<id, int>, stack:seq<frame>, heap:map<int, int>)
 
 // Everything is word length. Words are 32b
 function Truncate(n:int) : int { n % 0x1_0000_0000 }
@@ -50,8 +50,8 @@ predicate ValidOperand(s:state, o:operand)
     match o
       case OVar(x) =>
         (match x
-           case IdGlobal(g) => x in s.decls && x in s.globals
-           case IdLocal(l) => |s.stack| > 0 && x in s.stack[0].decls && x in s.stack[0].locals
+           case IdGlobal(g) => x in s.globals
+           case IdLocal(l) => |s.stack| > 0 && x in s.stack[0].locals
            case IdStackSlot(n) => |s.stack| > 0 && x in s.stack[0].locals
            case IdARMReg(r) => x in s.globals)
       case OConst(n) => true
@@ -97,6 +97,15 @@ function eval_op(s:state, o:operand):int
             case OHeap(addr) => GetValueAtHeapAddress(s.heap, addr)
 }
 
+predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
+    requires ValidDestinationOperand(s, o);
+{
+    if o.x.IdGlobal? || o.x.IdARMReg? then
+        ok && r == s.(globals := s.globals[o.x := v])
+    else
+        ok && r == s.(stack := [s.stack[0].(locals := s.stack[0].locals[o.x := v])] + s.stack[1..])
+}
+
 function evalCmp(c:ocmp, i1:int, i2:int):bool
 {
   match c
@@ -118,7 +127,53 @@ function evalOBool(s:state, o:obool):bool
 predicate ValidInstruction(s:state, ins:ins)
 {
 	match ins
-		case Add(src1, src2, dest) => ValidOperand(s, src1) &&
+		case ADD(dest, src1, src2) => ValidOperand(s, src1) &&
 			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
 }
 
+predicate evalIns(ins:ins, s:state, r:state, ok:bool)
+{
+    if !ValidInstruction(s, ins) then
+	!ok
+    else
+	match ins
+		case ADD(dst, src1, src2) => evalUpdate(s, dst,
+			(OperandContents(s, src1) + OperandContents(s, src2)), r, ok)
+}
+
+predicate evalBlock(block:codes, s:state, r:state, ok:bool)
+{
+    if block.CNil? then
+        ok && r == s
+    else
+        exists r0, ok0 :: evalCode(block.hd, s, r0, ok0) && (if !ok0 then !ok else evalBlock(block.tl, r0, r, ok))
+}
+
+predicate evalWhile(b:obool, c:code, n:nat, s:state, r:state, ok:bool)
+  decreases c, n
+{
+    if ValidOperand(s, b.o1) && ValidOperand(s, b.o2) then
+        if n == 0 then
+            !evalOBool(s, b) && ok && r == s
+        else
+            exists r0, ok0 :: evalOBool(s, b) && evalCode(c, s, r0, ok0) && (if !ok0 then !ok else evalWhile(b, c, n - 1, r0, r, ok))
+    else
+        !ok
+}
+
+predicate evalCode(c:code, s:state, r:state, ok:bool)
+  decreases c, 0
+{
+    match c
+        case Ins(ins) => evalIns(ins, s, r, ok)
+        case Block(block) => evalBlock(block, s, r, ok)
+        // TODO: IfElse and While should havoc the flags
+        case IfElse(cond, ifT, ifF) => if ValidOperand(s, cond.o1) && ValidOperand(s, cond.o2) then
+                                           if evalOBool(s, cond) then
+                                               evalCode(ifT, s, r, ok)
+                                           else
+                                               evalCode(ifF, s, r, ok)
+                                       else
+                                           !ok
+        case While(cond, body) => exists n:nat :: evalWhile(cond, body, n, s, r, ok)
+}

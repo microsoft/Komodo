@@ -1,9 +1,30 @@
-var{:register var_r0()} r0:int;
-var{:register var_r1()} r1:int;
-var{:register var_r2()} r2:int;
+var{:register var_r(0)}  r0:int;
+var{:register var_r(1)}  r1:int;
+var{:register var_r(2)}  r2:int;
+var{:register var_r(3)}  r3:int;
+var{:register var_r(4)}  r4:int;
+var{:register var_r(5)}  r5:int;
+var{:register var_r(6)}  r6:int;
+var{:register var_r(7)}  r7:int;
+var{:register var_r(8)}  r8:int;
+var{:register var_r(9)}  r9:int;
+var{:register var_r(10)} r10:int;
+var{:register var_r(11)} r11:int;
+var{:register var_r(12)} r12:int;
+var{:register var_r(13)} r13:int;
+var{:register var_r(14)} r14:int;
+var{:register var_r(15)} r15:int;
 
 function{:operand} stack(slot:int):oprnd
 function{:operand} fromOperand(o:oprnd):oprnd
 
-procedure ADD(in{:operand} src1:int, in{:operand}, src2:int,
-	out{:operand} dst:int);
+procedure Add(out{:operand} dst:int, in{:operand} src1:int,
+	in{:operand}, src2:int)
+ 	requires/ensures
+    	ValidOperand(this, @src1);
+    	ValidOperand(this, @src2);
+		ValidDestinationOperand(this, @dst);
+	ensures
+		evalUpdate(old(this), @dst, old(src1 + src2), this, true);
+		
+	  

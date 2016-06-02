@@ -31,14 +31,25 @@ procedure Mov32(out{:operand} dst:int, {:operand} src:int)
     evalUpdateAndMaintainFlags(old(this), @dst, src, this, true);
     0 <= dst < GetValueLimitForX86Type(X86Uint32);
 
+// procedure Add32(inout{:operand} dst:int, {:operand} src:int)
+//   requires/ensures
+//     Valid32BitOperand(this, @src);
+//     Valid32BitDestinationOperand(this, @dst);
+//     requires isUInt32(dst);
+//     requires isUInt32(src + dst);
+//   requires
+//     requires isUInt32(src);
+//   ensures
+//     evalUpdateAndHavocFlags(old(this), @dst, old(dst + src), this, true);
+
 procedure Add32(inout{:operand} dst:int, {:operand} src:int)
   requires/ensures
     Valid32BitOperand(this, @src);
     Valid32BitDestinationOperand(this, @dst);
-    requires isUInt32(dst);
-    requires isUInt32(src + dst);
   requires
-    requires isUInt32(src);
+    isUInt32(dst);
+    isUInt32(src + dst);
+    isUInt32(src);
   ensures
     evalUpdateAndHavocFlags(old(this), @dst, old(dst + src), this, true);
 
