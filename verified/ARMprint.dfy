@@ -58,7 +58,7 @@ method printIns(ins:ins)
 {
 	match ins
 	{
-		case ADD(dest, src1, src2) =>
+		case Add(dest, src1, src2) =>
 			print("  Add"); printOperand(dest); cma();
 				printOperand(src1); cma();
 				printOperand(src2); nl();
