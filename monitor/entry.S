@@ -79,9 +79,13 @@ _monitor_start: /* start of day entry, invoked by the loader in secure SVC mode 
         movs    pc, lr
 
 _smchandler:
-        /* call C */
+        /* call C, stacking r4 (used as a parameter) */
         push    {lr}
+        push    {r4}
         bl      smchandler
+        /* XXX: restore r4 as demanded by ARM's SMC calling convention,
+         * even though it was used a parameter and this makes no sense */
+        pop     {r4}
         pop     {lr}
 
         /* scrub secrets from registers */
