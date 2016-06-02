@@ -29,3 +29,7 @@ X86_INCLUDES = -i x86spartan.dfy -i x86print.dfy
 X86_DEPS = x86def.dll x86print.dll x86spartan.dll x86decls.sdfy
 x86test1.dfy: x86test1.sdfy x86decls.sdfy $(X86_DEPS)
 	$(SPARTAN) x86decls.sdfy x86test1.sdfy -out $@ $(X86_INCLUDES)
+
+ARM_INCLUDES = -i ARMspartan.dfy - i ARMprint.dfy
+ARM_DEPS = ARMdef.dll ARMprint.dll ARMspartan.dll ARMdecls.sdfy
+arm_tmp: $(ARM_DEPS)

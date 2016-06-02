@@ -1,4 +1,4 @@
-include "../../../src/Libraries/Crypto/Hashing/assembly.s.dfy"
+include "assembly.s.dfy"
 
 datatype ARMReg = R(n:int)
 datatype ARMtype = ARMUint32
