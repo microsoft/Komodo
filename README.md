@@ -41,4 +41,6 @@ Required tools:
 
 The supported platform is currently Raspberry Pi 2, either a real
 board, or a custom QEMU, available from [this GitHub
-branch](https://github.com/0xabu/qemu/commits/raspi-tzkludges).
+branch](https://github.com/0xabu/qemu/commits/raspi-tzkludges). If
+you're at MSR, you can also find precompiled Windows binaries at
+[\\research\root\public\kevlar\qemu](file:////research/root/public/kevlar/qemu).
