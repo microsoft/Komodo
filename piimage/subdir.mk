@@ -5,7 +5,7 @@ $(dir)/kernelblob.elf: $(GUEST_KERNEL)
 	$(OBJCOPY) -I binary -O elf32-littlearm -B arm $< $@
 
 $(dir)/kevlar.elf: $(PIIMAGE_ELF_INPUTS) $(PIIMAGE_LINKER_SCRIPT)
-	$(LD) $(LDFLAGS_ALL) -T $(PIIMAGE_LINKER_SCRIPT) -o $@ $(PIIMAGE_ELF_INPUTS)
+	$(LD) $(LDFLAGS_ALL) -T $(PIIMAGE_LINKER_SCRIPT) -o $@ $(PIIMAGE_ELF_INPUTS) -z muldefs
 
 $(dir)/kevlar.img: $(dir)/kevlar.elf
 	$(OBJCOPY) $< -O binary $@
