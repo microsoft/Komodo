@@ -32,26 +32,14 @@ method printId(id:id)
 {
 	match id
 	{
-		case IdARMReg(r) => { match r
-			case R(i) => print("r"); print(i); }
-    	case IdGlobal(g) => print(" !!!NOT IMPLEMENTED!!!");
-    	case IdLocal(l) => print(" !!!NOT IMPLEMENTED!!!");
-    	case IdStackSlot(i) => print(" !!! NOT IMPLEMENTED!!!");
+    	case GlobalVar(g) => not_impl();
+    	case LocalVar(l)  => not_impl();
 	}
 }
 
 method printOperand(o:operand)
 {
-  match o
-  {
-    case OConst(n) =>
-    {
-      if 0 <= n < 0x1_0000_0000 { print(n); }
-      else { print(" !!!NOT IMPLEMENTED!!!"); }
-    }
-    case OVar(x) => printId(x);
-    case OHeap(addr) => print(" !!!NOT IMPLEMENTED!!!");
-  }
+	not_impl();
 }
 
 method printIns(ins:ins)

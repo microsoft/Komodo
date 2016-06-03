@@ -1,22 +1,38 @@
 include "assembly.s.dfy"
 
-datatype ARMReg = R(n:int)
-datatype ARMtype = ARMUint32
-datatype id = IdGlobal(g:int) | IdLocal(x:int)| IdStackSlot(s:int) | IdARMReg(r:ARMReg)
-datatype operand = OConst(n:int) | OVar(x:id) | OHeap(addr:int)
-datatype ocmp = OEq | ONe | OLe | OGe | OLt | OGt
-datatype obool = OCmp(cmp:ocmp, o1:operand, o2:operand)
+//-----------------------------------------------------------------------------
+// Microarchitectural State
+//-----------------------------------------------------------------------------
+datatype ARMReg = R(n:int) | SP(spm:Mode) | LP(lpm: Mode)
+datatype Mode = User | System | Monitor |Abort | Undefined | FIQ
 
-function method id_r(n:int): id
-	requires 0 <= n <= 15
-	{ IdARMReg(R(n)) }
+datatype operand = OConst(n:int) | OReg(r:ARMReg)
+datatype id = GlobalVar(g:int) | LocalVar(l:int)
+datatype memoperand =  MOId(x:id) | MOHeap(addr:int)
 
+datatype frame = Frame(locals:map<id, int>)
+datatype state = State(regs:map<ARMReg, int>,
+					   globals:map<id, int>,
+					   stack:seq<frame>,
+					   heap:map<int, int>)
+					   // TODO mode:Mode)
+
+//TODO rename op_r maybe
 function method var_r(n:int):operand
-	requires 0 <= n <= 15
-	{ OVar(id_r(n)) }
+	requires 0 <= n <= 12
+	{ OReg(R(n)) }
 
+//-----------------------------------------------------------------------------
+// Instructions
+//-----------------------------------------------------------------------------
 datatype ins =
 	Add(dest:operand, src1:operand, src2:operand)
+
+//-----------------------------------------------------------------------------
+// Code Representation
+//-----------------------------------------------------------------------------
+datatype ocmp = OEq | ONe | OLe | OGe | OLt | OGt
+datatype obool = OCmp(cmp:ocmp, o1:operand, o2:operand)
 
 datatype codes = CNil | sp_CCons(hd:code, tl:codes)
 
@@ -26,17 +42,21 @@ datatype code =
 | IfElse(ifCond:obool, ifTrue:code, ifFalse:code)
 | While(whileCond:obool, whileBody:code)
 
-datatype frame = Frame(locals:map<id, int>)
-datatype state = State(globals:map<id, int>, stack:seq<frame>, heap:map<int, int>)
-
-// Everything is word length. Words are 32b
+//-----------------------------------------------------------------------------
+// Microarch-Related Utilities
+//-----------------------------------------------------------------------------
 function Truncate(n:int) : int { n % 0x1_0000_0000 }
 function BytesPerWord() : int { 4 }
 function MaxVal() : int { 0x1_0000_0000 }
 
+//-----------------------------------------------------------------------------
+// Validity
+//-----------------------------------------------------------------------------
 predicate ValidState(s:state) 
 {
-	(forall r :: IdARMReg(r) in s.globals)
+	true
+	//(forall r :: IdARMReg(r) in s.globals)
+	// TODO
 } 
 
 predicate ValidHeapAddr(heap:map<int,int>, addr:int)
@@ -47,63 +67,81 @@ predicate ValidHeapAddr(heap:map<int,int>, addr:int)
 
 predicate ValidOperand(s:state, o:operand)
 {
-    match o
-      case OVar(x) =>
-        (match x
-           case IdGlobal(g) => x in s.globals
-           case IdLocal(l) => |s.stack| > 0 && x in s.stack[0].locals
-           case IdStackSlot(n) => |s.stack| > 0 && x in s.stack[0].locals
-           case IdARMReg(r) => x in s.globals)
-      case OConst(n) => true
-      case OHeap(addr) => ValidHeapAddr(s.heap, addr)
+	match o
+		case OConst(n) => true
+		case OReg(r) => (match r
+			case R(n) => r in s.regs  //TODO 0 <= n < 12
+			case SP(spm) => r in s.regs //TODO
+			case LP(lpm) => r in s.regs //TODO
+		)
 }
 
 predicate ValidDestinationOperand(s:state, o:operand)
-	{ o.OVar? && ValidOperand(s, o) }
+	{ o.OReg? && ValidOperand(s, o) }
 
+predicate ValidMemOperand(s:state, m:memoperand)
+{
+	match m
+		case MOId(x) => (match x
+			case GlobalVar(g) => x in s.globals
+			case LocalVar(l)  => |s.stack| > 0 && x in s.stack[0].locals
+		)
+		case MOHeap(addr) => ValidHeapAddr(s.heap, addr)
+}
+
+
+//-----------------------------------------------------------------------------
+// Evaluation
+//-----------------------------------------------------------------------------
 function {:axiom} GetValueAtHeapAddress(heap:map<int,int>, addr:int) : int
     requires ValidHeapAddr(heap, addr);
     ensures  0 <= GetValueAtHeapAddress(heap, addr) < MaxVal();
     ensures  addr in heap && GetValueAtHeapAddress(heap, addr) == heap[addr];
 
-function OperandContents(s:state, o:operand):int
-    requires ValidOperand(s, o);
+function OperandContents(s:state, o:operand): int
+	requires ValidOperand(s,o)
 {
-    match o
-        case OConst(n) => n
-        case OVar(x) =>
-            (match x
-                 case IdGlobal(g) => s.globals[x]
-                 case IdLocal(l) => s.stack[0].locals[x]
-                 case IdStackSlot(n) => s.stack[0].locals[x]
-                 case IdARMReg(r) => s.globals[x]
-            )
-        case OHeap(addr) => GetValueAtHeapAddress(s.heap, addr)
+	match o
+		case OConst(n) => n
+		case OReg(r) => s.regs[r]
 }
 
-function eval_op(s:state, o:operand):int
+function MemOperandContents(s:state, m:memoperand): int
+	requires ValidMemOperand(s, m)
 {
-    if !ValidOperand(s, o) then 0xDEADBEEF
-    else
-        match o
-            case OConst(n) => n
-            case OVar(x) =>
-                (match x
-                     case IdGlobal(g)    => Truncate(s.globals[x])
-                     case IdLocal(l)     => Truncate(s.stack[0].locals[x])
-                     case IdStackSlot(n) => Truncate(s.stack[0].locals[x])
-                     case IdARMReg(r)    => Truncate(s.globals[x])
-                )
-            case OHeap(addr) => GetValueAtHeapAddress(s.heap, addr)
+	match m
+		case MOId(x) => (match x
+			case GlobalVar(g) => s.globals[x]
+			case LocalVar(l) => s.stack[0].locals[x]
+		)
+		case MOHeap(addr:int) => GetValueAtHeapAddress(s.heap, addr)
 }
+
+
+// eval_op and eval_memop may need to duplicate _Contents and remove requires
+function eval_op(s:state, o:operand): int
+	requires ValidOperand(s, o) { Truncate(OperandContents(s,o)) }
+
+function eval_memop(s:state, m:memoperand): int
+	requires ValidMemOperand(s, m) { Truncate(MemOperandContents(s,m)) }
 
 predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
-    requires ValidDestinationOperand(s, o);
+	requires ValidDestinationOperand(s, o)
 {
-    if o.x.IdGlobal? || o.x.IdARMReg? then
-        ok && r == s.(globals := s.globals[o.x := v])
-    else
-        ok && r == s.(stack := [s.stack[0].(locals := s.stack[0].locals[o.x := v])] + s.stack[1..])
+	ok && r == s.(regs := s.regs[o.r := v])
+}
+
+predicate evalMemUpdate(s:state, m:memoperand, v: int, r:state, ok:bool)
+	requires ValidMemOperand(s, m);
+{
+	ok && match m
+		case MOId(x) => (match x
+			case GlobalVar(g) => r == s.(globals := s.globals[m.x := v])
+			case LocalVar(l) => r == s.(stack :=
+				[s.stack[0].(locals := s.stack[0].locals[m.x := v])] +
+					s.stack[1..])
+		)
+		case MOHeap(addr:int) => false //Not sure why heap addresses aren't valid dest in x86def
 }
 
 function evalCmp(c:ocmp, i1:int, i2:int):bool
