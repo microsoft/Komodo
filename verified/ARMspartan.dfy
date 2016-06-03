@@ -61,24 +61,26 @@ function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
 //-----------------------------------------------------------------------------
 // Stack
 //-----------------------------------------------------------------------------
-function method stack(slot:int):operand {  OVar(IdStackSlot(slot)) }
-function stackval(s:sp_state, o:operand):int requires ValidOperand(s, o); { sp_eval_op(s, o) }
-predicate NonEmptyStack(s:sp_state) { s.stack != [] }
-predicate StackContains(s:sp_state, slot:int) 
-    requires NonEmptyStack(s);
-    { stack(slot).x in s.stack[0].locals }
+// function method stack(slot:int):operand {  OVar(IdStackSlot(slot)) }
+// function stackval(s:sp_state, o:operand):int requires ValidOperand(s, o); { sp_eval_op(s, o) }
+// predicate NonEmptyStack(s:sp_state) { s.stack != [] }
+// predicate StackContains(s:sp_state, slot:int) 
+//     requires NonEmptyStack(s);
+//     { stack(slot).x in s.stack[0].locals }
 
 //-----------------------------------------------------------------------------
 // Heap
 //-----------------------------------------------------------------------------
-predicate HeapOperand(o:operand) { o.OHeap? }
+// predicate HeapOperand(o:operand) { o.OHeap? }
 
 //-----------------------------------------------------------------------------
 // Register Validity
 //-----------------------------------------------------------------------------
 predicate ValidRegisters(s:sp_state)
 {
-	forall i:int :: 0 <= i <= 15 ==> ValidOperand(s, var_r(i))
+	( forall i:int :: 0 <= i <= 12 ==> ValidOperand(s, op_r(i)) ) &&
+		( forall m:Mode :: ValidOperand(s, op_sp(m)) ) &&
+		( forall m:Mode :: ValidOperand(s, op_lr(m)) )
 }
 
 //-----------------------------------------------------------------------------

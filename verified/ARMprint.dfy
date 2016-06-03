@@ -19,7 +19,7 @@ method printBcc(c:ocmp)
 {
 	match c
 	{
-		case OEq => print("B EQ");
+		case OEq => print("B EQ ");
 		case ONe => print("B NE ");
 		case OLe => print("B LE ");
 		case OGe => print("B GE ");
