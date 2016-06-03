@@ -3,7 +3,7 @@ include "assembly.s.dfy"
 //-----------------------------------------------------------------------------
 // Microarchitectural State
 //-----------------------------------------------------------------------------
-datatype ARMReg = R(n:int) | SP(spm:Mode) | LP(lpm: Mode)
+datatype ARMReg = R(n:int) | SP(spm:Mode) | LR(lpm: Mode)
 datatype Mode = User | System | Monitor |Abort | Undefined | FIQ
 
 datatype operand = OConst(n:int) | OReg(r:ARMReg)
@@ -14,13 +14,18 @@ datatype frame = Frame(locals:map<id, int>)
 datatype state = State(regs:map<ARMReg, int>,
 					   globals:map<id, int>,
 					   stack:seq<frame>,
-					   heap:map<int, int>)
-					   // TODO mode:Mode)
+					   heap:map<int, int>,
+					   mode:Mode)
 
-//TODO rename op_r maybe
-function method var_r(n:int):operand
+function method op_r(n:int):operand
 	requires 0 <= n <= 12
 	{ OReg(R(n)) }
+
+function method op_sp(m:Mode):operand
+	{ OReg(SP(m)) }
+
+function method op_lr(m:Mode):operand
+	{ OReg(LR(m)) }
 
 //-----------------------------------------------------------------------------
 // Instructions
@@ -52,17 +57,11 @@ function MaxVal() : int { 0x1_0000_0000 }
 //-----------------------------------------------------------------------------
 // Validity
 //-----------------------------------------------------------------------------
-predicate ValidState(s:state) 
-{
-	true
-	//(forall r :: IdARMReg(r) in s.globals)
-	// TODO
-} 
-
 predicate ValidHeapAddr(heap:map<int,int>, addr:int)
 {
-    addr % MaxVal() == 0
- 	&& (forall i {:trigger addr + i in heap} :: 0 <= i < BytesPerWord() ==> addr + i in heap)
+    addr % MaxVal() == 0 &&
+		(forall i {:trigger addr + i in heap} ::
+			0 <= i < BytesPerWord() ==> addr + i in heap)
 }
 
 predicate ValidOperand(s:state, o:operand)
@@ -70,9 +69,9 @@ predicate ValidOperand(s:state, o:operand)
 	match o
 		case OConst(n) => true
 		case OReg(r) => (match r
-			case R(n) => r in s.regs  //TODO 0 <= n < 12
-			case SP(spm) => r in s.regs //TODO
-			case LP(lpm) => r in s.regs //TODO
+			case R(n) => r in s.regs 
+			case SP(spm) => r in s.regs 
+			case LR(lpm) => r in s.regs 
 		)
 }
 
@@ -88,7 +87,6 @@ predicate ValidMemOperand(s:state, m:memoperand)
 		)
 		case MOHeap(addr) => ValidHeapAddr(s.heap, addr)
 }
-
 
 //-----------------------------------------------------------------------------
 // Evaluation
@@ -183,7 +181,8 @@ predicate evalBlock(block:codes, s:state, r:state, ok:bool)
     if block.CNil? then
         ok && r == s
     else
-        exists r0, ok0 :: evalCode(block.hd, s, r0, ok0) && (if !ok0 then !ok else evalBlock(block.tl, r0, r, ok))
+        exists r0, ok0 :: evalCode(block.hd, s, r0, ok0) &&
+			(if !ok0 then !ok else evalBlock(block.tl, r0, r, ok))
 }
 
 predicate evalWhile(b:obool, c:code, n:nat, s:state, r:state, ok:bool)
@@ -193,9 +192,10 @@ predicate evalWhile(b:obool, c:code, n:nat, s:state, r:state, ok:bool)
         if n == 0 then
             !evalOBool(s, b) && ok && r == s
         else
-            exists r0, ok0 :: evalOBool(s, b) && evalCode(c, s, r0, ok0) && (if !ok0 then !ok else evalWhile(b, c, n - 1, r0, r, ok))
-    else
-        !ok
+            exists r0, ok0 :: evalOBool(s, b) &&
+				evalCode(c, s, r0, ok0) &&
+				(if !ok0 then !ok else evalWhile(b, c, n - 1, r0, r, ok))
+    else !ok
 }
 
 predicate evalCode(c:code, s:state, r:state, ok:bool)
