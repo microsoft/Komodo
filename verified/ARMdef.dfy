@@ -31,7 +31,10 @@ function method op_lr(m:Mode):operand
 // Instructions
 //-----------------------------------------------------------------------------
 datatype ins =
-	Add(dest:operand, src1:operand, src2:operand)
+	  ADD(dstADD:operand, src1ADD:operand, src2ADD:operand)
+	| MOV(dstMOV:operand, srcMOV:operand)
+	| LDR(rdLDR:operand, addrLDR:memoperand)
+	| STR(rdSTR:operand, addrSTR:memoperand)
 
 //-----------------------------------------------------------------------------
 // Code Representation
@@ -163,16 +166,31 @@ function evalOBool(s:state, o:obool):bool
 predicate ValidInstruction(s:state, ins:ins)
 {
 	match ins
-		case Add(dest, src1, src2) => ValidOperand(s, src1) &&
+		case ADD(dest, src1, src2) => ValidOperand(s, src1) &&
 			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
+		case LDR(rd, addr) => ValidDestinationOperand(s, rd) &&
+			ValidMemOperand(s, addr)
+		case STR(rd, addr) => ValidOperand(s, rd) &&
+			ValidMemOperand(s, addr) // All valid mem ops are valid dest ops
+		case MOV(dst, src) => ValidDestinationOperand(s, dst) &&
+			ValidOperand(s, src)
 }
 
 predicate evalIns(ins:ins, s:state, r:state, ok:bool)
 {
     if !ValidInstruction(s, ins) then !ok
     else match ins
-		case Add(dst, src1, src2) => evalUpdate(s, dst,
+		case ADD(dst, src1, src2) => evalUpdate(s, dst,
 			(OperandContents(s, src1) + OperandContents(s, src2) % MaxVal()),
+			r, ok)
+		case LDR(rd, addr) => evalUpdate(s, rd,
+			MemOperandContents(s, addr) % MaxVal(),
+			r, ok)
+		case STR(rd, addr) => evalMemUpdate(s, addr,
+			OperandContents(s, rd) % MaxVal(),
+			r, ok)
+		case MOV(dst, src) =>evalUpdate(s, dst,
+			OperandContents(s, src) % MaxVal(),
 			r, ok)
 }
 

@@ -6,6 +6,7 @@ DAFNY ?= $(IRON_IMPSEC_PATH)/tools/Dafny/Dafny.exe
 DAFNYFLAGS = /autoTriggers:1 /noNLarith /timeLimit:30
 
 all: x86test1.S
+# all: ARMtest1.S
 
 #%.dfy: %.sdfy
 #	$(SPARTAN) $< -out $@ $(SPARTAN_INCLUDES)
@@ -30,6 +31,8 @@ X86_DEPS = x86def.dll x86print.dll x86spartan.dll x86decls.sdfy
 x86test1.dfy: x86test1.sdfy x86decls.sdfy $(X86_DEPS)
 	$(SPARTAN) x86decls.sdfy x86test1.sdfy -out $@ $(X86_INCLUDES)
 
-ARM_INCLUDES = -i ARMspartan.dfy - i ARMprint.dfy
+ARM_INCLUDES = -i ARMspartan.dfy -i ARMprint.dfy
 ARM_DEPS = ARMdef.dll ARMprint.dll ARMspartan.dll ARMdecls.sdfy
-arm_tmp: $(ARM_DEPS)
+
+ARMtest1.dfy: ARMtest1.sdfy ARMdecls.sdfy $(ARM_DEPS)
+	$(SPARTAN) ARMdecls.sdfy ARMtest1.sdfy -out $@ $(ARM_INCLUDES)

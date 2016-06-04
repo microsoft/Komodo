@@ -30,26 +30,44 @@ method printBcc(c:ocmp)
 
 method printId(id:id)
 {
-	match id
-	{
-    	case GlobalVar(g) => not_impl();
-    	case LocalVar(l)  => not_impl();
-	}
+	not_impl();
 }
 
 method printOperand(o:operand)
 {
-	not_impl();
+	match o
+		case OConst(n) => print(n);
+		case OReg(r) => {match r
+			case R(n) => print("r"); print(n);
+			case SP(m) => print("r13");
+			case LR(m) => print("r14");
+		}
+}
+
+method printMemOperand(m:memoperand)
+{
+	match m
+		case MOId(x) => not_impl();
+		case MOHeap(addr) => not_impl();
 }
 
 method printIns(ins:ins)
 {
 	match ins
 	{
-		case Add(dest, src1, src2) =>
-			print("  Add"); printOperand(dest); cma();
+		case ADD(dest, src1, src2) =>
+			print("  ADD "); printOperand(dest); cma();
 				printOperand(src1); cma();
 				printOperand(src2); nl();
+		case LDR(rd, addr) =>
+			print("  LDR "); printOperand(rd); cma();
+				printMemOperand(addr); nl();
+		case STR(rd, addr) =>
+			print("  STR "); printOperand(rd); cma();
+				printMemOperand(addr); nl();
+		case MOV(dst, src) =>
+			print("  MOV "); printOperand(dst); cma();
+				printOperand(src); nl();
 	}
 }
 
@@ -100,4 +118,9 @@ method printCode(c:code, n:int) returns(n':int)
     	  printBcc(cmpNot(b.cmp)); print("L"); print(n1); print("\n");
     	}
 	}
+}
+
+method printHeader(){
+}
+method printFooter(){
 }

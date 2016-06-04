@@ -29,13 +29,31 @@ var{:register op_lr(FIQ)}       lrFIQ:int;
 function{:operand} stack(slot:int):oprnd
 function{:operand} fromOperand(o:oprnd):oprnd
 
-procedure Add(out{:operand} dst:int, in{:operand} src1:int,
-	in{:operand}, src2:int)
- 	requires/ensures
-    	ValidOperand(this, @src1);
-    	ValidOperand(this, @src2);
-		ValidDestinationOperand(this, @dst);
-	ensures
-		evalUpdate(old(this), @dst, old(src1 + src2), this, true);
-		
-	  
+procedure ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+    requires/ensures
+        ValidOperand(this, @src1);
+        ValidOperand(this, @src2);
+        ValidDestinationOperand(this, @dst);
+    ensures
+        evalUpdate(old(this), @dst, old(src1 + src2), this, true);
+
+procedure MOV(out{:operand} dst:int, {:operand} src:int)
+    requires/ensures
+        ValidOperand(this, @src);
+        ValidDestinationOperand(this, @dst);
+    ensures
+        evalUpdate(old(this), @dst, old(src), this, true);
+
+// procedure LDR(out{:operand} rd:int, {:operand} addr:int)
+//     requires/ensures
+//         ValidDestinationOperand(this, @rd);
+//         ValidMemOperand(this, @addr);
+//     ensures
+//         evalUpdate(old(this), @rd, old(addr), this, true);
+// 
+// procedure STR({:operand} rd:int, out{:operand} addr:int)
+//     requires/ensures
+//         ValidOperand(this, @addr);
+//     ensures
+//         evalMemUpdate(old(this), @addr, old(rd), this, true);
+// 
