@@ -19,12 +19,12 @@ method printBcc(c:ocmp)
 {
 	match c
 	{
-		case OEq => print("B EQ ");
-		case ONe => print("B NE ");
-		case OLe => print("B LE ");
-		case OGe => print("B GE ");
-		case OLt => print("B LT ");
-		case OGt => print("B GT ");
+		case OEq => print("BEQ ");
+		case ONe => print("BNE ");
+		case OLe => print("BLE ");
+		case OGe => print("BGE ");
+		case OLt => print("BLT ");
+		case OGt => print("BGT ");
 	}
 }
 
@@ -36,7 +36,7 @@ method printId(id:id)
 method printOperand(o:operand)
 {
 	match o
-		case OConst(n) => print(n);
+		case OConst(n) => print("#");print(n);
 		case OReg(r) => {match r
 			case R(n) => print("r"); print(n);
 			case SP(m) => print("r13");

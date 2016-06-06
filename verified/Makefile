@@ -35,6 +35,6 @@ clean::
 # 	$(SPARTAN) ARMdecls.sdfy ARMtest1.sdfy -out $@ $(ARM_INCLUDES)
 # =======
 # temp rule for assembling; this should go away once we're a subdir.mk
-AS ?= arm-eabi-as
+AS = arm-eabi-as
 %.o: %.S
 	$(AS) -mcpu=cortex-a7 -g $< -o $@
