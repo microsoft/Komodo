@@ -59,6 +59,10 @@ method printIns(ins:ins)
 			print("  ADD "); printOperand(dest); cma();
 				printOperand(src1); cma();
 				printOperand(src2); nl();
+        case SUB(dest, src1, src2) =>
+			print("  SUB "); printOperand(dest); cma();
+				printOperand(src1); cma();
+				printOperand(src2); nl();
 		case LDR(rd, addr) =>
 			print("  LDR "); printOperand(rd); cma();
 				printMemOperand(addr); nl();
