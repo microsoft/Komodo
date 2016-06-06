@@ -32,6 +32,7 @@ function method op_lr(m:Mode):operand
 //-----------------------------------------------------------------------------
 datatype ins =
 	  ADD(dstADD:operand, src1ADD:operand, src2ADD:operand)
+	| SUB(dstSUB:operand, src1SUB:operand, src2SUB:operand)
 	| MOV(dstMOV:operand, srcMOV:operand)
 	| LDR(rdLDR:operand, addrLDR:memoperand)
 	| STR(rdSTR:operand, addrSTR:memoperand)
@@ -168,6 +169,8 @@ predicate ValidInstruction(s:state, ins:ins)
 	match ins
 		case ADD(dest, src1, src2) => ValidOperand(s, src1) &&
 			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
+		case SUB(dest, src1, src2) => ValidOperand(s, src1) &&
+			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
 		case LDR(rd, addr) => ValidDestinationOperand(s, rd) &&
 			ValidMemOperand(s, addr)
 		case STR(rd, addr) => ValidOperand(s, rd) &&
@@ -182,6 +185,9 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
     else match ins
 		case ADD(dst, src1, src2) => evalUpdate(s, dst,
 			( (OperandContents(s, src1) + OperandContents(s, src2)) % MaxVal()),
+			r, ok)
+		case SUB(dst, src1, src2) => evalUpdate(s, dst,
+			( (OperandContents(s, src1) - OperandContents(s, src2)) % MaxVal()),
 			r, ok)
 		case LDR(rd, addr) => evalUpdate(s, rd,
 			MemOperandContents(s, addr) % MaxVal(),

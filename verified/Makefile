@@ -26,7 +26,7 @@ ARM_DEPS = ARMdef.dll ARMprint.dll ARMspartan.dll ARMdecls.sdfy
 	$(DAFNY) $<
 
 clean::
-	$(RM) *.exe *.dll *.pdb
+	$(RM) *.exe *.dll *.pdb *.S
 
 # ARM_INCLUDES = -i ARMspartan.dfy -i ARMprint.dfy
 # ARM_DEPS = ARMdef.dll ARMprint.dll ARMspartan.dll ARMdecls.sdfy

@@ -41,6 +41,18 @@ procedure ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         isUInt32(dst);
         evalUpdate(old(this), @dst, old(src1 + src2) % MaxVal(), this, true);
 
+procedure SUB(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+    requires/ensures
+        ValidOperand(this, @src1);
+        ValidOperand(this, @src2);
+        ValidDestinationOperand(this, @dst);
+    requires
+        isUInt32(src1);
+        isUInt32(src2);
+    ensures
+        isUInt32(dst);
+        evalUpdate(old(this), @dst, old(src1 - src2) % MaxVal(), this, true);
+
 procedure MOV(out{:operand} dst:int, {:operand} src:int)
     requires/ensures
         ValidOperand(this, @src);

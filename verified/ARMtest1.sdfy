@@ -42,7 +42,7 @@ procedure foo(ghost x:int, inout{:register op_r(1)} a:int) returns(ghost y:int)
     assert i == old(a) + 1;
     ghost var s1 := this;
     assert i == old[s1](i);
-    ADD(a,a,1); //todo decr
+    SUB(a,a,1); //todo decr
     assert i == old[s1](i) - 1;
   }
   else if (i >= i)
@@ -117,8 +117,8 @@ procedure main()
   }
   else
   {
-    ADD(r1,r1,1); //todo decr
-    ADD(r1,r1,1); //todo decr
+    SUB(r1,r1,1); //todo decr
+    SUB(r1,r1,1); //todo decr
   }
 }
 
