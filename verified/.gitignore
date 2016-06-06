@@ -1,5 +1,5 @@
 *.dll
+*.exe
 *.pdb
-x86test1.dfy
-x86test1.exe
-x86test1.S
+*.S
+ARMtest1.dfy
