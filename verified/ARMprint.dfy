@@ -42,13 +42,7 @@ method printOperand(o:operand)
 			case SP(m) => print("r13");
 			case LR(m) => print("r14");
 		}
-}
-
-method printMemOperand(m:memoperand)
-{
-	match m
-		case MOId(x) => not_impl();
-		case MOHeap(addr) => not_impl();
+        case OId(x) => print(x);
 }
 
 method printIns(ins:ins)
@@ -65,10 +59,10 @@ method printIns(ins:ins)
 				printOperand(src2); nl();
 		case LDR(rd, addr) =>
 			print("  LDR "); printOperand(rd); cma();
-				printMemOperand(addr); nl();
+				printOperand(addr); nl();
 		case STR(rd, addr) =>
 			print("  STR "); printOperand(rd); cma();
-				printMemOperand(addr); nl();
+				printOperand(addr); nl();
 		case MOV(dst, src) =>
 			print("  MOV "); printOperand(dst); cma();
 				printOperand(src); nl();

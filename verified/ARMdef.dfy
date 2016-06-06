@@ -6,9 +6,8 @@ include "assembly.s.dfy"
 datatype ARMReg = R(n:int) | SP(spm:Mode) | LR(lpm: Mode)
 datatype Mode = User | System | Monitor |Abort | Undefined | FIQ
 
-datatype operand = OConst(n:int) | OReg(r:ARMReg)
-datatype id = GlobalVar(g:int) | LocalVar(l:int)
-datatype memoperand =  MOId(x:id) | MOHeap(addr:int)
+datatype id = GlobalVar(g:int) | LocalVar(l:int) 
+datatype operand = OConst(n:int) | OReg(r:ARMReg) | OId(x:id)
 
 datatype frame = Frame(locals:map<id, int>)
 datatype state = State(regs:map<ARMReg, int>,
@@ -34,8 +33,8 @@ datatype ins =
 	  ADD(dstADD:operand, src1ADD:operand, src2ADD:operand)
 	| SUB(dstSUB:operand, src1SUB:operand, src2SUB:operand)
 	| MOV(dstMOV:operand, srcMOV:operand)
-	| LDR(rdLDR:operand, addrLDR:memoperand)
-	| STR(rdSTR:operand, addrSTR:memoperand)
+	| LDR(rdLDR:operand, addrLDR:operand)
+	| STR(rdSTR:operand, addrSTR:operand)
 
 //-----------------------------------------------------------------------------
 // Code Representation
@@ -61,13 +60,6 @@ function MaxVal() : int { 0x1_0000_0000 }
 //-----------------------------------------------------------------------------
 // Validity
 //-----------------------------------------------------------------------------
-predicate ValidHeapAddr(heap:map<int,int>, addr:int)
-{
-    addr % MaxVal() == 0 &&
-		(forall i {:trigger addr + i in heap} ::
-			0 <= i < BytesPerWord() ==> addr + i in heap)
-}
-
 predicate ValidOperand(s:state, o:operand)
 {
 	match o
@@ -77,46 +69,33 @@ predicate ValidOperand(s:state, o:operand)
 			case SP(spm) => r in s.regs 
 			case LR(lpm) => r in s.regs 
 		)
+		case OId(x) => (match x
+			case GlobalVar(g) => x in s.globals
+			case LocalVar(l)  => |s.stack| > 0 && x in s.stack[0].locals
+	    )
 }
 
 predicate ValidDestinationOperand(s:state, o:operand)
-	{ o.OReg? && ValidOperand(s, o) }
+	{ !o.OConst? && ValidOperand(s, o) }
 
-predicate ValidMemOperand(s:state, m:memoperand)
+predicate IsMemOperand(o:operand)
 {
-	match m
-		case MOId(x) => (match x
-			case GlobalVar(g) => x in s.globals
-			case LocalVar(l)  => |s.stack| > 0 && x in s.stack[0].locals
-		)
-		case MOHeap(addr) => ValidHeapAddr(s.heap, addr)
+    o.OId?
 }
 
 //-----------------------------------------------------------------------------
 // Evaluation
 //-----------------------------------------------------------------------------
-function {:axiom} GetValueAtHeapAddress(heap:map<int,int>, addr:int) : int
-    requires ValidHeapAddr(heap, addr);
-    ensures  0 <= GetValueAtHeapAddress(heap, addr) < MaxVal();
-    ensures  addr in heap && GetValueAtHeapAddress(heap, addr) == heap[addr];
-
 function OperandContents(s:state, o:operand): int
 	requires ValidOperand(s,o)
 {
 	match o
 		case OConst(n) => n
 		case OReg(r) => s.regs[r]
-}
-
-function MemOperandContents(s:state, m:memoperand): int
-	requires ValidMemOperand(s, m)
-{
-	match m
-		case MOId(x) => (match x
+		case OId(x) => (match x
 			case GlobalVar(g) => s.globals[x]
 			case LocalVar(l) => s.stack[0].locals[x]
 		)
-		case MOHeap(addr:int) => GetValueAtHeapAddress(s.heap, addr)
 }
 
 
@@ -124,26 +103,17 @@ function MemOperandContents(s:state, m:memoperand): int
 function eval_op(s:state, o:operand): int
 	requires ValidOperand(s, o) { Truncate(OperandContents(s,o)) }
 
-function eval_memop(s:state, m:memoperand): int
-	requires ValidMemOperand(s, m) { Truncate(MemOperandContents(s,m)) }
-
 predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
-	requires ValidDestinationOperand(s, o)
+	requires ValidDestinationOperand(s, o);
 {
-	ok && r == s.(regs := s.regs[o.r := v])
-}
-
-predicate evalMemUpdate(s:state, m:memoperand, v: int, r:state, ok:bool)
-	requires ValidMemOperand(s, m);
-{
-	ok && match m
-		case MOId(x) => (match x
-			case GlobalVar(g) => r == s.(globals := s.globals[m.x := v])
+    ok && match o
+        case OReg(reg) => r == s.(regs := s.regs[o.r := v])
+        case OId(x) => ( match x
+			case GlobalVar(g) => r == s.(globals := s.globals[o.x := v])
 			case LocalVar(l) => r == s.(stack :=
-				[s.stack[0].(locals := s.stack[0].locals[m.x := v])] +
+				[s.stack[0].(locals := s.stack[0].locals[o.x := v])] +
 					s.stack[1..])
 		)
-		case MOHeap(addr:int) => false //Not sure why heap addresses aren't valid dest in x86def
 }
 
 function evalCmp(c:ocmp, i1:int, i2:int):bool
@@ -166,17 +136,22 @@ function evalOBool(s:state, o:obool):bool
 
 predicate ValidInstruction(s:state, ins:ins)
 {
+    //TODO check mem vs non-mem
 	match ins
 		case ADD(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
+			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+            !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
 		case SUB(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
+			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+            !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
 		case LDR(rd, addr) => ValidDestinationOperand(s, rd) &&
-			ValidMemOperand(s, addr)
+			ValidOperand(s, addr) && IsMemOperand(addr) && !IsMemOperand(rd)
 		case STR(rd, addr) => ValidOperand(s, rd) &&
-			ValidMemOperand(s, addr) // All valid mem ops are valid dest ops
+			ValidDestinationOperand(s, addr) &&
+            IsMemOperand(addr) && !IsMemOperand(rd)
+            // All valid mem ops are valid dest ops
 		case MOV(dst, src) => ValidDestinationOperand(s, dst) &&
-			ValidOperand(s, src)
+			ValidOperand(s, src) && !IsMemOperand(src) && !IsMemOperand(dst)
 }
 
 predicate evalIns(ins:ins, s:state, r:state, ok:bool)
@@ -190,9 +165,9 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
 			( (OperandContents(s, src1) - OperandContents(s, src2)) % MaxVal()),
 			r, ok)
 		case LDR(rd, addr) => evalUpdate(s, rd,
-			MemOperandContents(s, addr) % MaxVal(),
+			OperandContents(s, addr) % MaxVal(),
 			r, ok)
-		case STR(rd, addr) => evalMemUpdate(s, addr,
+		case STR(rd, addr) => evalUpdate(s, addr,
 			OperandContents(s, rd) % MaxVal(),
 			r, ok)
 		case MOV(dst, src) =>evalUpdate(s, dst,
