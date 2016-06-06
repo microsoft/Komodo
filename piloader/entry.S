@@ -10,6 +10,8 @@
 #define ARM_SCR_IRQ     0x02 // IRQ handler monitor mode
 #define ARM_SCR_NS      0x01 // non-secure bit
 
+#define CPSRM_MONITOR   0x16 // value of CPSR.M for Monitor mode
+
 #define RASPI_TIMER_FREQ 19200000
 
 #define NCORES          4
@@ -145,6 +147,32 @@ park_secondary_cores: /* park caller, waiting for a jump address in mailbox 3 */
 	beq	1b
         str	r3, [r1, r0, lsl #4]    // clear mailbox
         bx      r3                      // jump
+
+
+        .global leave_secure_world
+leave_secure_world:
+        /* update monitor-mode's banked LR and SPSR so that we can return to the caller in non-secure world */
+        msr     lr_mon, lr
+        mrs     r0, cpsr
+        msr     spsr_mon, r0
+
+        /* save our current stack (the caller's) in r1 */
+        mov     r1, sp
+
+        /* switch to monitor mode (also to its stack, but we don't touch that) */
+        cps     #CPSRM_MONITOR
+
+        /* set NS bit, so we leave secure world when returning */
+        mrc     p15, 0, r0, c1, c1, 0
+        orr     r0, #1 // SCR.NS=1
+        mcr     p15, 0, r0, c1, c1, 0
+        isb // FIXME: is this needed?
+
+        /* copy the caller's stack pointer to the banked SP register */
+        msr     sp_svc, r1
+
+        /* return to caller (in normal-world supervisor mode) */
+        movs    pc, lr
 
 
         .section .bss

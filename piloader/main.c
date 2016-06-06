@@ -30,9 +30,12 @@
 #define ARM_SCR_NS      0x01 // non-secure bit
 
 // defined in kevlar linker script
-extern char monitor_image_start, monitor_image_data, monitor_image_end, _monitor_start;
+extern char monitor_image_start, monitor_image_data, monitor_image_end;
+// defined in monitor image
+extern char monitor_start, monitor_stack_base;
 
 void park_secondary_cores(void);
+void leave_secure_world(void);
 
 static inline uint8_t mycoreid(void)
 {
@@ -43,7 +46,7 @@ static inline uint8_t mycoreid(void)
 
 extern void print_hex(uint32_t val);
 
-static void secure_world_init(uintptr_t ptbase, uintptr_t vbar)
+static void secure_world_init(uintptr_t ptbase, uintptr_t vbar, uintptr_t mon_sp)
 {
     uint32_t reg;
     /* setup secure-world page tables */
@@ -85,6 +88,12 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar)
     __asm volatile("mcr p15, 0, %0, c12, c0, 0" :: "r" (vbar));
     __asm volatile("mcr p15, 0, %0, c12, c0, 1" :: "r" (vbar));
 
+    /* update monitor-mode's banked SP value for use in later SMCs */
+    /* FIXME: this causes an undefined instruction exception on
+       qemu, which doesn't seem to enable the virtualization
+       extension on its cortex-a15 model (as it should!)  */
+    __asm volatile("msr sp_mon, %0" :: "r" (mon_sp));
+
     /* flush again */
     __asm volatile("isb");
 }
@@ -96,13 +105,10 @@ static void __attribute__((noreturn)) secondary_main(uint8_t coreid)
 {
     while (!global_barrier) __asm volatile("yield");
 
-    secure_world_init(g_ptbase, g_mvbar);
+    // TODO: compute per-core monitor stack pointer
+    secure_world_init(g_ptbase, g_mvbar, 0xffffffff /* TODO */);
 
-    uintptr_t reg;
-    __asm volatile("mrc p15, 0, %0, c1, c1, 0" : "=r" (reg));
-    reg |= ARM_SCR_NS;
-    __asm volatile("mcr p15, 0, %0, c1, c1, 0" : : "r" (reg));
-    __asm volatile("isb");
+    leave_secure_world();
 
     park_secondary_cores();
     
@@ -270,7 +276,9 @@ void __attribute__((noreturn)) main(void)
                  ROUND_UP(monitor_image_bytes, 0x1000) - monitor_executable_size, false);
 
     uintptr_t monitor_entry
-        = &_monitor_start - &monitor_image_start + KEVLAR_MON_VBASE;
+        = &monitor_start - &monitor_image_start + KEVLAR_MON_VBASE;
+    uintptr_t monitor_stack
+        = &monitor_stack_base - &monitor_image_start + KEVLAR_MON_VBASE;
 
     g_ptbase = ptbase;
     g_mvbar = KEVLAR_MON_VBASE;
@@ -278,15 +286,17 @@ void __attribute__((noreturn)) main(void)
     //print_hex(0x4237);
     //console_printf(" <-- Print_hex test\n"),
 
-    secure_world_init(g_ptbase, g_mvbar);
+    secure_world_init(g_ptbase, g_mvbar, monitor_stack);
 
-    /* call into the monitor's init routine
-     * this will return to us in non-secure world (where MMUs are still off) */
+    /* call into the monitor's init routine (on our stack!) */
     console_printf("entering monitor at %lx\n", monitor_entry);
     typedef void entry_func(uintptr_t);
     ((entry_func *)monitor_entry)(secure_physbase);
 
     console_printf("returned from monitor!\n");
+
+    // this call will return in non-secure world (where MMUs are still off)
+    leave_secure_world();
 
     global_barrier = true;
 
