@@ -30,3 +30,7 @@ $(dir)/ARMspartan.dll: $(dir)/ARMdef.dfy
 
 # keep these "intermediate" files around, to avoid pointless re-verification
 .SECONDARY: $(SPARTAN_DEPS)
+
+# temp target to produce a bootable image
+$(dir)/%.img: $(dir)/%.o
+	$(OBJCOPY) $< -O binary $@
