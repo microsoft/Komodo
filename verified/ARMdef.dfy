@@ -70,7 +70,7 @@ predicate ValidHeapAddr(heap:map<int,int>, addr:int)
 predicate ValidOperand(s:state, o:operand)
 {
 	match o
-		case OConst(n) => true
+		case OConst(n) => 0 <= n < MaxVal()
 		case OReg(r) => (match r
 			case R(n) => r in s.regs 
 			case SP(spm) => r in s.regs 
@@ -181,7 +181,7 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
     if !ValidInstruction(s, ins) then !ok
     else match ins
 		case ADD(dst, src1, src2) => evalUpdate(s, dst,
-			(OperandContents(s, src1) + OperandContents(s, src2) % MaxVal()),
+			( (OperandContents(s, src1) + OperandContents(s, src2)) % MaxVal()),
 			r, ok)
 		case LDR(rd, addr) => evalUpdate(s, rd,
 			MemOperandContents(s, addr) % MaxVal(),

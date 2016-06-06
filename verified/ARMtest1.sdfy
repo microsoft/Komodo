@@ -76,26 +76,6 @@ procedure p()
 #token ++ precedence !
 #token += precedence :=
 
-procedure incr(inout{:operand} op:int)
-    requires/ensures 
-        ValidDestinationOperand(this, @op);
-    ensures
-        evalUpdate(old(this), @op, old(op + op), this, true);
-{
-    ADD(op,op,1);
-}
-
-procedure plusEquals(inout{:operand} dst:int,
-    {:operand} src:int)
-    requires/ensures 
-        ValidDestinationOperand(this, @dst);
-        ValidOperand(this, @src);
-    ensures
-        evalUpdate(old(this), @dst, old(src + dst), this, true);
-{
-    ADD(dst,dst,src);
-}
-
 procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
 procedure operator(++) (inout{:operand} dst:int) := incr
 procedure operator(+=) (inout{:operand} dst:int, {:operand} src:int) := plusEquals

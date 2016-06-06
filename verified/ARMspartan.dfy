@@ -99,6 +99,10 @@ function method{:opaque} sp_code_LDR(rd:operand, addr:memoperand):code
 function method{:opaque} sp_code_STR(rd:operand, addr:memoperand):code
 	{ Ins(STR(rd, addr)) }
 
+// Pseudoinstructions  
+function method{:opaque} sp_code_incr(o:operand):code { Ins(ADD(o, o, OConst(1))) }
+function method{:opaque} sp_code_plusEquals(o1:operand, o2:operand):code { Ins(ADD(o1, o1, o2)) }
+
 //-----------------------------------------------------------------------------
 // Instruction Lemmas
 //-----------------------------------------------------------------------------
@@ -108,12 +112,10 @@ lemma sp_lemma_ADD(s:state, r:state, ok:bool,
 	requires ValidOperand(s,src2);
 	requires ValidDestinationOperand(s, dst);
 	requires sp_eval(sp_code_ADD(dst, src1, src2), s, r, ok);
-	requires 0 <= OperandContents(s, dst) < MaxVal();
 	requires 0 <= OperandContents(s, src1) < MaxVal();
 	requires 0 <= OperandContents(s, src2) < MaxVal();
-	requires 0 <= OperandContents(s, src1) + OperandContents(s, src2) < MaxVal();
-	ensures  evalUpdate(s, dst, OperandContents(s, src1) +
-		OperandContents(s, src2), r, ok);
+	ensures  evalUpdate(s, dst, (OperandContents(s, src1) +
+		OperandContents(s, src2)) % MaxVal() , r, ok);
 	ensures  ok;
 	ensures  0 <= OperandContents(r, dst) < MaxVal();
 {
@@ -121,12 +123,12 @@ lemma sp_lemma_ADD(s:state, r:state, ok:bool,
 	reveal_sp_code_ADD();
 }
 
+
 lemma sp_lemma_MOV(s:state, r:state, ok:bool,
 	dst:operand, src:operand)
 	requires ValidOperand(s, src);
 	requires ValidDestinationOperand(s, dst);
 	requires sp_eval(sp_code_MOV(dst, src), s, r, ok);
-	requires 0 <= OperandContents(s, dst) < MaxVal();
 	requires 0 <= OperandContents(s, src) < MaxVal();
 	ensures evalUpdate(s, dst, OperandContents(s, src), r, ok);
 	ensures ok;
@@ -168,6 +170,32 @@ lemma sp_lemma_MOV(s:state, r:state, ok:bool,
 // 	reveal_sp_eval();
 // 	reveal_sp_code_STR();
 // }
+
+// Pseudoinstruction Lemmas
+lemma sp_lemma_incr(s:sp_state, r:sp_state, ok:bool, o:operand)
+  requires ValidDestinationOperand(s, o)
+  requires sp_eval(sp_code_incr(o), s, r, ok)
+  requires 0 <= eval_op(s, o) < MaxVal();
+  ensures  evalUpdate(s, o,
+    (OperandContents(s, o) + 1) % MaxVal(),
+    r, ok)
+{
+  reveal_sp_eval();
+  reveal_sp_code_incr();
+}
+
+lemma sp_lemma_plusEquals(s:sp_state, r:sp_state, ok:bool, o1:operand, o2:operand)
+    requires ValidDestinationOperand(s, o1);
+    requires ValidOperand(s, o2);
+    requires ValidOperand(s, o1);
+    requires sp_eval(sp_code_plusEquals(o1,o2), s, r, ok);
+    requires 0 <= OperandContents(s, o1) < MaxVal();
+    requires 0 <= OperandContents(s, o2) < MaxVal();
+    ensures evalUpdate(s, o1, (OperandContents(s, o1) + OperandContents(s, o2)) % MaxVal(), r, ok);
+{
+    reveal_sp_eval();
+    reveal_sp_code_plusEquals();
+}
 
 //-----------------------------------------------------------------------------
 // Control Flow Lemmas

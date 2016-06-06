@@ -34,15 +34,21 @@ procedure ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
+    requires
+        isUInt32(src1);
+        isUInt32(src2);
     ensures
-        evalUpdate(old(this), @dst, old(src1 + src2), this, true);
+        isUInt32(dst);
+        evalUpdate(old(this), @dst, old(src1 + src2) % MaxVal(), this, true);
 
 procedure MOV(out{:operand} dst:int, {:operand} src:int)
     requires/ensures
         ValidOperand(this, @src);
         ValidDestinationOperand(this, @dst);
+        isUInt32(src);
     ensures
         evalUpdate(old(this), @dst, old(src), this, true);
+        isUInt32(dst);
 
 // procedure LDR(out{:operand} rd:int, {:operand} addr:int)
 //     requires/ensures
@@ -57,3 +63,21 @@ procedure MOV(out{:operand} dst:int, {:operand} src:int)
 //     ensures
 //         evalMemUpdate(old(this), @addr, old(rd), this, true);
 // 
+
+procedure incr(inout{:operand} o:int)
+  requires
+    ValidDestinationOperand(this, @o);
+    isUInt32(o);
+    0 <= o < MaxVal();
+  ensures
+    evalUpdate(old(this), @o, (old(o) + 1) % MaxVal(), this, true);
+
+procedure plusEquals(inout{:operand} o1:int, {:operand} o2:int)
+    requires
+        ValidDestinationOperand(this, @o1);
+        ValidOperand(this, @o2);
+        isUInt32(o1);
+        isUInt32(o2);
+        0 <= o1 < MaxVal();
+    ensures
+        evalUpdate(old(this), @o1, old(o1 + o2) % MaxVal(), this, true);
