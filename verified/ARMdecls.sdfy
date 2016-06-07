@@ -74,23 +74,23 @@ procedure LDR(out{:operand} rd:int, {:operand} addr:int)
     requires/ensures
         ValidDestinationOperand(this, @rd);
         ValidOperand(this, @addr);
-        isUInt32(rd);
         isUInt32(addr);
         !IsMemOperand(@rd);
         IsMemOperand(@addr);
     ensures
         evalUpdate(old(this), @rd, old(addr), this, true);
+        isUInt32(rd);
 
 procedure STR({:operand} rd:int, out{:operand} addr:int)
     requires/ensures
         ValidOperand(this, @rd);
         ValidDestinationOperand(this, @addr);
         isUInt32(rd);
-        isUInt32(addr);
         !IsMemOperand(@rd);
         IsMemOperand(@addr);
     ensures
         evalUpdate(old(this), @addr, old(rd), this, true);
+        isUInt32(addr);
 
 
 procedure incr(inout{:operand} o:int)

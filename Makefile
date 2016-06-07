@@ -35,6 +35,9 @@ gdb: piloader/piloader.elf monitor/monitor.elf
 		-ex 'add-symbol-file piloader/piloader.elf 0x400' \
 		-ex 'add-symbol-file monitor/monitor.elf 0x40000000'
 
+run_test1: verified/ARMtest1.img
+		qemu-system-arm $(QEMU_ARGS) -bios verified/ARMtest1.img -S
+
 dir := pdclib
 include $(dir)/subdir.mk
 dir := piloader

@@ -172,7 +172,6 @@ lemma sp_lemma_LDR(s:state, r:state, ok:bool,
 	requires ValidDestinationOperand(s, rd);
 	requires ValidOperand(s, addr);
 	requires sp_eval(sp_code_LDR(rd, addr), s, r, ok);
-	requires 0 <= OperandContents(s, rd) < MaxVal();
 	requires 0 <= OperandContents(s, addr) < MaxVal();
     requires IsMemOperand(addr);
     requires !IsMemOperand(rd);
@@ -191,8 +190,6 @@ lemma sp_lemma_STR(s:state, r:state, ok:bool,
 	requires ValidDestinationOperand(s, addr);
 	requires sp_eval(sp_code_STR(rd, addr), s, r, ok);
 	requires 0 <= OperandContents(s, rd) < MaxVal();
-	requires 0 <= OperandContents(s, addr) < MaxVal();
-	requires 0 <= OperandContents(s, addr) < MaxVal();
     requires IsMemOperand(addr);
     requires !IsMemOperand(rd);
 	ensures evalUpdate(s, addr, OperandContents(s, rd), r, ok);
