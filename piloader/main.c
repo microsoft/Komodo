@@ -32,7 +32,7 @@
 // defined in kevlar linker script
 extern char monitor_image_start, monitor_image_data, monitor_image_end;
 // defined in monitor image
-extern char monitor_start, monitor_stack_base;
+extern char monitor_stack_base;
 
 void park_secondary_cores(void);
 void leave_secure_world(void);
@@ -180,15 +180,6 @@ static uintptr_t smc(uintptr_t arg0, uintptr_t arg1, uintptr_t arg2, uintptr_t a
     return r0;
 }
 
-static void smc_test(void)
-{
-    console_printf("SMC test...\n");
-
-    uintptr_t ret = smc(1, 0, 0, 0);
-
-    console_printf("SMC returned: %lx\n", ret);
-}
-
 void __attribute__((noreturn)) main(void)
 {
     uint8_t coreid = mycoreid();
@@ -275,8 +266,6 @@ void __attribute__((noreturn)) main(void)
                  monitor_physbase + monitor_executable_size,
                  ROUND_UP(monitor_image_bytes, 0x1000) - monitor_executable_size, false);
 
-    uintptr_t monitor_entry
-        = &monitor_start - &monitor_image_start + KEVLAR_MON_VBASE;
     uintptr_t monitor_stack
         = &monitor_stack_base - &monitor_image_start + KEVLAR_MON_VBASE;
 
@@ -288,20 +277,19 @@ void __attribute__((noreturn)) main(void)
 
     secure_world_init(g_ptbase, g_mvbar, monitor_stack);
 
-    /* call into the monitor's init routine (on our stack!) */
-    console_printf("entering monitor at %lx\n", monitor_entry);
-    typedef void entry_func(uintptr_t);
-    ((entry_func *)monitor_entry)(secure_physbase);
+    /* init the monitor with an initial SMC call */
+    console_printf("passing secure_physbase %lx to monitor\n", secure_physbase);
 
-    console_printf("returned from monitor!\n");
+    uintptr_t ret = smc(-1, secure_physbase, 0, 0);
+    assert(ret == 0);
+
+    console_printf("returned from SMC!\n");
 
     // this call will return in non-secure world (where MMUs are still off)
     leave_secure_world();
 
     global_barrier = true;
 
-    smc_test();
-    
     console_printf("entering kernel...\n");
     typedef void kernel_entry(uintptr_t zero, uintptr_t boardid, void *atags);
     ((kernel_entry *)0x8000)(0, 0xc43, (void *)0x100);

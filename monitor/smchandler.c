@@ -4,6 +4,9 @@
 #include <kevlar/smcapi.h>
 #include "monitor.h"
 
+struct kev_pagedb_entry g_pagedb[KEVLAR_SECURE_NPAGES];
+uintptr_t g_secure_physbase;
+
 static kev_err_t allocate_page(kev_secure_pageno_t page,
                                struct kev_addrspace *addrspace,
                                kev_pagetype_t type)
@@ -359,6 +362,16 @@ kev_err_t kev_smc_enter(kev_secure_pageno_t disp_page)
 uintptr_t smchandler(uintptr_t callno, uintptr_t arg1, uintptr_t arg2,
                      uintptr_t arg3, uintptr_t arg4)
 {
+    /* XXX: the very first SMC call into the monitor is a setup/init
+       call from the bootloader. It is assumed that arg1 contains the
+       secure phys base. */
+    static bool firstcall;
+    if (!firstcall) {
+        g_secure_physbase = arg1;
+        firstcall = true;
+        return KEV_ERR_SUCCESS;
+    }
+
     switch (callno) {
     case KEV_SMC_QUERY:
         return KEV_MAGIC;
