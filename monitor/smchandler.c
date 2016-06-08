@@ -4,8 +4,75 @@
 #include <kevlar/smcapi.h>
 #include "monitor.h"
 
-struct kev_pagedb_entry g_pagedb[KEVLAR_SECURE_NPAGES];
-uintptr_t g_secure_physbase;
+static struct kev_pagedb_entry g_pagedb[KEVLAR_SECURE_NPAGES];
+static uintptr_t g_secure_physbase;
+static struct kev_addrspace *g_cur_addrspace;
+
+static inline bool page_is_valid(kev_secure_pageno_t pageno)
+{
+    return pageno < KEVLAR_SECURE_NPAGES;
+}
+
+static inline bool page_is_typed(kev_secure_pageno_t pageno, kev_pagetype_t type)
+{
+    return page_is_valid(pageno) && g_pagedb[pageno].type == type;
+}
+
+static inline bool page_is_free(kev_secure_pageno_t pageno)
+{
+    return page_is_typed(pageno, KEV_PAGE_FREE);
+}
+
+static inline uintptr_t page_paddr(kev_secure_pageno_t pageno)
+{
+    //assert(page_is_valid(pageno));
+    return g_secure_physbase + pageno * KEVLAR_PAGE_SIZE;
+}
+
+static inline void *phys2monvaddr(uintptr_t phys)
+{
+    return (void *)(phys + KEVLAR_MON_VBASE);
+}
+
+static inline void *page_monvaddr(kev_secure_pageno_t pageno)
+{
+    return phys2monvaddr(page_paddr(pageno));
+}
+
+static void flushtlb(void)
+{
+    /* flush non-global entries with ASID 0 (the only one we use at present) */
+    __asm volatile("mcr p15, 0, %0, c8, c7, 2" :: "r" (0)); // TLBIASID
+}
+
+static void switch_addrspace(struct kev_addrspace *addrspace)
+{
+    if (g_cur_addrspace == addrspace) {
+        return;
+    }
+
+    if (addrspace != NULL) {
+        /* load the page table base into TTBR0 */
+        uintptr_t ttbr = addrspace->l1pt_phys | 0x6a; // XXX: cache pt walks
+        __asm volatile("mcr p15, 0, %0, c2, c0, 0" :: "r" (ttbr));
+    }
+
+    /* if addrspace is NULL, we disable TTBR0 in TTBCR bit 4 */
+    if (addrspace == NULL || g_cur_addrspace == NULL) {
+        uintptr_t ttbcr = 0x2; // 1G/3G address split
+        if (addrspace == NULL) {
+            ttbcr |= 0x10; // TTBR0 disable
+        }
+        __asm volatile("mcr p15, 0, %0, c2, c0, 2" :: "r" (ttbcr));
+    }
+
+    /* instruction barrier for the TTBR0/TTBCR writes */
+    __asm volatile("isb");
+
+    flushtlb();
+
+    g_cur_addrspace = addrspace;
+}
 
 static kev_err_t allocate_page(kev_secure_pageno_t page,
                                struct kev_addrspace *addrspace,
@@ -19,7 +86,7 @@ static kev_err_t allocate_page(kev_secure_pageno_t page,
         return KEV_ERR_PAGEINUSE;
     }
 
-    if (addrspace->final) {
+    if (addrspace->state != KEV_ADDRSPACE_INIT) {
         return KEV_ERR_ALREADY_FINAL;
     }
 
@@ -77,8 +144,8 @@ kev_err_t kev_smc_init_addrspace(kev_secure_pageno_t addrspace_page,
 
     addrspace->l1pt = page_monvaddr(l1pt_page);
     addrspace->l1pt_phys = page_paddr(l1pt_page);
-    addrspace->refcount = 0;
-    addrspace->final = false;
+    addrspace->refcount = 1; // for the l1pt
+    addrspace->state = KEV_ADDRSPACE_INIT;
 
     return KEV_ERR_SUCCESS;
 }
@@ -176,7 +243,7 @@ static armpte_short_l2 *lookup_pte(struct kev_addrspace *addrspace,
 static kev_err_t is_valid_mapping_target(struct kev_addrspace *addrspace,
                                          uint32_t mapping)
 {
-    if (addrspace->final) {
+    if (addrspace->state != KEV_ADDRSPACE_INIT) {
         return KEV_ERR_ALREADY_FINAL;
     }
 
@@ -304,6 +371,41 @@ kev_err_t kev_smc_map_insecure(kev_secure_pageno_t addrspace_page,
     return KEV_ERR_SUCCESS;
 }
 
+kev_err_t kev_smc_remove(kev_secure_pageno_t pageno)
+{
+    struct kev_addrspace *addrspace;
+
+    if (!page_is_valid(pageno)) {
+        return KEV_ERR_INVALID_PAGENO;
+    }
+
+    if (g_pagedb[pageno].type == KEV_PAGE_FREE) {
+        return KEV_ERR_SUCCESS;
+    }
+
+    if (g_pagedb[pageno].type == KEV_PAGE_ADDRSPACE) {
+        addrspace = page_monvaddr(pageno);
+        if (addrspace->refcount != 0) {
+            return KEV_ERR_PAGEINUSE;
+        }
+    } else {
+        addrspace = g_pagedb[pageno].addrspace;
+        if (addrspace->state != KEV_ADDRSPACE_STOPPED) {
+            return KEV_ERR_NOT_STOPPED;
+        }
+        addrspace->refcount--;
+    }
+
+    /* we don't bother updating page tables etc., because once an
+     * addrspace is stopped it can never execute again, so we can just
+     * wait for them to be deleted */
+
+    g_pagedb[pageno].type = KEV_PAGE_FREE;
+    g_pagedb[pageno].addrspace = NULL;
+
+    return KEV_ERR_SUCCESS;
+}
+
 kev_err_t kev_smc_finalise(kev_secure_pageno_t addrspace_page)
 {
     struct kev_addrspace *addrspace = get_addrspace(addrspace_page);
@@ -311,44 +413,42 @@ kev_err_t kev_smc_finalise(kev_secure_pageno_t addrspace_page)
         return KEV_ERR_INVALID_ADDRSPACE;
     }
 
-    if (addrspace->final) {
+    if (addrspace->state != KEV_ADDRSPACE_INIT) {
         return KEV_ERR_ALREADY_FINAL;
     }
 
-    addrspace->final = true;
+    addrspace->state = KEV_ADDRSPACE_FINAL;
     return KEV_ERR_SUCCESS;
 }
 
-static struct kev_addrspace *g_cur_addrspace;
-
-static void switch_addrspace(struct kev_addrspace *addrspace)
+kev_err_t kev_smc_stop(kev_secure_pageno_t addrspace_page)
 {
-    if (g_cur_addrspace == addrspace) {
-        return;
+    struct kev_addrspace *addrspace = get_addrspace(addrspace_page);
+    if (addrspace == NULL) {
+        return KEV_ERR_INVALID_ADDRSPACE;
     }
 
-    /* load the page table base into TTBR0 */
-    uintptr_t ttbr = addrspace->l1pt_phys | 0x6a; // XXX: cache pt walks
-    __asm volatile("mcr p15, 0, %0, c2, c0, 0" :: "r" (ttbr));
+    if (g_cur_addrspace == addrspace) {
+        switch_addrspace(NULL);
+    }
 
-    /* instruction barrier for the TTBR0 write */
-    __asm volatile("isb");
+    addrspace->state = KEV_ADDRSPACE_STOPPED;
 
-    /* flush non-global entries with ASID 0 (the only one we use at present) */
-    __asm volatile("mcr p15, 0, %0, c8, c7, 2" :: "r" (0)); // TLBIASID
-
-    g_cur_addrspace = addrspace;
+    return KEV_ERR_SUCCESS;
 }
 
 kev_err_t kev_smc_enter(kev_secure_pageno_t disp_page)
 {
-    
     if (!page_is_typed(disp_page, KEV_PAGE_DISPATCHER)) {
         return KEV_ERR_INVALID_PAGENO;
     }
 
     struct kev_dispatcher *dispatcher = page_monvaddr(disp_page);
     struct kev_addrspace *addrspace = g_pagedb[disp_page].addrspace;
+
+    if (addrspace->state != KEV_ADDRSPACE_FINAL) {
+        return KEV_ERR_NOT_FINAL;
+    }
 
     // switch to target addrspace
     switch_addrspace(addrspace);
@@ -394,12 +494,18 @@ uintptr_t smchandler(uintptr_t callno, uintptr_t arg1, uintptr_t arg2,
     case KEV_SMC_MAP_INSECURE:
         return kev_smc_map_insecure(arg1, arg2, arg3);
 
+    case KEV_SMC_REMOVE:
+        return kev_smc_remove(arg1);
+    
     case KEV_SMC_FINALISE:
         return kev_smc_finalise(arg1);
 
     case KEV_SMC_ENTER:
         return kev_smc_enter(arg1);
-        
+
+    case KEV_SMC_STOP:
+        return kev_smc_stop(arg1);
+
     default:
         return KEV_ERR_INVALID;
     }

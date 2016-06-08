@@ -26,11 +26,17 @@ struct kev_pagedb_entry {
     // do we need the mapping offset?
 };
 
+typedef enum {
+    KEV_ADDRSPACE_INIT = 0,
+    KEV_ADDRSPACE_FINAL = 1,
+    KEV_ADDRSPACE_STOPPED = 2,
+} kev_addrspace_state_t;
+
 struct kev_addrspace {
     armpte_short_l1 *l1pt;
     uintptr_t l1pt_phys;
     uint32_t refcount;
-    bool final;
+    kev_addrspace_state_t state;
 };
 
 struct kev_dispatcher {
@@ -38,38 +44,7 @@ struct kev_dispatcher {
     // TODO: current state, save area pointer
 };
 
-extern uintptr_t g_secure_physbase;
-extern struct kev_pagedb_entry g_pagedb[KEVLAR_SECURE_NPAGES];
-
-static inline bool page_is_valid(kev_secure_pageno_t pageno)
-{
-    return pageno < KEVLAR_SECURE_NPAGES;
-}
-
-static inline bool page_is_typed(kev_secure_pageno_t pageno, kev_pagetype_t type)
-{
-    return page_is_valid(pageno) && g_pagedb[pageno].type == type;
-}
-
-static inline bool page_is_free(kev_secure_pageno_t pageno)
-{
-    return page_is_typed(pageno, KEV_PAGE_FREE);
-}
-
-static inline uintptr_t page_paddr(kev_secure_pageno_t pageno)
-{
-    //assert(page_is_valid(pageno));
-    return g_secure_physbase + pageno * KEVLAR_PAGE_SIZE;
-}
-
-static inline void *phys2monvaddr(uintptr_t phys)
-{
-    return (void *)(phys + KEVLAR_MON_VBASE);
-}
-
-static inline void *page_monvaddr(kev_secure_pageno_t pageno)
-{
-    return phys2monvaddr(page_paddr(pageno));
-}
+//extern uintptr_t g_secure_physbase;
+//extern struct kev_pagedb_entry g_pagedb[KEVLAR_SECURE_NPAGES];
 
 #endif // _KEVLAR_MONITOR_H

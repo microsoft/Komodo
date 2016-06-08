@@ -6,10 +6,12 @@
 #define KEV_SMC_INIT_ADDRSPACE  10
 #define KEV_SMC_INIT_DISPATCHER 11
 #define KEV_SMC_INIT_L2PTABLE   12
-#define KEV_SMC_MAP_SECURE      20
-#define KEV_SMC_MAP_INSECURE    21
-#define KEV_SMC_FINALISE        30
-#define KEV_SMC_ENTER           40
+#define KEV_SMC_MAP_SECURE      13
+#define KEV_SMC_MAP_INSECURE    14
+#define KEV_SMC_REMOVE          20
+#define KEV_SMC_FINALISE        21
+#define KEV_SMC_ENTER           22
+#define KEV_SMC_STOP            29
 
 #define KEV_MAGIC 0x4b766c72 // "Kvlr"
 
@@ -24,6 +26,7 @@ typedef uint32_t kev_secure_pageno_t;
 #define KEV_ERR_NOT_FINAL       5
 #define KEV_ERR_INVALID_MAPPING 6
 #define KEV_ERR_ADDRINUSE       7
+#define KEV_ERR_NOT_STOPPED     8
 #define KEV_ERR_INVALID         ((kev_err_t)-1)
 
 // returns KVR_MAGIC
@@ -68,7 +71,11 @@ kev_err_t kev_smc_map_insecure(kev_secure_pageno_t addrspace,
                                uint32_t phys_pageno,
                                uint32_t mapping);
 
+// remove this page from its address space, or reclaim the address space (only possible once stopped)
+kev_err_t kev_smc_remove(kev_secure_pageno_t page);
+
 kev_err_t kev_smc_finalise(kev_secure_pageno_t addrspace);
+kev_err_t kev_smc_stop(kev_secure_pageno_t addrspace);
 
 kev_err_t kev_smc_enter(kev_secure_pageno_t dispatcher);
 
