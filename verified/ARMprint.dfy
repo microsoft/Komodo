@@ -30,7 +30,9 @@ method printBcc(c:ocmp)
 
 method printId(id:id)
 {
-	not_impl();
+    match id
+        case LocalVar(slot) => print("[sp, #");print(4*slot);print("]");
+        case GlobalVar(n) => not_impl();
 }
 
 method printOperand(o:operand)

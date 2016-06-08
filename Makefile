@@ -35,8 +35,15 @@ gdb: piloader/piloader.elf monitor/monitor.elf
 		-ex 'add-symbol-file piloader/piloader.elf 0x400' \
 		-ex 'add-symbol-file monitor/monitor.elf 0x40000000'
 
-run_test1: verified/ARMtest1.img
-		qemu-system-arm $(QEMU_ARGS) -bios verified/ARMtest1.img -S
+#-----------------------------------------------------------------------------
+# For running assembled tests of ARMspartan
+#-----------------------------------------------------------------------------
+run_%.img: verified/%.img verified/%.S
+		qemu-system-arm $(QEMU_ARGS) -bios $< -S
+
+gdb-test:
+	$(PREFIX)gdb -ex 'target remote :1234'
+#-----------------------------------------------------------------------------
 
 dir := pdclib
 include $(dir)/subdir.mk

@@ -71,12 +71,12 @@ function method priv_of_state(s:state):priv
 function method mode_encoding(m:int):mode
 {
     //TODO get an actual encoding from spec
-    if m == 0 then User
-    else if m == 1 then Supervisor
-    else if m == 2 then Monitor
-    else if m == 3 then Abort
-    else if m == 4 then Undefined
-    else  FIQ
+    if m == 0x10 then User
+    else if m == 0x13 then Supervisor
+    else if m == 0x16 then Monitor
+    else if m == 0x17 then Abort
+    else if m == 0x1B then Undefined
+    else  FIQ //0x11
 }
 
 //-----------------------------------------------------------------------------
