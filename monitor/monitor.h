@@ -38,13 +38,8 @@ struct kev_dispatcher {
     // TODO: current state, save area pointer
 };
 
-/* start.c */
 extern uintptr_t g_secure_physbase;
-
-/* pagedb.c */
 extern struct kev_pagedb_entry g_pagedb[KEVLAR_SECURE_NPAGES];
-void pagedb_init(void);
-
 
 static inline bool page_is_valid(kev_secure_pageno_t pageno)
 {
