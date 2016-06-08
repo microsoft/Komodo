@@ -9,23 +9,23 @@ procedure main()
         // ValidOperand(this, op_lr(User));
         // ValidOperand(this, op_lr(Supervisor));
 {
-    CPS(0x10); //User
+    CPS(0x13); //Supervisor
     MOV(sp, 2);
     MOV(lr, 3);
     MOV(r1, 4);
     assert(sp == 2);
     assert(lr == 3);
     assert(r1 == 4);
-    CPS(0x13); //Supervisor
+    CPS(0x16); //Monitor
     assert(r1 == 4);
     MOV(sp, 200);
     MOV(lr, 300);
     assert(sp == 200);
     assert(lr == 300);
-    CPS(0x10);
+    CPS(0x13);
     assert(sp == 2);
     assert(lr == 3);
-    CPS(0x13);
+    CPS(0x16);
     //assert(sp == 2); //as desired, this does not verify
     assert(sp == 200);
     assert(lr == 300);

@@ -68,15 +68,17 @@ function method priv_of_mode(m:mode):priv
 function method priv_of_state(s:state):priv
     { priv_of_mode(mode_of_state(s)) }
 
+
 function method mode_encoding(m:int):mode
+    requires ValidMode(m)
 {
-    //TODO get an actual encoding from spec
-    if m == 0x10 then User
+         if m == 0x10 then User
+    else if m == 0x11 then FIQ
     else if m == 0x13 then Supervisor
     else if m == 0x16 then Monitor
     else if m == 0x17 then Abort
     else if m == 0x1B then Undefined
-    else  FIQ //0x11
+    else User // should not happen
 }
 
 //-----------------------------------------------------------------------------
@@ -141,6 +143,10 @@ predicate ValidOperand(s:state, o:operand)
         case OLR => LR(mode_of_state(s)) in s.regs
 }
 
+predicate ValidMode(m:int) {
+    m == 0x10 || m == 0x11 || m == 0x13 || m == 0x16 || m == 0x17 || m == 0x17 
+}
+
 predicate ValidDestinationOperand(s:state, o:operand)
 	{ !o.OConst? && ValidOperand(s, o) }
 
@@ -188,7 +194,7 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
 predicate evalModeUpdate(s:state, newmode:int, r:state, ok:bool)
 {
     // ok && r == s.(cpsr := s.cpsr.(m := newmode))
-    ok && r == s.(mod := mode_encoding(newmode))
+    ok && ValidMode(newmode) && r == s.(mod := mode_encoding(newmode))
 }
 
 // predicate evalCPSRUpdate(s:state, newcpsr:cpsr_val, newspsr_entry:cpsr_val,
@@ -232,7 +238,8 @@ predicate ValidInstruction(s:state, ins:ins)
             IsMemOperand(addr) && !IsMemOperand(rd)
 		case MOV(dst, src) => ValidDestinationOperand(s, dst) &&
 			ValidOperand(s, src) && !IsMemOperand(src) && !IsMemOperand(dst)
-        case CPS(mod) => ValidOperand(s, mod)
+        case CPS(mod) => ValidOperand(s, mod) &&
+            ValidMode(OperandContents(s, mod))
 }
 
 predicate evalIns(ins:ins, s:state, r:state, ok:bool)

@@ -97,10 +97,10 @@ procedure STR({:operand} rd:int, out{:operand} addr:int)
 procedure CPS({:operand} mod:int)
     requires
         ValidOperand(this, @mod);
+        ValidMode(mod);
         isUInt32(mod);
     ensures
         evalModeUpdate(old(this), old(mod), this, true);
-
 
 procedure incr(inout{:operand} o:int)
   requires
