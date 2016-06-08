@@ -15,6 +15,8 @@ var{:register op_r(12)} r12:int;
 var{:register op_sp()}  sp:int;
 var{:register op_lr()}  lr:int;
 
+function{:operand} fromOperand(o:oprnd):oprnd
+
 // var{:register op_sp(User)}      spUser:int;
 // var{:register op_sp(System)}    spSystem:int;
 // var{:register op_sp(Monitor)}   spMonitor:int;

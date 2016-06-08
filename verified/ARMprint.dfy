@@ -124,8 +124,7 @@ method printCode(c:code, n:int) returns(n':int)
 
 method printHeader(){
     print(".arm\n");
-    print(".code32\n");
-    print(".section .text");
+    print(".section .text\n");
 }
 
 method printFooter(){
