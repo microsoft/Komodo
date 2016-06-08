@@ -39,10 +39,12 @@ method printOperand(o:operand)
 		case OConst(n) => print("#");print(n);
 		case OReg(r) => {match r
 			case R(n) => print("r"); print(n);
-			case SP(m) => print("r13");
-			case LR(m) => print("r14");
+			case SP(m) => print("this should never happen");
+			case LR(m) => print("this should never happen");
 		}
-        case OId(x) => print(x);
+        case OSP => print("r13");
+        case OLR => print("r14");
+        case OId(x) => printId(x);
 }
 
 method printIns(ins:ins)
@@ -66,6 +68,8 @@ method printIns(ins:ins)
 		case MOV(dst, src) =>
 			print("  MOV "); printOperand(dst); cma();
 				printOperand(src); nl();
+        case CPS(mod) =>
+            print("  CPS "); printOperand(mod); nl();
 	}
 }
 
@@ -119,6 +123,10 @@ method printCode(c:code, n:int) returns(n':int)
 }
 
 method printHeader(){
+    print(".arm\n");
+    print(".code32\n");
+    print(".section .text");
 }
+
 method printFooter(){
 }

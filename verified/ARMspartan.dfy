@@ -63,27 +63,13 @@ function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
 //-----------------------------------------------------------------------------
 // Stack
 //-----------------------------------------------------------------------------
+// This code is pretty much only used for stack-test
 function method stack(slot:int):operand { OId(LocalVar(slot)) }
 function stackval(s:sp_state, o:operand):int requires ValidOperand(s, o); { sp_eval_op(s, o) }
 predicate NonEmptyStack(s:sp_state) { s.stack != [] }
 predicate StackContains(s:sp_state, slot:int) 
     requires NonEmptyStack(s);
     { stack(slot).x in s.stack[0].locals }
-
-//-----------------------------------------------------------------------------
-// Heap
-//-----------------------------------------------------------------------------
-// predicate HeapOperand(o:operand) { o.OHeap? }
-
-//-----------------------------------------------------------------------------
-// Register Validity
-//-----------------------------------------------------------------------------
-predicate ValidRegisters(s:sp_state)
-{
-	( forall i:int :: 0 <= i <= 12 ==> ValidOperand(s, op_r(i)) ) &&
-		( forall m:Mode :: ValidOperand(s, op_sp(m)) ) &&
-		( forall m:Mode :: ValidOperand(s, op_lr(m)) )
-}
 
 //-----------------------------------------------------------------------------
 // Instructions
@@ -102,6 +88,9 @@ function method{:opaque} sp_code_LDR(rd:operand, addr:operand):code
 
 function method{:opaque} sp_code_STR(rd:operand, addr:operand):code
 	{ Ins(STR(rd, addr)) }
+
+function method{:opaque} sp_code_CPS(mod:operand):code
+    { Ins(CPS(mod)) }
 
 // Pseudoinstructions  
 function method{:opaque} sp_code_incr(o:operand):code { Ins(ADD(o, o, OConst(1))) }
@@ -199,6 +188,17 @@ lemma sp_lemma_STR(s:state, r:state, ok:bool,
 {
 	reveal_sp_eval();
 	reveal_sp_code_STR();
+}
+
+lemma sp_lemma_CPS(s:state, r:state, ok:bool, mod:operand)
+    requires ValidOperand(s, mod);
+    requires sp_eval(sp_code_CPS(mod), s, r, ok);
+    requires 0 <= OperandContents(s, mod) < MaxVal()
+    ensures  ok;
+    ensures  evalModeUpdate(s, OperandContents(s, mod), r, ok);
+{
+    reveal_sp_eval();
+    reveal_sp_code_CPS();
 }
 
 // Pseudoinstruction Lemmas

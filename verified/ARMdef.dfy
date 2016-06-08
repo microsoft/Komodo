@@ -3,28 +3,81 @@ include "assembly.s.dfy"
 //-----------------------------------------------------------------------------
 // Microarchitectural State
 //-----------------------------------------------------------------------------
-datatype ARMReg = R(n:int) | SP(spm:Mode) | LR(lpm: Mode)
-datatype Mode = User | System | Monitor |Abort | Undefined | FIQ
+datatype ARMReg = R(n:int) | SP(spm:mode) | LR(lpm: mode)
+// In FIQ, R8 to R12 are also banked
 
-datatype id = GlobalVar(g:int) | LocalVar(l:int) 
-datatype operand = OConst(n:int) | OReg(r:ARMReg) | OId(x:id)
+datatype id = GlobalVar(g:int) | LocalVar(l:int)
+datatype operand = OConst(n:int) | OReg(r:ARMReg) | OId(x:id) | OSP | OLR
 
 datatype frame = Frame(locals:map<id, int>)
 datatype state = State(regs:map<ARMReg, int>,
 					   globals:map<id, int>,
 					   stack:seq<frame>,
 					   heap:map<int, int>,
-					   mode:Mode)
+                       ns:bool,
+                       mod:mode)
+					   // cpsr:cpsr_val,
+                       // spsr:map<mode, cpsr_val>)
 
+// SCR.NS = non-secure bit
+
+datatype cpsr_val = CPSR(
+    // n:bool,             //Negative condition
+    // z:bool,             //Zero condition
+    // c:bool,             //Carry condition
+    // v:bool,             //Overflow condition
+    // a:bool,             //Abort mask
+    // f:bool,             //FIQ mask
+    m:mode)
+
+datatype mode = User | Supervisor | Monitor |Abort | Undefined | FIQ
+datatype priv = PL0 | PL1 // | PL2 // PL2 is only used in Hyp, not modeled
+
+
+//-----------------------------------------------------------------------------
+// State-related Utilities
+//-----------------------------------------------------------------------------
 function method op_r(n:int):operand
 	requires 0 <= n <= 12
 	{ OReg(R(n)) }
 
-function method op_sp(m:Mode):operand
-	{ OReg(SP(m)) }
+function method op_sp():operand
+    { OSP }
 
-function method op_lr(m:Mode):operand
-	{ OReg(LR(m)) }
+function method op_lr():operand
+    { OLR }
+
+function method mode_of_state(s:state):mode
+{
+    // match s.cpsr
+    //         case CPSR(m) => m
+    s.mod
+}
+
+function method priv_of_mode(m:mode):priv
+{
+    match m
+        case User => PL0
+        case Supervisor => PL1
+        case Monitor => PL1
+        case Abort => PL1
+        case Undefined => PL1
+        case FIQ => PL1
+}
+
+function method priv_of_state(s:state):priv
+    { priv_of_mode(mode_of_state(s)) }
+
+function method mode_encoding(m:int):mode
+{
+    //TODO get an actual encoding from spec
+    if m == 0 then User
+    else if m == 1 then Supervisor
+    else if m == 2 then Monitor
+    else if m == 3 then Abort
+    else if m == 4 then Undefined
+    else  FIQ
+}
 
 //-----------------------------------------------------------------------------
 // Instructions
@@ -33,8 +86,13 @@ datatype ins =
 	  ADD(dstADD:operand, src1ADD:operand, src2ADD:operand)
 	| SUB(dstSUB:operand, src1SUB:operand, src2SUB:operand)
 	| MOV(dstMOV:operand, srcMOV:operand)
-	| LDR(rdLDR:operand, addrLDR:operand)
-	| STR(rdSTR:operand, addrSTR:operand)
+	| LDR(rdLDR:operand,  addrLDR:operand)
+	| STR(rdSTR:operand,  addrSTR:operand)
+    | CPS(mod:operand) 
+
+//-----------------------------------------------------------------------------
+// Exception Handlers
+//-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------
 // Code Representation
@@ -60,28 +118,34 @@ function MaxVal() : int { 0x1_0000_0000 }
 //-----------------------------------------------------------------------------
 // Validity
 //-----------------------------------------------------------------------------
+predicate ValidState(s:state)
+{
+    (forall m:mode :: SP(m) in s.regs && LR(m) in s.regs) &&
+        (forall i:int :: 0 <= i <= 12 ==> R(i) in s.regs)
+}
+
 predicate ValidOperand(s:state, o:operand)
 {
 	match o
 		case OConst(n) => 0 <= n < MaxVal()
 		case OReg(r) => (match r
 			case R(n) => r in s.regs 
-			case SP(spm) => r in s.regs 
-			case LR(lpm) => r in s.regs 
+			case SP(m) => false // not used directly 
+			case LR(m) => false // not used directly 
 		)
 		case OId(x) => (match x
 			case GlobalVar(g) => x in s.globals
 			case LocalVar(l)  => |s.stack| > 0 && x in s.stack[0].locals
 	    )
+        case OSP => SP(mode_of_state(s)) in s.regs
+        case OLR => LR(mode_of_state(s)) in s.regs
 }
 
 predicate ValidDestinationOperand(s:state, o:operand)
 	{ !o.OConst? && ValidOperand(s, o) }
 
 predicate IsMemOperand(o:operand)
-{
-    o.OId?
-}
+    { o.OId? }
 
 //-----------------------------------------------------------------------------
 // Evaluation
@@ -96,6 +160,8 @@ function OperandContents(s:state, o:operand): int
 			case GlobalVar(g) => s.globals[x]
 			case LocalVar(l) => s.stack[0].locals[x]
 		)
+        case OSP => s.regs[SP(mode_of_state(s))]
+        case OLR => s.regs[LR(mode_of_state(s))]
 }
 
 
@@ -103,11 +169,14 @@ function OperandContents(s:state, o:operand): int
 function eval_op(s:state, o:operand): int
 	requires ValidOperand(s, o) { Truncate(OperandContents(s,o)) }
 
+
 predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
 	requires ValidDestinationOperand(s, o);
 {
     ok && match o
         case OReg(reg) => r == s.(regs := s.regs[o.r := v])
+        case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := v])
+        case OSP => r == s.(regs := s.regs[SP(mode_of_state(s)) := v])
         case OId(x) => ( match x
 			case GlobalVar(g) => r == s.(globals := s.globals[o.x := v])
 			case LocalVar(l) => r == s.(stack :=
@@ -115,6 +184,18 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
 					s.stack[1..])
 		)
 }
+
+predicate evalModeUpdate(s:state, newmode:int, r:state, ok:bool)
+{
+    // ok && r == s.(cpsr := s.cpsr.(m := newmode))
+    ok && r == s.(mod := mode_encoding(newmode))
+}
+
+// predicate evalCPSRUpdate(s:state, newcpsr:cpsr_val, newspsr_entry:cpsr_val,
+//     spsr_changed:mode, r:state, ok:bool)
+// {
+//     ok && r == s.(cpsr := newcpsr).(spsr := s.spsr[spsr_changed := newspsr_entry])
+// }
 
 function evalCmp(c:ocmp, i1:int, i2:int):bool
 {
@@ -149,9 +230,9 @@ predicate ValidInstruction(s:state, ins:ins)
 		case STR(rd, addr) => ValidOperand(s, rd) &&
 			ValidDestinationOperand(s, addr) &&
             IsMemOperand(addr) && !IsMemOperand(rd)
-            // All valid mem ops are valid dest ops
 		case MOV(dst, src) => ValidDestinationOperand(s, dst) &&
 			ValidOperand(s, src) && !IsMemOperand(src) && !IsMemOperand(dst)
+        case CPS(mod) => ValidOperand(s, mod)
 }
 
 predicate evalIns(ins:ins, s:state, r:state, ok:bool)
@@ -159,10 +240,10 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
     if !ValidInstruction(s, ins) then !ok
     else match ins
 		case ADD(dst, src1, src2) => evalUpdate(s, dst,
-			( (OperandContents(s, src1) + OperandContents(s, src2)) % MaxVal()),
+			((OperandContents(s, src1) + OperandContents(s, src2)) % MaxVal()),
 			r, ok)
 		case SUB(dst, src1, src2) => evalUpdate(s, dst,
-			( (OperandContents(s, src1) - OperandContents(s, src2)) % MaxVal()),
+			((OperandContents(s, src1) - OperandContents(s, src2)) % MaxVal()),
 			r, ok)
 		case LDR(rd, addr) => evalUpdate(s, rd,
 			OperandContents(s, addr) % MaxVal(),
@@ -170,9 +251,12 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
 		case STR(rd, addr) => evalUpdate(s, addr,
 			OperandContents(s, rd) % MaxVal(),
 			r, ok)
-		case MOV(dst, src) =>evalUpdate(s, dst,
+		case MOV(dst, src) => evalUpdate(s, dst,
 			OperandContents(s, src) % MaxVal(),
 			r, ok)
+        case CPS(mod) => evalModeUpdate(s,
+            OperandContents(s, mod),
+            r, ok)
 }
 
 predicate evalBlock(block:codes, s:state, r:state, ok:bool)

@@ -12,22 +12,22 @@ var{:register op_r(10)} r10:int;
 var{:register op_r(11)} r11:int;
 var{:register op_r(12)} r12:int;
 
-var{:register op_sp(User)}      spUser:int;
-var{:register op_sp(System)}    spSystem:int;
-var{:register op_sp(Monitor)}   spMonitor:int;
-var{:register op_sp(Abort)}     spAbort:int;
-var{:register op_sp(Undefined)} spUndefined:int;
-var{:register op_sp(FIQ)}       spFIQ:int;
+var{:register op_sp()}  sp:int;
+var{:register op_lr()}  lr:int;
 
-var{:register op_lr(User)}      lrUser:int;
-var{:register op_lr(System)}    lrSystem:int;
-var{:register op_lr(Monitor)}   lrMonitor:int;
-var{:register op_lr(Abort)}     lrAbort:int;
-var{:register op_lr(Undefined)} lrUndefined:int;
-var{:register op_lr(FIQ)}       lrFIQ:int;
-
-function{:operand} stack(slot:int):oprnd
-function{:operand} fromOperand(o:oprnd):oprnd
+// var{:register op_sp(User)}      spUser:int;
+// var{:register op_sp(System)}    spSystem:int;
+// var{:register op_sp(Monitor)}   spMonitor:int;
+// var{:register op_sp(Abort)}     spAbort:int;
+// var{:register op_sp(Undefined)} spUndefined:int;
+// var{:register op_sp(FIQ)}       spFIQ:int;
+// 
+// var{:register op_lr(User)}      lrUser:int;
+// var{:register op_lr(System)}    lrSystem:int;
+// var{:register op_lr(Monitor)}   lrMonitor:int;
+// var{:register op_lr(Abort)}     lrAbort:int;
+// var{:register op_lr(Undefined)} lrUndefined:int;
+// var{:register op_lr(FIQ)}       lrFIQ:int;
 
 procedure ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
@@ -91,6 +91,13 @@ procedure STR({:operand} rd:int, out{:operand} addr:int)
     ensures
         evalUpdate(old(this), @addr, old(rd), this, true);
         isUInt32(addr);
+
+procedure CPS({:operand} mod:int)
+    requires
+        ValidOperand(this, @mod);
+        isUInt32(mod);
+    ensures
+        evalModeUpdate(old(this), old(mod), this, true);
 
 
 procedure incr(inout{:operand} o:int)
