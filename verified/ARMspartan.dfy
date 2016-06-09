@@ -80,6 +80,27 @@ function method{:opaque} sp_code_ADD(dst:operand, src1:operand,
 function method{:opaque} sp_code_SUB(dst:operand, src1:operand,
 	src2:operand):code { Ins(SUB(dst, src1, src2)) }
 
+function method{:opaque} sp_code_AND(dst:operand, src1:operand,
+	src2:operand):code { Ins(AND(dst, src1, src2)) }
+
+function method{:opaque} sp_code_ORR(dst:operand, src1:operand,
+	src2:operand):code { Ins(ORR(dst, src1, src2)) }
+
+function method{:opaque} sp_code_EOR(dst:operand, src1:operand,
+	src2:operand):code { Ins(EOR(dst, src1, src2)) }
+
+function method{:opaque} sp_code_ROR(dst:operand, src1:operand,
+	src2:operand):code { Ins(ROR(dst, src1, src2)) }
+
+function method{:opaque} sp_code_LSL(dst:operand, src1:operand,
+	src2:operand):code { Ins(LSL(dst, src1, src2)) }
+
+function method{:opaque} sp_code_LSR(dst:operand, src1:operand,
+	src2:operand):code { Ins(LSR(dst, src1, src2)) }
+
+function method{:opaque} sp_code_MVN(dst:operand, src:operand):code
+    { Ins(MVN(dst, src)) }
+
 function method{:opaque} sp_code_MOV(dst:operand, src:operand):code
 	{ Ins(MOV(dst, src)) }
 
@@ -137,6 +158,149 @@ lemma sp_lemma_SUB(s:state, r:state, ok:bool,
 {
 	reveal_sp_eval();
 	reveal_sp_code_SUB();
+}
+
+lemma sp_lemma_AND(s:state, r:state, ok:bool,
+	dst:operand, src1:operand, src2:operand)
+	requires ValidOperand(s,src1);
+	requires ValidOperand(s,src2);
+	requires ValidDestinationOperand(s, dst);
+	requires sp_eval(sp_code_AND(dst, src1, src2), s, r, ok);
+	requires 0 <= OperandContents(s, src1) < MaxVal();
+	requires 0 <= OperandContents(s, src2) < MaxVal();
+    requires !IsMemOperand(dst);
+    requires !IsMemOperand(src1);
+    requires !IsMemOperand(src2);
+    ensures evalUpdate(s, dst, and32(eval_op(s, src1),
+        eval_op(s, src2)), r, ok);
+	ensures  ok;
+	ensures  0 <= OperandContents(r, dst) < MaxVal();
+{
+	reveal_sp_eval();
+	reveal_sp_code_AND();
+}
+
+lemma sp_lemma_ORR(s:state, r:state, ok:bool,
+	dst:operand, src1:operand, src2:operand)
+	requires ValidOperand(s,src1);
+	requires ValidOperand(s,src2);
+	requires ValidDestinationOperand(s, dst);
+	requires sp_eval(sp_code_ORR(dst, src1, src2), s, r, ok);
+	requires 0 <= OperandContents(s, src1) < MaxVal();
+	requires 0 <= OperandContents(s, src2) < MaxVal();
+    requires !IsMemOperand(dst);
+    requires !IsMemOperand(src1);
+    requires !IsMemOperand(src2);
+    ensures evalUpdate(s, dst, or32(eval_op(s, src1),
+        eval_op(s, src2)), r, ok);
+	ensures  ok;
+	ensures  0 <= OperandContents(r, dst) < MaxVal();
+{
+	reveal_sp_eval();
+	reveal_sp_code_ORR();
+}
+
+lemma sp_lemma_EOR(s:state, r:state, ok:bool,
+	dst:operand, src1:operand, src2:operand)
+	requires ValidOperand(s,src1);
+	requires ValidOperand(s,src2);
+	requires ValidDestinationOperand(s, dst);
+	requires sp_eval(sp_code_EOR(dst, src1, src2), s, r, ok);
+	requires 0 <= OperandContents(s, src1) < MaxVal();
+	requires 0 <= OperandContents(s, src2) < MaxVal();
+    requires !IsMemOperand(dst);
+    requires !IsMemOperand(src1);
+    requires !IsMemOperand(src2);
+    ensures evalUpdate(s, dst, xor32(eval_op(s, src1),
+        eval_op(s, src2)), r, ok);
+	ensures  ok;
+	ensures  0 <= OperandContents(r, dst) < MaxVal();
+{
+	reveal_sp_eval();
+	reveal_sp_code_EOR();
+}
+
+lemma sp_lemma_ROR(s:state, r:state, ok:bool,
+	dst:operand, src1:operand, src2:operand)
+	requires ValidOperand(s,src1);
+	requires ValidOperand(s,src2);
+	requires ValidDestinationOperand(s, dst);
+	requires sp_eval(sp_code_ROR(dst, src1, src2), s, r, ok);
+	requires 0 <= OperandContents(s, src1) < MaxVal();
+	requires 0 <= OperandContents(s, src2) < MaxVal();
+    requires !IsMemOperand(dst);
+    requires !IsMemOperand(src1);
+    requires !IsMemOperand(src2);
+    requires src2.OConst?;
+    requires 0 <= eval_op(s, src2) < 32;
+    ensures evalUpdate(s, dst, ror32(eval_op(s, src1),
+        eval_op(s, src2)), r, ok);
+	ensures  ok;
+	ensures  0 <= OperandContents(r, dst) < MaxVal();
+{
+	reveal_sp_eval();
+	reveal_sp_code_ROR();
+}
+
+lemma sp_lemma_LSL(s:state, r:state, ok:bool,
+	dst:operand, src1:operand, src2:operand)
+	requires ValidOperand(s,src1);
+	requires ValidOperand(s,src2);
+	requires ValidDestinationOperand(s, dst);
+	requires sp_eval(sp_code_LSL(dst, src1, src2), s, r, ok);
+	requires 0 <= OperandContents(s, src1) < MaxVal();
+	requires 0 <= OperandContents(s, src2) < MaxVal();
+    requires !IsMemOperand(dst);
+    requires !IsMemOperand(src1);
+    requires !IsMemOperand(src2);
+    requires src2.OConst?;
+    requires 0 <= eval_op(s, src2) < 32;
+    ensures evalUpdate(s, dst, shl32(eval_op(s, src1),
+        eval_op(s, src2)), r, ok);
+	ensures  ok;
+	ensures  0 <= OperandContents(r, dst) < MaxVal();
+{
+	reveal_sp_eval();
+	reveal_sp_code_LSL();
+}
+
+lemma sp_lemma_LSR(s:state, r:state, ok:bool,
+	dst:operand, src1:operand, src2:operand)
+	requires ValidOperand(s,src1);
+	requires ValidOperand(s,src2);
+	requires ValidDestinationOperand(s, dst);
+	requires sp_eval(sp_code_LSR(dst, src1, src2), s, r, ok);
+	requires 0 <= OperandContents(s, src1) < MaxVal();
+	requires 0 <= OperandContents(s, src2) < MaxVal();
+    requires !IsMemOperand(dst);
+    requires !IsMemOperand(src1);
+    requires !IsMemOperand(src2);
+    requires src2.OConst?;
+    requires 0 <= eval_op(s, src2) < 32;
+    ensures evalUpdate(s, dst, shr32(eval_op(s, src1),
+        eval_op(s, src2)), r, ok);
+	ensures  ok;
+	ensures  0 <= OperandContents(r, dst) < MaxVal();
+{
+	reveal_sp_eval();
+	reveal_sp_code_LSR();
+}
+
+lemma sp_lemma_MVN(s:state, r:state, ok:bool,
+	dst:operand, src:operand)
+	requires ValidOperand(s,src);
+	requires ValidDestinationOperand(s, dst);
+	requires sp_eval(sp_code_MVN(dst, src), s, r, ok);
+	requires 0 <= OperandContents(s, src) < MaxVal();
+    requires !IsMemOperand(dst);
+    requires !IsMemOperand(src);
+    ensures evalUpdate(s, dst, not32(eval_op(s, src)),
+        r, ok);
+	ensures  ok;
+	ensures  0 <= OperandContents(r, dst) < MaxVal();
+{
+	reveal_sp_eval();
+	reveal_sp_code_MVN();
 }
 
 lemma sp_lemma_MOV(s:state, r:state, ok:bool,

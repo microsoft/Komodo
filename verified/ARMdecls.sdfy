@@ -61,6 +61,116 @@ procedure SUB(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         isUInt32(dst);
         evalUpdate(old(this), @dst, old(src1 - src2) % MaxVal(), this, true);
 
+procedure AND(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+    requires/ensures
+        ValidOperand(this, @src1);
+        ValidOperand(this, @src2);
+        ValidDestinationOperand(this, @dst);
+        !IsMemOperand(@src1);
+        !IsMemOperand(@src2);
+        !IsMemOperand(@dst);
+    requires
+        isUInt32(src1);
+        isUInt32(src2);
+    ensures
+        isUInt32(dst);
+        evalUpdate(old(this), @dst, old(and32(src1, src2)), this, true);
+
+
+procedure ORR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+    requires/ensures
+        ValidOperand(this, @src1);
+        ValidOperand(this, @src2);
+        ValidDestinationOperand(this, @dst);
+        !IsMemOperand(@src1);
+        !IsMemOperand(@src2);
+        !IsMemOperand(@dst);
+    requires
+        isUInt32(src1);
+        isUInt32(src2);
+    ensures
+        isUInt32(dst);
+        evalUpdate(old(this), @dst, old(or32(src1,src2)), this, true);
+
+
+procedure EOR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+    requires/ensures
+        ValidOperand(this, @src1);
+        ValidOperand(this, @src2);
+        ValidDestinationOperand(this, @dst);
+        !IsMemOperand(@src1);
+        !IsMemOperand(@src2);
+        !IsMemOperand(@dst);
+    requires
+        isUInt32(src1);
+        isUInt32(src2);
+    ensures
+        isUInt32(dst);
+        evalUpdate(old(this), @dst, old(xor32(src1,src2)), this, true);
+
+procedure ROR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+    requires/ensures
+        ValidOperand(this, @src1);
+        ValidOperand(this, @src2);
+        ValidDestinationOperand(this, @dst);
+        !IsMemOperand(@src1);
+        !IsMemOperand(@src2);
+        !IsMemOperand(@dst);
+    requires
+        isUInt32(src1);
+        isUInt32(src2);
+        @src2 is OConst;
+        0 <= src2 < 32;
+    ensures
+        isUInt32(dst);
+        evalUpdate(old(this), @dst, old(ror32(src1,src2)), this, true);
+
+procedure LSL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+    requires/ensures
+        ValidOperand(this, @src1);
+        ValidOperand(this, @src2);
+        ValidDestinationOperand(this, @dst);
+        !IsMemOperand(@src1);
+        !IsMemOperand(@src2);
+        !IsMemOperand(@dst);
+    requires
+        isUInt32(src1);
+        isUInt32(src2);
+        @src2 is OConst;
+        0 <= src2 < 32;
+    ensures
+        isUInt32(dst);
+        evalUpdate(old(this), @dst, old(shl32(src1,src2)), this, true);
+
+procedure LSR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+    requires/ensures
+        ValidOperand(this, @src1);
+        ValidOperand(this, @src2);
+        ValidDestinationOperand(this, @dst);
+        !IsMemOperand(@src1);
+        !IsMemOperand(@src2);
+        !IsMemOperand(@dst);
+    requires
+        isUInt32(src1);
+        isUInt32(src2);
+        @src2 is OConst;
+        0 <= src2 < 32;
+    ensures
+        isUInt32(dst);
+        evalUpdate(old(this), @dst, old(shr32(src1,src2)), this, true);
+
+procedure MVN(out{:operand} dst:int, {:operand} src:int)
+    requires/ensures
+        ValidOperand(this, @src);
+        ValidDestinationOperand(this, @dst);
+        !IsMemOperand(@src);
+        !IsMemOperand(@dst);
+    requires
+        isUInt32(src);
+    ensures
+        isUInt32(dst);
+        evalUpdate(old(this), @dst, old(not32(src)) % MaxVal(), this, true);
+
 procedure MOV(out{:operand} dst:int, {:operand} src:int)
     requires/ensures
         ValidOperand(this, @src);

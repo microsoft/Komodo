@@ -61,6 +61,13 @@ method printIns(ins:ins)
 			print("  SUB "); printOperand(dest); cma();
 				printOperand(src1); cma();
 				printOperand(src2); nl();
+        case AND(dest, src1, src2) => not_impl();
+        case ORR(dest, src1, src2) => not_impl();
+        case EOR(dest, src1, src2) => not_impl();
+        case ROR(dest, src1, src2) => not_impl();
+        case LSL(dest, src1, src2) => not_impl();
+        case LSR(dest, src1, src2) => not_impl();
+        case MVN(dest, src) => not_impl();
 		case LDR(rd, addr) =>
 			print("  LDR "); printOperand(rd); cma();
 				printOperand(addr); nl();

@@ -87,7 +87,14 @@ function method mode_encoding(m:int):mode
 datatype ins =
 	  ADD(dstADD:operand, src1ADD:operand, src2ADD:operand)
 	| SUB(dstSUB:operand, src1SUB:operand, src2SUB:operand)
-	| MOV(dstMOV:operand, srcMOV:operand)
+	| AND(dstAND:operand, src1AND:operand, src2AND:operand)
+	| ORR(dstOR:operand, src1OR:operand, src2OR:operand)
+	| EOR(dstEOR:operand, src1EOR:operand, src2EOR:operand) // Also known as XOR
+	| ROR(dstROR:operand, src1ROR:operand, src2ROR:operand)
+	| LSL(dstLSL:operand, src1LSL:operand, src2LSL:operand)
+	| LSR(dstLSR:operand, src1LSR:operand, src2LSR:operand)
+    | MOV(dstMOV:operand, srcMOV:operand)
+    | MVN(dstMVN:operand, srcMVN:operand)
 	| LDR(rdLDR:operand,  addrLDR:operand)
 	| STR(rdSTR:operand,  addrSTR:operand)
     | CPS(mod:operand) 
@@ -143,6 +150,9 @@ predicate ValidOperand(s:state, o:operand)
         case OLR => LR(mode_of_state(s)) in s.regs
 }
 
+predicate ValidShiftOperand(s:state, o:operand)
+    { ( o.OConst? && 0 <= o.n <= 32) || ValidOperand(s, o) }
+
 predicate ValidMode(m:int) {
     m == 0x10 || m == 0x11 || m == 0x13 || m == 0x16 || m == 0x17 || m == 0x17 
 }
@@ -152,6 +162,41 @@ predicate ValidDestinationOperand(s:state, o:operand)
 
 predicate IsMemOperand(o:operand)
     { o.OId? }
+
+//-----------------------------------------------------------------------------
+// Functions for bitwise operations
+//-----------------------------------------------------------------------------
+function xor32(x:int, y:int) : int  
+    requires 0 <= x < 0x1_0000_0000 && 0 <= y < 0x1_0000_0000;
+    { int(BitwiseXor(uint32(x), uint32(y))) }
+
+function and32(x:int, y:int) : int  
+    requires 0 <= x < 0x1_0000_0000 && 0 <= y < 0x1_0000_0000;
+    { int(BitwiseAnd(uint32(x), uint32(y))) }
+
+function or32(x:int, y:int) : int  
+    requires 0 <= x < 0x1_0000_0000 && 0 <= y < 0x1_0000_0000;
+    { int(BitwiseOr(uint32(x), uint32(y))) }
+
+function not32(x:int) : int  
+    requires 0 <= x < 0x1_0000_0000;
+    { int(BitwiseNot(uint32(x))) }
+
+function rol32(x:int, amount:int) : int 
+    requires 0 <= x < 0x1_0000_0000 && 0 <= amount < 32;
+    { int(RotateLeft(uint32(x), uint32(amount))) }
+
+function ror32(x:int, amount:int) : int 
+    requires 0 <= x < 0x1_0000_0000 && 0 <= amount < 32;
+    { int(RotateRight(uint32(x), uint32(amount))) }
+
+function shl32(x:int, amount:int) : int 
+    requires 0 <= x < 0x1_0000_0000 && 0 <= amount < 32;
+    { int(LeftShift(uint32(x), uint32(amount))) }
+
+function shr32(x:int, amount:int) : int 
+    requires 0 <= x < 0x1_0000_0000 && 0 <= amount < 32;
+    { int(RightShift(uint32(x), uint32(amount))) }
 
 //-----------------------------------------------------------------------------
 // Evaluation
@@ -231,6 +276,27 @@ predicate ValidInstruction(s:state, ins:ins)
 		case SUB(dest, src1, src2) => ValidOperand(s, src1) &&
 			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
             !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+        case AND(dest, src1, src2) => ValidOperand(s, src1) &&
+			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+            !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+        case ORR(dest, src1, src2) => ValidOperand(s, src1) &&
+			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+            !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+        case EOR(dest, src1, src2) => ValidOperand(s, src1) &&
+			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+            !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+        case ROR(dest, src1, src2) => ValidOperand(s, src1) &&
+			ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+            !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+        case LSL(dest, src1, src2) => ValidOperand(s, src1) &&
+			ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+            !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+        case LSR(dest, src1, src2) => ValidOperand(s, src1) &&
+			ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+            !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+        case MVN(dest, src) => ValidOperand(s, src) &&
+			ValidDestinationOperand(s, dest) &&
+            !IsMemOperand(src) && !IsMemOperand(dest)
 		case LDR(rd, addr) => ValidDestinationOperand(s, rd) &&
 			ValidOperand(s, addr) && IsMemOperand(addr) && !IsMemOperand(rd)
 		case STR(rd, addr) => ValidOperand(s, rd) &&
@@ -251,6 +317,30 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
 			r, ok)
 		case SUB(dst, src1, src2) => evalUpdate(s, dst,
 			((OperandContents(s, src1) - OperandContents(s, src2)) % MaxVal()),
+			r, ok)
+		case AND(dst, src1, src2) => evalUpdate(s, dst,
+            and32(eval_op(s, src1), eval_op(s, src2)),
+			r, ok)
+		case ORR(dst, src1, src2) => evalUpdate(s, dst,
+            or32(eval_op(s, src1), eval_op(s, src2)),
+			r, ok)
+		case EOR(dst, src1, src2) => evalUpdate(s, dst,
+            xor32(eval_op(s, src1), eval_op(s, src2)),
+			r, ok)
+		case ROR(dst, src1, src2) => if !(src2.OConst? && 0 <= src2.n <32) then !ok
+            else evalUpdate(s, dst,
+                ror32(eval_op(s, src1), eval_op(s, src2)),
+			    r, ok)
+		case LSL(dst, src1, src2) => if !(src2.OConst? && 0 <= src2.n <32) then !ok 
+            else evalUpdate(s, dst,
+                shl32(eval_op(s, src1), eval_op(s, src2)),
+			    r, ok)
+		case LSR(dst, src1, src2) => if !(src2.OConst? && 0 <= src2.n <32) then !ok
+            else evalUpdate(s, dst,
+                shr32(eval_op(s, src1), eval_op(s, src2)),
+			    r, ok)
+		case MVN(dst, src) => evalUpdate(s, dst,
+            not32(eval_op(s, src)),
 			r, ok)
 		case LDR(rd, addr) => evalUpdate(s, rd,
 			OperandContents(s, addr) % MaxVal(),
