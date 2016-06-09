@@ -1,7 +1,8 @@
-DAFNYFLAGS = /autoTriggers:1 /noNLarith /timeLimit:30
+DAFNYFLAGS = /autoTriggers:1 /noNLarith /timeLimit:30 /trace
 # NB: include paths are relative to the (generated) dfy file, not the CWD
-SPARTAN_INCLUDES = -i ARMspartan.dfy -i ARMprint.dfy
-SPARTAN_DEPS = $(dir)/ARMdef.dll $(dir)/ARMprint.dll $(dir)/ARMspartan.dll
+SPARTAN_INCLUDES = -i ARMspartan.dfy -i ARMprint.dfy $(SHA256_INCLUDES)
+SHA256_INCLUDES = -i sha_common.s.dfy -i sha256.s.dfy -i sha256.i.dfy 
+SPARTAN_DEPS = $(dir)/ARMdef.dll $(dir)/ARMprint.dll $(dir)/ARMspartan.dll $(dir)/sha256.s.dll
 
 # temp target to build top-level verified stuff
 verified: $(dir)/ARMtest1.o
@@ -10,7 +11,7 @@ verified: $(dir)/ARMtest1.o
 	$(SPARTAN) $(dir)/ARMdecls.sdfy $< -out $@ $(SPARTAN_INCLUDES)
 
 %.exe: %.dfy
-	$(DAFNY) $<
+	$(DAFNY) /trace $<
 
 %.S: %.exe
 	$< > $@

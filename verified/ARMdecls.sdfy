@@ -234,3 +234,30 @@ procedure plusEquals(inout{:operand} o1:int, {:operand} o2:int)
         !IsMemOperand(@o2);
     ensures
         evalUpdate(old(this), @o1, old(o1 + o2) % MaxVal(), this, true);
+
+procedure andEquals(inout{:operand} o1:int, {:operand} o2:int)
+    requires
+        ValidDestinationOperand(this, @o1);
+        ValidOperand(this, @o2);
+        isUInt32(o1);
+        isUInt32(o2);
+        0 <= o1 < MaxVal();
+    requires/ensures
+        !IsMemOperand(@o1);
+        !IsMemOperand(@o2);
+    ensures
+        evalUpdate(old(this), @o1, old(and32(o1,o2)), this, true);
+
+procedure xorEquals(inout{:operand} o1:int, {:operand} o2:int)
+    requires
+        ValidDestinationOperand(this, @o1);
+        ValidOperand(this, @o2);
+        isUInt32(o1);
+        isUInt32(o2);
+        0 <= o1 < MaxVal();
+    requires/ensures
+        !IsMemOperand(@o1);
+        !IsMemOperand(@o2);
+    ensures
+        evalUpdate(old(this), @o1, old(xor32(o1,o2)), this, true);
+

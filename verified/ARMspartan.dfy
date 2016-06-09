@@ -71,6 +71,14 @@ predicate StackContains(s:sp_state, slot:int)
     requires NonEmptyStack(s);
     { stack(slot).x in s.stack[0].locals }
 
+predicate StackContainsRange(s:sp_state, start_slot:int, end_slot:int) 
+{ 
+    NonEmptyStack(s)
+ && forall slot {:trigger stack(slot).x in s.stack[0].locals} :: //{:trigger sp_eval_op(s, stack(slot))} :: 
+        start_slot <= slot < end_slot ==> stack(slot).x in s.stack[0].locals 
+                                       //&& 0 <= sp_eval_op(s, stack(slot)) < 0x1_0000_0000
+}
+
 //-----------------------------------------------------------------------------
 // Instructions
 //-----------------------------------------------------------------------------
@@ -116,6 +124,8 @@ function method{:opaque} sp_code_CPS(mod:operand):code
 // Pseudoinstructions  
 function method{:opaque} sp_code_incr(o:operand):code { Ins(ADD(o, o, OConst(1))) }
 function method{:opaque} sp_code_plusEquals(o1:operand, o2:operand):code { Ins(ADD(o1, o1, o2)) }
+function method{:opaque} sp_code_andEquals(o1:operand, o2:operand):code { Ins(AND(o1, o1, o2)) }
+function method{:opaque} sp_code_xorEquals(o1:operand, o2:operand):code { Ins(EOR(o1, o1, o2)) }
 
 //-----------------------------------------------------------------------------
 // Instruction Lemmas
@@ -366,7 +376,7 @@ lemma sp_lemma_CPS(s:state, r:state, ok:bool, mod:operand)
     reveal_sp_code_CPS();
 }
 
-// Pseudoinstruction Lemmas
+// Lemmas for frontend functions
 lemma sp_lemma_incr(s:sp_state, r:sp_state, ok:bool, o:operand)
   requires ValidDestinationOperand(s, o)
   requires sp_eval(sp_code_incr(o), s, r, ok)
@@ -384,15 +394,46 @@ lemma sp_lemma_plusEquals(s:sp_state, r:sp_state, ok:bool, o1:operand, o2:operan
     requires ValidDestinationOperand(s, o1);
     requires ValidOperand(s, o2);
     requires ValidOperand(s, o1);
-    requires sp_eval(sp_code_plusEquals(o1,o2), s, r, ok);
+    requires sp_eval(sp_code_plusEquals(o1, o2), s, r, ok);
     requires 0 <= OperandContents(s, o1) < MaxVal();
     requires 0 <= OperandContents(s, o2) < MaxVal();
-  requires !IsMemOperand(o1);
-  requires !IsMemOperand(o2);
-    ensures evalUpdate(s, o1, (OperandContents(s, o1) + OperandContents(s, o2)) % MaxVal(), r, ok);
+    requires !IsMemOperand(o1);
+    requires !IsMemOperand(o2);
+    ensures evalUpdate(s, o1, (OperandContents(s, o1) +
+        OperandContents(s, o2)) % MaxVal(), r, ok);
 {
     reveal_sp_eval();
     reveal_sp_code_plusEquals();
+}
+
+lemma sp_lemma_andEquals(s:sp_state, r:sp_state, ok:bool, o1:operand, o2:operand)
+    requires ValidDestinationOperand(s, o1);
+    requires ValidOperand(s, o2);
+    requires ValidOperand(s, o1);
+    requires sp_eval(sp_code_andEquals(o1, o2), s, r, ok);
+    requires 0 <= OperandContents(s, o1) < MaxVal();
+    requires 0 <= OperandContents(s, o2) < MaxVal();
+    requires !IsMemOperand(o1);
+    requires !IsMemOperand(o2);
+    ensures evalUpdate(s, o1, and32(eval_op(s, o1), eval_op(s, o2)), r, ok);
+{
+    reveal_sp_eval();
+    reveal_sp_code_andEquals();
+}
+
+lemma sp_lemma_xorEquals(s:sp_state, r:sp_state, ok:bool, o1:operand, o2:operand)
+    requires ValidDestinationOperand(s, o1);
+    requires ValidOperand(s, o2);
+    requires ValidOperand(s, o1);
+    requires sp_eval(sp_code_xorEquals(o1, o2), s, r, ok);
+    requires 0 <= OperandContents(s, o1) < MaxVal();
+    requires 0 <= OperandContents(s, o2) < MaxVal();
+    requires !IsMemOperand(o1);
+    requires !IsMemOperand(o2);
+    ensures evalUpdate(s, o1, xor32(eval_op(s, o1), eval_op(s, o2)), r, ok);
+{
+    reveal_sp_eval();
+    reveal_sp_code_xorEquals();
 }
 
 //-----------------------------------------------------------------------------
