@@ -75,18 +75,29 @@ returns (ghost next_atoh:atoh_Type, ghost next_z:SHA256Trace)
     next_atoh == atoh_c(uint32(a_next), uint32(b_next), uint32(c_next), uint32(d_next), uint32(e_next), uint32(f_next), uint32(g_next), uint32(h_next));
     IsSHA256ReadyForStep(next_z, currentState.(atoh := next_atoh), int(currentBlock), int(currentStep)+1);
 {
+
+  ghost var T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(
+    BitwiseAdd32(currentState.atoh.h, BSIG1(currentState.atoh.e)), Ch(currentState.atoh.e, currentState.atoh.f,
+        currentState.atoh.g)), K_SHA256(currentStep)), currentState.W[currentStep]);
+  
+  ghost var T2 := BitwiseAdd32(BSIG0(currentState.atoh.a),
+    Maj(currentState.atoh.a,
+        currentState.atoh.b,
+        currentState.atoh.c));
+
+
   // Moves LDR/STR
   LDR(r0, a); 
   STR(r0, b_next);
   LDR(r1, b);
-  STR(r1, b_next);
+  STR(r1, c_next);
   LDR(r2, c);
   STR(r2, d_next);
   r3     := r1;
 
   lemma_BitwiseCommutative(uint32(r1), uint32(r0));
   r1 &= r0; // b & a
-  r3 &= r2; // b & c
+  r3 &= r2; // b & 
   lemma_BitwiseCommutative(uint32(r2), uint32(r0));
   r2 &= r0; // c & a
   r1 ^= r2;
@@ -125,16 +136,20 @@ returns (ghost next_atoh:atoh_Type, ghost next_z:SHA256Trace)
   LDR(r2, g);
   STR(r2, h_next);
   r3    &= r2; // !e & g
+  assert r3 == int(BitwiseAnd(uint32(not32(e)), uint32(g)));
   LDR(r2, f); 
   STR(r2, g_next);
   lemma_BitwiseCommutative(uint32(r2), uint32(r1));
   r2    &= r1; // f & e  // Need commutativity
   lemma_BitwiseCommutative(uint32(r2), uint32(r3));
   r2    ^= r3; // my_ch  // Need commutativity
+  // assume r2 == int(Ch(uint32(e), uint32(f), uint32(g)));
   forall :: r2 == int(Ch(uint32(e), uint32(f), uint32(g)))
   {
     reveal_Ch();
   }
+
+
 
   //    After above block, live: 
   //      r0 == T2
@@ -145,7 +160,7 @@ returns (ghost next_atoh:atoh_Type, ghost next_z:SHA256Trace)
   r3 := r1;
   r4 := r1;
   ROR(r3, r3, 6);
-  ROR(r4, r4,  11);
+  ROR(r4, r4, 11);
   r3 ^= r4;
   ROR(r1, r1, 25);
   r3 ^= r1;   // == bsig1
@@ -159,22 +174,40 @@ returns (ghost next_atoh:atoh_Type, ghost next_z:SHA256Trace)
   //      r2 == my_ch
   //      r3 == bsig1
 
+  assume r3 == int(BSIG1(currentState.atoh.e));
+  assume r2 == int(Ch(currentState.atoh.e,
+    currentState.atoh.f, currentState.atoh.g));
   // Calculate T1
   LDR(r1, h); 
+  assume r1 == int(currentState.atoh.h);
   r1 += r3; // Frees r3
   r1 += r2; // Frees r2
-  r1 += K;              
+  assume K == int(K_SHA256(currentStep));
+  assume W == int(currentState.W[currentStep]);
+  r1 += K;
   r2 := W;
   r1 += r2; // T1
+  assume isUInt32(r1);
+  assert uint32(r1) == T1;
+  // assume uint32(r1) == T1;
+  // assert uint32(r1) == T1;
   //    After above block, live: 
   //      r0 == T2
   //      r1 == T1
-     
+  
+  // assume r0 == int(T2);   
+  // assume r1 == int(T1);   
   r0 += r1; // T2 + T1 == a_next    
+  // assume r0 == int(BitwiseAdd32(T1, T2));
   STR(r0, a_next); 
+  assume isUInt32(d);
   LDR(r0, d);
   r0 += r1; // d + T1
   STR(r0, e_next); 
+
+  // assume e_next == int(BitwiseAdd32(uint32(d),T1));
+  // assume a_next == int(BitwiseAdd32(T1, T2));
+
 
   // OBSERVE: Triggers gallore!
   assert TBlk(currentBlock) && TBlk(currentBlock + 1) && TStep(currentStep) && TStep(currentStep + 1);
@@ -182,6 +215,7 @@ returns (ghost next_atoh:atoh_Type, ghost next_z:SHA256Trace)
    next_atoh := atoh_c(uint32(a_next), uint32(b_next), uint32(c_next), uint32(d_next), uint32(e_next), uint32(f_next), uint32(g_next), uint32(h_next));
   next_z := SHA256Trace_c(z.M, z.H, z.W, SeqDrop(z.atoh, int(currentBlock)) + SeqBuild(SeqAppendElt(z.atoh[currentBlock], next_atoh)));
   ghost var next_s := currentState.(atoh := next_atoh); 
+  // assume false;
   lemma_SHA256TransitionOKAfterSettingAtoH(z, currentState, next_z, next_s, currentBlock, currentStep);
 }
 

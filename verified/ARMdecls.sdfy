@@ -45,6 +45,7 @@ procedure ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     ensures
         isUInt32(dst);
         evalUpdate(old(this), @dst, old(src1 + src2) % MaxVal(), this, true);
+        evalUpdate(old(this), @dst, old(int(BitwiseAdd32(uint32(src1), uint32(src2)))), this, true);
 
 procedure SUB(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
@@ -170,6 +171,7 @@ procedure MVN(out{:operand} dst:int, {:operand} src:int)
     ensures
         isUInt32(dst);
         evalUpdate(old(this), @dst, old(not32(src)) % MaxVal(), this, true);
+        0 <= dst < MaxVal();
 
 procedure MOV(out{:operand} dst:int, {:operand} src:int)
     requires/ensures
@@ -181,6 +183,7 @@ procedure MOV(out{:operand} dst:int, {:operand} src:int)
     ensures
         evalUpdate(old(this), @dst, old(src), this, true);
         isUInt32(dst);
+        0 <= dst < MaxVal();
 
 procedure LDR(out{:operand} rd:int, {:operand} addr:int)
     requires/ensures
@@ -192,6 +195,7 @@ procedure LDR(out{:operand} rd:int, {:operand} addr:int)
     ensures
         evalUpdate(old(this), @rd, old(addr), this, true);
         isUInt32(rd);
+        0 <= rd < MaxVal();
 
 procedure STR({:operand} rd:int, out{:operand} addr:int)
     requires/ensures
@@ -203,6 +207,7 @@ procedure STR({:operand} rd:int, out{:operand} addr:int)
     ensures
         evalUpdate(old(this), @addr, old(rd), this, true);
         isUInt32(addr);
+        0 <= addr < MaxVal();
 
 procedure CPS({:operand} mod:int)
     requires

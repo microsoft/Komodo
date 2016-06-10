@@ -143,6 +143,9 @@ lemma sp_lemma_ADD(s:state, r:state, ok:bool,
     requires !IsMemOperand(src2);
 	ensures  evalUpdate(s, dst, (OperandContents(s, src1) +
 		OperandContents(s, src2)) % MaxVal() , r, ok);
+    ensures  OperandContents(r, dst) ==
+        int(BitwiseAdd32(uint32(OperandContents(s, src1)),
+            uint32(OperandContents(s, src2))));
 	ensures  ok;
 	ensures  0 <= OperandContents(r, dst) < MaxVal();
 {
