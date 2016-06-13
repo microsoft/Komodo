@@ -36,9 +36,6 @@ procedure ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
-        !IsMemOperand(@src1);
-        !IsMemOperand(@src2);
-        !IsMemOperand(@dst);
     requires
         isUInt32(src1);
         isUInt32(src2);
@@ -52,9 +49,6 @@ procedure SUB(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
-        !IsMemOperand(@src1);
-        !IsMemOperand(@src2);
-        !IsMemOperand(@dst);
     requires
         isUInt32(src1);
         isUInt32(src2);
@@ -67,9 +61,6 @@ procedure AND(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
-        !IsMemOperand(@src1);
-        !IsMemOperand(@src2);
-        !IsMemOperand(@dst);
     requires
         isUInt32(src1);
         isUInt32(src2);
@@ -83,9 +74,6 @@ procedure ORR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
-        !IsMemOperand(@src1);
-        !IsMemOperand(@src2);
-        !IsMemOperand(@dst);
     requires
         isUInt32(src1);
         isUInt32(src2);
@@ -99,9 +87,6 @@ procedure EOR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
-        !IsMemOperand(@src1);
-        !IsMemOperand(@src2);
-        !IsMemOperand(@dst);
     requires
         isUInt32(src1);
         isUInt32(src2);
@@ -114,9 +99,6 @@ procedure ROR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
-        !IsMemOperand(@src1);
-        !IsMemOperand(@src2);
-        !IsMemOperand(@dst);
     requires
         isUInt32(src1);
         isUInt32(src2);
@@ -131,9 +113,6 @@ procedure LSL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
-        !IsMemOperand(@src1);
-        !IsMemOperand(@src2);
-        !IsMemOperand(@dst);
     requires
         isUInt32(src1);
         isUInt32(src2);
@@ -148,9 +127,6 @@ procedure LSR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
-        !IsMemOperand(@src1);
-        !IsMemOperand(@src2);
-        !IsMemOperand(@dst);
     requires
         isUInt32(src1);
         isUInt32(src2);
@@ -164,8 +140,6 @@ procedure MVN(out{:operand} dst:int, {:operand} src:int)
     requires/ensures
         ValidOperand(this, @src);
         ValidDestinationOperand(this, @dst);
-        !IsMemOperand(@src);
-        !IsMemOperand(@dst);
     requires
         isUInt32(src);
     ensures
@@ -178,8 +152,6 @@ procedure MOV(out{:operand} dst:int, {:operand} src:int)
         ValidOperand(this, @src);
         ValidDestinationOperand(this, @dst);
         isUInt32(src);
-        !IsMemOperand(@src);
-        !IsMemOperand(@dst);
     ensures
         evalUpdate(old(this), @dst, old(src), this, true);
         isUInt32(dst);
@@ -190,14 +162,13 @@ procedure LDR(out{:operand} rd:int, {:operand} base:int, {:operand} ofs:int)
         ValidDestinationOperand(this, @rd);
         ValidOperand(this, @base);
         ValidOperand(this, @ofs);
-        ValidOperand(this, addr_op(old(this), @base, @ofs));
         isUInt32(rd);
         isUInt32(base);
         isUInt32(ofs);
-        // !IsMemOperand(@rd);
-        // IsMemOperand(@addr);
+    requires
+        ValidMem(this, addr_mem(this, @base, @ofs));
     ensures
-        evalUpdate(old(this), @rd, eval_op(this, addr_op(old(this),@base,@ofs)), this, true);
+        evalUpdate(old(this), @rd, eval_mem(old(this), addr_mem(old(this), @base, @ofs)), this, true);
         isUInt32(rd);
         0 <= rd < MaxVal();
 
@@ -206,15 +177,14 @@ procedure STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
         ValidOperand(this, @rd);
         ValidOperand(this, @base);
         ValidOperand(this, @ofs);
-        ValidDestinationOperand(this, addr_op(old(this), @base, @ofs));
         isUInt32(rd);
         isUInt32(base);
         isUInt32(ofs);
-        // !IsMemOperand(@rd);
-        // IsMemOperand(@addr);
+    requires
+        ValidMem(this, addr_mem(this, @base, @ofs));
     ensures
-        evalUpdate(old(this), addr_op(old(this), @base, @ofs) , old(rd), this, true);
-        0 <= eval_op(this, addr_op(old(this), @base, @ofs)) < MaxVal();
+        evalMemUpdate(old(this), addr_mem(old(this), @base, @ofs), old(rd), this, true);
+        // 0 <= addrval(this, addr(base, ofs)) < MaxVal();
 
 procedure CPS({:operand} mod:int)
     requires
@@ -229,8 +199,6 @@ procedure incr(inout{:operand} o:int)
     ValidDestinationOperand(this, @o);
     isUInt32(o);
     0 <= o < MaxVal();
-  requires/ensures
-    !IsMemOperand(@o);
   ensures
     evalUpdate(old(this), @o, (old(o) + 1) % MaxVal(), this, true);
 
@@ -241,9 +209,6 @@ procedure plusEquals(inout{:operand} o1:int, {:operand} o2:int)
         isUInt32(o1);
         isUInt32(o2);
         0 <= o1 < MaxVal();
-    requires/ensures
-        !IsMemOperand(@o1);
-        !IsMemOperand(@o2);
     ensures
         evalUpdate(old(this), @o1, old(o1 + o2) % MaxVal(), this, true);
 
@@ -254,9 +219,6 @@ procedure andEquals(inout{:operand} o1:int, {:operand} o2:int)
         isUInt32(o1);
         isUInt32(o2);
         0 <= o1 < MaxVal();
-    requires/ensures
-        !IsMemOperand(@o1);
-        !IsMemOperand(@o2);
     ensures
         evalUpdate(old(this), @o1, old(and32(o1,o2)), this, true);
 
@@ -267,9 +229,6 @@ procedure xorEquals(inout{:operand} o1:int, {:operand} o2:int)
         isUInt32(o1);
         isUInt32(o2);
         0 <= o1 < MaxVal();
-    requires/ensures
-        !IsMemOperand(@o1);
-        !IsMemOperand(@o2);
     ensures
         evalUpdate(old(this), @o1, old(xor32(o1,o2)), this, true);
 

@@ -1,4 +1,4 @@
-DAFNYFLAGS = /autoTriggers:1 /noNLarith /timeLimit:30 /trace
+DAFNYFLAGS = /autoTriggers:1 /noNLarith #/timeLimit:30 /trace
 # NB: include paths are relative to the (generated) dfy file, not the CWD
 SPARTAN_INCLUDES = -i ARMspartan.dfy -i ARMprint.dfy #$(SHA256_INCLUDES)
 SHA256_INCLUDES = -i sha_common.s.dfy -i sha256.s.dfy -i sha256.i.dfy 

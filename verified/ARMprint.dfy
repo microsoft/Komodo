@@ -48,7 +48,7 @@ method printOperand(o:operand)
 		}
         case OSP => print("r13");
         case OLR => print("r14");
-        case OMem(x) => not_impl();
+        // case OMem(x) => not_impl();
 }
 
 method printIns(ins:ins)

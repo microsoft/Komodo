@@ -6,19 +6,19 @@ include "assembly.s.dfy"
 datatype ARMReg = R(n:int) | SP(spm:mode) | LR(lpm: mode)
 // In FIQ, R8 to R12 are also banked
 
-datatype mem = GlobalVar(g:int) | LocalVar(l:int) | Address(a:int)
-datatype operand = OConst(n:int) | OReg(r:ARMReg) | OMem(x:mem) | OSP | OLR 
+datatype mem = Address(a:int) // | GlobalVar(g:int) | LocalVar(l:int)
+datatype operand = OConst(n:int) | OReg(r:ARMReg) | OSP | OLR 
 
 datatype frame = Frame(locals:map<mem, int>)
 datatype state = State(regs:map<ARMReg, int>,
-					   globals:map<mem, int>,
                        addresses:map<mem, int>,
-					   stack:seq<frame>,
+					   //globals:map<mem, int>,
+					   // stack:seq<frame>,
 					   // heap:map<int, int>,
-                       ns:bool,
-                       mod:mode)
+                       // ns:bool,
 					   // cpsr:cpsr_val,
-                       // spsr:map<mode, cpsr_val>)
+                       // spsr:map<mode, cpsr_val>,
+                       mod:mode)
 
 // SCR.NS = non-secure bit
 
@@ -47,6 +47,9 @@ function method op_sp():operand
 
 function method op_lr():operand
     { OLR }
+
+// function method addr(base:int, ofs:int):mem
+//     { Address(base + ofs) }
 
 function method mode_of_state(s:state):mode
 {
@@ -82,11 +85,11 @@ function method mode_encoding(m:int):mode
     else User // should not happen
 }
 
-function addr_op(s:state, base:operand, ofs:operand):operand
+function addr_mem(s:state, base:operand, ofs:operand):mem
     requires ValidOperand(s, base);
     requires ValidOperand(s, ofs);
 {
-    OMem(Address( eval_op(s, base) + eval_op(s, ofs) ))
+    Address( eval_op(s, base) + eval_op(s, ofs) )
 }
 
 //-----------------------------------------------------------------------------
@@ -150,13 +153,18 @@ predicate ValidOperand(s:state, o:operand)
 			case SP(m) => false // not used directly 
 			case LR(m) => false // not used directly 
 		)
-		case OMem(x) => (match x
-			case GlobalVar(g) => x in s.globals
-			case LocalVar(l)  => |s.stack| > 0 && x in s.stack[0].locals
-            case Address(a)   => x in s.addresses
-	    )
+		// case OMem(x) => (match x
+		// 	case GlobalVar(g) => x in s.globals
+		// 	case LocalVar(l)  => |s.stack| > 0 && x in s.stack[0].locals
+        //     case Address(a)   => x in s.addresses
+	    // )
         case OSP => SP(mode_of_state(s)) in s.regs
         case OLR => LR(mode_of_state(s)) in s.regs
+}
+
+predicate ValidMem(s:state, m:mem)
+{
+    m in s.addresses
 }
 
 predicate ValidShiftOperand(s:state, o:operand)
@@ -168,16 +176,6 @@ predicate ValidMode(m:int) {
 
 predicate ValidDestinationOperand(s:state, o:operand)
 	{ !o.OConst? && ValidOperand(s, o) }
-
-predicate IsMemOperand(o:operand)
-    { o.OMem? }
-
-predicate ValidAddress(s:state, base:operand, ofs:operand)
-    requires ValidOperand(s, base);
-    requires ValidOperand(s, ofs);
-{
-    ValidOperand(s, addr_op(s, base, ofs))
-}
 
 //-----------------------------------------------------------------------------
 // Functions for bitwise operations
@@ -223,20 +221,28 @@ function OperandContents(s:state, o:operand): int
 	match o
 		case OConst(n) => n
 		case OReg(r) => s.regs[r]
-		case OMem(x) => (match x
-			case GlobalVar(g) => s.globals[x]
-			case LocalVar(l) => s.stack[0].locals[x]
-            case Address(a) => s.addresses[x]
-		)
+		// case OMem(x) => (match x
+		// 	case GlobalVar(g) => s.globals[x]
+		// 	case LocalVar(l) => s.stack[0].locals[x]
+        //     case Address(a) => s.addresses[x]
+		// )
         case OSP => s.regs[SP(mode_of_state(s))]
         case OLR => s.regs[LR(mode_of_state(s))]
 }
 
+function MemContents(s:state, m:mem): int
+    requires ValidMem(s, m)
+{
+    s.addresses[m]
+}
 
-// eval_op and eval_memop may need to duplicate _Contents and remove requires
 function eval_op(s:state, o:operand): int
 	requires ValidOperand(s, o)
     { Truncate(OperandContents(s,o)) }
+
+function eval_mem(s:state, m:mem): int
+    requires ValidMem(s, m)
+{ Truncate(MemContents(s, m)) }
 
 
 predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
@@ -246,13 +252,19 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
         case OReg(reg) => r == s.(regs := s.regs[o.r := v])
         case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := v])
         case OSP => r == s.(regs := s.regs[SP(mode_of_state(s)) := v])
-        case OMem(x) => ( match x
-            case Address(a) => r == s.(addresses:= s.addresses[o.x := v])
-			case GlobalVar(g) => r == s.(globals := s.globals[o.x := v])
-			case LocalVar(l) => r == s.(stack :=
-				[s.stack[0].(locals := s.stack[0].locals[o.x := v])] +
-					s.stack[1..])
-		)
+        // case OMem(x) => ( match x
+        //     case Address(a) => r == s.(addresses:= s.addresses[o.x := v])
+		// 	case GlobalVar(g) => r == s.(globals := s.globals[o.x := v])
+		// 	case LocalVar(l) => r == s.(stack :=
+		// 		[s.stack[0].(locals := s.stack[0].locals[o.x := v])] +
+		// 			s.stack[1..])
+		// )
+}
+
+predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
+    requires ValidMem(s, m)
+{
+    ok && r == s.(addresses := s.addresses[m := v])
 }
 
 predicate evalModeUpdate(s:state, newmode:int, r:state, ok:bool)
@@ -313,12 +325,13 @@ predicate ValidInstruction(s:state, ins:ins)
 		case LDR(rd, base, ofs) => 
             ValidDestinationOperand(s, rd) &&
 			ValidOperand(s, base) && ValidOperand(s, ofs) &&
-            ValidOperand(s,  addr_op(s, base, ofs))
+            ValidMem(s, Address(eval_op(s, base) + eval_op(s, ofs)))
             //IsMemOperand(addr) && !IsMemOperand(rd)
 		case STR(rd, base, ofs) =>
             ValidOperand(s, rd) &&
             ValidOperand(s, ofs) && ValidOperand(s, base) &&
-            ValidDestinationOperand(s, addr_op(s, base, ofs))
+            ValidMem(s, Address(eval_op(s, base) + eval_op(s, ofs)))
+            //ValidDestinationOperand(s, addr_op(s, base, ofs))
             //IsMemOperand(addr) && !IsMemOperand(rd)
 		case MOV(dst, src) => ValidDestinationOperand(s, dst) &&
 			ValidOperand(s, src)
@@ -361,9 +374,9 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
 		case MVN(dst, src) => evalUpdate(s, dst,
             not32(eval_op(s, src)), r, ok)
 		case LDR(rd, base, ofs) => 
-            evalUpdate(s, rd, eval_op(s, addr_op(s, base, ofs)), r, ok)
+            evalUpdate(s, rd, eval_mem(s, Address(eval_op(s, base) + eval_op(s, ofs))), r, ok)
 		case STR(rd, base, ofs) => 
-            evalUpdate(s, addr_op(s, base, ofs), eval_op(s, rd), r, ok)
+            evalMemUpdate(s, Address(eval_op(s, base) + eval_op(s, ofs)), eval_op(s, rd), r, ok)
 		case MOV(dst, src) => evalUpdate(s, dst,
 			OperandContents(s, src) % MaxVal(),
 			r, ok)

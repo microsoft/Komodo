@@ -34,6 +34,10 @@ function sp_eval_op(s:state, o:operand):int
     requires ValidOperand(s, o);
     { OperandContents(s, o) }
 
+function sp_eval_mem(s:state, m:mem):int
+    requires ValidMem(s, m);
+    { MemContents(s, m) }
+
 function method sp_CNil():codes { CNil }
 function sp_cHead(b:codes):code requires b.sp_CCons? { b.hd }
 predicate sp_cHeadIs(b:codes, c:code) { b.sp_CCons? && b.hd == c }
@@ -64,20 +68,26 @@ function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
 // Stack
 //-----------------------------------------------------------------------------
 // This code is pretty much only used for stack-test
-function method stack(slot:int):operand { OMem(LocalVar(slot)) }
-function stackval(s:sp_state, o:operand):int requires ValidOperand(s, o); { sp_eval_op(s, o) }
-predicate NonEmptyStack(s:sp_state) { s.stack != [] }
-predicate StackContains(s:sp_state, slot:int) 
-    requires NonEmptyStack(s);
-    { stack(slot).x in s.stack[0].locals }
+// function method stack(slot:int):operand { OMem(LocalVar(slot)) }
+// function stackval(s:sp_state, o:operand):int requires ValidOperand(s, o); { sp_eval_op(s, o) }
+// predicate NonEmptyStack(s:sp_state) { s.stack != [] }
+// predicate StackContains(s:sp_state, slot:int) 
+//     requires NonEmptyStack(s);
+//     { stack(slot).x in s.stack[0].locals }
+// 
+// predicate StackContainsRange(s:sp_state, start_slot:int, end_slot:int) 
+// { 
+//     NonEmptyStack(s)
+//  && forall slot {:trigger stack(slot).x in s.stack[0].locals} :: //{:trigger sp_eval_op(s, stack(slot))} :: 
+//         start_slot <= slot < end_slot ==> stack(slot).x in s.stack[0].locals 
+//                                        //&& 0 <= sp_eval_op(s, stack(slot)) < 0x1_0000_0000
+// }
 
-predicate StackContainsRange(s:sp_state, start_slot:int, end_slot:int) 
-{ 
-    NonEmptyStack(s)
- && forall slot {:trigger stack(slot).x in s.stack[0].locals} :: //{:trigger sp_eval_op(s, stack(slot))} :: 
-        start_slot <= slot < end_slot ==> stack(slot).x in s.stack[0].locals 
-                                       //&& 0 <= sp_eval_op(s, stack(slot)) < 0x1_0000_0000
-}
+//-----------------------------------------------------------------------------
+// Address Helper Functions
+//-----------------------------------------------------------------------------
+function addrval(s:sp_state, a:int):int
+    requires ValidMem(s, Address(a)); { eval_mem(s, Address(a)) }
 
 //-----------------------------------------------------------------------------
 // Instructions
@@ -138,9 +148,6 @@ lemma sp_lemma_ADD(s:state, r:state, ok:bool,
 	requires sp_eval(sp_code_ADD(dst, src1, src2), s, r, ok);
 	requires 0 <= OperandContents(s, src1) < MaxVal();
 	requires 0 <= OperandContents(s, src2) < MaxVal();
-    requires !IsMemOperand(dst);
-    requires !IsMemOperand(src1);
-    requires !IsMemOperand(src2);
 	ensures  evalUpdate(s, dst, (OperandContents(s, src1) +
 		OperandContents(s, src2)) % MaxVal() , r, ok);
     ensures  OperandContents(r, dst) ==
@@ -161,9 +168,6 @@ lemma sp_lemma_SUB(s:state, r:state, ok:bool,
 	requires sp_eval(sp_code_SUB(dst, src1, src2), s, r, ok);
 	requires 0 <= OperandContents(s, src1) < MaxVal();
 	requires 0 <= OperandContents(s, src2) < MaxVal();
-    requires !IsMemOperand(dst);
-    requires !IsMemOperand(src1);
-    requires !IsMemOperand(src2);
 	ensures  evalUpdate(s, dst, (OperandContents(s, src1) -
 		OperandContents(s, src2)) % MaxVal() , r, ok);
 	ensures  ok;
@@ -181,9 +185,6 @@ lemma sp_lemma_AND(s:state, r:state, ok:bool,
 	requires sp_eval(sp_code_AND(dst, src1, src2), s, r, ok);
 	requires 0 <= OperandContents(s, src1) < MaxVal();
 	requires 0 <= OperandContents(s, src2) < MaxVal();
-    requires !IsMemOperand(dst);
-    requires !IsMemOperand(src1);
-    requires !IsMemOperand(src2);
     ensures evalUpdate(s, dst, and32(eval_op(s, src1),
         eval_op(s, src2)), r, ok);
 	ensures  ok;
@@ -201,9 +202,6 @@ lemma sp_lemma_ORR(s:state, r:state, ok:bool,
 	requires sp_eval(sp_code_ORR(dst, src1, src2), s, r, ok);
 	requires 0 <= OperandContents(s, src1) < MaxVal();
 	requires 0 <= OperandContents(s, src2) < MaxVal();
-    requires !IsMemOperand(dst);
-    requires !IsMemOperand(src1);
-    requires !IsMemOperand(src2);
     ensures evalUpdate(s, dst, or32(eval_op(s, src1),
         eval_op(s, src2)), r, ok);
 	ensures  ok;
@@ -221,9 +219,6 @@ lemma sp_lemma_EOR(s:state, r:state, ok:bool,
 	requires sp_eval(sp_code_EOR(dst, src1, src2), s, r, ok);
 	requires 0 <= OperandContents(s, src1) < MaxVal();
 	requires 0 <= OperandContents(s, src2) < MaxVal();
-    requires !IsMemOperand(dst);
-    requires !IsMemOperand(src1);
-    requires !IsMemOperand(src2);
     ensures evalUpdate(s, dst, xor32(eval_op(s, src1),
         eval_op(s, src2)), r, ok);
 	ensures  ok;
@@ -241,9 +236,6 @@ lemma sp_lemma_ROR(s:state, r:state, ok:bool,
 	requires sp_eval(sp_code_ROR(dst, src1, src2), s, r, ok);
 	requires 0 <= OperandContents(s, src1) < MaxVal();
 	requires 0 <= OperandContents(s, src2) < MaxVal();
-    requires !IsMemOperand(dst);
-    requires !IsMemOperand(src1);
-    requires !IsMemOperand(src2);
     requires src2.OConst?;
     requires 0 <= eval_op(s, src2) < 32;
     ensures evalUpdate(s, dst, ror32(eval_op(s, src1),
@@ -263,9 +255,6 @@ lemma sp_lemma_LSL(s:state, r:state, ok:bool,
 	requires sp_eval(sp_code_LSL(dst, src1, src2), s, r, ok);
 	requires 0 <= OperandContents(s, src1) < MaxVal();
 	requires 0 <= OperandContents(s, src2) < MaxVal();
-    requires !IsMemOperand(dst);
-    requires !IsMemOperand(src1);
-    requires !IsMemOperand(src2);
     requires src2.OConst?;
     requires 0 <= eval_op(s, src2) < 32;
     ensures evalUpdate(s, dst, shl32(eval_op(s, src1),
@@ -285,9 +274,6 @@ lemma sp_lemma_LSR(s:state, r:state, ok:bool,
 	requires sp_eval(sp_code_LSR(dst, src1, src2), s, r, ok);
 	requires 0 <= OperandContents(s, src1) < MaxVal();
 	requires 0 <= OperandContents(s, src2) < MaxVal();
-    requires !IsMemOperand(dst);
-    requires !IsMemOperand(src1);
-    requires !IsMemOperand(src2);
     requires src2.OConst?;
     requires 0 <= eval_op(s, src2) < 32;
     ensures evalUpdate(s, dst, shr32(eval_op(s, src1),
@@ -305,8 +291,6 @@ lemma sp_lemma_MVN(s:state, r:state, ok:bool,
 	requires ValidDestinationOperand(s, dst);
 	requires sp_eval(sp_code_MVN(dst, src), s, r, ok);
 	requires 0 <= OperandContents(s, src) < MaxVal();
-    requires !IsMemOperand(dst);
-    requires !IsMemOperand(src);
     ensures evalUpdate(s, dst, not32(eval_op(s, src)),
         r, ok);
 	ensures  ok;
@@ -338,17 +322,18 @@ lemma sp_lemma_LDR(s:state, r:state, ok:bool,
 	requires ValidDestinationOperand(s, rd);
 	requires ValidOperand(s, base);
 	requires ValidOperand(s, ofs);
-    requires ValidOperand(s, addr_op(s, base, ofs));
+    requires ValidMem(s, addr_mem(s, base, ofs));
 	requires sp_eval(sp_code_LDR(rd, base, ofs), s, r, ok);
 	requires 0 <= OperandContents(s, base) < MaxVal();
 	requires 0 <= OperandContents(s, ofs) < MaxVal();
 	// requires 0 <= OperandContents(s, addr_op(s, base, ofs)) < MaxVal();
     //requires IsMemOperand(addr);
     //requires !IsMemOperand(rd);
-	ensures evalUpdate(s, rd, eval_op(s, addr_op(s, base, ofs)), r, ok);
+	// ensures evalUpdate(s, rd, eval_op(s, addr_op(s, base, ofs)), r, ok);
+	// ensures evalUpdate(s, rd, eval_op(s, addr(eval_op(s,base), eval_op(s,ofs))), r, ok);
+    ensures evalUpdate(s, rd, eval_mem(s, Address(eval_op(s, base) + eval_op(s, ofs))), r, ok)
     ensures ValidOperand(r, base);
     ensures ValidOperand(r, ofs);
-    ensures ValidOperand(r, addr_op(s, base, ofs));
 	ensures ok;
 	ensures 0 <= OperandContents(r, rd) < MaxVal();
 {
@@ -361,15 +346,16 @@ lemma sp_lemma_STR(s:state, r:state, ok:bool,
 	requires ValidOperand(s, rd);
 	requires ValidOperand(s, base);
 	requires ValidOperand(s, ofs);
-    requires ValidDestinationOperand(s, addr_op(s, base, ofs));
+    requires ValidMem(s, addr_mem(s, base, ofs));
 	requires sp_eval(sp_code_STR(rd, base, ofs), s, r, ok);
 	requires 0 <= OperandContents(s, rd) < MaxVal();
     // requires IsMemOperand(addr);
     // requires !IsMemOperand(rd);
-	ensures evalUpdate(s, addr_op(s, base, ofs), eval_op(s, rd), r, ok);
+    ensures evalMemUpdate(s, Address(eval_op(s, base) + eval_op(s, ofs)), eval_op(s, rd), r, ok)
 	ensures ok;
-	ensures 0 <= OperandContents(r, rd) < MaxVal();
-	ensures 0 <= OperandContents(r, addr_op(s, base, ofs)) < MaxVal();
+    ensures 0 <= MemContents(r, addr_mem(s, base, ofs)) < MaxVal();
+	// ensures 0 <= OperandContents(r, rd) < MaxVal();
+	// ensures 0 <= OperandContents(r, addr_op(s, base, ofs)) < MaxVal();
 {
 	reveal_sp_eval();
 	reveal_sp_code_STR();
@@ -392,7 +378,6 @@ lemma sp_lemma_incr(s:sp_state, r:sp_state, ok:bool, o:operand)
   requires ValidDestinationOperand(s, o)
   requires sp_eval(sp_code_incr(o), s, r, ok)
   requires 0 <= eval_op(s, o) < MaxVal();
-  requires !IsMemOperand(o);
   ensures  evalUpdate(s, o,
     (OperandContents(s, o) + 1) % MaxVal(),
     r, ok)
@@ -408,8 +393,6 @@ lemma sp_lemma_plusEquals(s:sp_state, r:sp_state, ok:bool, o1:operand, o2:operan
     requires sp_eval(sp_code_plusEquals(o1, o2), s, r, ok);
     requires 0 <= OperandContents(s, o1) < MaxVal();
     requires 0 <= OperandContents(s, o2) < MaxVal();
-    requires !IsMemOperand(o1);
-    requires !IsMemOperand(o2);
     ensures evalUpdate(s, o1, (OperandContents(s, o1) +
         OperandContents(s, o2)) % MaxVal(), r, ok);
 {
@@ -424,8 +407,6 @@ lemma sp_lemma_andEquals(s:sp_state, r:sp_state, ok:bool, o1:operand, o2:operand
     requires sp_eval(sp_code_andEquals(o1, o2), s, r, ok);
     requires 0 <= OperandContents(s, o1) < MaxVal();
     requires 0 <= OperandContents(s, o2) < MaxVal();
-    requires !IsMemOperand(o1);
-    requires !IsMemOperand(o2);
     ensures evalUpdate(s, o1, and32(eval_op(s, o1), eval_op(s, o2)), r, ok);
 {
     reveal_sp_eval();
@@ -439,8 +420,6 @@ lemma sp_lemma_xorEquals(s:sp_state, r:sp_state, ok:bool, o1:operand, o2:operand
     requires sp_eval(sp_code_xorEquals(o1, o2), s, r, ok);
     requires 0 <= OperandContents(s, o1) < MaxVal();
     requires 0 <= OperandContents(s, o2) < MaxVal();
-    requires !IsMemOperand(o1);
-    requires !IsMemOperand(o2);
     ensures evalUpdate(s, o1, xor32(eval_op(s, o1), eval_op(s, o2)), r, ok);
 {
     reveal_sp_eval();
