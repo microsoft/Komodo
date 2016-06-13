@@ -28,12 +28,14 @@ method printBcc(c:ocmp)
 	}
 }
 
+/*
 method printId(id:id)
 {
     match id
         case LocalVar(slot) => print("[sp, #");print(4*slot);print("]");
         case GlobalVar(n) => not_impl();
 }
+*/
 
 method printOperand(o:operand)
 {
@@ -46,7 +48,7 @@ method printOperand(o:operand)
 		}
         case OSP => print("r13");
         case OLR => print("r14");
-        case OId(x) => printId(x);
+        case OMem(x) => not_impl();
 }
 
 method printIns(ins:ins)
@@ -68,12 +70,14 @@ method printIns(ins:ins)
         case LSL(dest, src1, src2) => not_impl();
         case LSR(dest, src1, src2) => not_impl();
         case MVN(dest, src) => not_impl();
-		case LDR(rd, addr) =>
+		case LDR(rd, base, ofs) =>
 			print("  LDR "); printOperand(rd); cma();
-				printOperand(addr); nl();
-		case STR(rd, addr) =>
+				print("["); printOperand(base); cma();
+                printOperand(ofs); print("]"); nl();
+		case STR(rd, base, ofs) =>
 			print("  STR "); printOperand(rd); cma();
-				printOperand(addr); nl();
+				print("["); printOperand(base); cma();
+                printOperand(ofs); print("]"); nl();
 		case MOV(dst, src) =>
 			print("  MOV "); printOperand(dst); cma();
 				printOperand(src); nl();

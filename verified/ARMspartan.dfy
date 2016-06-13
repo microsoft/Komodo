@@ -64,7 +64,7 @@ function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
 // Stack
 //-----------------------------------------------------------------------------
 // This code is pretty much only used for stack-test
-function method stack(slot:int):operand { OId(LocalVar(slot)) }
+function method stack(slot:int):operand { OMem(LocalVar(slot)) }
 function stackval(s:sp_state, o:operand):int requires ValidOperand(s, o); { sp_eval_op(s, o) }
 predicate NonEmptyStack(s:sp_state) { s.stack != [] }
 predicate StackContains(s:sp_state, slot:int) 
@@ -112,11 +112,11 @@ function method{:opaque} sp_code_MVN(dst:operand, src:operand):code
 function method{:opaque} sp_code_MOV(dst:operand, src:operand):code
 	{ Ins(MOV(dst, src)) }
 
-function method{:opaque} sp_code_LDR(rd:operand, addr:operand):code
-	{ Ins(LDR(rd, addr)) }
+function method{:opaque} sp_code_LDR(rd:operand, base:operand, ofs:operand):code
+	{ Ins(LDR(rd, base, ofs)) }
 
-function method{:opaque} sp_code_STR(rd:operand, addr:operand):code
-	{ Ins(STR(rd, addr)) }
+function method{:opaque} sp_code_STR(rd:operand, base:operand, ofs:operand):code
+	{ Ins(STR(rd, base, ofs)) }
 
 function method{:opaque} sp_code_CPS(mod:operand):code
     { Ins(CPS(mod)) }
@@ -322,8 +322,8 @@ lemma sp_lemma_MOV(s:state, r:state, ok:bool,
 	requires ValidDestinationOperand(s, dst);
 	requires sp_eval(sp_code_MOV(dst, src), s, r, ok);
 	requires 0 <= OperandContents(s, src) < MaxVal();
-    requires !IsMemOperand(dst);
-    requires !IsMemOperand(src);
+    //requires !IsMemOperand(dst);
+    //requires !IsMemOperand(src);
 	ensures evalUpdate(s, dst, OperandContents(s, src), r, ok);
 	ensures ok;
 	ensures 0 <= OperandContents(r, dst) < MaxVal();
@@ -334,34 +334,42 @@ lemma sp_lemma_MOV(s:state, r:state, ok:bool,
 }
 
 lemma sp_lemma_LDR(s:state, r:state, ok:bool,
-	rd:operand, addr:operand)
+	rd:operand, base:operand, ofs:operand)
 	requires ValidDestinationOperand(s, rd);
-	requires ValidOperand(s, addr);
-	requires sp_eval(sp_code_LDR(rd, addr), s, r, ok);
-	requires 0 <= OperandContents(s, addr) < MaxVal();
-    requires IsMemOperand(addr);
-    requires !IsMemOperand(rd);
-	ensures evalUpdate(s, rd, OperandContents(s, addr), r, ok);
+	requires ValidOperand(s, base);
+	requires ValidOperand(s, ofs);
+    requires ValidOperand(s, addr_op(s, base, ofs));
+	requires sp_eval(sp_code_LDR(rd, base, ofs), s, r, ok);
+	requires 0 <= OperandContents(s, base) < MaxVal();
+	requires 0 <= OperandContents(s, ofs) < MaxVal();
+	// requires 0 <= OperandContents(s, addr_op(s, base, ofs)) < MaxVal();
+    //requires IsMemOperand(addr);
+    //requires !IsMemOperand(rd);
+	ensures evalUpdate(s, rd, eval_op(s, addr_op(s, base, ofs)), r, ok);
+    ensures ValidOperand(r, base);
+    ensures ValidOperand(r, ofs);
+    ensures ValidOperand(r, addr_op(s, base, ofs));
 	ensures ok;
 	ensures 0 <= OperandContents(r, rd) < MaxVal();
-	ensures 0 <= OperandContents(r, addr) < MaxVal();
 {
 	reveal_sp_eval();
 	reveal_sp_code_LDR();
 }
 
 lemma sp_lemma_STR(s:state, r:state, ok:bool,
-	rd:operand, addr:operand)
+	rd:operand, base:operand, ofs:operand)
 	requires ValidOperand(s, rd);
-	requires ValidDestinationOperand(s, addr);
-	requires sp_eval(sp_code_STR(rd, addr), s, r, ok);
+	requires ValidOperand(s, base);
+	requires ValidOperand(s, ofs);
+    requires ValidDestinationOperand(s, addr_op(s, base, ofs));
+	requires sp_eval(sp_code_STR(rd, base, ofs), s, r, ok);
 	requires 0 <= OperandContents(s, rd) < MaxVal();
-    requires IsMemOperand(addr);
-    requires !IsMemOperand(rd);
-	ensures evalUpdate(s, addr, OperandContents(s, rd), r, ok);
+    // requires IsMemOperand(addr);
+    // requires !IsMemOperand(rd);
+	ensures evalUpdate(s, addr_op(s, base, ofs), eval_op(s, rd), r, ok);
 	ensures ok;
 	ensures 0 <= OperandContents(r, rd) < MaxVal();
-	ensures 0 <= OperandContents(r, addr) < MaxVal();
+	ensures 0 <= OperandContents(r, addr_op(s, base, ofs)) < MaxVal();
 {
 	reveal_sp_eval();
 	reveal_sp_code_STR();

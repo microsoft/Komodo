@@ -185,29 +185,36 @@ procedure MOV(out{:operand} dst:int, {:operand} src:int)
         isUInt32(dst);
         0 <= dst < MaxVal();
 
-procedure LDR(out{:operand} rd:int, {:operand} addr:int)
+procedure LDR(out{:operand} rd:int, {:operand} base:int, {:operand} ofs:int)
     requires/ensures
         ValidDestinationOperand(this, @rd);
-        ValidOperand(this, @addr);
-        isUInt32(addr);
-        !IsMemOperand(@rd);
-        IsMemOperand(@addr);
+        ValidOperand(this, @base);
+        ValidOperand(this, @ofs);
+        ValidOperand(this, addr_op(old(this), @base, @ofs));
+        isUInt32(rd);
+        isUInt32(base);
+        isUInt32(ofs);
+        // !IsMemOperand(@rd);
+        // IsMemOperand(@addr);
     ensures
-        evalUpdate(old(this), @rd, old(addr), this, true);
+        evalUpdate(old(this), @rd, eval_op(this, addr_op(old(this),@base,@ofs)), this, true);
         isUInt32(rd);
         0 <= rd < MaxVal();
 
-procedure STR({:operand} rd:int, out{:operand} addr:int)
+procedure STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
     requires/ensures
         ValidOperand(this, @rd);
-        ValidDestinationOperand(this, @addr);
+        ValidOperand(this, @base);
+        ValidOperand(this, @ofs);
+        ValidDestinationOperand(this, addr_op(old(this), @base, @ofs));
         isUInt32(rd);
-        !IsMemOperand(@rd);
-        IsMemOperand(@addr);
+        isUInt32(base);
+        isUInt32(ofs);
+        // !IsMemOperand(@rd);
+        // IsMemOperand(@addr);
     ensures
-        evalUpdate(old(this), @addr, old(rd), this, true);
-        isUInt32(addr);
-        0 <= addr < MaxVal();
+        evalUpdate(old(this), addr_op(old(this), @base, @ofs) , old(rd), this, true);
+        0 <= eval_op(this, addr_op(old(this), @base, @ofs)) < MaxVal();
 
 procedure CPS({:operand} mod:int)
     requires

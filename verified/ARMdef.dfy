@@ -6,14 +6,15 @@ include "assembly.s.dfy"
 datatype ARMReg = R(n:int) | SP(spm:mode) | LR(lpm: mode)
 // In FIQ, R8 to R12 are also banked
 
-datatype id = GlobalVar(g:int) | LocalVar(l:int)
-datatype operand = OConst(n:int) | OReg(r:ARMReg) | OId(x:id) | OSP | OLR
+datatype mem = GlobalVar(g:int) | LocalVar(l:int) | Address(a:int)
+datatype operand = OConst(n:int) | OReg(r:ARMReg) | OMem(x:mem) | OSP | OLR 
 
-datatype frame = Frame(locals:map<id, int>)
+datatype frame = Frame(locals:map<mem, int>)
 datatype state = State(regs:map<ARMReg, int>,
-					   globals:map<id, int>,
+					   globals:map<mem, int>,
+                       addresses:map<mem, int>,
 					   stack:seq<frame>,
-					   heap:map<int, int>,
+					   // heap:map<int, int>,
                        ns:bool,
                        mod:mode)
 					   // cpsr:cpsr_val,
@@ -81,6 +82,13 @@ function method mode_encoding(m:int):mode
     else User // should not happen
 }
 
+function addr_op(s:state, base:operand, ofs:operand):operand
+    requires ValidOperand(s, base);
+    requires ValidOperand(s, ofs);
+{
+    OMem(Address( eval_op(s, base) + eval_op(s, ofs) ))
+}
+
 //-----------------------------------------------------------------------------
 // Instructions
 //-----------------------------------------------------------------------------
@@ -88,15 +96,15 @@ datatype ins =
 	  ADD(dstADD:operand, src1ADD:operand, src2ADD:operand)
 	| SUB(dstSUB:operand, src1SUB:operand, src2SUB:operand)
 	| AND(dstAND:operand, src1AND:operand, src2AND:operand)
-	| ORR(dstOR:operand, src1OR:operand, src2OR:operand)
+	| ORR(dstOR:operand,  src1OR:operand,  src2OR:operand)
 	| EOR(dstEOR:operand, src1EOR:operand, src2EOR:operand) // Also known as XOR
 	| ROR(dstROR:operand, src1ROR:operand, src2ROR:operand)
 	| LSL(dstLSL:operand, src1LSL:operand, src2LSL:operand)
 	| LSR(dstLSR:operand, src1LSR:operand, src2LSR:operand)
     | MOV(dstMOV:operand, srcMOV:operand)
     | MVN(dstMVN:operand, srcMVN:operand)
-	| LDR(rdLDR:operand,  addrLDR:operand)
-	| STR(rdSTR:operand,  addrSTR:operand)
+	| LDR(rdLDR:operand,  baseLDR:operand, ofsLDR:operand)
+	| STR(rdSTR:operand,  baseSTR:operand, ofsSTR:operand)
     | CPS(mod:operand) 
 
 //-----------------------------------------------------------------------------
@@ -142,9 +150,10 @@ predicate ValidOperand(s:state, o:operand)
 			case SP(m) => false // not used directly 
 			case LR(m) => false // not used directly 
 		)
-		case OId(x) => (match x
+		case OMem(x) => (match x
 			case GlobalVar(g) => x in s.globals
 			case LocalVar(l)  => |s.stack| > 0 && x in s.stack[0].locals
+            case Address(a)   => x in s.addresses
 	    )
         case OSP => SP(mode_of_state(s)) in s.regs
         case OLR => LR(mode_of_state(s)) in s.regs
@@ -161,7 +170,14 @@ predicate ValidDestinationOperand(s:state, o:operand)
 	{ !o.OConst? && ValidOperand(s, o) }
 
 predicate IsMemOperand(o:operand)
-    { o.OId? }
+    { o.OMem? }
+
+predicate ValidAddress(s:state, base:operand, ofs:operand)
+    requires ValidOperand(s, base);
+    requires ValidOperand(s, ofs);
+{
+    ValidOperand(s, addr_op(s, base, ofs))
+}
 
 //-----------------------------------------------------------------------------
 // Functions for bitwise operations
@@ -207,9 +223,10 @@ function OperandContents(s:state, o:operand): int
 	match o
 		case OConst(n) => n
 		case OReg(r) => s.regs[r]
-		case OId(x) => (match x
+		case OMem(x) => (match x
 			case GlobalVar(g) => s.globals[x]
 			case LocalVar(l) => s.stack[0].locals[x]
+            case Address(a) => s.addresses[x]
 		)
         case OSP => s.regs[SP(mode_of_state(s))]
         case OLR => s.regs[LR(mode_of_state(s))]
@@ -218,7 +235,8 @@ function OperandContents(s:state, o:operand): int
 
 // eval_op and eval_memop may need to duplicate _Contents and remove requires
 function eval_op(s:state, o:operand): int
-	requires ValidOperand(s, o) { Truncate(OperandContents(s,o)) }
+	requires ValidOperand(s, o)
+    { Truncate(OperandContents(s,o)) }
 
 
 predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
@@ -228,7 +246,8 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
         case OReg(reg) => r == s.(regs := s.regs[o.r := v])
         case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := v])
         case OSP => r == s.(regs := s.regs[SP(mode_of_state(s)) := v])
-        case OId(x) => ( match x
+        case OMem(x) => ( match x
+            case Address(a) => r == s.(addresses:= s.addresses[o.x := v])
 			case GlobalVar(g) => r == s.(globals := s.globals[o.x := v])
 			case LocalVar(l) => r == s.(stack :=
 				[s.stack[0].(locals := s.stack[0].locals[o.x := v])] +
@@ -241,12 +260,6 @@ predicate evalModeUpdate(s:state, newmode:int, r:state, ok:bool)
     // ok && r == s.(cpsr := s.cpsr.(m := newmode))
     ok && ValidMode(newmode) && r == s.(mod := mode_encoding(newmode))
 }
-
-// predicate evalCPSRUpdate(s:state, newcpsr:cpsr_val, newspsr_entry:cpsr_val,
-//     spsr_changed:mode, r:state, ok:bool)
-// {
-//     ok && r == s.(cpsr := newcpsr).(spsr := s.spsr[spsr_changed := newspsr_entry])
-// }
 
 function evalCmp(c:ocmp, i1:int, i2:int):bool
 {
@@ -271,39 +284,45 @@ predicate ValidInstruction(s:state, ins:ins)
     //TODO check mem vs non-mem
 	match ins
 		case ADD(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
-            !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
+            //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
 		case SUB(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
-            !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
+            //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
         case AND(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
-            !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
+            //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
         case ORR(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
-            !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
+            //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
         case EOR(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
-            !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
+            //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
         case ROR(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest) &&
-            !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+			ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest)
+            //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
         case LSL(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest) &&
-            !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+			ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest)
+            //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
         case LSR(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest) &&
-            !IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+			ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest)
+            //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
         case MVN(dest, src) => ValidOperand(s, src) &&
-			ValidDestinationOperand(s, dest) &&
-            !IsMemOperand(src) && !IsMemOperand(dest)
-		case LDR(rd, addr) => ValidDestinationOperand(s, rd) &&
-			ValidOperand(s, addr) && IsMemOperand(addr) && !IsMemOperand(rd)
-		case STR(rd, addr) => ValidOperand(s, rd) &&
-			ValidDestinationOperand(s, addr) &&
-            IsMemOperand(addr) && !IsMemOperand(rd)
+			ValidDestinationOperand(s, dest)
+            //!IsMemOperand(src) && !IsMemOperand(dest)
+		case LDR(rd, base, ofs) => 
+            ValidDestinationOperand(s, rd) &&
+			ValidOperand(s, base) && ValidOperand(s, ofs) &&
+            ValidOperand(s,  addr_op(s, base, ofs))
+            //IsMemOperand(addr) && !IsMemOperand(rd)
+		case STR(rd, base, ofs) =>
+            ValidOperand(s, rd) &&
+            ValidOperand(s, ofs) && ValidOperand(s, base) &&
+            ValidDestinationOperand(s, addr_op(s, base, ofs))
+            //IsMemOperand(addr) && !IsMemOperand(rd)
 		case MOV(dst, src) => ValidDestinationOperand(s, dst) &&
-			ValidOperand(s, src) && !IsMemOperand(src) && !IsMemOperand(dst)
+			ValidOperand(s, src)
+            //!IsMemOperand(src) && !IsMemOperand(dst)
         case CPS(mod) => ValidOperand(s, mod) &&
             ValidMode(OperandContents(s, mod))
 }
@@ -340,14 +359,11 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
                 shr32(eval_op(s, src1), eval_op(s, src2)),
 			    r, ok)
 		case MVN(dst, src) => evalUpdate(s, dst,
-            not32(eval_op(s, src)),
-			r, ok)
-		case LDR(rd, addr) => evalUpdate(s, rd,
-			OperandContents(s, addr) % MaxVal(),
-			r, ok)
-		case STR(rd, addr) => evalUpdate(s, addr,
-			OperandContents(s, rd) % MaxVal(),
-			r, ok)
+            not32(eval_op(s, src)), r, ok)
+		case LDR(rd, base, ofs) => 
+            evalUpdate(s, rd, eval_op(s, addr_op(s, base, ofs)), r, ok)
+		case STR(rd, base, ofs) => 
+            evalUpdate(s, addr_op(s, base, ofs), eval_op(s, rd), r, ok)
 		case MOV(dst, src) => evalUpdate(s, dst,
 			OperandContents(s, src) % MaxVal(),
 			r, ok)
