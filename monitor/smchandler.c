@@ -7,6 +7,8 @@
 static struct kev_pagedb_entry g_pagedb[KEVLAR_SECURE_NPAGES];
 static uintptr_t g_secure_physbase;
 static struct kev_addrspace *g_cur_addrspace;
+struct kev_dispatcher *g_cur_dispatcher;
+bool g_pending_irq, g_pending_fiq;
 
 static inline bool page_is_valid(kev_secure_pageno_t pageno)
 {

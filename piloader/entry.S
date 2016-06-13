@@ -172,7 +172,7 @@ leave_secure_world:
         msr     sp_svc, r1
 
         /* return to caller (in normal-world supervisor mode) */
-        movs    pc, lr
+        movs pc, lr /* or ERET */
 
 
         .section .bss

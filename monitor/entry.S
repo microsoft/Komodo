@@ -2,24 +2,50 @@
 #define STACK_SHIFT     14 // 16kB stack per-core
 #define STACK_SIZE      (1<<STACK_SHIFT)
 
+#define CPSRM_MONITOR   0x16 // value of CPSR.M for Monitor mode
+
         /* Vector table */
         .section vectors, "ax"
-        .global _monitor_vectors
+        .global _monitor_vectors, _secure_vectors
 
         .align 5
-_monitor_vectors:
+_monitor_vectors: /* MVBAR points here */
 1:      b       1b      /* reset */
 1:      b       1b      /* undef */
-        b       _smchandler
-1:      b       blinky  /* prefetch_abort */
-1:      b       blinky  /* data_abort */
+        b       _smc
+        b       blinky  /* prefetch_abort */
+        b       blinky  /* data_abort */
+1:      b       1b      /* reserved */
+        b       _irq    /* irq */
+        b       _fiq    /* fiq */
+
+        .align 5
+_secure_vectors: /* Secure-world VBAR points here */
+1:      b       1b      /* reset */
+1:      b       1b      /* undef */
+        b       _svc
+        b       _abort  /* prefetch_abort */
+        b       _abort  /* data_abort */
 1:      b       1b      /* reserved */
 1:      b       1b      /* irq */
 1:      b       1b      /* fiq */
 
-
         .section .text
-_smchandler:
+
+        .macro save_user_context
+        /* save full context in dispatcher */
+        push    {lr}       // free up lr
+        ldr     lr, =g_cur_dispatcher
+        ldr     lr, [lr]
+        stmia   lr, {r0-r12} // r0-r12
+        mrs     r0, sp_usr   // SP
+        mrs     r1, lr_usr // LR
+        pop     {r2} // PC (was stacked LR)
+        mrs     r3, spsr // CPSR
+        stmia   lr, {r0-r3}
+        .endm
+
+_smc:
         /* call C, stacking r4 (used as a parameter) */
         push    {lr}
         push    {r4}
@@ -43,6 +69,39 @@ _smchandler:
         /* return from monitor mode */
         movs    pc,  lr
 
+_irq:   /* IRQ exception, taken from secure user-mode to secure monitor-mode */
+        sub     lr, lr, #4 // adjust LR to point to next instruction to be executed
+        save_user_context
+
+        /* remember that we have a pending interrupt for normal world */
+        ldr     r0, =g_pending_irq
+        mov     r1, #1
+        strb    r1, [r0]
+
+        /* TODO: return to SMC dispatch path */
+        pop     {lr}
+        bx      lr
+
+_fiq:   /* FIQ exception, taken from secure user-mode to secure monitor-mode */
+        sub     lr, lr, #4 // adjust LR to point to next instruction to be executed
+        save_user_context
+
+        /* remember that we have a pending interrupt for normal world */
+        ldr     r0, =g_pending_fiq
+        mov     r1, #1
+        strb    r1, [r0]
+
+        /* TODO: return to SMC dispatch path */
+        pop     {lr}
+        bx      lr
+
+_abort: /* Data abort, only taken from secure user-mode */
+        /* TODO */
+        b       _abort
+
+_svc: /* Supervisor call, only taken from secure user-mode */
+        /* TODO */
+        b       _svc
 
 #if 1 /* blink LED -- handy to debug early boot issues */
 blinky: ldr     r0, =0x3F200000 // gpio base
