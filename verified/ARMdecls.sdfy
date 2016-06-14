@@ -49,7 +49,6 @@ procedure SUB(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
-    requires
         isUInt32(src1);
         isUInt32(src2);
     ensures
@@ -61,7 +60,6 @@ procedure AND(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
-    requires
         isUInt32(src1);
         isUInt32(src2);
     ensures
@@ -184,7 +182,7 @@ procedure STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
         ValidMem(this, addr_mem(this, @base, @ofs));
     ensures
         evalMemUpdate(old(this), addr_mem(old(this), @base, @ofs), old(rd), this, true);
-        // 0 <= addrval(this, addr(base, ofs)) < MaxVal();
+        isUInt32(addrval(this, base + ofs));
 
 procedure CPS({:operand} mod:int)
     requires

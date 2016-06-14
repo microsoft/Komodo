@@ -1,0 +1,53 @@
+procedure main(){
+}
+
+procedure smc_handler()
+    requires
+{
+}
+
+procedure smc_entry()
+    requires
+        ValidOperand(this, @r4);
+        ValidOperand(this, @lr);
+        ValidOperand(this, @sp);
+        isUInt32(r4);
+        isUInt32(lr);
+        isUInt32(sp);
+        sp >= 8;
+        ValidMemRange(this, sp-8, sp);
+{
+    ghost var orig_sp := sp;
+    //push lr
+    SUB(sp, sp, 4);
+    STR(lr, sp, 0);
+
+    //push r0-r4
+    // r0: callno
+    // r1: arg1
+    // r2: arg2
+    // r3: arg3
+    // r4: arg4
+    SUB(sp, sp, 4);
+    STR(r4, sp, 0);
+
+    //do smchandler call
+    //inline smchandler
+
+    // pop r4
+    LDR(r4, sp, 0);
+    ADD(sp, sp, 4); 
+
+    // pop lr
+    LDR(lr, sp, 0);
+    ADD(sp, sp, 4);
+}
+
+#verbatim
+method Main()
+{
+  printHeader();
+  var n := printCode(sp_code_main(), 0);
+  printFooter();
+}
+#endverbatim

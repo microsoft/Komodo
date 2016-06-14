@@ -374,9 +374,9 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
 		case MVN(dst, src) => evalUpdate(s, dst,
             not32(eval_op(s, src)), r, ok)
 		case LDR(rd, base, ofs) => 
-            evalUpdate(s, rd, eval_mem(s, Address(eval_op(s, base) + eval_op(s, ofs))), r, ok)
+            evalUpdate(s, rd, eval_mem(s, Address(eval_op(s, base) + eval_op(s, ofs))) % MaxVal(), r, ok)
 		case STR(rd, base, ofs) => 
-            evalMemUpdate(s, Address(eval_op(s, base) + eval_op(s, ofs)), eval_op(s, rd), r, ok)
+            evalMemUpdate(s, Address(eval_op(s, base) + eval_op(s, ofs)), eval_op(s, rd) % MaxVal(), r, ok)
 		case MOV(dst, src) => evalUpdate(s, dst,
 			OperandContents(s, src) % MaxVal(),
 			r, ok)

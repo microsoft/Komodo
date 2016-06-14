@@ -38,6 +38,12 @@ function sp_eval_mem(s:state, m:mem):int
     requires ValidMem(s, m);
     { MemContents(s, m) }
 
+predicate ValidMemRange(s:state, lwr:int, upr:int)
+{
+    forall i:int :: lwr <= i <= upr ==>
+        ValidMem(s, Address(i))
+}
+
 function method sp_CNil():codes { CNil }
 function sp_cHead(b:codes):code requires b.sp_CCons? { b.hd }
 predicate sp_cHeadIs(b:codes, c:code) { b.sp_CCons? && b.hd == c }
