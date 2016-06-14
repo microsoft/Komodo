@@ -32,7 +32,7 @@
 // defined in kevlar linker script
 extern char monitor_image_start, monitor_image_data, monitor_image_end;
 // defined in monitor image
-extern char monitor_stack_base;
+extern char monitor_stack_base, _monitor_vectors, _secure_vectors;
 
 void park_secondary_cores(void);
 void leave_secure_world(void);
@@ -46,7 +46,8 @@ static inline uint8_t mycoreid(void)
 
 extern void print_hex(uint32_t val);
 
-static void secure_world_init(uintptr_t ptbase, uintptr_t vbar, uintptr_t mon_sp)
+static void secure_world_init(uintptr_t ptbase, uintptr_t vbar, uintptr_t mvbar,
+                              uintptr_t mon_sp)
 {
     uint32_t reg;
     /* setup secure-world page tables */
@@ -86,7 +87,7 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar, uintptr_t mon_sp
 
     /* setup secure VBAR and MVBAR */
     __asm volatile("mcr p15, 0, %0, c12, c0, 0" :: "r" (vbar));
-    __asm volatile("mcr p15, 0, %0, c12, c0, 1" :: "r" (vbar));
+    __asm volatile("mcr p15, 0, %0, c12, c0, 1" :: "r" (mvbar));
 
     /* update monitor-mode's banked SP value for use in later SMCs */
     /* FIXME: this causes an undefined instruction exception on
@@ -99,14 +100,14 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar, uintptr_t mon_sp
 }
 
 static volatile bool global_barrier;
-static uintptr_t g_ptbase, g_mvbar;
+static uintptr_t g_ptbase, g_vbar, g_mvbar;
 
 static void __attribute__((noreturn)) secondary_main(uint8_t coreid)
 {
     while (!global_barrier) __asm volatile("yield");
 
     // TODO: compute per-core monitor stack pointer
-    secure_world_init(g_ptbase, g_mvbar, 0xffffffff /* TODO */);
+    secure_world_init(g_ptbase, g_vbar, g_mvbar, 0xffffffff /* TODO */);
 
     leave_secure_world();
 
@@ -270,12 +271,14 @@ void __attribute__((noreturn)) main(void)
         = &monitor_stack_base - &monitor_image_start + KEVLAR_MON_VBASE;
 
     g_ptbase = ptbase;
-    g_mvbar = KEVLAR_MON_VBASE;
+    assert(&_monitor_vectors == &monitor_image_start);
+    g_mvbar = &_monitor_vectors - &monitor_image_start + KEVLAR_MON_VBASE;
+    g_vbar = &_secure_vectors - &monitor_image_start + KEVLAR_MON_VBASE;
 
     //print_hex(0x4237);
     //console_printf(" <-- Print_hex test\n"),
 
-    secure_world_init(g_ptbase, g_mvbar, monitor_stack);
+    secure_world_init(g_ptbase, g_vbar, g_mvbar, monitor_stack);
 
     /* init the monitor with an initial SMC call */
     console_printf("passing secure_physbase %lx to monitor\n", secure_physbase);
