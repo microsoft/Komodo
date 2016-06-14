@@ -546,7 +546,8 @@ kev_multival_t smchandler(uintptr_t callno, uintptr_t arg1, uintptr_t arg2,
         break;
 
     case KEV_SMC_GETPHYSPAGES:
-        ret.err = kev_smc_get_phys_pages();
+        ret.val = kev_smc_get_phys_pages();
+        ret.err = KEV_ERR_SUCCESS;
         break;
 
     case KEV_SMC_INIT_ADDRSPACE:

@@ -17,7 +17,19 @@ struct kevlar_client {
     // TBD
 };
 
-asmlinkage u32 invoke_smc(u32 callno, u32 arg1, u32 arg2, u32 arg3, u32 arg4);
+// return number of secure pages
+uint32_t kev_smc_get_phys_pages(void);
+
+kev_err_t kev_smc_init_addrspace(kev_secure_pageno_t addrspace_page,
+                                 kev_secure_pageno_t l1pt_page);
+
+kev_err_t kev_smc_init_dispatcher(kev_secure_pageno_t page,
+                                  kev_secure_pageno_t addrspace,
+                                  uint32_t entrypoint);
+
+kev_err_t kev_smc_init_l2table(kev_secure_pageno_t page,
+                               kev_secure_pageno_t addrspace,
+                               uint32_t l1_index);
 
 static int kevlar_open(struct inode *inode, struct file *filp)
 {
@@ -70,9 +82,9 @@ static int __init driver_init(void)
 
     printk(KERN_INFO "Kevlar driver init\n");
 
-    magic = invoke_smc(KEV_SMC_QUERY,0,0,0,0);
+    magic = kev_smc_query();
     if (magic != KEV_MAGIC) {
-        printk(KERN_ERR "kevlar: SMC to monitor failed: %x\n", magic);
+        printk(KERN_ERR "kevlar: query SMC to monitor failed: %x\n", magic);
         r = -ENODEV;
         goto fail;
     }
