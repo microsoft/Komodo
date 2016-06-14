@@ -40,11 +40,16 @@ struct kev_addrspace {
 };
 
 struct kev_dispatcher {
-    uintptr_t entrypoint;
-    // TODO: current state, save area pointer
+    uint32_t regs[16]; // core regs
+    uint32_t cpsr;
+    uint32_t entrypoint;
+    uint32_t entered; // bool
 };
 
 //extern uintptr_t g_secure_physbase;
 //extern struct kev_pagedb_entry g_pagedb[KEVLAR_SECURE_NPAGES];
+
+/* entry.S */
+kev_multival_t dispatch(struct kev_dispatcher *dispatcher);
 
 #endif // _KEVLAR_MONITOR_H

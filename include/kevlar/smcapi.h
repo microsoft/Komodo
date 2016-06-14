@@ -11,6 +11,7 @@
 #define KEV_SMC_REMOVE          20
 #define KEV_SMC_FINALISE        21
 #define KEV_SMC_ENTER           22
+#define KEV_SMC_RESUME          23
 #define KEV_SMC_STOP            29
 
 #define KEV_MAGIC 0x4b766c72 // "Kvlr"
@@ -27,7 +28,17 @@ typedef uint32_t kev_secure_pageno_t;
 #define KEV_ERR_INVALID_MAPPING 6
 #define KEV_ERR_ADDRINUSE       7
 #define KEV_ERR_NOT_STOPPED     8
+#define KEV_ERR_INTERRUPTED     9
+#define KEV_ERR_FAULT           10
+#define KEV_ERR_ALREADY_ENTERED 11
+#define KEV_ERR_NOT_ENTERED     12
 #define KEV_ERR_INVALID         ((kev_err_t)-1)
+
+// struct type for returning two values across an SMC API
+typedef struct kev_multival {
+    kev_err_t err;
+    uintptr_t val;
+} kev_multival_t;
 
 // returns KVR_MAGIC
 uint32_t kev_smc_query(void);
@@ -77,6 +88,8 @@ kev_err_t kev_smc_remove(kev_secure_pageno_t page);
 kev_err_t kev_smc_finalise(kev_secure_pageno_t addrspace);
 kev_err_t kev_smc_stop(kev_secure_pageno_t addrspace);
 
-kev_err_t kev_smc_enter(kev_secure_pageno_t dispatcher);
+kev_multival_t kev_smc_enter(kev_secure_pageno_t dispatcher, uintptr_t arg1,
+                             uintptr_t arg2, uintptr_t arg3);
+kev_multival_t kev_smc_resume(kev_secure_pageno_t dispatcher);
 
 #endif
