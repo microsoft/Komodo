@@ -43,6 +43,12 @@ predicate ValidMemRange(s:state, lwr:int, upr:int)
     forall i:int :: lwr <= i <= upr ==>
         ValidMem(s, Address(i))
 }
+predicate MemRangeIs32(s:state, lwr:int, upr:int)
+    requires ValidMemRange(s, lwr, upr);
+{
+    forall i:int :: lwr <= i <= upr ==>
+        isUInt32(addrval(s, i))
+}
 
 function method sp_CNil():codes { CNil }
 function sp_cHead(b:codes):code requires b.sp_CCons? { b.hd }
