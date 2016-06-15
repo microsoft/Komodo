@@ -7,6 +7,7 @@
 static struct kev_pagedb_entry g_pagedb[KEVLAR_SECURE_NPAGES];
 static uintptr_t g_secure_physbase;
 static struct kev_addrspace *g_cur_addrspace;
+struct kev_dispatcher *g_cur_dispatcher;
 
 static inline bool page_is_valid(kev_secure_pageno_t pageno)
 {
@@ -437,31 +438,97 @@ kev_err_t kev_smc_stop(kev_secure_pageno_t addrspace_page)
     return KEV_ERR_SUCCESS;
 }
 
-kev_err_t kev_smc_enter(kev_secure_pageno_t disp_page)
+kev_multival_t kev_smc_enter(kev_secure_pageno_t disp_page, uintptr_t arg1,
+                             uintptr_t arg2, uintptr_t arg3)
 {
+    kev_multival_t ret;
+
+    ret.val = 0;
+    
     if (!page_is_typed(disp_page, KEV_PAGE_DISPATCHER)) {
-        return KEV_ERR_INVALID_PAGENO;
+        ret.err = KEV_ERR_INVALID_PAGENO;
+        return ret;
     }
 
     struct kev_dispatcher *dispatcher = page_monvaddr(disp_page);
     struct kev_addrspace *addrspace = g_pagedb[disp_page].addrspace;
 
     if (addrspace->state != KEV_ADDRSPACE_FINAL) {
-        return KEV_ERR_NOT_FINAL;
+        ret.err = KEV_ERR_NOT_FINAL;
+        return ret;
+    }
+
+    if (dispatcher->entered) {
+        ret.err = KEV_ERR_ALREADY_ENTERED;
+        return ret;
     }
 
     // switch to target addrspace
     switch_addrspace(addrspace);
 
-    // TODO: dispatch into usermode :)
-    (void)dispatcher;
+    // setup target context
+    dispatcher->regs[0] = arg1;
+    dispatcher->regs[1] = arg2;
+    dispatcher->regs[3] = arg3;
+    dispatcher->regs[15] = dispatcher->entrypoint; // XXX: PC
+    dispatcher->cpsr = 0x10; // XXX: user mode
 
-    return KEV_ERR_INVALID;
+    // dispatch into usermode
+    g_cur_dispatcher = dispatcher;
+    ret = dispatch(dispatcher);
+    if (ret.err == KEV_ERR_INTERRUPTED || ret.err == KEV_ERR_FAULT) {
+        dispatcher->entered = true;
+    }
+    g_cur_dispatcher = NULL;
+
+    return ret;
 }
 
-uintptr_t smchandler(uintptr_t callno, uintptr_t arg1, uintptr_t arg2,
-                     uintptr_t arg3, uintptr_t arg4)
+kev_multival_t kev_smc_resume(kev_secure_pageno_t disp_page)
 {
+    kev_multival_t ret;
+
+    ret.val = 0;
+    
+    if (!page_is_typed(disp_page, KEV_PAGE_DISPATCHER)) {
+        ret.err = KEV_ERR_INVALID_PAGENO;
+        return ret;
+    }
+
+    struct kev_dispatcher *dispatcher = page_monvaddr(disp_page);
+    struct kev_addrspace *addrspace = g_pagedb[disp_page].addrspace;
+
+    if (addrspace->state != KEV_ADDRSPACE_FINAL) {
+        ret.err = KEV_ERR_NOT_FINAL;
+        return ret;
+    }
+
+    if (!dispatcher->entered) {
+        ret.err = KEV_ERR_NOT_ENTERED;
+        return ret;
+    }
+
+    // switch to target addrspace
+    switch_addrspace(addrspace);
+
+    // dispatch into usermode
+    g_cur_dispatcher = dispatcher;
+    ret = dispatch(dispatcher);
+    if (ret.err == KEV_ERR_SUCCESS) {
+        dispatcher->entered = false;
+    }
+    g_cur_dispatcher = NULL;
+
+    return ret;
+}
+
+kev_multival_t smchandler(uintptr_t callno, uintptr_t arg1, uintptr_t arg2,
+                          uintptr_t arg3, uintptr_t arg4)
+{
+    kev_multival_t ret;
+
+    ret.val = 0;
+
     /* XXX: the very first SMC call into the monitor is a setup/init
        call from the bootloader. It is assumed that arg1 contains the
        secure phys base. */
@@ -469,44 +536,64 @@ uintptr_t smchandler(uintptr_t callno, uintptr_t arg1, uintptr_t arg2,
     if (!firstcall) {
         g_secure_physbase = arg1;
         firstcall = true;
-        return KEV_ERR_SUCCESS;
+        ret.err = KEV_ERR_SUCCESS;
+        return ret;
     }
 
     switch (callno) {
     case KEV_SMC_QUERY:
-        return KEV_MAGIC;
+        ret.err = KEV_MAGIC;
+        break;
 
     case KEV_SMC_GETPHYSPAGES:
-        return kev_smc_get_phys_pages();
+        ret.val = kev_smc_get_phys_pages();
+        ret.err = KEV_ERR_SUCCESS;
+        break;
 
     case KEV_SMC_INIT_ADDRSPACE:
-        return kev_smc_init_addrspace(arg1, arg2);
+        ret.err = kev_smc_init_addrspace(arg1, arg2);
+        break;
 
     case KEV_SMC_INIT_DISPATCHER:
-        return kev_smc_init_dispatcher(arg1, arg2, arg3);
+        ret.err = kev_smc_init_dispatcher(arg1, arg2, arg3);
+        break;
 
     case KEV_SMC_INIT_L2PTABLE:
-        return kev_smc_init_l2table(arg1, arg2, arg3);
+        ret.err = kev_smc_init_l2table(arg1, arg2, arg3);
+        break;
 
     case KEV_SMC_MAP_SECURE:
-        return kev_smc_map_secure(arg1, arg2, arg3, arg4);
+        ret.err = kev_smc_map_secure(arg1, arg2, arg3, arg4);
+        break;
 
     case KEV_SMC_MAP_INSECURE:
-        return kev_smc_map_insecure(arg1, arg2, arg3);
+        ret.err = kev_smc_map_insecure(arg1, arg2, arg3);
+        break;
 
     case KEV_SMC_REMOVE:
-        return kev_smc_remove(arg1);
+        ret.err = kev_smc_remove(arg1);
+        break;
     
     case KEV_SMC_FINALISE:
-        return kev_smc_finalise(arg1);
+        ret.err = kev_smc_finalise(arg1);
+        break;
 
     case KEV_SMC_ENTER:
-        return kev_smc_enter(arg1);
+        ret = kev_smc_enter(arg1, arg2, arg3, arg4);
+        break;
+
+    case KEV_SMC_RESUME:
+        ret = kev_smc_resume(arg1);
+        break;
 
     case KEV_SMC_STOP:
-        return kev_smc_stop(arg1);
+        ret.err = kev_smc_stop(arg1);
+        break;
 
     default:
-        return KEV_ERR_INVALID;
+        ret.err = KEV_ERR_INVALID;
+        break;
     }
+
+    return ret;
 }
