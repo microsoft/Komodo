@@ -1,0 +1,69 @@
+procedure operator(:=) (out{:operand} dst:int, {:operand} src:int)   := MOV
+
+procedure kev_smc_get_phys_pages() //arg1, arg2
+
+procedure fcall_prologue()
+    requires
+        ValidState(this);
+        sp >= 36;
+        ValidMemRange(this, sp-36, sp);
+{
+
+    //push link register onto stack
+    SUB(sp, sp, 4);
+    STR(lr, sp, 0);
+
+    //push r4-r11 onto stack
+    SUB(sp,  sp, 4);
+    STR(r4,  sp, 0);
+    SUB(sp,  sp, 4);
+    STR(r5,  sp, 0);
+    SUB(sp,  sp, 4);
+    STR(r6,  sp, 0);
+    SUB(sp,  sp, 4);
+    STR(r7,  sp, 0);
+    SUB(sp,  sp, 4);
+    STR(r8,  sp, 0);
+    SUB(sp,  sp, 4);
+    STR(r9,  sp, 0);
+    SUB(sp,  sp, 4);
+    STR(r10, sp, 0);
+    SUB(sp,  sp, 4);
+    STR(r11, sp, 0);
+
+    //Move function arguments in r0-r3 into r4-r7
+    r4 := r0;
+    r5 := r1;
+    r6 := r2;
+    r7 := r3;
+}
+
+procedure smc_handler()
+    requires
+        ValidState(this);
+        sp >= 36;
+        ValidMemRange(this, sp-36, sp);
+{
+    fcall_prologue();
+
+    //Here, callno is used as an input to select the particular call and
+    //as the return value
+    // if(callno == KEV_SMC_QUERY()) {
+    //     callno := KEV_MAGIC();
+    // } else(callno == KEV_SMC_GETPHYSPAGES()) {
+    //     callno := kev_smc_get_phys_pages();
+    // }
+
+}
+
+procedure main(){}
+
+#verbatim
+
+method Main()
+{
+  printHeader();
+  var n := printCode(sp_code_main(), 0);
+  printFooter();
+}
+#endverbatim

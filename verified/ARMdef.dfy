@@ -140,8 +140,10 @@ function MaxVal() : int { 0x1_0000_0000 }
 //-----------------------------------------------------------------------------
 predicate ValidState(s:state)
 {
-    (forall m:mode :: SP(m) in s.regs && LR(m) in s.regs) &&
-        (forall i:int :: 0 <= i <= 12 ==> R(i) in s.regs)
+    (forall m:mode :: SP(m) in s.regs && 0 <= s.regs[SP(m)] < MaxVal() &&
+        LR(m) in s.regs && 0 <= s.regs[LR(m)] < MaxVal()) &&
+     (forall i:int :: 0 <= i <= 12 ==> R(i) in s.regs && 
+            0 <= s.regs[R(i)] < MaxVal())
 }
 
 predicate ValidOperand(s:state, o:operand)

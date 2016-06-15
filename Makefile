@@ -5,7 +5,7 @@ INSTALLDIR ?= .
 GUEST_KERNEL ?= e:/raspi/raspbian-boot/kernel7.img
 IRON_IMPSEC_PATH ?= $(HOME)/src/iron/impsec
 SPARTAN ?= $(IRON_IMPSEC_PATH)/tools/Spartan/bin/spartan.exe
-DAFNY ?= $(IRON_IMPSEC_PATH)/tools/Dafny/Dafny.exe $(DAFNYFLAGS)
+DAFNY ?= $(IRON_IMPSEC_PATH)/tools/Dafny/Dafny.exe 
 
 AS = $(PREFIX)as
 CC = $(PREFIX)gcc
