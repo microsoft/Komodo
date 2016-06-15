@@ -5,6 +5,7 @@
 #include <linux/errno.h>
 #include <linux/cdev.h>
 #include <linux/slab.h>
+#include <linux/highmem.h>
 #include <kevlar/smcapi.h>
 #include "kevdriver.h"
 
@@ -17,6 +18,148 @@ static struct cdev *kevlar_cdev;
 struct kevlar_client {
     // TBD
 };
+
+static int test(void)
+{
+    int r;
+    kev_err_t err;
+    u32 addrspace, l1pt, l2pt, disp, code, data;
+    struct page *shared_page;
+    u32 shared_phys;
+    void *shared_virt;
+    kev_multival_t ret;
+
+    shared_page = alloc_page(GFP_KERNEL);
+    BUG_ON(shared_page == NULL);
+
+    shared_phys = page_to_phys(shared_page);
+    shared_virt = kmap(shared_page);
+    printk(KERN_DEBUG "allocated phys page %x mapped to %p\n",
+           shared_phys, shared_virt);
+
+    // allocate pages
+    r = pgalloc_alloc(&addrspace);
+    if (r != 0) {
+        printk(KERN_DEBUG "page alloc failed: %d\n", r);
+        return r;
+    }
+
+    r = pgalloc_alloc(&l1pt);
+    if (r != 0) {
+        printk(KERN_DEBUG "page alloc failed: %d\n", r);
+        return r;
+    }
+
+    r = pgalloc_alloc(&l2pt);
+    if (r != 0) {
+        printk(KERN_DEBUG "page alloc failed: %d\n", r);
+        return r;
+    }
+
+    r = pgalloc_alloc(&disp);
+    if (r != 0) {
+        printk(KERN_DEBUG "page alloc failed: %d\n", r);
+        return r;
+    }
+
+    r = pgalloc_alloc(&code);
+    if (r != 0) {
+        printk(KERN_DEBUG "page alloc failed: %d\n", r);
+        return r;
+    }
+
+    r = pgalloc_alloc(&data);
+    if (r != 0) {
+        printk(KERN_DEBUG "page alloc failed: %d\n", r);
+        return r;
+    }
+
+    printk(KERN_DEBUG "pages allocated: addrspace %x l1pt %x"
+           " l2pt %x disp %x code %x data %x\n",
+           addrspace, l1pt, l2pt, disp, code, data);
+
+    err = kev_smc_init_addrspace(addrspace, l1pt);
+    printk(KERN_DEBUG "init_addrspace: %d\n", err);
+    if (err != KEV_ERR_SUCCESS) {
+        return -EIO;
+    }
+
+    err = kev_smc_init_dispatcher(disp, addrspace, 0x8000);
+    printk(KERN_DEBUG "init_dispatcher: %d\n", err);
+    if (err != KEV_ERR_SUCCESS) {
+        return -EIO;
+    }
+
+    err = kev_smc_init_l2table(l2pt, addrspace, 0);
+    printk(KERN_DEBUG "init_l2table: %d\n", err);
+    if (err != KEV_ERR_SUCCESS) {
+        return -EIO;
+    }
+
+    /* TODO: Populate the page! */
+    
+    err = kev_smc_map_secure(code, addrspace,
+                             0x8000 | KEV_MAPPING_R | KEV_MAPPING_X, shared_phys);
+    printk(KERN_DEBUG "map_secure (code): %d\n", err);
+    if (err != KEV_ERR_SUCCESS) {
+        return -EIO;
+    }
+    
+    err = kev_smc_map_secure(data, addrspace,
+                             0x9000 | KEV_MAPPING_R | KEV_MAPPING_W, 0);
+    printk(KERN_DEBUG "map_secure (data): %d\n", err);
+    if (err != KEV_ERR_SUCCESS) {
+        return -EIO;
+    }
+    
+    err = kev_smc_map_insecure(addrspace, shared_phys >> 12,
+                               0xa000 | KEV_MAPPING_R | KEV_MAPPING_W);
+    printk(KERN_DEBUG "map_insecure: %d\n", err);
+    if (err != KEV_ERR_SUCCESS) {
+        return -EIO;
+    }
+
+    err = kev_smc_finalise(addrspace);
+    printk(KERN_DEBUG "finalise: %d\n", err);
+    if (err != KEV_ERR_SUCCESS) {
+        return -EIO;
+    }
+    
+    ret = kev_smc_enter(disp, 1, 2, 3);
+    printk(KERN_DEBUG "enter: %d\n", err);
+    if (err != KEV_ERR_SUCCESS) {
+        return -EIO;
+    }
+
+    err = kev_smc_stop(addrspace);
+    printk(KERN_DEBUG "stop: %d\n", err);
+    if (err != KEV_ERR_SUCCESS) {
+        return -EIO;
+    }
+
+    err = kev_smc_remove(disp);
+    printk(KERN_DEBUG "remove: %d\n", err);
+
+    err = kev_smc_remove(code);
+    printk(KERN_DEBUG "remove: %d\n", err);
+
+    err = kev_smc_remove(data);
+    printk(KERN_DEBUG "remove: %d\n", err);
+
+    err = kev_smc_remove(l2pt);
+    printk(KERN_DEBUG "remove: %d\n", err);
+
+    err = kev_smc_remove(l1pt);
+    printk(KERN_DEBUG "remove: %d\n", err);
+
+    err = kev_smc_remove(addrspace);
+    printk(KERN_DEBUG "remove: %d\n", err);
+
+    kunmap(shared_page);
+    __free_page(shared_page);
+
+    return 0;
+}
 
 static int kevlar_open(struct inode *inode, struct file *filp)
 {
@@ -86,6 +229,10 @@ static int __init driver_init(void)
         printk(KERN_ERR "kevlar: pgalloc_init(%u) failed: %x\n", npages, r);
         goto fail;
     }
+
+    printk(KERN_DEBUG "kevlar: running tests\n");
+    r = test();
+    printk(KERN_DEBUG "kevlar: test complete: %d\n", r);
     
     r = alloc_chrdev_region(&kevlar_dev, 0, 1, "kevlar");
     if (r != 0) {
