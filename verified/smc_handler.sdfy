@@ -32,10 +32,10 @@ procedure fcall_prologue()
     STR(r11, sp, 0);
 
     // Move function arguments in r0-r3 into r4-r7
-    // r4 := r0;
-    // r5 := r1;
-    // r6 := r2;
-    // r7 := r3;
+    r4 := r0;
+    r5 := r1;
+    r6 := r2;
+    r7 := r3;
 }
 
 procedure smc_handler()

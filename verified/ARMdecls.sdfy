@@ -144,7 +144,7 @@ procedure MVN(out{:operand} dst:int, {:operand} src:int)
         isUInt32(src);
     ensures
         isUInt32(dst);
-        evalUpdate(old(this), @dst, old(not32(src)) % MaxVal(), this, true);
+        evalUpdate(old(this), @dst, old(not32(src)), this, true);
         0 <= dst < MaxVal();
 
 procedure MOV(out{:operand} dst:int, {:operand} src:int)

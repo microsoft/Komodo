@@ -164,6 +164,12 @@ predicate ValidOperand(s:state, o:operand)
         case OLR => LR(mode_of_state(s)) in s.regs
 }
 
+predicate Is32BitOperand(s:state, o:operand)
+    requires ValidOperand(s, o);
+{
+    0 <= OperandContents(s, o) < MaxVal()
+}
+
 predicate ValidMem(s:state, m:mem)
 {
     m in s.addresses
@@ -240,7 +246,7 @@ function MemContents(s:state, m:mem): int
 
 function eval_op(s:state, o:operand): int
 	requires ValidOperand(s, o)
-    { Truncate(OperandContents(s,o)) }
+    { OperandContents(s,o) }
 
 // function eval_mem(s:state, m:mem): int
 //     requires ValidMem(s, m)
@@ -299,30 +305,36 @@ predicate ValidInstruction(s:state, ins:ins)
 	match ins
 		case ADD(dest, src1, src2) => ValidOperand(s, src1) &&
 			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
-            //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
 		case SUB(dest, src1, src2) => ValidOperand(s, src1) &&
 			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
             //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
         case AND(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
+			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+            Is32BitOperand(s, src1) && Is32BitOperand(s, src2)
             //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
         case ORR(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
+			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+            Is32BitOperand(s, src1) && Is32BitOperand(s, src2)
             //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
         case EOR(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
+			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+            Is32BitOperand(s, src1) && Is32BitOperand(s, src2)
             //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
         case ROR(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest)
+			ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+            Is32BitOperand(s, src1) && Is32BitOperand(s, src2)
             //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
         case LSL(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest)
+			ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+            Is32BitOperand(s, src1) && Is32BitOperand(s, src2)
             //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
         case LSR(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest)
+			ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+            Is32BitOperand(s, src1) && Is32BitOperand(s, src2)
             //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
         case MVN(dest, src) => ValidOperand(s, src) &&
-			ValidDestinationOperand(s, dest)
+			ValidDestinationOperand(s, dest) &&
+            Is32BitOperand(s, src)
             //!IsMemOperand(src) && !IsMemOperand(dest)
 		case LDR(rd, base, ofs) => 
             ValidDestinationOperand(s, rd) &&
@@ -336,7 +348,7 @@ predicate ValidInstruction(s:state, ins:ins)
             //ValidDestinationOperand(s, addr_op(s, base, ofs))
             //IsMemOperand(addr) && !IsMemOperand(rd)
 		case MOV(dst, src) => ValidDestinationOperand(s, dst) &&
-			ValidOperand(s, src)
+			ValidOperand(s, src) && Is32BitOperand(s, src)
             //!IsMemOperand(src) && !IsMemOperand(dst)
         case CPS(mod) => ValidOperand(s, mod) &&
             ValidMode(OperandContents(s, mod))
@@ -382,7 +394,7 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
             evalMemUpdate(s, Address(OperandContents(s, base) +
                 OperandContents(s, ofs)), OperandContents(s, rd), r, ok)
 		case MOV(dst, src) => evalUpdate(s, dst,
-			OperandContents(s, src) % MaxVal(),
+			OperandContents(s, src),
 			r, ok)
         case CPS(mod) => evalModeUpdate(s,
             OperandContents(s, mod),
