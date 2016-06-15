@@ -89,7 +89,7 @@ function addr_mem(s:state, base:operand, ofs:operand):mem
     requires ValidOperand(s, base);
     requires ValidOperand(s, ofs);
 {
-    Address( eval_op(s, base) + eval_op(s, ofs) )
+    Address( OperandContents(s, base) + OperandContents(s, ofs) )
 }
 
 //-----------------------------------------------------------------------------
@@ -242,9 +242,9 @@ function eval_op(s:state, o:operand): int
 	requires ValidOperand(s, o)
     { Truncate(OperandContents(s,o)) }
 
-function eval_mem(s:state, m:mem): int
-    requires ValidMem(s, m)
-{ Truncate(MemContents(s, m)) }
+// function eval_mem(s:state, m:mem): int
+//     requires ValidMem(s, m)
+// { Truncate(MemContents(s, m)) }
 
 
 predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
@@ -290,7 +290,7 @@ function evalOBool(s:state, o:obool):bool
     requires ValidOperand(s, o.o1);
     requires ValidOperand(s, o.o2);
 {
-    evalCmp(o.cmp, eval_op(s, o.o1), eval_op(s, o.o2))
+    evalCmp(o.cmp, OperandContents(s, o.o1), OperandContents(s, o.o2))
 }
 
 predicate ValidInstruction(s:state, ins:ins)
@@ -327,12 +327,12 @@ predicate ValidInstruction(s:state, ins:ins)
 		case LDR(rd, base, ofs) => 
             ValidDestinationOperand(s, rd) &&
 			ValidOperand(s, base) && ValidOperand(s, ofs) &&
-            ValidMem(s, Address(eval_op(s, base) + eval_op(s, ofs)))
+            ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
             //IsMemOperand(addr) && !IsMemOperand(rd)
 		case STR(rd, base, ofs) =>
             ValidOperand(s, rd) &&
             ValidOperand(s, ofs) && ValidOperand(s, base) &&
-            ValidMem(s, Address(eval_op(s, base) + eval_op(s, ofs)))
+            ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
             //ValidDestinationOperand(s, addr_op(s, base, ofs))
             //IsMemOperand(addr) && !IsMemOperand(rd)
 		case MOV(dst, src) => ValidDestinationOperand(s, dst) &&
@@ -347,10 +347,10 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
     if !ValidInstruction(s, ins) then !ok
     else match ins
 		case ADD(dst, src1, src2) => evalUpdate(s, dst,
-			((OperandContents(s, src1) + OperandContents(s, src2)) % MaxVal()),
+			((OperandContents(s, src1) + OperandContents(s, src2))),
 			r, ok)
 		case SUB(dst, src1, src2) => evalUpdate(s, dst,
-			((OperandContents(s, src1) - OperandContents(s, src2)) % MaxVal()),
+			((OperandContents(s, src1) - OperandContents(s, src2))),
 			r, ok)
 		case AND(dst, src1, src2) => evalUpdate(s, dst,
             and32(eval_op(s, src1), eval_op(s, src2)),
@@ -376,9 +376,11 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
 		case MVN(dst, src) => evalUpdate(s, dst,
             not32(eval_op(s, src)), r, ok)
 		case LDR(rd, base, ofs) => 
-            evalUpdate(s, rd, eval_mem(s, Address(eval_op(s, base) + eval_op(s, ofs))) % MaxVal(), r, ok)
+            evalUpdate(s, rd, MemContents(s, Address(OperandContents(s, base) +
+                OperandContents(s, ofs))), r, ok)
 		case STR(rd, base, ofs) => 
-            evalMemUpdate(s, Address(eval_op(s, base) + eval_op(s, ofs)), eval_op(s, rd) % MaxVal(), r, ok)
+            evalMemUpdate(s, Address(OperandContents(s, base) +
+                OperandContents(s, ofs)), OperandContents(s, rd), r, ok)
 		case MOV(dst, src) => evalUpdate(s, dst,
 			OperandContents(s, src) % MaxVal(),
 			r, ok)

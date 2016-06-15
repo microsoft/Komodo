@@ -93,7 +93,7 @@ function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
 // Address Helper Functions
 //-----------------------------------------------------------------------------
 function addrval(s:sp_state, a:int):int
-    requires ValidMem(s, Address(a)); { eval_mem(s, Address(a)) }
+    requires ValidMem(s, Address(a)); { MemContents(s, Address(a)) }
 
 //-----------------------------------------------------------------------------
 // Instructions
@@ -154,11 +154,9 @@ lemma sp_lemma_ADD(s:state, r:state, ok:bool,
 	requires sp_eval(sp_code_ADD(dst, src1, src2), s, r, ok);
 	requires 0 <= OperandContents(s, src1) < MaxVal();
 	requires 0 <= OperandContents(s, src2) < MaxVal();
-	ensures  evalUpdate(s, dst, (OperandContents(s, src1) +
-		OperandContents(s, src2)) % MaxVal() , r, ok);
-    ensures  OperandContents(r, dst) ==
-        int(BitwiseAdd32(uint32(OperandContents(s, src1)),
-            uint32(OperandContents(s, src2))));
+    requires 0 <= OperandContents(s, src1) + OperandContents(s, src2) < MaxVal();
+	ensures  evalUpdate(s, dst, OperandContents(s, src1) +
+		OperandContents(s, src2), r, ok);
 	ensures  ok;
 	ensures  0 <= OperandContents(r, dst) < MaxVal();
 {
@@ -174,8 +172,9 @@ lemma sp_lemma_SUB(s:state, r:state, ok:bool,
 	requires sp_eval(sp_code_SUB(dst, src1, src2), s, r, ok);
 	requires 0 <= OperandContents(s, src1) < MaxVal();
 	requires 0 <= OperandContents(s, src2) < MaxVal();
-	ensures  evalUpdate(s, dst, (OperandContents(s, src1) -
-		OperandContents(s, src2)) % MaxVal() , r, ok);
+    requires 0 <= OperandContents(s, src1) - OperandContents(s, src2) < MaxVal();
+	ensures  evalUpdate(s, dst, OperandContents(s, src1) -
+		OperandContents(s, src2), r, ok);
 	ensures  ok;
 	ensures  0 <= OperandContents(r, dst) < MaxVal();
 {
@@ -332,12 +331,14 @@ lemma sp_lemma_LDR(s:state, r:state, ok:bool,
 	requires sp_eval(sp_code_LDR(rd, base, ofs), s, r, ok);
 	requires 0 <= OperandContents(s, base) < MaxVal();
 	requires 0 <= OperandContents(s, ofs) < MaxVal();
+    requires 0 <= MemContents(s, Address(OperandContents(s, base) +
+        OperandContents(s, ofs))) < MaxVal();
 	// requires 0 <= OperandContents(s, addr_op(s, base, ofs)) < MaxVal();
     //requires IsMemOperand(addr);
     //requires !IsMemOperand(rd);
 	// ensures evalUpdate(s, rd, eval_op(s, addr_op(s, base, ofs)), r, ok);
 	// ensures evalUpdate(s, rd, eval_op(s, addr(eval_op(s,base), eval_op(s,ofs))), r, ok);
-    ensures evalUpdate(s, rd, eval_mem(s, Address(eval_op(s, base) + eval_op(s, ofs))), r, ok)
+    ensures evalUpdate(s, rd, MemContents(s, Address(OperandContents(s, base) + OperandContents(s, ofs))), r, ok)
     ensures ValidOperand(r, base);
     ensures ValidOperand(r, ofs);
 	ensures ok;
@@ -357,7 +358,8 @@ lemma sp_lemma_STR(s:state, r:state, ok:bool,
 	requires 0 <= OperandContents(s, rd) < MaxVal();
     // requires IsMemOperand(addr);
     // requires !IsMemOperand(rd);
-    ensures evalMemUpdate(s, Address(eval_op(s, base) + eval_op(s, ofs)), eval_op(s, rd), r, ok)
+    ensures evalMemUpdate(s, Address(OperandContents(s, base) + OperandContents(s, ofs)),
+        OperandContents(s, rd), r, ok)
 	ensures ok;
     ensures 0 <= MemContents(r, addr_mem(s, base, ofs)) < MaxVal();
 	// ensures 0 <= OperandContents(r, rd) < MaxVal();
@@ -383,9 +385,9 @@ lemma sp_lemma_CPS(s:state, r:state, ok:bool, mod:operand)
 lemma sp_lemma_incr(s:sp_state, r:sp_state, ok:bool, o:operand)
   requires ValidDestinationOperand(s, o)
   requires sp_eval(sp_code_incr(o), s, r, ok)
-  requires 0 <= eval_op(s, o) < MaxVal();
+  requires 0 <= eval_op(s, o) + 1 < MaxVal();
   ensures  evalUpdate(s, o,
-    (OperandContents(s, o) + 1) % MaxVal(),
+    OperandContents(s, o) + 1,
     r, ok)
 {
   reveal_sp_eval();
@@ -399,8 +401,9 @@ lemma sp_lemma_plusEquals(s:sp_state, r:sp_state, ok:bool, o1:operand, o2:operan
     requires sp_eval(sp_code_plusEquals(o1, o2), s, r, ok);
     requires 0 <= OperandContents(s, o1) < MaxVal();
     requires 0 <= OperandContents(s, o2) < MaxVal();
-    ensures evalUpdate(s, o1, (OperandContents(s, o1) +
-        OperandContents(s, o2)) % MaxVal(), r, ok);
+    requires 0 <= OperandContents(s, o1) + OperandContents(s, o2) < MaxVal();
+    ensures evalUpdate(s, o1, OperandContents(s, o1) +
+        OperandContents(s, o2), r, ok);
 {
     reveal_sp_eval();
     reveal_sp_code_plusEquals();

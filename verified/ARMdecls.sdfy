@@ -39,21 +39,23 @@ procedure ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires
         isUInt32(src1);
         isUInt32(src2);
+        isUInt32(src1 + src2);
     ensures
         isUInt32(dst);
-        evalUpdate(old(this), @dst, old(src1 + src2) % MaxVal(), this, true);
-        evalUpdate(old(this), @dst, old(int(BitwiseAdd32(uint32(src1), uint32(src2)))), this, true);
+        evalUpdate(old(this), @dst, old(src1 + src2), this, true);
 
 procedure SUB(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
+    requires
         isUInt32(src1);
         isUInt32(src2);
+        isUInt32(src1 - src2);
     ensures
         isUInt32(dst);
-        evalUpdate(old(this), @dst, old(src1 - src2) % MaxVal(), this, true);
+        evalUpdate(old(this), @dst, old(src1 - src2), this, true);
 
 procedure AND(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
@@ -165,8 +167,9 @@ procedure LDR(out{:operand} rd:int, {:operand} base:int, {:operand} ofs:int)
         isUInt32(ofs);
     requires
         ValidMem(this, addr_mem(this, @base, @ofs));
+        isUInt32(addrval(this, base + ofs));
     ensures
-        evalUpdate(old(this), @rd, eval_mem(old(this), addr_mem(old(this), @base, @ofs)), this, true);
+        evalUpdate(old(this), @rd, MemContents(old(this), addr_mem(old(this), @base, @ofs)), this, true);
         isUInt32(rd);
         0 <= rd < MaxVal();
 
@@ -196,9 +199,9 @@ procedure incr(inout{:operand} o:int)
   requires
     ValidDestinationOperand(this, @o);
     isUInt32(o);
-    0 <= o < MaxVal();
+    isUInt32(o + 1);
   ensures
-    evalUpdate(old(this), @o, (old(o) + 1) % MaxVal(), this, true);
+    evalUpdate(old(this), @o, old(o) + 1, this, true);
 
 procedure plusEquals(inout{:operand} o1:int, {:operand} o2:int)
     requires
@@ -206,9 +209,9 @@ procedure plusEquals(inout{:operand} o1:int, {:operand} o2:int)
         ValidOperand(this, @o2);
         isUInt32(o1);
         isUInt32(o2);
-        0 <= o1 < MaxVal();
+        isUInt32(o1 + o2);
     ensures
-        evalUpdate(old(this), @o1, old(o1 + o2) % MaxVal(), this, true);
+        evalUpdate(old(this), @o1, old(o1 + o2), this, true);
 
 procedure andEquals(inout{:operand} o1:int, {:operand} o2:int)
     requires
