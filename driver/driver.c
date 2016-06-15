@@ -6,6 +6,7 @@
 #include <linux/cdev.h>
 #include <linux/slab.h>
 #include <kevlar/smcapi.h>
+#include "kevdriver.h"
 
 MODULE_LICENSE("TBD");
 MODULE_DESCRIPTION("Kevlar driver");
@@ -16,20 +17,6 @@ static struct cdev *kevlar_cdev;
 struct kevlar_client {
     // TBD
 };
-
-// return number of secure pages
-uint32_t kev_smc_get_phys_pages(void);
-
-kev_err_t kev_smc_init_addrspace(kev_secure_pageno_t addrspace_page,
-                                 kev_secure_pageno_t l1pt_page);
-
-kev_err_t kev_smc_init_dispatcher(kev_secure_pageno_t page,
-                                  kev_secure_pageno_t addrspace,
-                                  uint32_t entrypoint);
-
-kev_err_t kev_smc_init_l2table(kev_secure_pageno_t page,
-                               kev_secure_pageno_t addrspace,
-                               uint32_t l1_index);
 
 static int kevlar_open(struct inode *inode, struct file *filp)
 {
@@ -73,12 +60,14 @@ static void driver_exit(void)
         unregister_chrdev_region(kevlar_dev, 1);
         kevlar_dev = 0;
     }
+
+    pgalloc_cleanup();
 }
 
 static int __init driver_init(void)
 {
     int r;
-    u32 magic;
+    u32 magic, npages;
 
     printk(KERN_INFO "Kevlar driver init\n");
 
@@ -89,6 +78,15 @@ static int __init driver_init(void)
         goto fail;
     }
 
+    npages = kev_smc_get_phys_pages();
+    printk(KERN_DEBUG "kevlar: %u pages available\n", npages);
+
+    r = pgalloc_init(npages);
+    if (r != 0) {
+        printk(KERN_ERR "kevlar: pgalloc_init(%u) failed: %x\n", npages, r);
+        goto fail;
+    }
+    
     r = alloc_chrdev_region(&kevlar_dev, 0, 1, "kevlar");
     if (r != 0) {
         printk(KERN_ERR "kevlar: alloc_chrdev_region failed: %x\n", r);
