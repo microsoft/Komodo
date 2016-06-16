@@ -1,6 +1,14 @@
 procedure operator(:=) (out{:operand} dst:int, {:operand} src:int)   := MOV
 
-procedure kev_smc_get_phys_pages() //arg1, arg2
+#verbatim
+predicate can_fcall(s:sp_state)
+{
+    ValidState(s) &&
+    36 <= eval_op(s, op_sp()) < MaxVal() &&
+    ValidMemRange(s, eval_op(s, op_sp())-36, eval_op(s, op_sp()) ) &&
+    MemRangeIs32(s, eval_op(s, op_sp())-36, eval_op(s, op_sp()))
+}
+#endverbatim
 
 procedure fcall_prologue()
     requires/ensures
@@ -38,10 +46,10 @@ procedure fcall_prologue()
     STR(r11, sp, 0);
 
     // Move function arguments in r0-r3 into r4-r7
-    r4 := r0;
-    r5 := r1;
-    r6 := r2;
-    r7 := r3;
+    // r4 := r0;
+    // r5 := r1;
+    // r6 := r2;
+    // r7 := r3;
 }
 
 procedure fcall_epilogue()
@@ -57,81 +65,69 @@ procedure fcall_epilogue()
         MemRangeIs32(this,  sp-36, sp);
 {
     //pop r11 down to r4 from stack
-    // ghost var old_sp := sp;
-    // assert isUInt32(addrval(this, sp));
-    // assert isUInt32(addrval(this, sp+4));
-    // assert isUInt32(addrval(this, sp+8));
-    // assert isUInt32(addrval(this, sp+12));
-    // assert isUInt32(addrval(this, sp+16));
-    // assert isUInt32(addrval(this, sp+20));
-    // assert isUInt32(addrval(this, sp+24));
-    // assert isUInt32(addrval(this, sp+28));
-    // assert isUInt32(addrval(this, sp+32));
-    // assert isUInt32(addrval(this, sp+36));
-
     LDR(r11, sp, 0);
     ADD(sp, sp, 4);
-    // assert sp == old_sp + 4;
-    // assert isUInt32(addrval(this, sp));
     LDR(r10, sp, 0);
     ADD(sp, sp, 4);
-    // assert sp == old_sp + 8;
-    // assert isUInt32(addrval(this, sp));
     LDR(r9, sp, 0);
     ADD(sp, sp, 4);
-    // assert sp == old_sp + 12;
-    // assert isUInt32(addrval(this, sp));
     LDR(r8, sp, 0);
     ADD(sp, sp, 4);
-    // assert sp == old_sp + 16;
-    // assert isUInt32(addrval(this, sp));
     LDR(r7, sp, 0);
     ADD(sp, sp, 4);
-    // assert sp == old_sp + 20;
-    // assert isUInt32(addrval(this, sp));
     LDR(r6, sp, 0);
     ADD(sp, sp, 4);
-    // assert sp == old_sp + 24;
-    // assert isUInt32(addrval(this, sp));
     LDR(r5, sp, 0);
     ADD(sp, sp, 4);
-    // assert sp == old_sp + 28;
-    // assert isUInt32(addrval(this, sp));
     LDR(r4, sp, 0);
     ADD(sp, sp, 4);
-    // assert sp == old_sp + 32;
-    // assert isUInt32(addrval(this, sp));
 
     //pop link register from stack
     LDR(lr, sp, 0);
     ADD(sp, sp, 4);
-    // assert sp == old_sp + 36;
-    // assert isUInt32(addrval(this, sp));
 
     //Move function arguments back into r0-r3
-    r0 := r4;
-    r1 := r5;
-    r2 := r6;
-    r3 := r7;
+    // r0 := r4;
+    // r1 := r5;
+    // r2 := r6;
+    // r3 := r7;
 }
 
-procedure smc_handler()
-    requires
-        ValidState(this);
-        sp >= 36;
-        ValidMemRange(this, sp-36, sp);
-        MemRangeIs32(this, sp-36, sp);
+procedure kev_smc_init_addrspace(
+    {:register op_r(0)} arg1:int,
+    {:register op_r(1)} arg2:int,
+    out {:register op_r(0)} err:int)
+    requires/ensures
+        can_fcall(this);
 {
     fcall_prologue();
+    err := 0;
     fcall_epilogue();
+}
 
-    //Here, callno is used as an input to select the particular call and
-    //as the return value
-    // if(callno == KEV_SMC_QUERY()) {
-    //     callno := KEV_MAGIC();
-    // } else(callno == KEV_SMC_GETPHYSPAGES()) {
-    //     callno := kev_smc_get_phys_pages();
-    // }
+procedure smc_handler(
+    {:register op_r(4)} callno:int,
+    {:register op_r(0)} arg1:int,
+    {:register op_r(1)} arg2:int,
+    {:register op_r(2)} arg3:int,
+    {:register op_r(3)} arg4:int,
+    out {:register op_r(0)} err:int,
+    out {:register op_r(1)} retval:int)
+    requires/ensures
+        can_fcall(this);
+{
+    
+    retval := 0;
+    
+    if(callno == KEV_SMC_QUERY()) {
+        err := KEV_MAGIC();
+    } else if(callno == KEV_SMC_GETPHYSPAGES()) {
+        // assume 0 <= KEVLAR_SECURE_NPAGES() < pow2_32(); // Really want to inline constants
+        retval := KEVLAR_SECURE_NPAGES() % pow2_32();
+        err := KEV_ERR_SUCCESS();
+    } else if(callno == KEV_SMC_INIT_ADDRSPACE()) {
+        kev_smc_init_addrspace(arg1, arg2, err);
+    }
 
 }
 
