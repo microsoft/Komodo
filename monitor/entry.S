@@ -211,7 +211,7 @@ irqfiq_common:
 1:      /* we came from user mode. save context, and continue into the monitor */
         save_user_context
 
-        leave_secure_world r1
+        //leave_secure_world r1
 
         /* return to SMC dispatch path */
         mov     r0, #KEV_ERR_INTERRUPTED
@@ -224,7 +224,7 @@ _abort: /* Data abort or undefined instruction, only taken from secure user-mode
 	 * instruction, we might still take an IRQ or FIQ while in abort/undef mode :( */
         cpsid  iaf, #CPSRM_MONITOR
 
-        leave_secure_world r1
+        //leave_secure_world r1
 
         mov     r0, #KEV_ERR_FAULT
         mov     r1, #0
@@ -237,7 +237,7 @@ _svc: /* Supervisor call, only taken from secure user-mode */
         cpsid  iaf, #CPSRM_MONITOR
 
         /* XXX: that the only supervisor call we can take (for now) is an exit from secure user mode */
-        leave_secure_world r1
+        //leave_secure_world r1
 
         /* return to SMC dispatch path */
         mov     r1, r0 // return value from call
@@ -253,7 +253,7 @@ dispatch:
         mrs     r4, spsr
         push    {r4}
 
-        enter_secure_world r4
+        //enter_secure_world r4
 
         /* load complete context from dispatcher
          * future optimisation: only load arg regs and zero the rest on a fresh dispatch (not resume) */
