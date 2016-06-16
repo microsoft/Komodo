@@ -50,10 +50,22 @@ static void flushtlb(void)
     __asm volatile("mcr p15, 0, %0, c8, c7, 2" :: "r" (0)); // TLBIASID
 }
 
+/* saved banked registers from normal world that might be trampled
+   while we execute in secure world */
+static uint32_t sp_usr, lr_usr, lr_svc, lr_abt, lr_und;
+
 static void enter_secure_world(void)
 {
     uint32_t scr;
 
+    /* save normal-world banked regs */
+    __asm volatile("mrs %0, sp_usr" : "=r" (sp_usr));
+    __asm volatile("mrs %0, lr_usr" : "=r" (lr_usr));
+    __asm volatile("mrs %0, lr_svc" : "=r" (lr_svc));
+    __asm volatile("mrs %0, lr_abt" : "=r" (lr_abt));
+    __asm volatile("mrs %0, lr_und" : "=r" (lr_und));
+
+    /* update SCR... */
     __asm volatile("mrc p15, 0, %0, c1, c1, 0" : "=r" (scr));
 
     /* clear NS bit, so we stay in secure world when returning */
@@ -80,6 +92,13 @@ static void leave_secure_world(void)
 
     __asm volatile("mcr p15, 0, %0, c1, c1, 0" :: "r" (scr));
     __asm volatile("isb");
+
+    /* restore normal-world banked regs */
+    __asm volatile("msr sp_usr, %0" :: "r" (sp_usr));
+    __asm volatile("msr lr_usr, %0" :: "r" (lr_usr));
+    __asm volatile("msr lr_svc, %0" :: "r" (lr_svc));
+    __asm volatile("msr lr_abt, %0" :: "r" (lr_abt));
+    __asm volatile("msr lr_und, %0" :: "r" (lr_und));
 }
 
 static void switch_addrspace(struct kev_addrspace *addrspace)
