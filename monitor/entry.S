@@ -16,6 +16,8 @@
 #define ARM_SCR_IRQ     0x02 // IRQ handler monitor mode
 #define ARM_SCR_NS      0x01 // non-secure bit
 
+#define ARM_SCTLR_V     0x2000 /* SCTLR vectors bit (1 = hivecs) */
+
 #define KEV_ERR_SUCCESS         0
 #define KEV_ERR_INTERRUPTED     9
 #define KEV_ERR_FAULT           10
@@ -90,6 +92,19 @@ _secure_vectors: /* Secure-world VBAR points here */
         isb
         .endm
 
+        .macro get_vector_base dstreg
+        /* check SCTLR.V (hivecs bit) */
+        mrc     p15, 0, \dstreg, c1, c0, 0
+        ands    \dstreg, \dstreg, #ARM_SCTLR_V
+        /* load value assuming hivecs is on (0xffff0000) */
+        movw    \dstreg, #0
+        movt    \dstreg, #0xffff
+        bne     9f
+        /* no hivecs: read VBAR */
+        mrc     p15, 0, \dstreg, c12, c0, 0
+9:
+        .endm
+        
 _smc:
         /* call C, stacking r4 (used as a parameter) */
         push    {lr}
@@ -121,9 +136,8 @@ _smc:
         /* update target LR to current return address */
         msr     lr_fiq, lr
 
-        /* compute return address from VBAR
-         * TODO: support hivecs setting? */
-        mcr     p15, 0, lr, c12, c0, 0
+        /* compute return address */
+        get_vector_base lr
         add     lr, #(7*4)
         b       2f
 
@@ -148,9 +162,8 @@ _smc:
         /* update target LR to current return address */
         msr     lr_irq, lr
 
-        /* compute return address from VBAR
-         * TODO: support hivecs setting? */
-        mcr     p15, 0, lr, c12, c0, 0
+        /* compute return address */
+        get_vector_base lr
         add     lr, #(6*4)
 
 
