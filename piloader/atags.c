@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "console.h"
 #include "atags.h"
@@ -8,7 +9,10 @@
 
 #define ATAG_CORE 0x54410001
 #define ATAG_MEM  0x54410002
+#define ATAG_CMDLINE 0x54410009
 #define ATAG_NONE 0
+
+#define DIVIDE_ROUND_UP(n, size) (((n) + (size) - 1) / (size))
 
 struct atag_header {
     uint32_t size; /* length of tag in words including this header */
@@ -28,7 +32,13 @@ struct atag_mem {
     uint32_t start;  /* physical start address */
 };
 
+struct atag_cmdline {
+    struct atag_header h;
+    char cmdline[1];
+};
+
 static struct atag_header *g_atags;
+static const char qemu_cmdline[] = "console=ttyAMA0,115200 root=/dev/mmcblk0p2 rootfstype=ext4 rootwait earlyprintk loglevel=8";
 
 void atags_init(void *atags_ptr)
 {
@@ -37,7 +47,7 @@ void atags_init(void *atags_ptr)
     t = g_atags = atags_ptr;
 
     if (g_atags->size == 0 || g_atags->tag == ATAG_NONE) {
-        console_printf("No ATAGs found. Faking them up...\n");
+        console_printf("No ATAGs found. Faking them up (assuming QEMU)...\n");
         t->size = 5;
         t->tag = ATAG_CORE;
         struct atag_core *core = (struct atag_core *)t;
@@ -51,7 +61,13 @@ void atags_init(void *atags_ptr)
         mem->size = 0x3b000000ul; // XXX: 1024MB - 80MB framebuffer
         mem->start = 0;
 
-        t = (struct atag_header *)(mem + 1);
+        struct atag_cmdline *cmdline = (struct atag_cmdline *)(mem + 1);
+        cmdline->h.tag = ATAG_CMDLINE;
+        memcpy(cmdline->cmdline, qemu_cmdline, sizeof(qemu_cmdline)); 
+        cmdline->h.size = 2 + DIVIDE_ROUND_UP(sizeof(qemu_cmdline),
+                                              sizeof(uint32_t));
+
+        t = (struct atag_header *)(((uint32_t *)cmdline) + cmdline->h.size);
         t->size = 0;
         t->tag = ATAG_NONE;
     }
