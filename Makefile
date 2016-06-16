@@ -2,7 +2,8 @@
 -include config.mk
 PREFIX ?= arm-eabi-
 INSTALLDIR ?= .
-GUEST_KERNEL ?= e:/raspi/raspbian-boot/kernel7.img
+GUEST_KERNEL ?= kernel7.img
+GUEST_DISKIMG ?= raspbian.img
 IRON_IMPSEC_PATH ?= $(HOME)/src/iron/impsec
 SPARTAN ?= $(IRON_IMPSEC_PATH)/tools/Spartan/bin/spartan.exe
 DAFNY ?= $(IRON_IMPSEC_PATH)/tools/Dafny/Dafny.exe 
@@ -24,11 +25,11 @@ QEMU_ARGS = -M raspi2 -display none -serial stdio -gdb tcp:127.0.0.1:1234
 
 .PHONY: clean qemu qemugdb
 
-qemu: piimage/kevlar.img
-	qemu-system-arm $(QEMU_ARGS) -bios $<
+qemu: piimage/kevlar.img guestimg/guestdisk.img
+	qemu-system-arm $(QEMU_ARGS) -bios $< -sd guestimg/guestdisk.img
 
-qemugdb: piimage/kevlar.img
-	qemu-system-arm $(QEMU_ARGS) -bios $< -S
+qemugdb: piimage/kevlar.img guestimg/guestdisk.img
+	qemu-system-arm $(QEMU_ARGS) -bios $< -sd guestimg/guestdisk.img -S
 
 gdb: piloader/piloader.elf monitor/monitor.elf
 	$(PREFIX)gdb -ex 'target remote :1234' \
@@ -39,7 +40,7 @@ gdb: piloader/piloader.elf monitor/monitor.elf
 # For running assembled tests of ARMspartan
 #-----------------------------------------------------------------------------
 run_%.img: verified/%.img verified/%.S
-		qemu-system-arm $(QEMU_ARGS) -bios $< -S
+	qemu-system-arm $(QEMU_ARGS) -bios $< -S
 
 gdb-test:
 	$(PREFIX)gdb -ex 'target remote :1234'
@@ -54,6 +55,8 @@ include $(dir)/subdir.mk
 dir := monitor
 include $(dir)/subdir.mk
 dir := verified
+include $(dir)/subdir.mk
+dir := guestimg
 include $(dir)/subdir.mk
 
 %.o: %.c
