@@ -46,8 +46,8 @@ predicate ValidMemRange(s:state, lwr:int, upr:int)
 predicate MemRangeIs32(s:state, lwr:int, upr:int)
     requires ValidMemRange(s, lwr, upr);
 {
-    forall i:int :: lwr <= i <= upr ==>
-        isUInt32(addrval(s, i))
+    forall i:int {:trigger s.addresses[Address(i)]} ::
+        lwr <= i <= upr ==> isUInt32(addrval(s, i))
 }
 
 function method sp_CNil():codes { CNil }
@@ -148,6 +148,12 @@ function method{:opaque} sp_code_incr(o:operand):code { Ins(ADD(o, o, OConst(1))
 function method{:opaque} sp_code_plusEquals(o1:operand, o2:operand):code { Ins(ADD(o1, o1, o2)) }
 function method{:opaque} sp_code_andEquals(o1:operand, o2:operand):code { Ins(AND(o1, o1, o2)) }
 function method{:opaque} sp_code_xorEquals(o1:operand, o2:operand):code { Ins(EOR(o1, o1, o2)) }
+// function method{:opaque} sp_code_push(o:operand):code { 
+//     Ins(SUB(OSP, OSP, OConst(4)))
+//     // var i1 := Ins(SUB(OSP, OSP, OConst(4)));
+//     // var i2 := Ins(STR(o,OSP,OConst(0)));
+//     // Block(sp_CCons( i1, sp_CCons(i2, CNil) ))
+// }
 
 //-----------------------------------------------------------------------------
 // Instruction Lemmas
@@ -392,6 +398,7 @@ lemma sp_lemma_incr(s:sp_state, r:sp_state, ok:bool, o:operand)
   requires ValidDestinationOperand(s, o)
   requires sp_eval(sp_code_incr(o), s, r, ok)
   requires 0 <= eval_op(s, o) + 1 < MaxVal();
+  ensures ok;
   ensures  evalUpdate(s, o,
     OperandContents(s, o) + 1,
     r, ok)
@@ -399,6 +406,23 @@ lemma sp_lemma_incr(s:sp_state, r:sp_state, ok:bool, o:operand)
   reveal_sp_eval();
   reveal_sp_code_incr();
 }
+
+// lemma sp_lemma_push(s:sp_state, r:sp_state, ok:bool, o:operand)
+//     requires ValidDestinationOperand(s, OSP)
+//     requires ValidOperand(s, o)
+//     requires sp_eval(sp_code_push(o), s, r, ok)
+//     requires 4 <= eval_op(s, o) < MaxVal()
+//     requires ValidMem(s, Address(eval_op(s, OSP)))
+//     ensures ok;
+//     // ensures  evalMemUpdate(s, Address(eval_op(s, OSP)),
+//     //     eval_op(s, o), r, ok)
+//     ensures  evalUpdate(s, OSP, eval_op(s, OSP) - 4, r, ok)
+//     ensures  eval_op(r, OSP) == eval_op(s, OSP) - 4
+//     // ensures  addrval(r, eval_op(s, OSP)) == eval_op(s, o)
+// {
+//     reveal_sp_eval();
+//     reveal_sp_code_push();
+// }
 
 lemma sp_lemma_plusEquals(s:sp_state, r:sp_state, ok:bool, o1:operand, o2:operand)
     requires ValidDestinationOperand(s, o1);

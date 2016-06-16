@@ -57,56 +57,56 @@ procedure fcall_epilogue()
         MemRangeIs32(this,  sp-36, sp);
 {
     //pop r11 down to r4 from stack
-    ghost var old_sp := sp;
-    assert isUInt32(addrval(this, sp));
-    assert isUInt32(addrval(this, sp+4));
-    assert isUInt32(addrval(this, sp+8));
-    assert isUInt32(addrval(this, sp+12));
-    assert isUInt32(addrval(this, sp+16));
-    assert isUInt32(addrval(this, sp+20));
-    assert isUInt32(addrval(this, sp+24));
-    assert isUInt32(addrval(this, sp+28));
-    assert isUInt32(addrval(this, sp+32));
-    assert isUInt32(addrval(this, sp+36));
+    // ghost var old_sp := sp;
+    // assert isUInt32(addrval(this, sp));
+    // assert isUInt32(addrval(this, sp+4));
+    // assert isUInt32(addrval(this, sp+8));
+    // assert isUInt32(addrval(this, sp+12));
+    // assert isUInt32(addrval(this, sp+16));
+    // assert isUInt32(addrval(this, sp+20));
+    // assert isUInt32(addrval(this, sp+24));
+    // assert isUInt32(addrval(this, sp+28));
+    // assert isUInt32(addrval(this, sp+32));
+    // assert isUInt32(addrval(this, sp+36));
 
     LDR(r11, sp, 0);
     ADD(sp, sp, 4);
-    assert sp == old_sp + 4;
-    assert isUInt32(addrval(this, sp));
+    // assert sp == old_sp + 4;
+    // assert isUInt32(addrval(this, sp));
     LDR(r10, sp, 0);
     ADD(sp, sp, 4);
-    assert sp == old_sp + 8;
-    assert isUInt32(addrval(this, sp));
+    // assert sp == old_sp + 8;
+    // assert isUInt32(addrval(this, sp));
     LDR(r9, sp, 0);
     ADD(sp, sp, 4);
-    assert sp == old_sp + 12;
-    assert isUInt32(addrval(this, sp));
+    // assert sp == old_sp + 12;
+    // assert isUInt32(addrval(this, sp));
     LDR(r8, sp, 0);
     ADD(sp, sp, 4);
-    assert sp == old_sp + 16;
-    assert isUInt32(addrval(this, sp));
+    // assert sp == old_sp + 16;
+    // assert isUInt32(addrval(this, sp));
     LDR(r7, sp, 0);
     ADD(sp, sp, 4);
-    assert sp == old_sp + 20;
-    assert isUInt32(addrval(this, sp));
+    // assert sp == old_sp + 20;
+    // assert isUInt32(addrval(this, sp));
     LDR(r6, sp, 0);
     ADD(sp, sp, 4);
-    assert sp == old_sp + 24;
-    assert isUInt32(addrval(this, sp));
+    // assert sp == old_sp + 24;
+    // assert isUInt32(addrval(this, sp));
     LDR(r5, sp, 0);
     ADD(sp, sp, 4);
-    assert sp == old_sp + 28;
-    assert isUInt32(addrval(this, sp));
+    // assert sp == old_sp + 28;
+    // assert isUInt32(addrval(this, sp));
     LDR(r4, sp, 0);
     ADD(sp, sp, 4);
-    assert sp == old_sp + 32;
-    assert isUInt32(addrval(this, sp));
+    // assert sp == old_sp + 32;
+    // assert isUInt32(addrval(this, sp));
 
     //pop link register from stack
     LDR(lr, sp, 0);
     ADD(sp, sp, 4);
-    assert sp == old_sp + 36;
-    assert isUInt32(addrval(this, sp));
+    // assert sp == old_sp + 36;
+    // assert isUInt32(addrval(this, sp));
 
     //Move function arguments back into r0-r3
     r0 := r4;
