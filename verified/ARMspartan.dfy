@@ -3,7 +3,7 @@ include "ARMdef.dfy"
 //-----------------------------------------------------------------------------
 // Utilities 
 //-----------------------------------------------------------------------------
-function pow2_32():int { 0x1_0000_0000 }
+function method pow2_32():int { 0x1_0000_0000 }
 predicate isUInt32(i:int) { 0 <= i < pow2_32() }
 
 //-----------------------------------------------------------------------------
@@ -149,10 +149,10 @@ function method{:opaque} sp_code_plusEquals(o1:operand, o2:operand):code { Ins(A
 function method{:opaque} sp_code_andEquals(o1:operand, o2:operand):code { Ins(AND(o1, o1, o2)) }
 function method{:opaque} sp_code_xorEquals(o1:operand, o2:operand):code { Ins(EOR(o1, o1, o2)) }
 // function method{:opaque} sp_code_push(o:operand):code { 
-//     Ins(SUB(OSP, OSP, OConst(4)))
-//     // var i1 := Ins(SUB(OSP, OSP, OConst(4)));
-//     // var i2 := Ins(STR(o,OSP,OConst(0)));
-//     // Block(sp_CCons( i1, sp_CCons(i2, CNil) ))
+//     // Ins(SUB(OSP, OSP, OConst(4)))
+//     var i1 := Ins(SUB(OSP, OSP, OConst(4)));
+//     var i2 := Ins(STR(o, OSP, OConst(0)));
+//     Block(sp_CCons( i1, sp_CCons(i2, CNil) ))
 // }
 
 //-----------------------------------------------------------------------------
@@ -414,11 +414,11 @@ lemma sp_lemma_incr(s:sp_state, r:sp_state, ok:bool, o:operand)
 //     requires 4 <= eval_op(s, o) < MaxVal()
 //     requires ValidMem(s, Address(eval_op(s, OSP)))
 //     ensures ok;
-//     // ensures  evalMemUpdate(s, Address(eval_op(s, OSP)),
-//     //     eval_op(s, o), r, ok)
+//     ensures  evalMemUpdate(s, Address(eval_op(s, OSP)),
+//         eval_op(s, o), r, ok)
 //     ensures  evalUpdate(s, OSP, eval_op(s, OSP) - 4, r, ok)
 //     ensures  eval_op(r, OSP) == eval_op(s, OSP) - 4
-//     // ensures  addrval(r, eval_op(s, OSP)) == eval_op(s, o)
+//     ensures  addrval(r, eval_op(s, OSP)) == eval_op(s, o)
 // {
 //     reveal_sp_eval();
 //     reveal_sp_code_push();

@@ -213,7 +213,7 @@ procedure incr(inout{:operand} o:int)
 //     ensures
 //         evalUpdate(old(this), @sp, old(sp-4), this, true);
 //         sp == old(sp-4);
-//         // addrval(this, old(sp)) == o;
+//         addrval(this, old(sp)) == o;
 
 procedure plusEquals(inout{:operand} o1:int, {:operand} o2:int)
     requires
