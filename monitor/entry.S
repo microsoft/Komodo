@@ -133,7 +133,9 @@ _smc:
         orr     r2, r2, #(CPSR_F|CPSR_I|CPSRM_FIQ)
         msr     spsr, r2
 
-        /* update target LR to current return address */
+        /* update target LR for current return address */
+        add     lr, lr, #4      // +4 for ARM IRQ shenanigans
+        // FIXME: is this adjustment correct for thumb mode?
         msr     lr_fiq, lr
 
         /* compute return address */
@@ -159,7 +161,8 @@ _smc:
         orr     r2, r2, #(CPSRM_IRQ|CPSR_I)
         msr     spsr, r2
 
-        /* update target LR to current return address */
+        /* update target LR for current return address */
+        add     lr, lr, #4      // +4 for ARM IRQ shenanigans
         msr     lr_irq, lr
 
         /* compute return address */
