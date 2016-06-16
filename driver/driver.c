@@ -44,7 +44,7 @@ static int test(void)
         return r;
     }
 
-    r = pgalloc_alloc(&l1pt);
+    r = pgalloc_alloc_l1pt(&l1pt);
     if (r != 0) {
         printk(KERN_DEBUG "page alloc failed: %d\n", r);
         return r;

@@ -37,6 +37,27 @@ int pgalloc_alloc(u32 *pageno)
     }
 }
 
+// level1 tables require 64KB alignment
+int pgalloc_alloc_l1pt(u32 *pageno)
+{
+    int r;
+
+    BUG_ON(g_bitmap == NULL);
+
+    // XXX: quick and dirty way of ensuring alignment, but it involves
+    // (transient) over-allocation: allocate 4 aligned bits
+    r = bitmap_find_free_region(g_bitmap, g_npages, 2);
+    if (r < 0) {
+        return r;
+    } else {
+        // free the other 3 bits
+        bitmap_release_region(g_bitmap, r + 1, 0);
+        bitmap_release_region(g_bitmap, r + 2, 1);
+        *pageno = r;
+        return 0;
+    }
+}
+
 void pgalloc_free(u32 pageno)
 {
     bitmap_release_region(g_bitmap, pageno, 0);
