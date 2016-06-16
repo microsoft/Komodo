@@ -32,7 +32,7 @@ static inline uintptr_t page_paddr(kev_secure_pageno_t pageno)
 
 static inline void *phys2monvaddr(uintptr_t phys)
 {
-    return (void *)(phys + KEVLAR_MON_VBASE);
+    return (void *)(phys + KEVLAR_DIRECTMAP_VBASE);
 }
 
 static inline void *page_monvaddr(kev_secure_pageno_t pageno)
