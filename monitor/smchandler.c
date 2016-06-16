@@ -443,10 +443,10 @@ kev_multival_t kev_smc_enter(kev_secure_pageno_t disp_page, uintptr_t arg1,
 {
     kev_multival_t ret;
 
-    ret.val = 0;
+    ret.x.val = 0;
     
     if (!page_is_typed(disp_page, KEV_PAGE_DISPATCHER)) {
-        ret.err = KEV_ERR_INVALID_PAGENO;
+        ret.x.err = KEV_ERR_INVALID_PAGENO;
         return ret;
     }
 
@@ -454,12 +454,12 @@ kev_multival_t kev_smc_enter(kev_secure_pageno_t disp_page, uintptr_t arg1,
     struct kev_addrspace *addrspace = g_pagedb[disp_page].addrspace;
 
     if (addrspace->state != KEV_ADDRSPACE_FINAL) {
-        ret.err = KEV_ERR_NOT_FINAL;
+        ret.x.err = KEV_ERR_NOT_FINAL;
         return ret;
     }
 
     if (dispatcher->entered) {
-        ret.err = KEV_ERR_ALREADY_ENTERED;
+        ret.x.err = KEV_ERR_ALREADY_ENTERED;
         return ret;
     }
 
@@ -475,8 +475,8 @@ kev_multival_t kev_smc_enter(kev_secure_pageno_t disp_page, uintptr_t arg1,
 
     // dispatch into usermode
     g_cur_dispatcher = dispatcher;
-    ret = dispatch(dispatcher);
-    if (ret.err == KEV_ERR_INTERRUPTED || ret.err == KEV_ERR_FAULT) {
+    ret.raw = dispatch(dispatcher);
+    if (ret.x.err == KEV_ERR_INTERRUPTED || ret.x.err == KEV_ERR_FAULT) {
         dispatcher->entered = true;
     }
     g_cur_dispatcher = NULL;
@@ -488,10 +488,10 @@ kev_multival_t kev_smc_resume(kev_secure_pageno_t disp_page)
 {
     kev_multival_t ret;
 
-    ret.val = 0;
+    ret.x.val = 0;
     
     if (!page_is_typed(disp_page, KEV_PAGE_DISPATCHER)) {
-        ret.err = KEV_ERR_INVALID_PAGENO;
+        ret.x.err = KEV_ERR_INVALID_PAGENO;
         return ret;
     }
 
@@ -499,12 +499,12 @@ kev_multival_t kev_smc_resume(kev_secure_pageno_t disp_page)
     struct kev_addrspace *addrspace = g_pagedb[disp_page].addrspace;
 
     if (addrspace->state != KEV_ADDRSPACE_FINAL) {
-        ret.err = KEV_ERR_NOT_FINAL;
+        ret.x.err = KEV_ERR_NOT_FINAL;
         return ret;
     }
 
     if (!dispatcher->entered) {
-        ret.err = KEV_ERR_NOT_ENTERED;
+        ret.x.err = KEV_ERR_NOT_ENTERED;
         return ret;
     }
 
@@ -513,8 +513,8 @@ kev_multival_t kev_smc_resume(kev_secure_pageno_t disp_page)
 
     // dispatch into usermode
     g_cur_dispatcher = dispatcher;
-    ret = dispatch(dispatcher);
-    if (ret.err == KEV_ERR_SUCCESS) {
+    ret.raw = dispatch(dispatcher);
+    if (ret.x.err == KEV_ERR_SUCCESS) {
         dispatcher->entered = false;
     }
     g_cur_dispatcher = NULL;
@@ -522,12 +522,12 @@ kev_multival_t kev_smc_resume(kev_secure_pageno_t disp_page)
     return ret;
 }
 
-kev_multival_t smchandler(uintptr_t callno, uintptr_t arg1, uintptr_t arg2,
-                          uintptr_t arg3, uintptr_t arg4)
+uint64_t smchandler(uintptr_t callno, uintptr_t arg1, uintptr_t arg2,
+                    uintptr_t arg3, uintptr_t arg4)
 {
     kev_multival_t ret;
 
-    ret.val = 0;
+    ret.x.val = 0;
 
     /* XXX: the very first SMC call into the monitor is a setup/init
        call from the bootloader. It is assumed that arg1 contains the
@@ -536,46 +536,46 @@ kev_multival_t smchandler(uintptr_t callno, uintptr_t arg1, uintptr_t arg2,
     if (!firstcall) {
         g_secure_physbase = arg1;
         firstcall = true;
-        ret.err = KEV_ERR_SUCCESS;
-        return ret;
+        ret.x.err = KEV_ERR_SUCCESS;
+        return ret.raw;
     }
 
     switch (callno) {
     case KEV_SMC_QUERY:
-        ret.err = KEV_MAGIC;
+        ret.x.err = KEV_MAGIC;
         break;
 
     case KEV_SMC_GETPHYSPAGES:
-        ret.val = kev_smc_get_phys_pages();
-        ret.err = KEV_ERR_SUCCESS;
+        ret.x.val = kev_smc_get_phys_pages();
+        ret.x.err = KEV_ERR_SUCCESS;
         break;
 
     case KEV_SMC_INIT_ADDRSPACE:
-        ret.err = kev_smc_init_addrspace(arg1, arg2);
+        ret.x.err = kev_smc_init_addrspace(arg1, arg2);
         break;
 
     case KEV_SMC_INIT_DISPATCHER:
-        ret.err = kev_smc_init_dispatcher(arg1, arg2, arg3);
+        ret.x.err = kev_smc_init_dispatcher(arg1, arg2, arg3);
         break;
 
     case KEV_SMC_INIT_L2PTABLE:
-        ret.err = kev_smc_init_l2table(arg1, arg2, arg3);
+        ret.x.err = kev_smc_init_l2table(arg1, arg2, arg3);
         break;
 
     case KEV_SMC_MAP_SECURE:
-        ret.err = kev_smc_map_secure(arg1, arg2, arg3, arg4);
+        ret.x.err = kev_smc_map_secure(arg1, arg2, arg3, arg4);
         break;
 
     case KEV_SMC_MAP_INSECURE:
-        ret.err = kev_smc_map_insecure(arg1, arg2, arg3);
+        ret.x.err = kev_smc_map_insecure(arg1, arg2, arg3);
         break;
 
     case KEV_SMC_REMOVE:
-        ret.err = kev_smc_remove(arg1);
+        ret.x.err = kev_smc_remove(arg1);
         break;
     
     case KEV_SMC_FINALISE:
-        ret.err = kev_smc_finalise(arg1);
+        ret.x.err = kev_smc_finalise(arg1);
         break;
 
     case KEV_SMC_ENTER:
@@ -587,13 +587,13 @@ kev_multival_t smchandler(uintptr_t callno, uintptr_t arg1, uintptr_t arg2,
         break;
 
     case KEV_SMC_STOP:
-        ret.err = kev_smc_stop(arg1);
+        ret.x.err = kev_smc_stop(arg1);
         break;
 
     default:
-        ret.err = KEV_ERR_INVALID;
+        ret.x.err = KEV_ERR_INVALID;
         break;
     }
 
-    return ret;
+    return ret.raw;
 }

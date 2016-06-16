@@ -50,6 +50,6 @@ struct kev_dispatcher {
 //extern struct kev_pagedb_entry g_pagedb[KEVLAR_SECURE_NPAGES];
 
 /* entry.S */
-kev_multival_t dispatch(struct kev_dispatcher *dispatcher);
+uint64_t dispatch(struct kev_dispatcher *dispatcher);
 
 #endif // _KEVLAR_MONITOR_H

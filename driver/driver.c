@@ -126,8 +126,8 @@ static int test(void)
     }
     
     ret = kev_smc_enter(disp, 1, 2, 3);
-    printk(KERN_DEBUG "enter: %d\n", err);
-    if (err != KEV_ERR_SUCCESS) {
+    printk(KERN_DEBUG "enter: %d\n", ret.x.err);
+    if (ret.x.err != KEV_ERR_SUCCESS) {
         return -EIO;
     }
 
