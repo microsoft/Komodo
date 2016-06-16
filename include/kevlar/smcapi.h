@@ -35,9 +35,12 @@ typedef uint32_t kev_secure_pageno_t;
 #define KEV_ERR_INVALID         ((kev_err_t)-1)
 
 // struct type for returning two values across an SMC API
-typedef struct kev_multival {
-    kev_err_t err;
-    uintptr_t val;
+typedef union kev_multival {
+    uint64_t raw;
+    struct {
+        kev_err_t err;
+        uintptr_t val;
+    } x;
 } kev_multival_t;
 
 // returns KVR_MAGIC
