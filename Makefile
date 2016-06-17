@@ -54,9 +54,9 @@ dir := piimage
 include $(dir)/subdir.mk
 dir := monitor
 include $(dir)/subdir.mk
-dir := verified
-include $(dir)/subdir.mk
 dir := guestimg
+include $(dir)/subdir.mk
+dir := verified
 include $(dir)/subdir.mk
 
 %.o: %.c

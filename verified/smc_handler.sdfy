@@ -94,14 +94,29 @@ procedure fcall_epilogue()
 }
 
 procedure kev_smc_init_addrspace(
-    {:register op_r(0)} arg1:int,
-    {:register op_r(1)} arg2:int,
+    {:register op_r(0)} addrspace_page:int,
+    {:register op_r(1)} l1pt_page:int,
     out {:register op_r(0)} err:int)
     requires/ensures
         can_fcall(this);
 {
     fcall_prologue();
     err := 0;
+
+    r4 := KEVLAR_SECURE_NPAGES() % pow2_32();
+    r5 := PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page));  //addr of type
+    LDR(r5, r5, 0); // type
+    r6 := PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page));  //addr of type
+    LDR(r6, r6, 0); // type
+    if( addrspace_page >= r4 ) {
+        err := KEV_ERR_INVALID_PAGENO();
+    } else if( l1pt_page >= r4 ) {
+        err := KEV_ERR_INVALID_PAGENO();
+    } else { //todo
+        err := KEV_ERR_SUCCESS();
+    }
+
+
     fcall_epilogue();
 }
 
