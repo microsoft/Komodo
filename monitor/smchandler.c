@@ -4,6 +4,10 @@
 #include <kevlar/smcapi.h>
 #include "monitor.h"
 
+#define ARM_SCR_FIQ     0x04 // FIQ handler monitor mode
+#define ARM_SCR_IRQ     0x02 // IRQ handler monitor mode
+#define ARM_SCR_NS      0x01 // non-secure bit
+
 static struct kev_pagedb_entry g_pagedb[KEVLAR_SECURE_NPAGES];
 static uintptr_t g_secure_physbase;
 static struct kev_addrspace *g_cur_addrspace;
@@ -32,7 +36,7 @@ static inline uintptr_t page_paddr(kev_secure_pageno_t pageno)
 
 static inline void *phys2monvaddr(uintptr_t phys)
 {
-    return (void *)(phys + KEVLAR_MON_VBASE);
+    return (void *)(phys + KEVLAR_DIRECTMAP_VBASE);
 }
 
 static inline void *page_monvaddr(kev_secure_pageno_t pageno)
@@ -44,6 +48,57 @@ static void flushtlb(void)
 {
     /* flush non-global entries with ASID 0 (the only one we use at present) */
     __asm volatile("mcr p15, 0, %0, c8, c7, 2" :: "r" (0)); // TLBIASID
+}
+
+/* saved banked registers from normal world that might be trampled
+   while we execute in secure world */
+static uint32_t sp_usr, lr_usr, lr_svc, lr_abt, lr_und;
+
+static void enter_secure_world(void)
+{
+    uint32_t scr;
+
+    /* save normal-world banked regs */
+    __asm volatile("mrs %0, sp_usr" : "=r" (sp_usr));
+    __asm volatile("mrs %0, lr_usr" : "=r" (lr_usr));
+    __asm volatile("mrs %0, lr_svc" : "=r" (lr_svc));
+    __asm volatile("mrs %0, lr_abt" : "=r" (lr_abt));
+    __asm volatile("mrs %0, lr_und" : "=r" (lr_und));
+
+    /* update SCR... */
+    __asm volatile("mrc p15, 0, %0, c1, c1, 0" : "=r" (scr));
+
+    /* clear NS bit, so we stay in secure world when returning */
+    scr &= ~ARM_SCR_NS;
+
+    /* set FIQ and IRQ bits so that we take these directly to monitor mode */
+    scr |= ARM_SCR_FIQ|ARM_SCR_IRQ;
+
+    __asm volatile("mcr p15, 0, %0, c1, c1, 0" :: "r" (scr));
+    __asm volatile("isb");
+}
+
+static void leave_secure_world(void)
+{
+    uint32_t scr;
+
+    __asm volatile("mrc p15, 0, %0, c1, c1, 0" : "=r" (scr));
+
+    /* set NS bit */
+    scr |= ARM_SCR_NS;
+
+    /* clear FIQ and IRQ bits so that we take these in normal world */
+    scr &= ~(ARM_SCR_FIQ|ARM_SCR_IRQ);
+
+    __asm volatile("mcr p15, 0, %0, c1, c1, 0" :: "r" (scr));
+    __asm volatile("isb");
+
+    /* restore normal-world banked regs */
+    __asm volatile("msr sp_usr, %0" :: "r" (sp_usr));
+    __asm volatile("msr lr_usr, %0" :: "r" (lr_usr));
+    __asm volatile("msr lr_svc, %0" :: "r" (lr_svc));
+    __asm volatile("msr lr_abt, %0" :: "r" (lr_abt));
+    __asm volatile("msr lr_und, %0" :: "r" (lr_und));
 }
 
 static void switch_addrspace(struct kev_addrspace *addrspace)
@@ -430,7 +485,9 @@ kev_err_t kev_smc_stop(kev_secure_pageno_t addrspace_page)
     }
 
     if (g_cur_addrspace == addrspace) {
+        enter_secure_world();
         switch_addrspace(NULL);
+        leave_secure_world();
     }
 
     addrspace->state = KEV_ADDRSPACE_STOPPED;
@@ -463,19 +520,22 @@ kev_multival_t kev_smc_enter(kev_secure_pageno_t disp_page, uintptr_t arg1,
         return ret;
     }
 
+    enter_secure_world();
+    
     // switch to target addrspace
     switch_addrspace(addrspace);
 
     // setup target context
     dispatcher->regs[0] = arg1;
     dispatcher->regs[1] = arg2;
-    dispatcher->regs[3] = arg3;
+    dispatcher->regs[2] = arg3;
     dispatcher->regs[15] = dispatcher->entrypoint; // XXX: PC
     dispatcher->cpsr = 0x10; // XXX: user mode
 
     // dispatch into usermode
     g_cur_dispatcher = dispatcher;
     ret.raw = dispatch(dispatcher);
+    leave_secure_world();
     if (ret.x.err == KEV_ERR_INTERRUPTED || ret.x.err == KEV_ERR_FAULT) {
         dispatcher->entered = true;
     }
@@ -508,12 +568,15 @@ kev_multival_t kev_smc_resume(kev_secure_pageno_t disp_page)
         return ret;
     }
 
+    enter_secure_world();
+    
     // switch to target addrspace
     switch_addrspace(addrspace);
 
     // dispatch into usermode
     g_cur_dispatcher = dispatcher;
     ret.raw = dispatch(dispatcher);
+    leave_secure_world();
     if (ret.x.err == KEV_ERR_SUCCESS) {
         dispatcher->entered = false;
     }

@@ -21,15 +21,17 @@ LDFLAGS_ALL = -nostdlib
 
 all: piimage/kevlar.img
 
+QEMU ?= qemu-system-arm
 QEMU_ARGS = -M raspi2 -display none -serial stdio -gdb tcp:127.0.0.1:1234
+QEMU_CMD = $(QEMU) $(QEMU_ARGS) -bios piimage/kevlar.img -sd guestimg/guestdisk.img
 
 .PHONY: clean qemu qemugdb
 
 qemu: piimage/kevlar.img guestimg/guestdisk.img
-	qemu-system-arm $(QEMU_ARGS) -bios $< -sd guestimg/guestdisk.img
+	$(QEMU_CMD)
 
 qemugdb: piimage/kevlar.img guestimg/guestdisk.img
-	qemu-system-arm $(QEMU_ARGS) -bios $< -sd guestimg/guestdisk.img -S
+	$(QEMU_CMD) -S
 
 gdb: piloader/piloader.elf monitor/monitor.elf
 	$(PREFIX)gdb -ex 'target remote :1234' \
@@ -39,8 +41,8 @@ gdb: piloader/piloader.elf monitor/monitor.elf
 #-----------------------------------------------------------------------------
 # For running assembled tests of ARMspartan
 #-----------------------------------------------------------------------------
-run_%.img: verified/%.img verified/%.S
-	qemu-system-arm $(QEMU_ARGS) -bios $< -S
+run_%.img: verified/%.img
+	$(QEMU) $(QEMU_ARGS) -bios $< -S
 
 gdb-test:
 	$(PREFIX)gdb -ex 'target remote :1234'

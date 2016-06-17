@@ -16,6 +16,8 @@
 #define ARM_SCR_IRQ     0x02 // IRQ handler monitor mode
 #define ARM_SCR_NS      0x01 // non-secure bit
 
+#define ARM_SCTLR_V     0x2000 /* SCTLR vectors bit (1 = hivecs) */
+
 #define KEV_ERR_SUCCESS         0
 #define KEV_ERR_INTERRUPTED     9
 #define KEV_ERR_FAULT           10
@@ -90,6 +92,19 @@ _secure_vectors: /* Secure-world VBAR points here */
         isb
         .endm
 
+        .macro get_vector_base dstreg
+        /* check SCTLR.V (hivecs bit) */
+        mrc     p15, 0, \dstreg, c1, c0, 0
+        ands    \dstreg, \dstreg, #ARM_SCTLR_V
+        /* load value assuming hivecs is on (0xffff0000) */
+        movw    \dstreg, #0
+        movt    \dstreg, #0xffff
+        bne     9f
+        /* no hivecs: read VBAR */
+        mrc     p15, 0, \dstreg, c12, c0, 0
+9:
+        .endm
+        
 _smc:
         /* call C, stacking r4 (used as a parameter) */
         push    {lr}
@@ -118,12 +133,13 @@ _smc:
         orr     r2, r2, #(CPSR_F|CPSR_I|CPSRM_FIQ)
         msr     spsr, r2
 
-        /* update target LR to current return address */
+        /* update target LR for current return address */
+        add     lr, lr, #4      // +4 for ARM IRQ shenanigans
+        // FIXME: is this adjustment correct for thumb mode?
         msr     lr_fiq, lr
 
-        /* compute return address from VBAR
-         * TODO: support hivecs setting? */
-        mcr     p15, 0, lr, c12, c0, 0
+        /* compute return address */
+        get_vector_base lr
         add     lr, #(7*4)
         b       2f
 
@@ -145,12 +161,12 @@ _smc:
         orr     r2, r2, #(CPSRM_IRQ|CPSR_I)
         msr     spsr, r2
 
-        /* update target LR to current return address */
+        /* update target LR for current return address */
+        add     lr, lr, #4      // +4 for ARM IRQ shenanigans
         msr     lr_irq, lr
 
-        /* compute return address from VBAR
-         * TODO: support hivecs setting? */
-        mcr     p15, 0, lr, c12, c0, 0
+        /* compute return address */
+        get_vector_base lr
         add     lr, #(6*4)
 
 
@@ -211,7 +227,7 @@ irqfiq_common:
 1:      /* we came from user mode. save context, and continue into the monitor */
         save_user_context
 
-        leave_secure_world r1
+        //leave_secure_world r1
 
         /* return to SMC dispatch path */
         mov     r0, #KEV_ERR_INTERRUPTED
@@ -224,7 +240,7 @@ _abort: /* Data abort or undefined instruction, only taken from secure user-mode
 	 * instruction, we might still take an IRQ or FIQ while in abort/undef mode :( */
         cpsid  iaf, #CPSRM_MONITOR
 
-        leave_secure_world r1
+        //leave_secure_world r1
 
         mov     r0, #KEV_ERR_FAULT
         mov     r1, #0
@@ -237,7 +253,7 @@ _svc: /* Supervisor call, only taken from secure user-mode */
         cpsid  iaf, #CPSRM_MONITOR
 
         /* XXX: that the only supervisor call we can take (for now) is an exit from secure user mode */
-        leave_secure_world r1
+        //leave_secure_world r1
 
         /* return to SMC dispatch path */
         mov     r1, r0 // return value from call
@@ -253,7 +269,7 @@ dispatch:
         mrs     r4, spsr
         push    {r4}
 
-        enter_secure_world r4
+        //enter_secure_world r4
 
         /* load complete context from dispatcher
          * future optimisation: only load arg regs and zero the rest on a fresh dispatch (not resume) */

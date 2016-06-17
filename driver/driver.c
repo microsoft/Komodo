@@ -19,6 +19,17 @@ struct kevlar_client {
     // TBD
 };
 
+void __attribute__ ((visibility ("hidden"))) test_enclave(void);
+void __attribute__ ((visibility ("hidden"))) test_enclave_end(void);
+__asm (
+    ".text                                      \n"
+    "test_enclave:                              \n"
+    "   mov     r0, #42                         \n"
+    "1: svc     #0                              \n"
+    "   b       1b                              \n"
+    "test_enclave_end:                          \n"
+);
+
 static int test(void)
 {
     int r;
@@ -96,10 +107,12 @@ static int test(void)
         return -EIO;
     }
 
-    /* TODO: Populate the page! */
-    
+    /* Populate the page with our test code! */
+    memcpy(shared_virt, &test_enclave, &test_enclave_end - &test_enclave);
+
     err = kev_smc_map_secure(code, addrspace,
-                             0x8000 | KEV_MAPPING_R | KEV_MAPPING_X, shared_phys);
+                             0x8000 | KEV_MAPPING_R | KEV_MAPPING_X,
+                             shared_phys >> 12);
     printk(KERN_DEBUG "map_secure (code): %d\n", err);
     if (err != KEV_ERR_SUCCESS) {
         return -EIO;
