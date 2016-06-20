@@ -18,7 +18,9 @@ function method KEV_SMC_STOP():int            { 29 }
 //-----------------------------------------------------------------------------
 // Errors
 //-----------------------------------------------------------------------------
-function method KEV_ERR_SUCCESS():int            { 0 }
+function method KEV_ERR_SUCCESS():int
+    ensures KEV_ERR_SUCCESS() == 0;
+    { 0 }
 function method KEV_ERR_INVALID_PAGENO():int     { 1 }
 function method KEV_ERR_PAGEINUSE():int          { 2 }
 function method KEV_ERR_INVALID_ADDRSPACE():int  { 3 }
@@ -32,12 +34,20 @@ function method KEV_ERR_INVALID():int            { 0x1_0000_0000 }
 //-----------------------------------------------------------------------------
 // Memory Regions
 //-----------------------------------------------------------------------------
-function method KEVLAR_PAGE_SIZE():int        { 0x1000 }
-function method KEVLAR_MON_VBASE():int        { 0x4000_0000 }  
+function method KEVLAR_PAGE_SIZE():int
+    ensures KEVLAR_PAGE_SIZE() == 0x1000
+    { 0x1000 }
+function method KEVLAR_MON_VBASE():int        
+    ensures KEVLAR_MON_VBASE() == 0x4000_0000;
+    { 0x4000_0000 }  
 function method KEVLAR_DIRECTMAP_VBASE():int  { 0x8000_0000 }
 function method KEVLAR_DIRECTMAP_SIZE():int   { 0x8000_0000 }
-function method KEVLAR_SECURE_RESERVE():int   { 1 * 1024 * 1024 }
-function method KEVLAR_SECURE_NPAGES():int    { KEVLAR_SECURE_RESERVE() / KEVLAR_PAGE_SIZE() }
+function method KEVLAR_SECURE_RESERVE():int   
+    ensures KEVLAR_SECURE_RESERVE() == 1 * 1024 * 1024;
+    { 1 * 1024 * 1024 }
+function method KEVLAR_SECURE_NPAGES():int    
+    ensures KEVLAR_SECURE_NPAGES() == 256;
+    { KEVLAR_SECURE_RESERVE() / KEVLAR_PAGE_SIZE() }
 
 function method STACK_LOWER():int { 0x4000 }
 function method STACK_UPPER():int { 0x8000 }
@@ -45,21 +55,35 @@ function method STACK_UPPER():int { 0x8000 }
 //-----------------------------------------------------------------------------
 // Data Structures
 //-----------------------------------------------------------------------------
-function method G_PAGEDB():int { KEVLAR_MON_VBASE() }
-function method G_PAGEDB_END():int { G_PAGEDB() + KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE() }
-function method G_PAGEDB_ENTRY(pageno:int):int { G_PAGEDB() + pageno * PAGEDB_ENTRY_SIZE() }
+function method G_PAGEDB():int 
+    ensures G_PAGEDB() == KEVLAR_MON_VBASE();
+    { KEVLAR_MON_VBASE() }
+function method G_PAGEDB_END():int 
+    ensures G_PAGEDB_END() == G_PAGEDB() + KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE()
+    { G_PAGEDB() + KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE() }
+function method G_PAGEDB_ENTRY(pageno:int):int 
+    ensures G_PAGEDB_ENTRY(pageno) == G_PAGEDB() + pageno * PAGEDB_ENTRY_SIZE();
+    { G_PAGEDB() + pageno * PAGEDB_ENTRY_SIZE() }
 
 // entry = start address of pagedb entry
-function method PAGEDB_ENTRY_TYPE(entry:int):int       { entry }
-function method PAGEDB_ENTRY_ADDRSPACE(entry:int):int  { entry + 1 }
-function method PAGEDB_ENTRY_SIZE():int                { 1 + ADDRSPACE_SIZE() }
+function method PAGEDB_ENTRY_TYPE(entry:int):int
+    ensures PAGEDB_ENTRY_TYPE(entry) == entry;
+    { entry }
+function method PAGEDB_ENTRY_ADDRSPACE(entry:int):int
+    ensures PAGEDB_ENTRY_ADDRSPACE(entry) == entry + 1;
+    { entry + 1 }
+function method PAGEDB_ENTRY_SIZE():int
+    ensures PAGEDB_ENTRY_SIZE() == ADDRSPACE_SIZE() + 1
+    { 1 + ADDRSPACE_SIZE() }
 
 // addrspc = start address of address space metadata
 function method ADDRSPACE_L1PT(addrspc:int):int        { addrspc }
 function method ADDRSPACE_L1PT_PHYS(addrspc:int):int   { addrspc + 1 }
 function method ADDRSPACE_REF(addrspc:int):int         { addrspc + 2 }
 function method ADDRSPACE_STATE(addrspc:int):int       { addrspc + 3 }
-function method ADDRSPACE_SIZE():int                   { 4 }
+function method ADDRSPACE_SIZE():int
+    ensures ADDRSPACE_SIZE() == 4
+    { 4 }
 
 function method KEV_PAGE_FREE():int                    { 0 }
 function method KEV_PAGE_ADDRSPACE():int               { 1 }
