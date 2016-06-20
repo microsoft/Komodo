@@ -11,7 +11,7 @@ predicate can_fcall(s:sp_state)
 predicate can_fcall_n(s:sp_state,n:int)
 {
     ValidState(s) &&
-    36 <= eval_op(s, op_sp()) < MaxVal() &&
+    36 * n <= eval_op(s, op_sp()) < MaxVal() &&
     ValidMemRange(s, eval_op(s, op_sp())-36*n, eval_op(s, op_sp()) ) &&
     MemRangeIs32(s, eval_op(s, op_sp())-36*n, eval_op(s, op_sp())) &&
     (STACK_LOWER() + 36*n <= eval_op(s,op_sp()) < STACK_UPPER())
@@ -25,7 +25,7 @@ procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
 procedure operator(++) (inout{:operand} dst:int) := incr
 procedure operator(+=) (inout{:operand} dst:int, {:operand} src:int) := plusEquals
 
-procedure fcall_prologue()
+procedure fcall_prologue(ghost fcalls_left:int)
     requires/ensures
         ValidState(this);
         STACK_LOWER() <= sp < STACK_UPPER();
@@ -34,6 +34,7 @@ procedure fcall_prologue()
         STACK_LOWER() + 36 <= sp;
         ValidMemRange(this, sp-36, sp);
         MemRangeIs32(this, sp-36, sp); 
+        // can_fcall_n(this, fcalls_left);
     ensures
         // Moves stack pointer
         sp == old(sp-36);
@@ -60,8 +61,12 @@ procedure fcall_prologue()
         forall i:int :: !(STACK_LOWER() <= i < STACK_UPPER()) && ValidMem(old(this),Address(i)) ==>
             addrval(this,i) == addrval(old(this),i);
 
-{
+        // TODO need something like this to make function calls usable.
+        // forall n :: n >= 2 && can_fcall_n(old(this), n) ==> can_fcall_n(this, n-1);
+        // can_fcall_n(this,fcalls_left-1);
 
+{
+    
     //push link register onto stack
     SUB(sp, sp, 4);
     STR(lr, sp, 0);
@@ -84,14 +89,9 @@ procedure fcall_prologue()
     SUB(sp,  sp, 4);
     STR(r11, sp, 0);
 
-    // Move function arguments in r0-r3 into r4-r7
-    // r4 := r0;
-    // r5 := r1;
-    // r6 := r2;
-    // r7 := r3;
 }
 
-procedure fcall_epilogue()
+procedure fcall_epilogue(ghost fcalls_left:int)
     requires/ensures
         ValidState(this);
         STACK_LOWER() <= sp < STACK_UPPER();
@@ -100,6 +100,7 @@ procedure fcall_epilogue()
         sp + 36 < STACK_UPPER();
         ValidMemRange(this, sp, sp+36);
         MemRangeIs32(this,  sp, sp+36);
+        // can_fcall_n(this,fcalls_left);
     ensures
         sp == old(sp+36);
         ValidMemRange(this, sp-36, sp);
@@ -123,6 +124,7 @@ procedure fcall_epilogue()
         //preserves values in memory region outside of stack
         forall i:int :: !(STACK_LOWER() <= i < STACK_UPPER()) && ValidMem(old(this),Address(i)) ==>
             addrval(this,i) == addrval(old(this),i);
+        // can_fcall_n(this,fcalls_left+1);
 {
     //pop r11 down to r4 from stack
     LDR(r11, sp, 0);
@@ -161,11 +163,11 @@ procedure pagedb_entry(
         ValidState(this);
         0 <= r0 < 256;
         ValidMem(this, Address(0x4000_0000 + old(r0) * 5));
-        can_fcall(this);
+        // can_fcall_n(this,1);
     ensures
         entry == addrval(this, 0x4000_0000 + old(r0) * 5);
 {
-    fcall_prologue();
+    // fcall_prologue();
     entry := 0x4000_0000; // G_PAGEDB()
 
     for (r9:= 0; r9 < r0; r9++)
@@ -179,9 +181,9 @@ procedure pagedb_entry(
         // Allows store.
         ValidMem(this, Address(0x4000_0000 + old(r0) * 5));
         // Allows fcall_epilogue;
-        sp == old(sp-36);
-        ValidMemRange(this, sp, sp+36);
-        MemRangeIs32(this, sp, sp+36); 
+        // sp == old(sp-36);
+        // ValidMemRange(this, sp, sp+36);
+        // MemRangeIs32(this, sp, sp+36); 
       decreases
         r0 - r9;
     {
@@ -192,7 +194,7 @@ procedure pagedb_entry(
 
     STR(entry, entry, 0);
     assert entry == addrval(this, 0x4000_0000 + old(r0) * 5);
-    fcall_epilogue();
+    // fcall_epilogue();
 }
 
 procedure kev_smc_init_addrspace(
@@ -200,9 +202,10 @@ procedure kev_smc_init_addrspace(
     {:register op_r(1)} l1pt_page:int,
     out {:register op_r(0)} err:int)
     requires/ensures
-        can_fcall(this);
+        ValidState(this);
+        // can_fcall_n(this,1);
 {
-    fcall_prologue();
+    // fcall_prologue();
     err := 0;
 
     r4 := KEVLAR_SECURE_NPAGES() % pow2_32();
@@ -219,7 +222,7 @@ procedure kev_smc_init_addrspace(
     }
 
 
-    fcall_epilogue();
+    // fcall_epilogue();
 }
 
 procedure smc_handler(
@@ -231,7 +234,8 @@ procedure smc_handler(
     out {:register op_r(0)} err:int,
     out {:register op_r(1)} retval:int)
     requires/ensures
-        can_fcall(this);
+        ValidState(this);
+        // can_fcall_n(this,1);
 {
     
     retval := 0;

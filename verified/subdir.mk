@@ -1,4 +1,4 @@
-DAFNYFLAGS = /noNLarith /timeLimit:5 #/trace
+DAFNYFLAGS = /noNLarith /timeLimit:5 /trace
 # NB: include paths are relative to the (generated) dfy file, not the CWD
 SPARTAN_INCLUDES = -i ARMspartan.dfy -i ARMprint.dfy #$(SHA256_INCLUDES)
 KEVLAR_INCLUDES  = -i kev_constants.dfy
