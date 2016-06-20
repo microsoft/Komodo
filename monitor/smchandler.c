@@ -9,7 +9,7 @@
 #define ARM_SCR_NS      0x01 // non-secure bit
 
 static struct kev_pagedb_entry g_pagedb[KEVLAR_SECURE_NPAGES];
-static uintptr_t g_secure_physbase;
+uintptr_t g_secure_physbase;
 static struct kev_addrspace *g_cur_addrspace;
 struct kev_dispatcher *g_cur_dispatcher;
 
@@ -591,17 +591,6 @@ uint64_t smchandler(uintptr_t callno, uintptr_t arg1, uintptr_t arg2,
     kev_multival_t ret;
 
     ret.x.val = 0;
-
-    /* XXX: the very first SMC call into the monitor is a setup/init
-       call from the bootloader. It is assumed that arg1 contains the
-       secure phys base. */
-    static bool firstcall;
-    if (!firstcall) {
-        g_secure_physbase = arg1;
-        firstcall = true;
-        ret.x.err = KEV_ERR_SUCCESS;
-        return ret.raw;
-    }
 
     switch (callno) {
     case KEV_SMC_QUERY:
