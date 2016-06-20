@@ -27,7 +27,7 @@ function method KEV_ERR_NOT_FINAL():int          { 5 }
 function method KEV_ERR_INVALID_MAPPING():int    { 6 }
 function method KEV_ERR_ADDRINUSE():int          { 7 }
 function method KEV_ERR_NOT_STOPPED():int        { 8 }
-function method KEV_ERR_INVALID():int            { pow2_32()-1 }
+function method KEV_ERR_INVALID():int            { 0x1_0000_0000 }
 
 //-----------------------------------------------------------------------------
 // Memory Regions
@@ -38,6 +38,9 @@ function method KEVLAR_DIRECTMAP_VBASE():int  { 0x8000_0000 }
 function method KEVLAR_DIRECTMAP_SIZE():int   { 0x8000_0000 }
 function method KEVLAR_SECURE_RESERVE():int   { 1 * 1024 * 1024 }
 function method KEVLAR_SECURE_NPAGES():int    { KEVLAR_SECURE_RESERVE() / KEVLAR_PAGE_SIZE() }
+
+function method STACK_LOWER():int { 0x4000 }
+function method STACK_UPPER():int { 0x8000 }
 
 //-----------------------------------------------------------------------------
 // Data Structures
