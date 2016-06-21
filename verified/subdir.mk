@@ -9,7 +9,7 @@ KEVLAR_DEPS  = $(dir)/kev_constants.dll
 # temp target to build top-level verified stuff
 verified: $(dir)/ARMtest1.o
 
-%.dfy: %.sdfy $(dir)/ARMdecls.sdfy $(SPARTAN_DEPS)
+%.dfy: %.sdfy $(dir)/ARMdecls.sdfy $(SPARTAN_DEPS) $(KEVLAR_DEPS)
 	$(SPARTAN) $(dir)/ARMdecls.sdfy $< -out $@ $(SPARTAN_INCLUDES) $(KEVLAR_INCLUDES)
 
 %.exe: %.dfy

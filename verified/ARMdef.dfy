@@ -271,6 +271,7 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
 
 predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
     requires ValidMem(s, m)
+    ensures  ValidMem(s, m)
 {
     ok && r == s.(addresses := s.addresses[m := v])
 }
