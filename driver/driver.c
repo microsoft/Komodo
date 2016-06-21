@@ -25,6 +25,8 @@ __asm (
     ".text                                      \n"
     "test_enclave:                              \n"
     "   mov     r0, #42                         \n"
+    "   mov     r1, #0xa000                     \n"
+    "   str     r0, [r1]                        \n"
     "1: svc     #0                              \n"
     "   b       1b                              \n"
     "test_enclave_end:                          \n"
@@ -143,6 +145,9 @@ static int test(void)
     if (ret.x.err != KEV_ERR_SUCCESS) {
         return -EIO;
     }
+
+    printk(KERN_DEBUG "returned: %lx\n", ret.x.val);
+    printk(KERN_DEBUG "wrote: %x\n", *(u32 *)shared_virt);
 
     err = kev_smc_stop(addrspace);
     printk(KERN_DEBUG "stop: %d\n", err);

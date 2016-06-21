@@ -32,7 +32,8 @@
 // defined in kevlar linker script
 extern char monitor_image_start, monitor_image_data, monitor_image_end;
 // defined in monitor image
-extern char monitor_stack_base, _monitor_vectors, _secure_vectors;
+extern char monitor_stack_base, _monitor_vectors, _secure_vectors,
+    g_secure_physbase;
 
 void park_secondary_cores(void);
 void leave_secure_world(void);
@@ -166,6 +167,7 @@ static void map_l2_pages(armpte_short_l2 *l2pt, uintptr_t vaddr, uintptr_t paddr
     }
 }
 
+#if 0
 static uintptr_t smc(uintptr_t arg0, uintptr_t arg1, uintptr_t arg2, uintptr_t arg3)
 {
     register uintptr_t r0 __asm("r0") = arg0;
@@ -180,6 +182,7 @@ static uintptr_t smc(uintptr_t arg0, uintptr_t arg1, uintptr_t arg2, uintptr_t a
 
     return r0;
 }
+#endif
 
 void __attribute__((noreturn)) main(void)
 {
@@ -280,13 +283,12 @@ void __attribute__((noreturn)) main(void)
 
     secure_world_init(g_ptbase, g_vbar, g_mvbar, monitor_stack);
 
-    /* init the monitor with an initial SMC call */
+    /* init the monitor by setting up the secure physbase */
     console_printf("passing secure_physbase %lx to monitor\n", secure_physbase);
 
-    uintptr_t ret = smc(-1, secure_physbase, 0, 0);
-    assert(ret == 0);
-
-    console_printf("returned from SMC!\n");
+    uintptr_t *monitor_secure_physbase
+        = (uintptr_t *)(&g_secure_physbase - &monitor_image_start + KEVLAR_MON_VBASE);
+    *monitor_secure_physbase = secure_physbase;
 
     // this call will return in non-secure world (where MMUs are still off)
     leave_secure_world();
