@@ -8,29 +8,29 @@ predicate ValidStack(s:sp_state)
 }
 
 predicate can_fcall(s:sp_state)
-    requires ValidState(s)
 {
-    ValidStack(s) &&
+    ValidState(s) && ValidStack(s) &&
     (STACK_LOWER() + 40 <= eval_op(s,op_sp()) < STACK_UPPER())
 }
 
-// predicate can_fcall(s:sp_state)
-// {
-//     ValidState(s) &&
-//     40 <= eval_op(s, op_sp()) < MaxVal() &&
-//     ValidMemRange(s, eval_op(s, op_sp())-40, eval_op(s, op_sp()) ) &&
-//     MemRangeIs32(s, eval_op(s, op_sp())-40, eval_op(s, op_sp())) &&
-//     (STACK_LOWER() + 40 <= eval_op(s,op_sp()) < STACK_UPPER())
-// }
-// 
+predicate can_fcall_n(s:sp_state,n:int)
+{
+    ValidState(s) && ValidStack(s) &&
+    (STACK_LOWER() + 40*n <= eval_op(s,op_sp()) < STACK_UPPER())
+}
+
 // predicate can_fcall_n(s:sp_state,n:int)
+//     decreases n, 0; 
 // {
-//     ValidState(s) &&
-//     40 * n <= eval_op(s, op_sp()) < MaxVal() &&
-//     ValidMemRange(s, eval_op(s, op_sp())-40*n, eval_op(s, op_sp()) ) &&
-//     MemRangeIs32(s, eval_op(s, op_sp())-40*n, eval_op(s, op_sp())) &&
-//     (STACK_LOWER() + 40*n <= eval_op(s,op_sp()) < STACK_UPPER())
+//     ValidState(s) && ValidStack(s) && if(n <= 0) then false
+//     else if(n == 1) then 
+//         (STACK_LOWER() + 40 <= eval_op(s,op_sp()) < STACK_UPPER())
+//     else 
+//         var sp_val := eval_op(s,op_sp());
+//         var pushed_s := s.(regs := s.regs[SP(mode_of_state(s)) := sp_val - 40]);
+//         can_fcall_n(pushed_s, n-1)
 // }
+
 
 predicate reg_preserving(s:sp_state, r:sp_state)
     requires ValidState(s) && ValidState(r);
@@ -62,7 +62,13 @@ procedure fcall_prologue(ghost fcalls_left:int)
         //STACK_LOWER() <= sp < STACK_UPPER();
         ValidStack(this);
     requires
-        can_fcall(this);
+        fcalls_left > 1; // TODO get this to >= 1?
+        can_fcall_n(this,fcalls_left);
+        // can_fcall_n(this,1);
+        //fcalls_left > 0;
+        //can_fcall_n(this,fcalls_left);
+
+        // can_fcall_n(this,fcalls_left);
         // 40 <= sp < MaxVal();
         // STACK_LOWER() + 40 <= sp;
         // ValidMemRange(this, sp-40, sp);
@@ -94,10 +100,7 @@ procedure fcall_prologue(ghost fcalls_left:int)
         // preserves values of other memory locations
         forall i:int :: !(STACK_LOWER() <= i < STACK_UPPER()) && ValidMem(old(this),Address(i)) ==>
             addrval(this,i) == addrval(old(this),i);
-
-        // TODO need something like this to make function calls usable.
-        // forall n :: n >= 2 && can_fcall_n(old(this), n) ==> can_fcall_n(this, n-1);
-        // can_fcall_n(this,fcalls_left-1);
+        can_fcall_n(this,fcalls_left-1);
 
 {
     
@@ -135,6 +138,7 @@ procedure fcall_epilogue(ghost fcalls_left:int)
     requires
         0 <= sp + 40 < MaxVal();
         sp + 40 < STACK_UPPER();
+        can_fcall_n(this,fcalls_left);
         // ValidMemRange(this, sp, sp+40);
         // MemRangeIs32(this,  sp, sp+40);
         // can_fcall_n(this,fcalls_left);
@@ -164,8 +168,12 @@ procedure fcall_epilogue(ghost fcalls_left:int)
         //preserves values in memory region outside of stack
         forall i:int :: !(STACK_LOWER() <= i < STACK_UPPER()) && ValidMem(old(this),Address(i)) ==>
             addrval(this,i) == addrval(old(this),i);
+        can_fcall_n(this,fcalls_left+1);
+        // can_fcall(this);
+        // Popping implies room for one more push
+        // forall n :: n > 1 && can_fcall_n(old(this), n-1) ==> can_fcall_n(this, n);
         // can_fcall_n(this,fcalls_left+1);
-        can_fcall(this);
+        // can_fcall_n(this,fcalls_left+1);
 {
     //pop r12 down to r4 from stack
     LDR(r12, sp, 0);
@@ -198,20 +206,51 @@ procedure fcall_epilogue(ghost fcalls_left:int)
     // r3 := r7;
 }
 
+procedure reg_preservation_inner()
+    requires/ensures
+        ValidState(this);
+        ValidStack(this);
+        can_fcall_n(this,2);
+    ensures
+        r4 == old(r4);
+        r10 == old(r10);
+        sp == old(sp);
+        forall i:int :: sp <= i < STACK_UPPER() && ValidMem(old(this),Address(i)) ==>
+            addrval(this,i) == addrval(old(this),i);
+        // reg_preserving(this,old(this));
+{
+    // fcall_prologue(2);
+    // r10 := 99;
+    // fcall_epilogue(1);
+}
+
 procedure reg_preservation_test()
     requires/ensures
         ValidState(this);
-        can_fcall(this);
+        can_fcall_n(this,3);
+        ValidStack(this);
     ensures
-        reg_preserving(this,old(this));
-
+        r4  == old(r4);
+        r10 == old(r10);
+        sp == old(sp);
+        // reg_preserving(this,old(this));
 {
-    fcall_prologue(1);
+    fcall_prologue(3);
+    assert addrval(this, sp+8) == old(r10);
+    assert addrval(this, sp+32) == old(r4);
+    // //fcall_prologue(2);
     r10 := 3000;
     r4  := 98;
-    //TODO try to rewrite fcall epiloge from old sp
-    fcall_epilogue(0);
+    reg_preservation_inner();
+    assert r10 == 3000;
+    assert r4 == 98;
+    assert addrval(this, sp+8) == old(r10);
+    assert addrval(this, sp+32) == old(r4);
+    // //TODO try to rewrite fcall epiloge from old sp
+    // //fcall_epilogue(1);
+    fcall_epilogue(2);
 }
+
 
 // loads the pagedb_entry address for pageno into entry
 procedure pagedb_entry(
@@ -262,7 +301,7 @@ procedure kev_smc_init_addrspace(
     out {:register op_r(11)} err:int)
     requires/ensures
         ValidState(this);
-        can_fcall(this);
+        can_fcall_n(this,2);
 {
     err := 0;
 
@@ -289,7 +328,7 @@ procedure kev_smc_init_addrspace(
         // assert r5 == PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page));
         
 
-        reg_preservation_test();
+        // reg_preservation_test();
        
         // This can't be proven! We need function calls, otherwise spartan
         // can't prove that registers/addresses not mentioned in the postconditions
@@ -310,7 +349,7 @@ procedure smc_handler(
     out {:register op_r(12)} retval:int)
     requires/ensures
         ValidState(this);
-        can_fcall(this);
+        can_fcall_n(this,2);
     requires
         callno == KEV_SMC_INIT_ADDRSPACE() ==>
             ValidMem(this, Address(PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(arg1)))) &&
