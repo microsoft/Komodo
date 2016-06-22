@@ -49,8 +49,13 @@ function method KEVLAR_SECURE_NPAGES():int
     ensures KEVLAR_SECURE_NPAGES() == 256;
     { KEVLAR_SECURE_RESERVE() / KEVLAR_PAGE_SIZE() }
 
-function method STACK_LOWER():int { 0x4000 }
-function method STACK_UPPER():int { 0x8000 }
+//These were picked arbitrarily 
+function method STACK_LOWER():int
+    ensures STACK_LOWER() == 0x4000
+    { 0x4000 }
+function method STACK_UPPER():int
+    ensures STACK_UPPER() == 0x8000
+    { 0x8000 }
 
 //-----------------------------------------------------------------------------
 // Data Structures

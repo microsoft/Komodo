@@ -1,0 +1,188 @@
+#verbatim
+predicate ValidStack(s:sp_state)
+    requires ValidState(s)
+{
+    ValidMemRange(s, STACK_LOWER(), STACK_UPPER()) &&
+    MemRangeIs32(s, STACK_LOWER(), STACK_UPPER()) &&
+    (STACK_LOWER() <= eval_op(s, op_sp()) < STACK_UPPER())
+}
+
+predicate can_fcall(s:sp_state)
+{
+    ValidState(s) && ValidStack(s) &&
+    (STACK_LOWER() + 40 <= eval_op(s,op_sp()) < STACK_UPPER())
+}
+
+predicate can_fcall_n(s:sp_state,n:int)
+{
+    ValidState(s) && ValidStack(s) &&
+    (STACK_LOWER() + 40*n <= eval_op(s,op_sp()) < STACK_UPPER())
+}
+
+predicate RegPreserving(s:sp_state, r:sp_state)
+    requires ValidState(s) && ValidState(r);
+{
+    eval_op(s,op_r(4))  == eval_op(r,op_r(4))  &&
+    eval_op(s,op_r(5))  == eval_op(r,op_r(5))  &&
+    eval_op(s,op_r(6))  == eval_op(r,op_r(6))  &&
+    eval_op(s,op_r(7))  == eval_op(r,op_r(7))  &&
+    eval_op(s,op_r(8))  == eval_op(r,op_r(8))  &&
+    eval_op(s,op_r(9))  == eval_op(r,op_r(9))  &&
+    eval_op(s,op_r(10)) == eval_op(r,op_r(10)) &&
+    eval_op(s,op_r(11)) == eval_op(r,op_r(11)) &&
+    eval_op(s,op_r(12)) == eval_op(r,op_r(12)) &&
+    eval_op(s,op_sp())  == eval_op(r,op_sp())
+}
+
+predicate MemValidityPreserving(s:sp_state, r:sp_state)
+{
+    forall i:int :: ValidMem(s,Address(i)) ==> ValidMem(r,Address(i))
+}
+
+predicate MemValuePreserving(s:sp_state, r:sp_state)
+    requires MemValidityPreserving(s,r);
+{
+    forall i:int :: ValidMem(s,Address(i)) ==>
+        addrval(s,i) == addrval(r,i)
+}
+
+predicate StackValuePreserving(s:sp_state, r:sp_state, depth:int)
+    requires ValidState(s) && ValidState(r);
+    requires ValidStack(s) && ValidStack(r);
+    requires MemValidityPreserving(s,r);
+{
+    // forall i:int :: !(eval_op(s,op_sp()) - 40*depth <= i < eval_op(s,op_sp())) &&
+    //     ValidMem(s,Address(i)) ==> addrval(r,i) == addrval(s,i)
+    forall i:int :: ((STACK_LOWER() <= i < eval_op(s,op_sp()) - 40*depth) ||
+        (eval_op(s,op_sp()) <= i < STACK_UPPER())) &&
+        ValidMem(s,Address(i)) ==> addrval(r,i) == addrval(s,i)
+}
+
+predicate NonStackValuePreserving(s:sp_state, r:sp_state)
+    requires ValidState(s) && ValidState(r);
+    requires MemValidityPreserving(s,r);
+{
+    forall i:int :: !(STACK_LOWER() <= i < STACK_UPPER()) &&
+        ValidMem(s,Address(i)) ==> addrval(r,i) == addrval(s,i)
+}         
+#endverbatim
+
+procedure fcall_prologue(ghost fcalls_left:int)
+    requires/ensures
+        ValidState(this);
+        ValidStack(this);
+    requires
+        fcalls_left > 1; // TODO get this to >= 1?
+        can_fcall_n(this,fcalls_left);
+    ensures
+        sp == old(sp-40);
+        
+        //preserves function call argument registers 
+        r0 == old(r0);
+        r1 == old(r1);
+        r2 == old(r2);
+        r3 == old(r3);
+
+        // pushes r4-r11, sp, lr
+        addrval(this, sp)    == old(r12);
+        addrval(this, sp+4)  == old(r11);
+        addrval(this, sp+8)  == old(r10);
+        addrval(this, sp+12) == old(r9);
+        addrval(this, sp+16) == old(r8);
+        addrval(this, sp+20) == old(r7);
+        addrval(this, sp+24) == old(r6);
+        addrval(this, sp+28) == old(r5);
+        addrval(this, sp+32) == old(r4);
+        addrval(this, sp+36) == old(lr);
+
+        MemValidityPreserving(old(this),this);
+        NonStackValuePreserving(old(this),this);
+        StackValuePreserving(old(this),this,1);
+        
+        can_fcall_n(this,fcalls_left-1);
+{
+    
+    //push link register onto stack
+    SUB(sp, sp, 4);
+    STR(lr, sp, 0);
+
+    //push r4-r11 onto stack
+    SUB(sp,  sp, 4);
+    STR(r4,  sp, 0);
+    SUB(sp,  sp, 4);
+    STR(r5,  sp, 0);
+    SUB(sp,  sp, 4);
+    STR(r6,  sp, 0);
+    SUB(sp,  sp, 4);
+    STR(r7,  sp, 0);
+    SUB(sp,  sp, 4);
+    STR(r8,  sp, 0);
+    SUB(sp,  sp, 4);
+    STR(r9,  sp, 0);
+    SUB(sp,  sp, 4);
+    STR(r10, sp, 0);
+    SUB(sp,  sp, 4);
+    STR(r11, sp, 0);
+    SUB(sp,  sp, 4);
+    STR(r12, sp, 0);
+
+}
+
+procedure fcall_epilogue(ghost fcalls_left:int)
+    requires/ensures
+        ValidState(this);
+        ValidStack(this);
+    requires
+        0 <= sp + 40 < MaxVal();
+        sp + 40 < STACK_UPPER();
+        can_fcall_n(this,fcalls_left);
+    ensures
+        sp == old(sp+40);
+       
+        // fcall argument regs preserved. 
+        r0 == old(r0);
+        r1 == old(r1);
+        r2 == old(r2);
+        r3 == old(r3);
+
+        // pop lr, r4-r11 from stack.
+        lr  == old(addrval(this, sp+36));
+        r4  == old(addrval(this, sp+32));
+        r5  == old(addrval(this, sp+28));
+        r6  == old(addrval(this, sp+24));
+        r7  == old(addrval(this, sp+20));
+        r8  == old(addrval(this, sp+16));
+        r9  == old(addrval(this, sp+12));
+        r10 == old(addrval(this, sp+8));
+        r11 == old(addrval(this, sp+4));
+        r12 == old(addrval(this, sp));
+
+        MemValidityPreserving(old(this),this);        
+        MemValuePreserving(old(this),this);
+
+        can_fcall_n(this,fcalls_left+1);
+{
+    //pop r12 down to r4 from stack
+    LDR(r12, sp, 0);
+    ADD(sp,  sp, 4);
+    LDR(r11, sp, 0);
+    ADD(sp,  sp, 4);
+    LDR(r10, sp, 0);
+    ADD(sp,  sp, 4);
+    LDR(r9,  sp, 0);
+    ADD(sp,  sp, 4);
+    LDR(r8,  sp, 0);
+    ADD(sp,  sp, 4);
+    LDR(r7,  sp, 0);
+    ADD(sp,  sp, 4);
+    LDR(r6,  sp, 0);
+    ADD(sp,  sp, 4);
+    LDR(r5,  sp, 0);
+    ADD(sp,  sp, 4);
+    LDR(r4,  sp, 0);
+    ADD(sp,  sp, 4);
+
+    //pop link register from stack
+    LDR(lr, sp, 0);
+    ADD(sp, sp, 4);
+}

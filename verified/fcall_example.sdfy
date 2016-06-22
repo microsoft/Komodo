@@ -1,0 +1,69 @@
+procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
+
+procedure reg_preservation_inner(ghost call_depth:int)
+    requires
+        call_depth > 1;
+    requires/ensures
+        ValidState(this);
+        ValidStack(this);
+        can_fcall_n(this,call_depth);
+    ensures
+        MemValidityPreserving(old(this),this);
+        StackValuePreserving(old(this),this,call_depth);
+        RegPreserving(old(this),this);
+        NonStackValuePreserving(old(this),this);
+{
+    fcall_prologue(call_depth);
+    r10 := 99;
+    fcall_epilogue(call_depth-1);
+}
+
+procedure reg_preservation_test(ghost call_depth:int)
+    requires
+        call_depth > 2;
+    requires/ensures
+        ValidState(this);
+        ValidStack(this);
+        can_fcall_n(this,call_depth);
+    ensures
+        MemValidityPreserving(old(this),this);
+        StackValuePreserving(old(this),this,call_depth);
+        RegPreserving(old(this),this);
+        NonStackValuePreserving(old(this),this);
+{
+    fcall_prologue(call_depth);
+    r10 := 3000;
+    r4  := 98;
+    reg_preservation_inner(call_depth-1);
+    fcall_epilogue(call_depth-1);
+}
+
+procedure main()
+    requires/ensures
+        ValidState(this);
+        ValidStack(this);
+        can_fcall_n(this,3);
+        ValidMem(this,Address(4));
+    ensures
+        r4 == 10;
+        addrval(this,4) == 5;
+{
+    r4 := 10;
+    STR(5,4,0);
+    reg_preservation_test(3);
+    
+    // r4 wasn't clobbered!
+    assert r4 == 10;
+    // Address(4) wasn't clobbered!
+    assert addrval(this,4) == 5;
+}
+
+#verbatim
+
+method Main()
+{
+  printHeader();
+  var n := printCode(sp_code_main(), 0);
+  printFooter();
+}
+#endverbatim
