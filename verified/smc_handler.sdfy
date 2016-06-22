@@ -1,217 +1,9 @@
-#verbatim
-predicate ValidStack(s:sp_state)
-    requires ValidState(s)
-{
-    ValidMemRange(s, STACK_LOWER(), STACK_UPPER()) &&
-    MemRangeIs32(s, STACK_LOWER(), STACK_UPPER()) &&
-    (STACK_LOWER() <= eval_op(s, op_sp()) < STACK_UPPER())
-}
-
-predicate can_fcall(s:sp_state)
-    requires ValidState(s)
-{
-    ValidStack(s) &&
-    (STACK_LOWER() + 40 <= eval_op(s,op_sp()) < STACK_UPPER())
-}
-
-// predicate can_fcall(s:sp_state)
-// {
-//     ValidState(s) &&
-//     40 <= eval_op(s, op_sp()) < MaxVal() &&
-//     ValidMemRange(s, eval_op(s, op_sp())-40, eval_op(s, op_sp()) ) &&
-//     MemRangeIs32(s, eval_op(s, op_sp())-40, eval_op(s, op_sp())) &&
-//     (STACK_LOWER() + 40 <= eval_op(s,op_sp()) < STACK_UPPER())
-// }
-// 
-// predicate can_fcall_n(s:sp_state,n:int)
-// {
-//     ValidState(s) &&
-//     40 * n <= eval_op(s, op_sp()) < MaxVal() &&
-//     ValidMemRange(s, eval_op(s, op_sp())-40*n, eval_op(s, op_sp()) ) &&
-//     MemRangeIs32(s, eval_op(s, op_sp())-40*n, eval_op(s, op_sp())) &&
-//     (STACK_LOWER() + 40*n <= eval_op(s,op_sp()) < STACK_UPPER())
-// }
-
-predicate reg_preserving(s:sp_state, r:sp_state)
-    requires ValidState(s) && ValidState(r);
-{
-    eval_op(s,op_r(4))  == eval_op(r,op_r(4))  &&
-    eval_op(s,op_r(5))  == eval_op(r,op_r(5))  &&
-    eval_op(s,op_r(6))  == eval_op(r,op_r(6))  &&
-    eval_op(s,op_r(7))  == eval_op(r,op_r(7))  &&
-    eval_op(s,op_r(8))  == eval_op(r,op_r(8))  &&
-    eval_op(s,op_r(9))  == eval_op(r,op_r(9))  &&
-    eval_op(s,op_r(10)) == eval_op(r,op_r(10)) &&
-    eval_op(s,op_r(11)) == eval_op(r,op_r(11)) &&
-    eval_op(s,op_r(12)) == eval_op(r,op_r(12)) &&
-    eval_op(s,op_sp())  == eval_op(r,op_sp())
-}
-
-#endverbatim
-
 #token ++ precedence !
 #token += precedence :=
 
 procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
 procedure operator(++) (inout{:operand} dst:int) := incr
 procedure operator(+=) (inout{:operand} dst:int, {:operand} src:int) := plusEquals
-
-procedure fcall_prologue(ghost fcalls_left:int)
-    requires/ensures
-        ValidState(this);
-        //STACK_LOWER() <= sp < STACK_UPPER();
-        ValidStack(this);
-    requires
-        can_fcall(this);
-        // 40 <= sp < MaxVal();
-        // STACK_LOWER() + 40 <= sp;
-        // ValidMemRange(this, sp-40, sp);
-        // MemRangeIs32(this, sp-40, sp); 
-        // can_fcall_n(this, fcalls_left);
-    ensures
-        // Moves stack pointer
-        sp == old(sp-40);
-        // ValidMemRange(this, sp, sp+40);
-        // MemRangeIs32(this, sp, sp+40); 
-        // keeps r0-r3
-        r0 == old(r0);
-        r1 == old(r1);
-        r2 == old(r2);
-        r3 == old(r3);
-        // pushes r4-r11, sp, lr
-        addrval(this, sp)    == old(r12);
-        addrval(this, sp+4)  == old(r11);
-        addrval(this, sp+8)  == old(r10);
-        addrval(this, sp+12) == old(r9);
-        addrval(this, sp+16) == old(r8);
-        addrval(this, sp+20) == old(r7);
-        addrval(this, sp+24) == old(r6);
-        addrval(this, sp+28) == old(r5);
-        addrval(this, sp+32) == old(r4);
-        addrval(this, sp+36) == old(lr);
-        // preserves memory validity
-        forall m:mem :: ValidMem(old(this), m) ==> ValidMem(this,m);
-        // preserves values of other memory locations
-        forall i:int :: !(STACK_LOWER() <= i < STACK_UPPER()) && ValidMem(old(this),Address(i)) ==>
-            addrval(this,i) == addrval(old(this),i);
-
-        // TODO need something like this to make function calls usable.
-        // forall n :: n >= 2 && can_fcall_n(old(this), n) ==> can_fcall_n(this, n-1);
-        // can_fcall_n(this,fcalls_left-1);
-
-{
-    
-    //push link register onto stack
-    SUB(sp, sp, 4);
-    STR(lr, sp, 0);
-
-    //push r4-r11 onto stack
-    SUB(sp,  sp, 4);
-    STR(r4,  sp, 0);
-    SUB(sp,  sp, 4);
-    STR(r5,  sp, 0);
-    SUB(sp,  sp, 4);
-    STR(r6,  sp, 0);
-    SUB(sp,  sp, 4);
-    STR(r7,  sp, 0);
-    SUB(sp,  sp, 4);
-    STR(r8,  sp, 0);
-    SUB(sp,  sp, 4);
-    STR(r9,  sp, 0);
-    SUB(sp,  sp, 4);
-    STR(r10, sp, 0);
-    SUB(sp,  sp, 4);
-    STR(r11, sp, 0);
-    SUB(sp,  sp, 4);
-    STR(r12, sp, 0);
-
-}
-
-procedure fcall_epilogue(ghost fcalls_left:int)
-    requires/ensures
-        ValidState(this);
-        ValidStack(this);
-        // STACK_LOWER() <= sp < STACK_UPPER();
-    requires
-        0 <= sp + 40 < MaxVal();
-        sp + 40 < STACK_UPPER();
-        // ValidMemRange(this, sp, sp+40);
-        // MemRangeIs32(this,  sp, sp+40);
-        // can_fcall_n(this,fcalls_left);
-    ensures
-        sp == old(sp+40);
-        ValidMemRange(this, sp-40, sp);
-        MemRangeIs32(this,  sp-40, sp);
-        r0 == old(r0);
-        r1 == old(r1);
-        r2 == old(r2);
-        r3 == old(r3);
-        // pop lr, r4-r11 from stack.
-
-        //TODO try to rewrite from old sp
-        lr  == old(addrval(this, sp+36));
-        r4  == old(addrval(this, sp+32));
-        r5  == old(addrval(this, sp+28));
-        r6  == old(addrval(this, sp+24));
-        r7  == old(addrval(this, sp+20));
-        r8  == old(addrval(this, sp+16));
-        r9  == old(addrval(this, sp+12));
-        r10 == old(addrval(this, sp+8));
-        r11 == old(addrval(this, sp+4));
-        r12 == old(addrval(this, sp));
-        //preserves memory validity
-        forall m:mem :: ValidMem(old(this), m) ==> ValidMem(this,m);
-        //preserves values in memory region outside of stack
-        forall i:int :: !(STACK_LOWER() <= i < STACK_UPPER()) && ValidMem(old(this),Address(i)) ==>
-            addrval(this,i) == addrval(old(this),i);
-        // can_fcall_n(this,fcalls_left+1);
-        can_fcall(this);
-{
-    //pop r12 down to r4 from stack
-    LDR(r12, sp, 0);
-    ADD(sp, sp, 4);
-    LDR(r11, sp, 0);
-    ADD(sp, sp, 4);
-    LDR(r10, sp, 0);
-    ADD(sp, sp, 4);
-    LDR(r9, sp, 0);
-    ADD(sp, sp, 4);
-    LDR(r8, sp, 0);
-    ADD(sp, sp, 4);
-    LDR(r7, sp, 0);
-    ADD(sp, sp, 4);
-    LDR(r6, sp, 0);
-    ADD(sp, sp, 4);
-    LDR(r5, sp, 0);
-    ADD(sp, sp, 4);
-    LDR(r4, sp, 0);
-    ADD(sp, sp, 4);
-
-    //pop link register from stack
-    LDR(lr, sp, 0);
-    ADD(sp, sp, 4);
-
-    //Move function arguments back into r0-r3
-    // r0 := r4;
-    // r1 := r5;
-    // r2 := r6;
-    // r3 := r7;
-}
-
-procedure reg_preservation_test()
-    requires/ensures
-        ValidState(this);
-        can_fcall(this);
-    ensures
-        reg_preserving(this,old(this));
-
-{
-    fcall_prologue(1);
-    r10 := 3000;
-    r4  := 98;
-    //TODO try to rewrite fcall epiloge from old sp
-    fcall_epilogue(0);
-}
 
 // loads the pagedb_entry address for pageno into entry
 procedure pagedb_entry(
@@ -262,7 +54,7 @@ procedure kev_smc_init_addrspace(
     out {:register op_r(11)} err:int)
     requires/ensures
         ValidState(this);
-        can_fcall(this);
+        can_fcall_n(this,3);
 {
     err := 0;
 
@@ -277,24 +69,7 @@ procedure kev_smc_init_addrspace(
         err := KEV_ERR_INVALID_PAGENO();
     } else if( l1pt_page >= r4 ) {
         err := KEV_ERR_INVALID_PAGENO();
-    } else { //todo
-        ghost var saved_sp := addrspace_page;
-        r10 := addrspace_page;
-        // r11 := l1pt_page;
-        
-        // r1 <- PAGEDB_ENTRY(addrspace_page);
-        // pagedb_entry(r0, r1);
-        // assert r1 == PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page));
-        // r5 := r1;
-        // assert r5 == PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page));
-        
-
-        reg_preservation_test();
-       
-        // This can't be proven! We need function calls, otherwise spartan
-        // can't prove that registers/addresses not mentioned in the postconditions
-        // of procedures aren't clobbered. 
-        assert r10 == saved_sp;
+    } else {  //TODO
         
     }
 
@@ -310,12 +85,11 @@ procedure smc_handler(
     out {:register op_r(12)} retval:int)
     requires/ensures
         ValidState(this);
-        can_fcall(this);
+        can_fcall_n(this,3);
     requires
         callno == KEV_SMC_INIT_ADDRSPACE() ==>
             ValidMem(this, Address(PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(arg1)))) &&
             isUInt32(addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(arg1))));
-        // can_fcall_n(this,1);
 {
     
     retval := 0;
