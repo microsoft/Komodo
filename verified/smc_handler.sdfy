@@ -98,7 +98,7 @@ procedure fcall_prologue(ghost fcalls_left:int)
         // preserves memory validity
         forall m:mem :: ValidMem(old(this), m) ==> ValidMem(this,m);
         // preserves values of other memory locations
-        forall i:int :: !(STACK_LOWER() <= i < STACK_UPPER()) && ValidMem(old(this),Address(i)) ==>
+        forall i:int :: !(old(sp-40) <= i < old(sp)) && ValidMem(old(this),Address(i)) ==>
             addrval(this,i) == addrval(old(this),i);
         can_fcall_n(this,fcalls_left-1);
 
@@ -166,7 +166,7 @@ procedure fcall_epilogue(ghost fcalls_left:int)
         //preserves memory validity
         forall m:mem :: ValidMem(old(this), m) ==> ValidMem(this,m);
         //preserves values in memory region outside of stack
-        forall i:int :: !(STACK_LOWER() <= i < STACK_UPPER()) && ValidMem(old(this),Address(i)) ==>
+        forall i:int :: ValidMem(old(this),Address(i)) ==>
             addrval(this,i) == addrval(old(this),i);
         can_fcall_n(this,fcalls_left+1);
         // can_fcall(this);
@@ -212,16 +212,14 @@ procedure reg_preservation_inner()
         ValidStack(this);
         can_fcall_n(this,2);
     ensures
-        r4 == old(r4);
-        r10 == old(r10);
-        sp == old(sp);
-        forall i:int :: sp <= i < STACK_UPPER() && ValidMem(old(this),Address(i)) ==>
+        forall m:mem :: ValidMem(old(this), m) ==> ValidMem(this,m);
+        forall i:int :: !(old(sp - 40) <= i < old(sp)) && ValidMem(old(this),Address(i)) ==>
             addrval(this,i) == addrval(old(this),i);
-        // reg_preserving(this,old(this));
+        reg_preserving(this,old(this));
 {
-    // fcall_prologue(2);
-    // r10 := 99;
-    // fcall_epilogue(1);
+    fcall_prologue(2);
+    r10 := 99;
+    fcall_epilogue(1);
 }
 
 procedure reg_preservation_test()
@@ -230,24 +228,15 @@ procedure reg_preservation_test()
         can_fcall_n(this,3);
         ValidStack(this);
     ensures
-        r4  == old(r4);
-        r10 == old(r10);
-        sp == old(sp);
-        // reg_preserving(this,old(this));
+        forall m:mem :: ValidMem(old(this), m) ==> ValidMem(this,m);
+        forall i:int :: !(old(sp - 80) <= i < old(sp)) && ValidMem(old(this),Address(i)) ==>
+            addrval(this,i) == addrval(old(this),i);
+        reg_preserving(this,old(this));
 {
     fcall_prologue(3);
-    assert addrval(this, sp+8) == old(r10);
-    assert addrval(this, sp+32) == old(r4);
-    // //fcall_prologue(2);
     r10 := 3000;
     r4  := 98;
     reg_preservation_inner();
-    assert r10 == 3000;
-    assert r4 == 98;
-    assert addrval(this, sp+8) == old(r10);
-    assert addrval(this, sp+32) == old(r4);
-    // //TODO try to rewrite fcall epiloge from old sp
-    // //fcall_epilogue(1);
     fcall_epilogue(2);
 }
 
@@ -301,7 +290,7 @@ procedure kev_smc_init_addrspace(
     out {:register op_r(11)} err:int)
     requires/ensures
         ValidState(this);
-        can_fcall_n(this,2);
+        can_fcall_n(this,3);
 {
     err := 0;
 
@@ -319,20 +308,9 @@ procedure kev_smc_init_addrspace(
     } else { //todo
         ghost var saved_sp := addrspace_page;
         r10 := addrspace_page;
-        // r11 := l1pt_page;
-        
-        // r1 <- PAGEDB_ENTRY(addrspace_page);
-        // pagedb_entry(r0, r1);
-        // assert r1 == PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page));
-        // r5 := r1;
-        // assert r5 == PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page));
-        
 
-        // reg_preservation_test();
+        reg_preservation_test();
        
-        // This can't be proven! We need function calls, otherwise spartan
-        // can't prove that registers/addresses not mentioned in the postconditions
-        // of procedures aren't clobbered. 
         assert r10 == saved_sp;
         
     }
@@ -349,12 +327,11 @@ procedure smc_handler(
     out {:register op_r(12)} retval:int)
     requires/ensures
         ValidState(this);
-        can_fcall_n(this,2);
+        can_fcall_n(this,3);
     requires
         callno == KEV_SMC_INIT_ADDRSPACE() ==>
             ValidMem(this, Address(PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(arg1)))) &&
             isUInt32(addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(arg1))));
-        // can_fcall_n(this,1);
 {
     
     retval := 0;
