@@ -60,6 +60,7 @@ function method STACK_UPPER():int
 //-----------------------------------------------------------------------------
 // Data Structures
 //-----------------------------------------------------------------------------
+// start of G_PAGEDB chosen arbitrarily
 function method G_PAGEDB():int 
     ensures G_PAGEDB() == KEVLAR_MON_VBASE();
     { KEVLAR_MON_VBASE() }
@@ -72,6 +73,7 @@ function method G_PAGEDB_ENTRY(pageno:int):int
 
 // entry = start address of pagedb entry
 function method PAGEDB_ENTRY_TYPE(entry:int):int
+    requires G_PAGEDB() <= entry < G_PAGEDB_END();
     ensures PAGEDB_ENTRY_TYPE(entry) == entry;
     { entry }
 function method PAGEDB_ENTRY_ADDRSPACE(entry:int):int
@@ -90,6 +92,9 @@ function method ADDRSPACE_SIZE():int
     ensures ADDRSPACE_SIZE() == 4
     { 4 }
 
+//-----------------------------------------------------------------------------
+// Page Types
+//-----------------------------------------------------------------------------
 function method KEV_PAGE_FREE():int                    { 0 }
 function method KEV_PAGE_ADDRSPACE():int               { 1 }
 function method KEV_PAGE_DISPATCHER():int              { 2 }
@@ -98,6 +103,9 @@ function method KEV_PAGE_L2PTABLE():int                { 4 }
 function method KEV_PAGE_DATA():int                    { 5 }
 function method KEV_PAGE_INVALID():int                 { 6 }
 
+//-----------------------------------------------------------------------------
+// Address Space States
+//-----------------------------------------------------------------------------
 function method KEV_ADDRSPACE_INIT():int               { 0 }
 function method KEV_ADDRSPACE_FINAL():int              { 1 }
 function method KEV_ADDRSPACE_STOPPED():int            { 2 }
