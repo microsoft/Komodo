@@ -97,7 +97,7 @@ procedure fcall_prologue(ghost fcalls_left:int)
 
         MemValidityPreserving(old(this),this);
         NonStackValuePreserving(old(this),this);
-        StackValuePreserving(old(this),this,1);
+        StackValuePreserving(old(this),this,fcalls_left-1);
         
         can_fcall_n(this,fcalls_left-1);
 {

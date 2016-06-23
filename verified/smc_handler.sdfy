@@ -15,13 +15,63 @@ procedure phys2monvaddr({:operand} phys:int, out {:operand} virt:int)
         isUInt32(phys);
     ensures
         virt == old(KEVLAR_DIRECTMAP_VBASE() + phys);
+        MemValidityPreserving(old(this),this);
+        MemValuePreserving(old(this),this);
 {
     ADD(virt,KEVLAR_DIRECTMAP_VBASE(),phys);
 }
 
-procedure memset()
+//This is not quite the same as std::memset
+procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
+    {:register op_r(2)} val:int, ghost fcall_depth:int)
+    requires/ensures
+        ValidState(this);
+        ValidStack(this);
+        ValidMemRange(this,lower,upper);
+        fcall_depth > 1;
+        can_fcall_n(this,fcall_depth);
+    requires
+        lower < upper;
+        lower >= STACK_UPPER() || upper < STACK_LOWER();
+    ensures
+        forall i:int :: old(lower) <= i < old(upper) ==>
+            addrval(this,i) == old(val);
+        RegPreserving(old(this),this);
+        MemValidityPreserving(old(this),this);
+        StackValuePreserving(old(this),this,fcall_depth);
 {
-    //TODO
+    fcall_prologue(fcall_depth);
+
+    ghost var loop_old_sp := sp;
+    ghost var pre_loop_s := this;
+
+    assert upper == old(upper);
+    assert upper == r1;
+
+    for (r9 := lower; r9 < upper; r9++)
+        invariant
+
+            ValidState(this);
+            ValidStack(this);
+            MemValidityPreserving(pre_loop_s,this);
+            sp == loop_old_sp;
+            StackValuePreserving(pre_loop_s,this,fcall_depth-1);
+            can_fcall_n(this,fcall_depth-1);
+            
+            r0 == old(lower);
+            r1 == old(upper);
+            r2 == old(val);
+            lower < upper;
+            lower <= r9 <= upper;
+            forall i:int :: lower <= i < r9 ==>
+                addrval(this,i) == val;
+        decreases
+            upper - r9;
+    {
+        STR(r2, r9, 0);
+    }
+            
+    fcall_epilogue(fcall_depth-1);
 }
 
 //loads the address of the G_PAEDB entry for pageno into entry

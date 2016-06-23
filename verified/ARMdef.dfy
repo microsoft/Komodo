@@ -302,7 +302,6 @@ function evalOBool(s:state, o:obool):bool
 
 predicate ValidInstruction(s:state, ins:ins)
 {
-    //TODO check mem vs non-mem
 	match ins
 		case ADD(dest, src1, src2) => ValidOperand(s, src1) &&
 			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
