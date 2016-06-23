@@ -5,6 +5,25 @@ procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
 procedure operator(++) (inout{:operand} dst:int) := incr
 procedure operator(+=) (inout{:operand} dst:int, {:operand} src:int) := plusEquals
 
+procedure phys2monvaddr({:operand} phys:int, out {:operand} virt:int)
+    requires/ensures
+        ValidOperand(this,@phys);
+        ValidDestinationOperand(this,@virt);
+        isUInt32(virt);
+    requires
+        isUInt32(KEVLAR_DIRECTMAP_VBASE()+phys);
+        isUInt32(phys);
+    ensures
+        virt == old(KEVLAR_DIRECTMAP_VBASE() + phys);
+{
+    ADD(virt,KEVLAR_DIRECTMAP_VBASE(),phys);
+}
+
+procedure memset()
+{
+    //TODO
+}
+
 //loads the address of the G_PAEDB entry for pageno into entry
 procedure pagedb_entry(
     {:register op_r(0)} pageno:int,
@@ -135,7 +154,7 @@ procedure kev_smc_init_addrspace(
         } else if( r8 != KEV_PAGE_FREE() ) {
             err := KEV_ERR_PAGEINUSE();
         } else {
-            //TODO
+
         }
 
     }

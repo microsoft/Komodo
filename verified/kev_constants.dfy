@@ -40,7 +40,9 @@ function method KEVLAR_PAGE_SIZE():int
 function method KEVLAR_MON_VBASE():int        
     ensures KEVLAR_MON_VBASE() == 0x4000_0000;
     { 0x4000_0000 }  
-function method KEVLAR_DIRECTMAP_VBASE():int  { 0x8000_0000 }
+function method KEVLAR_DIRECTMAP_VBASE():int
+    ensures KEVLAR_DIRECTMAP_VBASE() == 0x8000_0000;
+    { 0x8000_0000 }
 function method KEVLAR_DIRECTMAP_SIZE():int   { 0x8000_0000 }
 function method KEVLAR_SECURE_RESERVE():int   
     ensures KEVLAR_SECURE_RESERVE() == 1 * 1024 * 1024;
