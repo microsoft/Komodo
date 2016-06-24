@@ -53,6 +53,7 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
         forall i:int :: old(lower) <= i < old(upper) ==>
             addrval(this,i) == old(val);
         forall i:int :: !(old(lower) <= i < old(upper)) &&
+            !(STACK_LOWER() <= i < STACK_UPPER()) &&
             ValidMem(old(this),Address(i)) ==>
                 addrval(this,i) == addrval(old(this),i);
         RegPreserving(old(this),this);
@@ -75,22 +76,26 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
             ValidState(this);
             ValidStack(this);
             sp == loop_old_sp;
-            MemValidityPreserving(old(this),this);
+            MemValidityPreserving(old(this),pre_loop_s);
             MemValidityPreserving(pre_loop_s,this);
+            ValidMemRange(old(this),lower,upper);
             StackValuePreserving(pre_loop_s,this,fcall_depth-1);
             can_fcall_n(this,fcall_depth-1);
             
-            ValidMemRange(this,lower,r9);
-            forall i:int :: lower <= i < r9 ==>
-                addrval(this,i) == val;
-            forall i:int :: !(lower <= i < upper) && ValidMem(old(this),Address(i))==>
-                addrval(this,i) == addrval(old(this),i);
-
             r0 == old(lower);
             r1 == old(upper);
             r2 == old(val);
             lower < upper;
             lower <= r9 <= upper;
+            lower >= STACK_UPPER() || upper < STACK_LOWER();
+            
+            forall i:int :: lower <= i < r9 ==>
+                addrval(this,i) == val;
+            forall i:int :: !(lower <= i < r9 ) && 
+                !(STACK_LOWER() <= i < STACK_UPPER()) &&
+                ValidMem(pre_loop_s,Address(i)) ==>
+                    addrval(this,i) == addrval(pre_loop_s,i);
+
         decreases
             upper - r9;
     {
@@ -241,17 +246,22 @@ procedure kev_smc_init_addrspace(
             assert r5 >= 0;
             assert isUInt32(KEVLAR_SECURE_NPAGES() + KEVLAR_PAGE_SIZE());
 
-            r0 := r5;
-            ADD(r1,r0,KEVLAR_PAGE_SIZE());
-            r2 := 0;
-            assert r0 == old(addrspace_page);
-            
-            assert ValidMemRange(this,r0,r1);
-            ghost var r0_saved := r0;
-            ghost var r1_saved := r1;
-            memset(r0,r1,r2,fcall_depth-1);
-            assert ValidMemRange(this,r0,r1);
-            assert forall i:int :: r0 <= i < r1 ==> addrval(this,i) == r2;
+            // r0 := r5;
+            // ADD(r1,r0,KEVLAR_PAGE_SIZE());
+            // r2 := 0;
+            // assert r0 == old(addrspace_page);
+            // 
+            // assert ValidMemRange(this,r0,r1);
+            // ghost var r0_saved := r0;
+            // ghost var r1_saved := r1;
+            // ghost var saved_s := this;
+            // memset(r0,r1,r2,fcall_depth-1);
+            // assert ValidMemRange(this,r0,r1);
+            // assert forall i:int :: r0 <= i < r1 ==> addrval(this,i) == r2;
+            // assert forall i:int :: r0 <= i < r1 ==> isUInt32(addrval(this,i));
+            // assert forall i:int :: !(r0 <= i < r1) ==> ValidMem(saved_s,Address(i)) ==>
+            //     addrval(this,i) == addrval(saved_s,i);
+
 
             // r0 := r6;
             // ADD(r1,r0,KEVLAR_PAGE_SIZE());
