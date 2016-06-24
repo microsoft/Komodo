@@ -70,6 +70,7 @@ function method G_PAGEDB_END():int
     ensures G_PAGEDB_END() == G_PAGEDB() + KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE()
     { G_PAGEDB() + KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE() }
 function method G_PAGEDB_ENTRY(pageno:int):int 
+    requires 0 <= pageno < KEVLAR_SECURE_NPAGES();
     ensures G_PAGEDB_ENTRY(pageno) == G_PAGEDB() + pageno * PAGEDB_ENTRY_SIZE();
     { G_PAGEDB() + pageno * PAGEDB_ENTRY_SIZE() }
 
@@ -79,17 +80,26 @@ function method PAGEDB_ENTRY_TYPE(entry:int):int
     ensures PAGEDB_ENTRY_TYPE(entry) == entry;
     { entry }
 function method PAGEDB_ENTRY_ADDRSPACE(entry:int):int
+    requires G_PAGEDB() <= entry + 1 < G_PAGEDB_END();
     ensures PAGEDB_ENTRY_ADDRSPACE(entry) == entry + 1;
     { entry + 1 }
 function method PAGEDB_ENTRY_SIZE():int
-    ensures PAGEDB_ENTRY_SIZE() == ADDRSPACE_SIZE() + 1
-    { 1 + ADDRSPACE_SIZE() }
+    ensures PAGEDB_ENTRY_SIZE() == 2 
+    { 2 }
 
 // addrspc = start address of address space metadata
-function method ADDRSPACE_L1PT(addrspc:int):int        { addrspc }
-function method ADDRSPACE_L1PT_PHYS(addrspc:int):int   { addrspc + 1 }
-function method ADDRSPACE_REF(addrspc:int):int         { addrspc + 2 }
-function method ADDRSPACE_STATE(addrspc:int):int       { addrspc + 3 }
+function method ADDRSPACE_L1PT(addrspace:int):int
+    ensures ADDRSPACE_L1PT(addrspace) == addrspace;
+    { addrspace }
+function method ADDRSPACE_L1PT_PHYS(addrspace:int):int
+    ensures ADDRSPACE_L1PT_PHYS(addrspace) == addrspace + 1;
+    { addrspace + 1 }
+function method ADDRSPACE_REF(addrspace:int):int
+    ensures ADDRSPACE_REF(addrspace) == addrspace + 2;
+    { addrspace + 2 }
+function method ADDRSPACE_STATE(addrspace:int):int
+    ensures ADDRSPACE_STATE(addrspace) == addrspace + 3;
+    { addrspace + 3 }
 function method ADDRSPACE_SIZE():int
     ensures ADDRSPACE_SIZE() == 4
     { 4 }
@@ -97,13 +107,20 @@ function method ADDRSPACE_SIZE():int
 //-----------------------------------------------------------------------------
 // Page Types
 //-----------------------------------------------------------------------------
-function method KEV_PAGE_FREE():int                    { 0 }
-function method KEV_PAGE_ADDRSPACE():int               { 1 }
-function method KEV_PAGE_DISPATCHER():int              { 2 }
-function method KEV_PAGE_L1PTABLE():int                { 3 }
-function method KEV_PAGE_L2PTABLE():int                { 4 }
-function method KEV_PAGE_DATA():int                    { 5 }
-function method KEV_PAGE_INVALID():int                 { 6 }
+function method KEV_PAGE_FREE():int
+    ensures KEV_PAGE_FREE() == 0; { 0 }
+function method KEV_PAGE_ADDRSPACE():int
+    ensures KEV_PAGE_ADDRSPACE() == 1; { 1 }
+function method KEV_PAGE_DISPATCHER():int
+    ensures KEV_PAGE_DISPATCHER() == 2; { 2 }
+function method KEV_PAGE_L1PTABLE():int
+    ensures KEV_PAGE_L1PTABLE() == 3; { 3 }
+function method KEV_PAGE_L2PTABLE():int
+    ensures KEV_PAGE_L2PTABLE() == 4; { 4 }
+function method KEV_PAGE_DATA():int
+    ensures KEV_PAGE_DATA() == 5; { 5 }
+function method KEV_PAGE_INVALID():int
+    ensures KEV_PAGE_INVALID() == 6; { 6 }
 
 //-----------------------------------------------------------------------------
 // Address Space States

@@ -39,6 +39,11 @@ predicate MemValidityPreserving(s:sp_state, r:sp_state)
     forall i:int :: ValidMem(s,Address(i)) ==> ValidMem(r,Address(i))
 }
 
+predicate ValidMemIs32(s:sp_state)
+{
+    forall i:int :: ValidMem(s,Address(i)) ==> isUInt32(addrval(s,i))
+}
+
 predicate MemValuePreserving(s:sp_state, r:sp_state)
     requires MemValidityPreserving(s,r);
 {
@@ -64,13 +69,15 @@ predicate NonStackValuePreserving(s:sp_state, r:sp_state)
 {
     forall i:int :: !(STACK_LOWER() <= i < STACK_UPPER()) &&
         ValidMem(s,Address(i)) ==> addrval(r,i) == addrval(s,i)
-}         
+}
+
 #endverbatim
 
 procedure fcall_prologue(ghost fcalls_left:int)
     requires/ensures
         ValidState(this);
         ValidStack(this);
+        ValidMemIs32(this);
     requires
         fcalls_left > 1; // TODO get this to >= 1?
         can_fcall_n(this,fcalls_left);
@@ -132,6 +139,7 @@ procedure fcall_epilogue(ghost fcalls_left:int)
     requires/ensures
         ValidState(this);
         ValidStack(this);
+        ValidMemIs32(this);
     requires
         0 <= sp + 40 < MaxVal();
         sp + 40 < STACK_UPPER();

@@ -11,9 +11,9 @@ predicate page_is_valid(page:int)
     0 <= page < KEVLAR_SECURE_NPAGES()
 }
 
-predicate vmap(virt:int,phys:int)
+function vmap(phys:int):int
 {
-    virt == phys + KEVLAR_DIRECTMAP_VBASE()
+    phys + KEVLAR_DIRECTMAP_VBASE()
 }
 
 #endverbatim
@@ -43,6 +43,7 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
         ValidState(this);
         ValidStack(this);
         ValidMemRange(this,lower,upper);
+        ValidMemIs32(this);
         fcall_depth > 1;
         can_fcall_n(this,fcall_depth);
     requires
@@ -75,6 +76,7 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
         invariant
             ValidState(this);
             ValidStack(this);
+            ValidMemIs32(this);
             sp == loop_old_sp;
             MemValidityPreserving(old(this),pre_loop_s);
             MemValidityPreserving(pre_loop_s,this);
@@ -113,6 +115,7 @@ procedure pagedb_entry(
     requires/ensures
         ValidState(this);
         ValidStack(this);
+        ValidMemIs32(this);
         fcall_depth > 1;
         can_fcall_n(this,fcall_depth);
         0 <= pageno < KEVLAR_SECURE_NPAGES();
@@ -121,7 +124,6 @@ procedure pagedb_entry(
         MemValidityPreserving(old(this),this);
         NonStackValuePreserving(old(this),this);
         StackValuePreserving(old(this),this,fcall_depth);
-        //The important part
         entry == G_PAGEDB_ENTRY(pageno);
         G_PAGEDB() <= entry < G_PAGEDB_END();
 {
@@ -134,9 +136,10 @@ procedure pagedb_entry(
       invariant
         ValidState(this);
         ValidStack(this);
+        ValidMemIs32(this);
         0 <= pageno < KEVLAR_SECURE_NPAGES();
         0 <= r9 <= pageno;
-        r0 == old(pageno); // generates different dafny with pageno == old(pageno) !!
+        r0 == old(pageno);
         entry == G_PAGEDB_ENTRY(r9);
 
         // Allows fcall_epilogue;
@@ -164,11 +167,11 @@ procedure page_type(
     requires/ensures
         ValidState(this);
         ValidStack(this);
+        ValidMemIs32(this);
         fcall_depth > 2;
         can_fcall_n(this,fcall_depth);
         0 <= pageno < KEVLAR_SECURE_NPAGES();
         ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
-        MemRangeIs32(this,G_PAGEDB(),G_PAGEDB_END());
     ensures
         pgtype == addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(old(r0))));
         RegPreserving(old(this),this);
@@ -195,25 +198,47 @@ procedure kev_smc_init_addrspace(
         fcall_depth > 3;
         can_fcall_n(this,fcall_depth);
         ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
-        MemRangeIs32(this,G_PAGEDB(),G_PAGEDB_END());
-        ValidMemRange(this,addrspace_page,addrspace_page+KEVLAR_PAGE_SIZE());
-        ValidMemRange(this,l1pt_page,l1pt_page+KEVLAR_PAGE_SIZE());
+        ValidMemRange(this,vmap(addrspace_page),vmap(addrspace_page)*ADDRSPACE_SIZE());
+        ValidMemIs32(this);
+        // ValidMemRange(this,addrspace_page,addrspace_page+KEVLAR_PAGE_SIZE());
+        // ValidMemRange(this,l1pt_page,l1pt_page+KEVLAR_PAGE_SIZE());
+    requires
+        addrspace_page != l1pt_page;
+        // G_PAGEDB() <= addrspace_page < G_PAGEDB_END();
+        // G_PAGEDB() <= l1pt_page < G_PAGEDB_END();
+        // !(STACK_LOWER() <= addrspace_page < STACK_UPPER());
+        // !(STACK_LOWER() <= l1pt_page < STACK_UPPER());
     ensures
+        MemValidityPreserving(old(this),this); 
         //(old(addrspace_page) >= KEVLAR_SECURE_NPAGES()) ==>
-        !page_is_valid(old(addrspace_page)) ==>
+        !page_is_valid(addrspace_page) ==>
             err == KEV_ERR_INVALID_PAGENO();
-        !page_is_valid(old(addrspace_page)) ==>
+        !page_is_valid(addrspace_page) ==>
             err == KEV_ERR_INVALID_PAGENO();
-        page_is_valid(old(addrspace_page)) && page_is_valid(old(l1pt_page)) &&
-            (addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(old(addrspace_page)))) !=
+        page_is_valid(addrspace_page) && page_is_valid(l1pt_page) &&
+            (addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) !=
                 KEV_PAGE_FREE()) ==> err == KEV_ERR_PAGEINUSE();
-        page_is_valid(old(addrspace_page)) && page_is_valid(old(l1pt_page)) &&
-            (addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(old(l1pt_page)))) !=
+        page_is_valid(addrspace_page) && page_is_valid(l1pt_page) &&
+            (addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page))) !=
                 KEV_PAGE_FREE()) ==> err == KEV_ERR_PAGEINUSE();
+        err == KEV_ERR_SUCCESS() ==> page_is_valid(addrspace_page);
+        err == KEV_ERR_SUCCESS() ==> page_is_valid(l1pt_page);
+        err == KEV_ERR_SUCCESS() ==>
+            (addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) ==
+                KEV_PAGE_ADDRSPACE());
+        err == KEV_ERR_SUCCESS() ==>
+            (addrval(this, PAGEDB_ENTRY_ADDRSPACE(G_PAGEDB_ENTRY(addrspace_page))) ==
+                vmap(addrspace_page));
+        err == KEV_ERR_SUCCESS() ==>
+            (addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page))) ==
+                KEV_PAGE_L1PTABLE());
+        err == KEV_ERR_SUCCESS() ==>
+            (addrval(this, PAGEDB_ENTRY_ADDRSPACE(G_PAGEDB_ENTRY(l1pt_page))) ==
+                vmap(addrspace_page));
         
 {
     fcall_prologue(fcall_depth);
-    err := 0;
+    ghost var saved_s := this;
 
     if( addrspace_page >= KEVLAR_SECURE_NPAGES() ) { 
         err := KEV_ERR_INVALID_PAGENO();
@@ -229,44 +254,64 @@ procedure kev_smc_init_addrspace(
 
         page_type(addrspace_page,r1,fcall_depth-1);
         r7 := r1;
-        assert r7 == addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(old(addrspace_page))));
+        assert r7 == addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page)));
 
         r0 := r6;
         assert r0 == old(l1pt_page);
         page_type(r0,r1,fcall_depth-1);
         r8 := r1;
-        assert r8 == addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(old(l1pt_page))));
+        assert r8 == addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page)));
 
         if( r7 != KEV_PAGE_FREE() ) {
             err := KEV_ERR_PAGEINUSE();
         } else if( r8 != KEV_PAGE_FREE() ) {
             err := KEV_ERR_PAGEINUSE();
         } else {
-            assert r5 < KEVLAR_SECURE_NPAGES();
-            assert r5 >= 0;
-            assert isUInt32(KEVLAR_SECURE_NPAGES() + KEVLAR_PAGE_SIZE());
+            assert ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
+            assert page_is_valid(addrspace_page) && page_is_valid(l1pt_page);
+            assert addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) ==
+                KEV_PAGE_FREE();
+            assert addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page))) ==
+                KEV_PAGE_FREE();
 
-            // r0 := r5;
-            // ADD(r1,r0,KEVLAR_PAGE_SIZE());
-            // r2 := 0;
-            // assert r0 == old(addrspace_page);
-            // 
-            // assert ValidMemRange(this,r0,r1);
-            // ghost var r0_saved := r0;
-            // ghost var r1_saved := r1;
-            // ghost var saved_s := this;
-            // memset(r0,r1,r2,fcall_depth-1);
-            // assert ValidMemRange(this,r0,r1);
-            // assert forall i:int :: r0 <= i < r1 ==> addrval(this,i) == r2;
-            // assert forall i:int :: r0 <= i < r1 ==> isUInt32(addrval(this,i));
-            // assert forall i:int :: !(r0 <= i < r1) ==> ValidMem(saved_s,Address(i)) ==>
-            //     addrval(this,i) == addrval(saved_s,i);
+            ADD(r9, r6, KEVLAR_DIRECTMAP_VBASE());
+            assert r9 == vmap(l1pt_page);
 
+            ADD(r10, r5, KEVLAR_DIRECTMAP_VBASE());
+            assert r10 == vmap(addrspace_page);
 
-            // r0 := r6;
-            // ADD(r1,r0,KEVLAR_PAGE_SIZE());
-            // memset(r0,r1,r2,fcall_depth-1);
+            r0 := r5;
+            pagedb_entry(r0,r1,fcall_depth-1);
+            assert ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
+            r7 := r1;
+            assert r7 == G_PAGEDB_ENTRY(addrspace_page);
+            
+            r0 := r6;
+            pagedb_entry(r0,r1,fcall_depth-1);
+            assert ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
+            r8 := r1;
+            assert r8 == G_PAGEDB_ENTRY(l1pt_page);
 
+            STR(KEV_PAGE_ADDRSPACE(), r7, 0);
+            assert addrval(this,PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page)))
+                == KEV_PAGE_ADDRSPACE();
+            STR(r10, r7, 1);
+            assert addrval(this,PAGEDB_ENTRY_ADDRSPACE(G_PAGEDB_ENTRY(addrspace_page)))
+                == vmap(addrspace_page);
+            
+            STR(KEV_PAGE_L1PTABLE(), r8,0);
+            assert addrval(this,PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page)))
+                == KEV_PAGE_L1PTABLE();
+            
+            STR(r10, r8, 1);
+            assert addrval(this,PAGEDB_ENTRY_ADDRSPACE(G_PAGEDB_ENTRY(l1pt_page)))
+                == vmap(addrspace_page);
+
+            STR(r9,r10,0);
+            assert addrval(this,ADDRSPACE_L1PT(vmap(addrspace_page))) == vmap(l1pt_page);
+
+           
+            err := KEV_ERR_SUCCESS();
         }
 
     }
@@ -285,14 +330,24 @@ procedure smc_handler(
     ghost fcall_depth:int)
     requires/ensures
         ValidState(this);
+        ValidStack(this);
+        ValidMemIs32(this);
         fcall_depth > 20;
         can_fcall_n(this,fcall_depth);
     requires
         ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
-        MemRangeIs32(this,G_PAGEDB(),G_PAGEDB_END());
         callno == KEV_SMC_INIT_ADDRSPACE() ==>
             ValidMemRange(this,arg1,arg1+KEVLAR_PAGE_SIZE()) &&
-            ValidMemRange(this,arg2,arg2+KEVLAR_PAGE_SIZE());
+            ValidMemRange(this,arg2,arg2+KEVLAR_PAGE_SIZE()) &&
+            // TODO violating these precond should throw errors. We shouldn't
+            // assume trusted code won't violate them.
+            (arg1 != arg2) &&
+            (G_PAGEDB() <= arg1 < G_PAGEDB_END()) &&
+            (G_PAGEDB() <= arg2 < G_PAGEDB_END()) &&
+            ValidMemRange(this,vmap(arg1),vmap(arg1)*ADDRSPACE_SIZE());
+
+            // !(STACK_LOWER() <= arg1 < STACK_UPPER()) &&
+            // !(STACK_LOWER() <= arg2 < STACK_UPPER());
 {
     
     retval := 0;
