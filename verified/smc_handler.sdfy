@@ -5,21 +5,36 @@ procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
 procedure operator(++) (inout{:operand} dst:int) := incr
 procedure operator(+=) (inout{:operand} dst:int, {:operand} src:int) := plusEquals
 
-procedure phys2monvaddr({:operand} phys:int, out {:operand} virt:int)
-    requires/ensures
-        ValidOperand(this,@phys);
-        ValidDestinationOperand(this,@virt);
-        isUInt32(virt);
-    requires
-        isUInt32(KEVLAR_DIRECTMAP_VBASE()+phys);
-        isUInt32(phys);
-    ensures
-        virt == old(KEVLAR_DIRECTMAP_VBASE() + phys);
-        MemValidityPreserving(old(this),this);
-        MemValuePreserving(old(this),this);
+#verbatim
+predicate page_is_valid(page:int)
 {
-    ADD(virt,KEVLAR_DIRECTMAP_VBASE(),phys);
+    0 <= page < KEVLAR_SECURE_NPAGES()
 }
+
+predicate vmap(virt:int,phys:int)
+{
+    virt == phys + KEVLAR_DIRECTMAP_VBASE()
+}
+
+#endverbatim
+
+// procedure phys2monvaddr({:operand} phys:int, out {:operand} virt:int)
+//     requires/ensures
+//         ValidState(this);
+//         ValidStack(this);
+//         ValidOperand(this,@phys);
+//         ValidDestinationOperand(this,@virt);
+//         isUInt32(virt);
+//     requires
+//         isUInt32(KEVLAR_DIRECTMAP_VBASE()+phys);
+//         isUInt32(phys);
+//     ensures
+//         virt == old(KEVLAR_DIRECTMAP_VBASE() + phys);
+//         MemValidityPreserving(old(this),this);
+//         MemValuePreserving(old(this),this);
+// {
+//     ADD(virt,KEVLAR_DIRECTMAP_VBASE(),phys);
+// }
 
 //This is not quite the same as std::memset
 procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
@@ -34,11 +49,18 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
         lower < upper;
         lower >= STACK_UPPER() || upper < STACK_LOWER();
     ensures
+        MemValidityPreserving(old(this),this);
         forall i:int :: old(lower) <= i < old(upper) ==>
             addrval(this,i) == old(val);
+        forall i:int :: !(old(lower) <= i < old(upper)) &&
+            ValidMem(old(this),Address(i)) ==>
+                addrval(this,i) == addrval(old(this),i);
         RegPreserving(old(this),this);
-        MemValidityPreserving(old(this),this);
         StackValuePreserving(old(this),this,fcall_depth);
+        r0 == old(r0);
+        r1 == old(r1);
+        r2 == old(r2);
+
 {
     fcall_prologue(fcall_depth);
 
@@ -50,21 +72,25 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
 
     for (r9 := lower; r9 < upper; r9++)
         invariant
-
             ValidState(this);
             ValidStack(this);
-            MemValidityPreserving(pre_loop_s,this);
             sp == loop_old_sp;
+            MemValidityPreserving(old(this),this);
+            MemValidityPreserving(pre_loop_s,this);
             StackValuePreserving(pre_loop_s,this,fcall_depth-1);
             can_fcall_n(this,fcall_depth-1);
             
+            ValidMemRange(this,lower,r9);
+            forall i:int :: lower <= i < r9 ==>
+                addrval(this,i) == val;
+            forall i:int :: !(lower <= i < upper) && ValidMem(old(this),Address(i))==>
+                addrval(this,i) == addrval(old(this),i);
+
             r0 == old(lower);
             r1 == old(upper);
             r2 == old(val);
             lower < upper;
             lower <= r9 <= upper;
-            forall i:int :: lower <= i < r9 ==>
-                addrval(this,i) == val;
         decreases
             upper - r9;
     {
@@ -165,15 +191,18 @@ procedure kev_smc_init_addrspace(
         can_fcall_n(this,fcall_depth);
         ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
         MemRangeIs32(this,G_PAGEDB(),G_PAGEDB_END());
+        ValidMemRange(this,addrspace_page,addrspace_page+KEVLAR_PAGE_SIZE());
+        ValidMemRange(this,l1pt_page,l1pt_page+KEVLAR_PAGE_SIZE());
     ensures
-        (old(addrspace_page) >= KEVLAR_SECURE_NPAGES()) ==>
+        //(old(addrspace_page) >= KEVLAR_SECURE_NPAGES()) ==>
+        !page_is_valid(old(addrspace_page)) ==>
             err == KEV_ERR_INVALID_PAGENO();
-        (old(l1pt_page) >= KEVLAR_SECURE_NPAGES()) ==>
+        !page_is_valid(old(addrspace_page)) ==>
             err == KEV_ERR_INVALID_PAGENO();
-        err != KEV_ERR_INVALID_PAGENO() &&
+        page_is_valid(old(addrspace_page)) && page_is_valid(old(l1pt_page)) &&
             (addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(old(addrspace_page)))) !=
                 KEV_PAGE_FREE()) ==> err == KEV_ERR_PAGEINUSE();
-        err != KEV_ERR_INVALID_PAGENO() &&
+        page_is_valid(old(addrspace_page)) && page_is_valid(old(l1pt_page)) &&
             (addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(old(l1pt_page)))) !=
                 KEV_PAGE_FREE()) ==> err == KEV_ERR_PAGEINUSE();
         
@@ -181,9 +210,13 @@ procedure kev_smc_init_addrspace(
     fcall_prologue(fcall_depth);
     err := 0;
 
-    if( addrspace_page >= KEVLAR_SECURE_NPAGES() ) {
+    if( addrspace_page >= KEVLAR_SECURE_NPAGES() ) { 
+        err := KEV_ERR_INVALID_PAGENO();
+    } else if( addrspace_page < 0 ) {
         err := KEV_ERR_INVALID_PAGENO();
     } else if( l1pt_page >= KEVLAR_SECURE_NPAGES() ) {
+        err := KEV_ERR_INVALID_PAGENO();
+    } else if( addrspace_page < 0 ) {
         err := KEV_ERR_INVALID_PAGENO();
     } else {  
         r5 := addrspace_page;
@@ -204,6 +237,25 @@ procedure kev_smc_init_addrspace(
         } else if( r8 != KEV_PAGE_FREE() ) {
             err := KEV_ERR_PAGEINUSE();
         } else {
+            assert r5 < KEVLAR_SECURE_NPAGES();
+            assert r5 >= 0;
+            assert isUInt32(KEVLAR_SECURE_NPAGES() + KEVLAR_PAGE_SIZE());
+
+            r0 := r5;
+            ADD(r1,r0,KEVLAR_PAGE_SIZE());
+            r2 := 0;
+            assert r0 == old(addrspace_page);
+            
+            assert ValidMemRange(this,r0,r1);
+            ghost var r0_saved := r0;
+            ghost var r1_saved := r1;
+            memset(r0,r1,r2,fcall_depth-1);
+            assert ValidMemRange(this,r0,r1);
+            assert forall i:int :: r0 <= i < r1 ==> addrval(this,i) == r2;
+
+            // r0 := r6;
+            // ADD(r1,r0,KEVLAR_PAGE_SIZE());
+            // memset(r0,r1,r2,fcall_depth-1);
 
         }
 
@@ -228,6 +280,9 @@ procedure smc_handler(
     requires
         ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
         MemRangeIs32(this,G_PAGEDB(),G_PAGEDB_END());
+        callno == KEV_SMC_INIT_ADDRSPACE() ==>
+            ValidMemRange(this,arg1,arg1+KEVLAR_PAGE_SIZE()) &&
+            ValidMemRange(this,arg2,arg2+KEVLAR_PAGE_SIZE());
 {
     
     retval := 0;
