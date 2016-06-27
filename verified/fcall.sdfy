@@ -108,31 +108,21 @@ procedure fcall_prologue(ghost fcalls_left:int)
         
         can_fcall_n(this,fcalls_left-1);
 {
-    
+    SUB(sp, sp, 40);
+
     //push link register onto stack
-    SUB(sp, sp, 4);
-    STR(lr, sp, 0);
+    STR(lr, sp, 36);
 
     //push r4-r11 onto stack
-    SUB(sp,  sp, 4);
-    STR(r4,  sp, 0);
-    SUB(sp,  sp, 4);
-    STR(r5,  sp, 0);
-    SUB(sp,  sp, 4);
-    STR(r6,  sp, 0);
-    SUB(sp,  sp, 4);
-    STR(r7,  sp, 0);
-    SUB(sp,  sp, 4);
-    STR(r8,  sp, 0);
-    SUB(sp,  sp, 4);
-    STR(r9,  sp, 0);
-    SUB(sp,  sp, 4);
-    STR(r10, sp, 0);
-    SUB(sp,  sp, 4);
-    STR(r11, sp, 0);
-    SUB(sp,  sp, 4);
+    STR(r4,  sp, 32);
+    STR(r5,  sp, 28);
+    STR(r6,  sp, 24);
+    STR(r7,  sp, 20);
+    STR(r8,  sp, 16);
+    STR(r9,  sp, 12);
+    STR(r10, sp, 8);
+    STR(r11, sp, 4);
     STR(r12, sp, 0);
-
 }
 
 procedure fcall_epilogue(ghost fcalls_left:int)
@@ -172,25 +162,16 @@ procedure fcall_epilogue(ghost fcalls_left:int)
 {
     //pop r12 down to r4 from stack
     LDR(r12, sp, 0);
-    ADD(sp,  sp, 4);
-    LDR(r11, sp, 0);
-    ADD(sp,  sp, 4);
-    LDR(r10, sp, 0);
-    ADD(sp,  sp, 4);
-    LDR(r9,  sp, 0);
-    ADD(sp,  sp, 4);
-    LDR(r8,  sp, 0);
-    ADD(sp,  sp, 4);
-    LDR(r7,  sp, 0);
-    ADD(sp,  sp, 4);
-    LDR(r6,  sp, 0);
-    ADD(sp,  sp, 4);
-    LDR(r5,  sp, 0);
-    ADD(sp,  sp, 4);
-    LDR(r4,  sp, 0);
-    ADD(sp,  sp, 4);
+    LDR(r11, sp, 4);
+    LDR(r10, sp, 8);
+    LDR(r9,  sp, 12);
+    LDR(r8,  sp, 16);
+    LDR(r7,  sp, 20);
+    LDR(r6,  sp, 24);
+    LDR(r5,  sp, 28);
+    LDR(r4,  sp, 32);
 
     //pop link register from stack
-    LDR(lr, sp, 0);
-    ADD(sp, sp, 4);
+    LDR(lr, sp, 36);
+    ADD(sp, sp, 40);
 }
