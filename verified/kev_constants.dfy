@@ -125,6 +125,7 @@ function method KEV_PAGE_INVALID():int
 //-----------------------------------------------------------------------------
 // Address Space States
 //-----------------------------------------------------------------------------
-function method KEV_ADDRSPACE_INIT():int               { 0 }
+function method KEV_ADDRSPACE_INIT():int
+    ensures KEV_ADDRSPACE_INIT() == 0; { 0 }
 function method KEV_ADDRSPACE_FINAL():int              { 1 }
 function method KEV_ADDRSPACE_STOPPED():int            { 2 }
