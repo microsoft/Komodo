@@ -1,5 +1,3 @@
-// -*- dafny-prover-local-args: ("/noNLarith") -*-
-
 include "kev_constants.dfy"
 
 type PageNr = int
