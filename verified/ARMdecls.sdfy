@@ -15,7 +15,9 @@ var{:register op_r(12)} r12:int;
 var{:register op_sp()}  sp:int;
 var{:register op_lr()}  lr:int;
 
-function{:operand} fromOperand(o:oprnd):oprnd
+// TODO: delete fromOperand as it's pointless in new Spartan
+function{:operand} fromOperand(o:oprnd):operand
+function{:operand} sp_op_const(n:int):operand
 
 // var{:register op_sp(User)}      spUser:int;
 // var{:register op_sp(System)}    spSystem:int;
