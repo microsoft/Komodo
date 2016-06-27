@@ -172,8 +172,11 @@ predicate Is32BitOperand(s:state, o:operand)
 
 predicate ValidMem(s:state, m:mem)
 {
-    m in s.addresses
+    m in s.addresses &&
+    match m { case Address(a) => WordAligned(a) }
 }
+
+predicate WordAligned(addr:int) { addr % 4 == 0}
 
 predicate ValidShiftOperand(s:state, o:operand)
     { ( o.OConst? && 0 <= o.n <= 32) || ValidOperand(s, o) }
@@ -339,11 +342,13 @@ predicate ValidInstruction(s:state, ins:ins)
 		case LDR(rd, base, ofs) => 
             ValidDestinationOperand(s, rd) &&
 			ValidOperand(s, base) && ValidOperand(s, ofs) &&
+            WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
             ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
             //IsMemOperand(addr) && !IsMemOperand(rd)
 		case STR(rd, base, ofs) =>
             ValidOperand(s, rd) &&
             ValidOperand(s, ofs) && ValidOperand(s, base) &&
+            WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
             ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
             //ValidDestinationOperand(s, addr_op(s, base, ofs))
             //IsMemOperand(addr) && !IsMemOperand(rd)

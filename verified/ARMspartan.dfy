@@ -40,7 +40,7 @@ function sp_eval_mem(s:state, m:mem):int
 
 predicate ValidMemRange(s:state, lwr:int, upr:int)
 {
-    forall i:int :: lwr <= i <= upr ==>
+    forall i:int :: lwr <= i <= upr && WordAligned(i) ==>
         ValidMem(s, Address(i))
 }
 
@@ -48,7 +48,7 @@ predicate MemRangeIs32(s:state, lwr:int, upr:int)
     requires ValidMemRange(s, lwr, upr);
 {
     forall i:int {:trigger s.addresses[Address(i)]} ::
-        lwr <= i <= upr ==> isUInt32(addrval(s, i))
+        lwr <= i <= upr && WordAligned(i) ==> isUInt32(addrval(s, i))
 }
 
 function method sp_CNil():codes { CNil }
@@ -346,6 +346,7 @@ lemma sp_lemma_LDR(s:state, r:state, ok:bool,
 	requires 0 <= OperandContents(s, ofs) < MaxVal();
     requires 0 <= MemContents(s, Address(OperandContents(s, base) +
         OperandContents(s, ofs))) < MaxVal();
+    requires WordAligned(OperandContents(s, base) + OperandContents(s, ofs));
 	// requires 0 <= OperandContents(s, addr_op(s, base, ofs)) < MaxVal();
     //requires IsMemOperand(addr);
     //requires !IsMemOperand(rd);
@@ -369,6 +370,7 @@ lemma sp_lemma_STR(s:state, r:state, ok:bool,
     requires ValidMem(s, addr_mem(s, base, ofs));
 	requires sp_eval(sp_code_STR(rd, base, ofs), s, r, ok);
 	requires 0 <= OperandContents(s, rd) < MaxVal();
+    requires WordAligned(OperandContents(s, base) + OperandContents(s, ofs));
     // requires IsMemOperand(addr);
     // requires !IsMemOperand(rd);
     ensures evalMemUpdate(s, Address(OperandContents(s, base) + OperandContents(s, ofs)),

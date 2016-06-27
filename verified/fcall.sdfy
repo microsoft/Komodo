@@ -4,6 +4,7 @@ predicate ValidStack(s:sp_state)
 {
     ValidMemRange(s, STACK_LOWER(), STACK_UPPER()) &&
     MemRangeIs32(s, STACK_LOWER(), STACK_UPPER()) &&
+    WordAligned(eval_op(s, op_sp())) &&
     (STACK_LOWER() <= eval_op(s, op_sp()) < STACK_UPPER())
 }
 

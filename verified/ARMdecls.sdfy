@@ -167,6 +167,7 @@ procedure LDR(out{:operand} rd:int, {:operand} base:int, {:operand} ofs:int)
         isUInt32(ofs);
     requires
         ValidMem(this, addr_mem(this, @base, @ofs));
+        WordAligned(base + ofs);
         isUInt32(addrval(this, base + ofs));
     ensures
         evalUpdate(old(this), @rd, MemContents(old(this), addr_mem(old(this), @base, @ofs)), this, true);
@@ -182,6 +183,7 @@ procedure STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
         isUInt32(base);
         isUInt32(ofs);
     requires
+        WordAligned(base + ofs);
         ValidMem(this, addr_mem(this, @base, @ofs));
     ensures
         evalMemUpdate(old(this), addr_mem(old(this), @base, @ofs), old(rd), this, true);
