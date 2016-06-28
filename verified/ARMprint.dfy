@@ -19,12 +19,12 @@ method printBcc(c:ocmp)
 {
 	match c
 	{
-		case OEq => print("BEQ ");
-		case ONe => print("BNE ");
-		case OLe => print("BLE ");
-		case OGe => print("BGE ");
-		case OLt => print("BLT ");
-		case OGt => print("BGT ");
+		case OEq => print("  BEQ ");
+		case ONe => print("  BNE ");
+		case OLe => print("  BLE ");
+		case OGe => print("  BGE ");
+		case OLt => print("  BLT ");
+		case OGt => print("  BGT ");
 	}
 }
 
@@ -46,8 +46,8 @@ method printOperand(o:operand)
 			case SP(m) => print("this should never happen");
 			case LR(m) => print("this should never happen");
 		}
-        case OSP => print("r13");
-        case OLR => print("r14");
+        case OSP => print("sp");
+        case OLR => print("lr");
         // case OMem(x) => not_impl();
 }
 
@@ -116,7 +116,7 @@ method printCode(c:code, n:int) returns(n':int)
 			var false_branch := n;
 			var end_of_block := n + 1;
 			// Do comparison
-			print("  cmp "); printOperand(ifb.o1); cma();
+			print("	 CMP "); printOperand(ifb.o1); cma();
 				printOperand(ifb.o2); nl();
 			// Branch to false branch if cond is false
 			printBcc(cmpNot(ifb.cmp)); print("L"); print(false_branch); nl();
@@ -137,15 +137,17 @@ method printCode(c:code, n:int) returns(n':int)
     	  print("L"); print(n1); print(":\n");
     	  n' := printCode(loop, n + 2);
     	  print("L"); print(n2); print(":\n");
-    	  print("  cmp "); printOperand(b.o1); print(", "); printOperand(b.o2); print("\n");
+    	  print("  CMP "); printOperand(b.o1); print(", "); printOperand(b.o2); print("\n");
     	  printBcc(cmpNot(b.cmp)); print("L"); print(n1); print("\n");
     	}
 	}
 }
 
-method printHeader(){
+method printHeader(symname:string){
     print(".arm\n");
     print(".section .text\n");
+    print(".global "); print(symname); print("\n");
+    print(symname); print(":\n");
 }
 
 method printFooter(){

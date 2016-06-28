@@ -367,14 +367,12 @@ procedure smc_handler(
 
 }
 
-procedure main(){}
-
 #verbatim
 
 method Main()
 {
-  printHeader();
-  var n := printCode(sp_code_main(), 0);
+  printHeader("smc_handler");
+  var n := printCode(sp_code_smc_handler(), 0);
   printFooter();
 }
 #endverbatim
