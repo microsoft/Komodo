@@ -6,6 +6,7 @@ procedure reg_preservation_inner(ghost call_depth:int)
     requires/ensures
         ValidState(this);
         ValidStack(this);
+        ValidMemIs32(this);
         can_fcall_n(this,call_depth);
     ensures
         MemValidityPreserving(old(this),this);
@@ -24,6 +25,7 @@ procedure reg_preservation_test(ghost call_depth:int)
     requires/ensures
         ValidState(this);
         ValidStack(this);
+        ValidMemIs32(this);
         can_fcall_n(this,call_depth);
     ensures
         MemValidityPreserving(old(this),this);
@@ -42,6 +44,7 @@ procedure main()
     requires/ensures
         ValidState(this);
         ValidStack(this);
+        ValidMemIs32(this);
         can_fcall_n(this,3);
         ValidMem(this,Address(4));
     ensures

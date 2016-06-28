@@ -36,11 +36,12 @@ function sp_eval_op(s:state, o:operand):int
 
 function sp_eval_mem(s:state, m:mem):int
     requires ValidMem(s, m);
+    requires WordAligned(m.addr);
     { MemContents(s, m) }
 
 predicate ValidMemRange(s:state, lwr:int, upr:int)
 {
-    forall i:int :: lwr <= i <= upr ==>
+    forall i:int :: lwr <= i <= upr && WordAligned(i) ==>
         ValidMem(s, Address(i))
 }
 
@@ -48,7 +49,7 @@ predicate MemRangeIs32(s:state, lwr:int, upr:int)
     requires ValidMemRange(s, lwr, upr);
 {
     forall i:int {:trigger s.addresses[Address(i)]} ::
-        lwr <= i <= upr ==> isUInt32(addrval(s, i))
+        lwr <= i <= upr && WordAligned(i) ==> isUInt32(addrval(s, i))
 }
 
 function method sp_CNil():codes { CNil }
@@ -100,7 +101,11 @@ function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
 // Address Helper Functions
 //-----------------------------------------------------------------------------
 function addrval(s:sp_state, a:int):int
-    requires ValidMem(s, Address(a)); { MemContents(s, Address(a)) }
+    requires ValidMem(s, Address(a))
+    requires WordAligned(a)
+{
+    MemContents(s, Address(a))
+}
 
 //-----------------------------------------------------------------------------
 // Instructions
@@ -344,6 +349,7 @@ lemma sp_lemma_LDR(s:state, r:state, ok:bool,
 	requires sp_eval(sp_code_LDR(rd, base, ofs), s, r, ok);
 	requires 0 <= OperandContents(s, base) < MaxVal();
 	requires 0 <= OperandContents(s, ofs) < MaxVal();
+    requires WordAligned(OperandContents(s, base) + OperandContents(s, ofs));
     requires 0 <= MemContents(s, Address(OperandContents(s, base) +
         OperandContents(s, ofs))) < MaxVal();
 	// requires 0 <= OperandContents(s, addr_op(s, base, ofs)) < MaxVal();
@@ -369,14 +375,11 @@ lemma sp_lemma_STR(s:state, r:state, ok:bool,
     requires ValidMem(s, addr_mem(s, base, ofs));
 	requires sp_eval(sp_code_STR(rd, base, ofs), s, r, ok);
 	requires 0 <= OperandContents(s, rd) < MaxVal();
-    // requires IsMemOperand(addr);
-    // requires !IsMemOperand(rd);
+    requires WordAligned(OperandContents(s, base) + OperandContents(s, ofs));
     ensures evalMemUpdate(s, Address(OperandContents(s, base) + OperandContents(s, ofs)),
         OperandContents(s, rd), r, ok)
 	ensures ok;
     ensures 0 <= MemContents(r, addr_mem(s, base, ofs)) < MaxVal();
-	// ensures 0 <= OperandContents(r, rd) < MaxVal();
-	// ensures 0 <= OperandContents(r, addr_op(s, base, ofs)) < MaxVal();
 {
 	reveal_sp_eval();
 	reveal_sp_code_STR();

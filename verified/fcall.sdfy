@@ -4,6 +4,7 @@ predicate ValidStack(s:sp_state)
 {
     ValidMemRange(s, STACK_LOWER(), STACK_UPPER()) &&
     MemRangeIs32(s, STACK_LOWER(), STACK_UPPER()) &&
+    WordAligned(eval_op(s, op_sp())) &&
     (STACK_LOWER() <= eval_op(s, op_sp()) < STACK_UPPER())
 }
 
@@ -41,13 +42,14 @@ predicate MemValidityPreserving(s:sp_state, r:sp_state)
 
 predicate ValidMemIs32(s:sp_state)
 {
-    forall i:int :: ValidMem(s,Address(i)) ==> isUInt32(addrval(s,i))
+    forall i:int :: ValidMem(s,Address(i)) && WordAligned(i)
+        ==> isUInt32(addrval(s,i))
 }
 
 predicate MemValuePreserving(s:sp_state, r:sp_state)
     requires MemValidityPreserving(s,r);
 {
-    forall i:int :: ValidMem(s,Address(i)) ==>
+    forall i:int :: ValidMem(s,Address(i)) && WordAligned(i) ==>
         addrval(s,i) == addrval(r,i)
 }
 
@@ -59,7 +61,7 @@ predicate StackValuePreserving(s:sp_state, r:sp_state, depth:int)
     // forall i:int :: !(eval_op(s,op_sp()) - 40*depth <= i < eval_op(s,op_sp())) &&
     //     ValidMem(s,Address(i)) ==> addrval(r,i) == addrval(s,i)
     forall i:int {:trgger Address(i)} :: ((STACK_LOWER() <= i < eval_op(s,op_sp()) - 40*depth) ||
-        (eval_op(s,op_sp()) <= i < STACK_UPPER())) &&
+        (eval_op(s,op_sp()) <= i < STACK_UPPER())) && WordAligned(i) &&
         ValidMem(s,Address(i)) ==> addrval(r,i) == addrval(s,i)
 }
 
@@ -68,7 +70,7 @@ predicate NonStackValuePreserving(s:sp_state, r:sp_state)
     requires MemValidityPreserving(s,r);
 {
     forall i:int {:trigger Address(i)} :: !(STACK_LOWER() <= i < STACK_UPPER()) &&
-        ValidMem(s,Address(i)) ==> addrval(r,i) == addrval(s,i)
+        ValidMem(s,Address(i)) && WordAligned(i) ==> addrval(r,i) == addrval(s,i)
 }
 
 #endverbatim

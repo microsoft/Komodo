@@ -6,7 +6,7 @@ include "assembly.s.dfy"
 datatype ARMReg = R(n:int) | SP(spm:mode) | LR(lpm: mode)
 // In FIQ, R8 to R12 are also banked
 
-datatype mem = Address(a:int) // | GlobalVar(g:int) | LocalVar(l:int)
+datatype mem = Address(addr:int) // | GlobalVar(g:int) | LocalVar(l:int)
 datatype operand = OConst(n:int) | OReg(r:ARMReg) | OSP | OLR 
 
 datatype frame = Frame(locals:map<mem, int>)
@@ -176,6 +176,8 @@ predicate ValidMem(s:state, m:mem)
     m in s.addresses
 }
 
+predicate WordAligned(addr:int) { addr % 4 == 0}
+
 predicate ValidShiftOperand(s:state, o:operand)
     { ( o.OConst? && 0 <= o.n <= 32) || ValidOperand(s, o) }
 
@@ -241,6 +243,7 @@ function OperandContents(s:state, o:operand): int
 
 function MemContents(s:state, m:mem): int
     requires ValidMem(s, m)
+    requires WordAligned(m.addr)
 {
     s.addresses[m]
 }
@@ -272,6 +275,7 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
 
 predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
     requires ValidMem(s, m)
+    requires WordAligned(m.addr)
     ensures  ValidMem(s, m)
 {
     ok && r == s.(addresses := s.addresses[m := v])
@@ -340,11 +344,13 @@ predicate ValidInstruction(s:state, ins:ins)
 		case LDR(rd, base, ofs) => 
             ValidDestinationOperand(s, rd) &&
 			ValidOperand(s, base) && ValidOperand(s, ofs) &&
+            WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
             ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
             //IsMemOperand(addr) && !IsMemOperand(rd)
 		case STR(rd, base, ofs) =>
             ValidOperand(s, rd) &&
             ValidOperand(s, ofs) && ValidOperand(s, base) &&
+            WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
             ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
             //ValidDestinationOperand(s, addr_op(s, base, ofs))
             //IsMemOperand(addr) && !IsMemOperand(rd)

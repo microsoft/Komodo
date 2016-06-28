@@ -51,6 +51,8 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
         ValidState(this);
         ValidStack(this);
         ValidMemRange(this,lower,upper);
+        WordAligned(lower);
+        WordAligned(upper);
         ValidMemIs32(this);
         fcall_depth > 1;
         can_fcall_n(this,fcall_depth);
@@ -59,9 +61,9 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
         lower >= STACK_UPPER() || upper < STACK_LOWER();
     ensures
         MemValidityPreserving(old(this),this);
-        forall i:int :: old(lower) <= i < old(upper) ==>
-            addrval(this,i) == old(val);
-        forall i:int :: !(old(lower) <= i < old(upper)) &&
+        forall i:int :: (lower <= i < upper) && WordAligned(i) ==>
+            addrval(this,i) == val;
+        forall i:int :: !(lower <= i < upper) && WordAligned(i) &&
             !(STACK_LOWER() <= i < STACK_UPPER()) &&
             ValidMem(old(this),Address(i)) ==>
                 addrval(this,i) == addrval(old(this),i);
@@ -80,7 +82,7 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
     assert upper == old(upper);
     assert upper == r1;
 
-    for (r9 := lower; r9 < upper; r9++)
+    for (r9 := lower; r9 < upper; r9+=4)
         invariant
             ValidState(this);
             ValidStack(this);
@@ -91,7 +93,9 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
             ValidMemRange(old(this),lower,upper);
             StackValuePreserving(pre_loop_s,this,fcall_depth-1);
             can_fcall_n(this,fcall_depth-1);
-            
+         
+            WordAligned(r9);
+               
             r0 == old(lower);
             r1 == old(upper);
             r2 == old(val);
@@ -99,9 +103,9 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
             lower <= r9 <= upper;
             lower >= STACK_UPPER() || upper < STACK_LOWER();
             
-            forall i:int :: lower <= i < r9 ==>
+            forall i:int :: (lower <= i < r9) && WordAligned(i) ==>
                 addrval(this,i) == val;
-            forall i:int :: !(lower <= i < r9 ) && 
+            forall i:int :: !(lower <= i < r9 ) && WordAligned(i) &&
                 !(STACK_LOWER() <= i < STACK_UPPER()) &&
                 ValidMem(pre_loop_s,Address(i)) ==>
                     addrval(this,i) == addrval(pre_loop_s,i);
@@ -181,7 +185,7 @@ procedure page_type(
         0 <= pageno < KEVLAR_SECURE_NPAGES();
         ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
     ensures
-        pgtype == addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(old(r0))));
+        pgtype == addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(pageno)));
         RegPreserving(old(this),this);
         MemValidityPreserving(old(this),this);
         NonStackValuePreserving(old(this),this);
@@ -206,21 +210,22 @@ procedure kev_smc_init_addrspace_success(
         fcall_depth > 2;
         can_fcall_n(this,fcall_depth);
         ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
-        ValidAddrspace(this,vmap(addrspace_page));
         ValidMemIs32(this);
+    requires
+        addrspace_page != l1pt_page;
         page_is_valid(addrspace_page);
         page_is_valid(l1pt_page);
+        WordAligned(addrspace_page); //TODO REMOVE ME
+        WordAligned(l1pt_page); 
+        ValidAddrspace(this,vmap(addrspace_page));
         addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) ==
             KEV_PAGE_FREE();
         addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page))) ==
             KEV_PAGE_FREE();
-    requires
-        addrspace_page != l1pt_page;
     ensures
         MemValidityPreserving(old(this),this);
-        StackValuePreserving(old(this),this,fcall_depth);
         sp == old(sp);
-        // RegPreserving(old(this),this);
+        StackValuePreserving(old(this),this,fcall_depth);
 
         addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) ==
             KEV_PAGE_ADDRSPACE();
@@ -260,7 +265,7 @@ procedure kev_smc_init_addrspace_success(
    STR(sp_op_const(KEV_PAGE_ADDRSPACE()), r7, 0);
    assert addrval(this,PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page)))
        == KEV_PAGE_ADDRSPACE();
-   STR(r10, r7, 1);
+   STR(r10, r7, 4);
    assert addrval(this,PAGEDB_ENTRY_ADDRSPACE(G_PAGEDB_ENTRY(addrspace_page)))
        == vmap(addrspace_page);
    
@@ -268,7 +273,7 @@ procedure kev_smc_init_addrspace_success(
    assert addrval(this,PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page)))
        == KEV_PAGE_L1PTABLE();
    
-   STR(r10, r8, 1);
+   STR(r10, r8, 4);
    assert addrval(this,PAGEDB_ENTRY_ADDRSPACE(G_PAGEDB_ENTRY(l1pt_page)))
        == vmap(addrspace_page);
 
@@ -276,13 +281,13 @@ procedure kev_smc_init_addrspace_success(
    assert addrval(this,ADDRSPACE_L1PT(vmap(addrspace_page))) ==
        vmap(l1pt_page);
 
-   STR(r6,r10,1);
+   STR(r6,r10,4);
    assert addrval(this,ADDRSPACE_L1PT_PHYS(vmap(addrspace_page))) == l1pt_page;
 
-   STR(1,r10,2);
+   STR(1,r10,8);
    assert addrval(this,ADDRSPACE_REF(vmap(addrspace_page))) == 1;
 
-   STR(sp_op_const(KEV_ADDRSPACE_INIT()),r10,3);
+   STR(sp_op_const(KEV_ADDRSPACE_INIT()),r10,12);
    assert addrval(this,ADDRSPACE_STATE(vmap(addrspace_page))) ==
        KEV_ADDRSPACE_INIT();
    
@@ -303,6 +308,8 @@ procedure kev_smc_init_addrspace(
         ValidAddrspace(this,vmap(addrspace_page));
         ValidMemIs32(this);
     requires
+        WordAligned(addrspace_page); // TODO REMOVE ME
+        WordAligned(l1pt_page); // TODO REMOVE ME AND ERROR ON FAIL
         addrspace_page != l1pt_page;
     ensures
         //RegPreserving(old(this),this);
@@ -320,8 +327,6 @@ procedure kev_smc_init_addrspace(
         page_is_valid(addrspace_page) && page_is_valid(l1pt_page) &&
             (addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page))) !=
                 KEV_PAGE_FREE()) ==> err == KEV_ERR_PAGEINUSE();
-        // err == KEV_ERR_SUCCESS() ==> page_is_valid(addrspace_page);
-        // err == KEV_ERR_SUCCESS() ==> page_is_valid(l1pt_page);
         err == KEV_ERR_SUCCESS() ==>
             (addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) ==
                 KEV_PAGE_ADDRSPACE());
@@ -379,17 +384,6 @@ procedure kev_smc_init_addrspace(
             r1 := r6;
             kev_smc_init_addrspace_success(r0,r1,err,fcall_depth-1);
             
-            /*
-            // assert ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
-            assert page_is_valid(addrspace_page) && page_is_valid(l1pt_page);
-            assert addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) ==
-                KEV_PAGE_FREE();
-            assert addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page))) ==
-                KEV_PAGE_FREE();
-
-            //TODO check word-alignment.
-           
-            */
             err := OConst(KEV_ERR_SUCCESS());
         }
 
@@ -421,6 +415,7 @@ procedure smc_handler(
             // TODO violating these precond should throw errors. We shouldn't
             // assume trusted code won't violate them.
             (arg1 != arg2) &&
+            WordAligned(arg1) && WordAligned(arg2) && // TODO REMOVE ME
             (G_PAGEDB() <= arg1 < G_PAGEDB_END()) &&
             (G_PAGEDB() <= arg2 < G_PAGEDB_END()) &&
             ValidAddrspace(this,vmap(arg1)); // && 

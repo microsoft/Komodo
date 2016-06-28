@@ -1,4 +1,4 @@
-
+include "ARMdef.dfy"
 function method KEV_MAGIC():int { 0x4b766c72 }
 //-----------------------------------------------------------------------------
 // SMC Call Numbers
@@ -72,37 +72,46 @@ function method G_PAGEDB_END():int
 function method G_PAGEDB_ENTRY(pageno:int):int 
     requires 0 <= pageno < KEVLAR_SECURE_NPAGES();
     ensures G_PAGEDB_ENTRY(pageno) == G_PAGEDB() + pageno * PAGEDB_ENTRY_SIZE();
-    { G_PAGEDB() + pageno * PAGEDB_ENTRY_SIZE() }
+    ensures WordAligned(G_PAGEDB_ENTRY(pageno))
+    { 
+        assert WordAligned(G_PAGEDB());
+        assert WordAligned(PAGEDB_ENTRY_SIZE());
+        assert WordAligned(pageno*PAGEDB_ENTRY_SIZE());
+        G_PAGEDB() + pageno * PAGEDB_ENTRY_SIZE()
+    }
 
 // entry = start address of pagedb entry
 function method PAGEDB_ENTRY_TYPE(entry:int):int
+    requires WordAligned(entry);
     requires G_PAGEDB() <= entry < G_PAGEDB_END();
+    ensures WordAligned(PAGEDB_ENTRY_TYPE(entry));
     ensures PAGEDB_ENTRY_TYPE(entry) == entry;
     { entry }
 function method PAGEDB_ENTRY_ADDRSPACE(entry:int):int
+    requires WordAligned(entry);
     requires G_PAGEDB() <= entry + 1 < G_PAGEDB_END();
-    ensures PAGEDB_ENTRY_ADDRSPACE(entry) == entry + 1;
-    { entry + 1 }
+    ensures PAGEDB_ENTRY_ADDRSPACE(entry) == entry + 4;
+    { entry + 4 }
 function method PAGEDB_ENTRY_SIZE():int
-    ensures PAGEDB_ENTRY_SIZE() == 2 
-    { 2 }
+    ensures PAGEDB_ENTRY_SIZE() == 8
+    { 8 }
 
 // addrspc = start address of address space metadata
 function method ADDRSPACE_L1PT(addrspace:int):int
     ensures ADDRSPACE_L1PT(addrspace) == addrspace;
     { addrspace }
 function method ADDRSPACE_L1PT_PHYS(addrspace:int):int
-    ensures ADDRSPACE_L1PT_PHYS(addrspace) == addrspace + 1;
-    { addrspace + 1 }
+    ensures ADDRSPACE_L1PT_PHYS(addrspace) == addrspace + 4;
+    { addrspace + 4 }
 function method ADDRSPACE_REF(addrspace:int):int
-    ensures ADDRSPACE_REF(addrspace) == addrspace + 2;
-    { addrspace + 2 }
+    ensures ADDRSPACE_REF(addrspace) == addrspace + 8;
+    { addrspace + 8 }
 function method ADDRSPACE_STATE(addrspace:int):int
-    ensures ADDRSPACE_STATE(addrspace) == addrspace + 3;
-    { addrspace + 3 }
+    ensures ADDRSPACE_STATE(addrspace) == addrspace + 12;
+    { addrspace + 12 }
 function method ADDRSPACE_SIZE():int
-    ensures ADDRSPACE_SIZE() == 4
-    { 4 }
+    ensures ADDRSPACE_SIZE() == 16
+    { 16 }
 
 //-----------------------------------------------------------------------------
 // Page Types
