@@ -239,8 +239,6 @@ procedure kev_smc_init_addrspace(
         ValidAddrspace(this,vmap(addrspace_page));
         ValidMemIs32(this);
     requires
-        WordAligned(addrspace_page); // TODO REMOVE ME
-        WordAligned(l1pt_page); // TODO REMOVE ME AND ERROR ON FAIL
         addrspace_page != l1pt_page;
     ensures
         //RegPreserving(old(this),this);
@@ -254,10 +252,10 @@ procedure kev_smc_init_addrspace(
             err == KEV_ERR_INVALID_PAGENO();
         !WordAligned(l1pt_page) ==>
             err == KEV_ERR_INVALID_PAGENO();
-        page_is_valid(addrspace_page) && page_is_valid(l1pt_page) &&
+        page_is_valid(addrspace_page) && page_is_valid(l1pt_page) && WordAligned(l1pt_page) &&
             (addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) !=
                 KEV_PAGE_FREE()) ==> err == KEV_ERR_PAGEINUSE();
-        page_is_valid(addrspace_page) && page_is_valid(l1pt_page) &&
+        page_is_valid(addrspace_page) && page_is_valid(l1pt_page) && WordAligned(l1pt_page) &&
             (addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page))) !=
                 KEV_PAGE_FREE()) ==> err == KEV_ERR_PAGEINUSE();
         err == KEV_ERR_SUCCESS() ==>
@@ -284,7 +282,10 @@ procedure kev_smc_init_addrspace(
             (addrval(this, ADDRSPACE_STATE(vmap(addrspace_page))) == KEV_ADDRSPACE_INIT());
 {
     fcall_prologue(fcall_depth);
-    ghost var saved_s := this;
+
+    assert 0 <= r1 < MaxVal();
+    AND(r4,r1,3);
+    assert r4 == r1 % 4;
 
     if( addrspace_page >= sp_op_const(KEVLAR_SECURE_NPAGES()) ) { 
         err := sp_op_const(KEV_ERR_INVALID_PAGENO());
@@ -294,7 +295,10 @@ procedure kev_smc_init_addrspace(
         err := sp_op_const(KEV_ERR_INVALID_PAGENO());
     } else if( addrspace_page < 0 ) {
         err := sp_op_const(KEV_ERR_INVALID_PAGENO());
-    } else {  
+    } else if( r4 != 0 ) {
+        err := sp_op_const(KEV_ERR_INVALID_PAGENO());
+    } else { 
+        assert WordAligned(l1pt_page);
         MUL(r7,r0,sp_op_const(PAGEDB_ENTRY_SIZE()));
         r7 += sp_op_const(G_PAGEDB());
         LDR(r7,r7,0);
@@ -343,7 +347,7 @@ procedure smc_handler(
             // TODO violating these precond should throw errors. We shouldn't
             // assume trusted code won't violate them.
             (arg1 != arg2) &&
-            WordAligned(arg1) && WordAligned(arg2) && // TODO REMOVE ME
+            //WordAligned(arg2) && // TODO REMOVE ME
             (G_PAGEDB() <= arg1 < G_PAGEDB_END()) &&
             (G_PAGEDB() <= arg2 < G_PAGEDB_END()) &&
             ValidAddrspace(this,vmap(arg1)); // && 
