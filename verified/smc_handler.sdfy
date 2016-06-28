@@ -119,86 +119,6 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
     fcall_epilogue(fcall_depth-1);
 }
 
-//loads the address of the G_PAEDB entry for pageno into entry
-procedure pagedb_entry(
-    {:register op_r(0)} pageno:int,
-    out {:register op_r(1)} entry:int,
-    ghost fcall_depth:int)
-    requires/ensures
-        ValidState(this);
-        ValidStack(this);
-        ValidMemIs32(this);
-        fcall_depth > 1;
-        can_fcall_n(this,fcall_depth);
-        0 <= pageno < KEVLAR_SECURE_NPAGES();
-    ensures
-        RegPreserving(old(this),this);
-        MemValidityPreserving(old(this),this);
-        NonStackValuePreserving(old(this),this);
-        StackValuePreserving(old(this),this,fcall_depth);
-        entry == G_PAGEDB_ENTRY(pageno);
-        G_PAGEDB() <= entry < G_PAGEDB_END();
-{
-    fcall_prologue(fcall_depth);
-    entry := sp_op_const(G_PAGEDB());
-
-    ghost var loop_old_sp := sp;
-    ghost var pre_loop_s := this;
-    for (r9:= 0; r9 < pageno; r9++)
-      invariant
-        ValidState(this);
-        ValidStack(this);
-        ValidMemIs32(this);
-        0 <= pageno < KEVLAR_SECURE_NPAGES();
-        0 <= r9 <= pageno;
-        r0 == old(pageno);
-        entry == G_PAGEDB_ENTRY(r9);
-
-        // Allows fcall_epilogue;
-        can_fcall_n(this,fcall_depth-1);
-
-        //All other postconditions
-        MemValidityPreserving(pre_loop_s,this);
-        MemValuePreserving(pre_loop_s,this);
-        sp  == loop_old_sp;
-      decreases
-        pageno - r9;
-    {
-        ADD(entry, entry, sp_op_const(PAGEDB_ENTRY_SIZE()));
-    }
-    
-    fcall_epilogue(fcall_depth-1); 
-    assert r9 == old(r9);
-    assert sp == old(sp);
-}
-
-procedure page_type(
-    {:register op_r(0)} pageno:int,
-    out {:register op_r(1)} pgtype:int,
-    ghost fcall_depth:int)
-    requires/ensures
-        ValidState(this);
-        ValidStack(this);
-        ValidMemIs32(this);
-        fcall_depth > 2;
-        can_fcall_n(this,fcall_depth);
-        0 <= pageno < KEVLAR_SECURE_NPAGES();
-        ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
-    ensures
-        pgtype == addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(pageno)));
-        RegPreserving(old(this),this);
-        MemValidityPreserving(old(this),this);
-        NonStackValuePreserving(old(this),this);
-        StackValuePreserving(old(this),this,fcall_depth);
-        
-{
-    // not doing fcall because no local var regs were harmed
-    fcall_prologue(fcall_depth);
-    pagedb_entry(pageno,pgtype,fcall_depth-1);
-    LDR(pgtype,pgtype,0);
-    fcall_epilogue(fcall_depth-1);
-}
-
 procedure kev_smc_init_addrspace_success(
     {:register op_r(0)} addrspace_page:int,
     {:register op_r(1)} l1pt_page:int,
@@ -243,23 +163,18 @@ procedure kev_smc_init_addrspace_success(
 {
    fcall_prologue(fcall_depth);
 
-   r5 := addrspace_page;
-   r6 := l1pt_page;
-
-   ADD(r9, r6, sp_op_const(KEVLAR_DIRECTMAP_VBASE()));
+   ADD(r9, r1, sp_op_const(KEVLAR_DIRECTMAP_VBASE()));
    assert r9 == vmap(l1pt_page);
 
-   ADD(r10, r5, sp_op_const(KEVLAR_DIRECTMAP_VBASE()));
+   ADD(r10, r0, sp_op_const(KEVLAR_DIRECTMAP_VBASE()));
    assert r10 == vmap(addrspace_page);
 
-   r0 := r5;
-   pagedb_entry(r0,r1,fcall_depth-1);
-   r7 := r1;
+   MUL(r7,r0,sp_op_const(PAGEDB_ENTRY_SIZE()));
+   r7 += sp_op_const(G_PAGEDB());
    assert r7 == G_PAGEDB_ENTRY(addrspace_page);
    
-   r0 := r6;
-   pagedb_entry(r0,r1,fcall_depth-1);
-   r8 := r1;
+   MUL(r8,r1,sp_op_const(PAGEDB_ENTRY_SIZE()));
+   r8 += sp_op_const(G_PAGEDB());
    assert r8 == G_PAGEDB_ENTRY(l1pt_page);
 
    STR(sp_op_const(KEV_PAGE_ADDRSPACE()), r7, 0);
@@ -281,7 +196,7 @@ procedure kev_smc_init_addrspace_success(
    assert addrval(this,ADDRSPACE_L1PT(vmap(addrspace_page))) ==
        vmap(l1pt_page);
 
-   STR(r6,r10,4);
+   STR(r1,r10,4);
    assert addrval(this,ADDRSPACE_L1PT_PHYS(vmap(addrspace_page))) == l1pt_page;
 
    STR(1,r10,8);
@@ -362,17 +277,14 @@ procedure kev_smc_init_addrspace(
     } else if( addrspace_page < 0 ) {
         err := sp_op_const(KEV_ERR_INVALID_PAGENO());
     } else {  
-        r5 := addrspace_page;
-        r6 := l1pt_page;
-
-        page_type(addrspace_page,r1,fcall_depth-1);
-        r7 := r1;
+        MUL(r7,r0,sp_op_const(PAGEDB_ENTRY_SIZE()));
+        r7 += sp_op_const(G_PAGEDB());
+        LDR(r7,r7,0);
         assert r7 == addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page)));
 
-        r0 := r6;
-        assert r0 == old(l1pt_page);
-        page_type(r0,r1,fcall_depth-1);
-        r8 := r1;
+        MUL(r8,r1,sp_op_const(PAGEDB_ENTRY_SIZE()));
+        r8 += sp_op_const(G_PAGEDB());
+        LDR(r8,r8,0);
         assert r8 == addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page)));
 
         if( r7 != sp_op_const(KEV_PAGE_FREE()) ) {
@@ -380,8 +292,6 @@ procedure kev_smc_init_addrspace(
         } else if( r8 != sp_op_const(KEV_PAGE_FREE()) ) {
             err := sp_op_const(KEV_ERR_PAGEINUSE());
         } else {
-            r0 := r5;
-            r1 := r6;
             kev_smc_init_addrspace_success(r0,r1,err,fcall_depth-1);
             
             err := OConst(KEV_ERR_SUCCESS());

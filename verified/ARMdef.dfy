@@ -98,6 +98,7 @@ function addr_mem(s:state, base:operand, ofs:operand):mem
 datatype ins =
 	  ADD(dstADD:operand, src1ADD:operand, src2ADD:operand)
 	| SUB(dstSUB:operand, src1SUB:operand, src2SUB:operand)
+	| MUL(dstMUL:operand, src1MUL:operand, src2MUL:operand)
 	| AND(dstAND:operand, src1AND:operand, src2AND:operand)
 	| ORR(dstOR:operand,  src1OR:operand,  src2OR:operand)
 	| EOR(dstEOR:operand, src1EOR:operand, src2EOR:operand) // Also known as XOR
@@ -309,9 +310,14 @@ predicate ValidInstruction(s:state, ins:ins)
 {
 	match ins
 		case ADD(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
+			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+            (0 <= (eval_op(s,src1) + eval_op(s,src2)) < MaxVal())
 		case SUB(dest, src1, src2) => ValidOperand(s, src1) &&
-			ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
+			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+            (0 <= (eval_op(s,src1) - eval_op(s,src2)) < MaxVal())
+        case MUL(dest,src1,src2) => ValidOperand(s, src1) &&
+            ValidOperand(s, src2) && ValidDestinationOperand(s,dest) &&
+            (0 <= (eval_op(s,src1) * eval_op(s,src2)) < MaxVal())
             //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
         case AND(dest, src1, src2) => ValidOperand(s, src1) &&
 			ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
@@ -370,6 +376,9 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
 			r, ok)
 		case SUB(dst, src1, src2) => evalUpdate(s, dst,
 			((OperandContents(s, src1) - OperandContents(s, src2))),
+			r, ok)
+		case MUL(dst, src1, src2) => evalUpdate(s, dst,
+			((OperandContents(s, src1) * OperandContents(s, src2))),
 			r, ok)
 		case AND(dst, src1, src2) => evalUpdate(s, dst,
             and32(eval_op(s, src1), eval_op(s, src2)),
