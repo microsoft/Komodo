@@ -13,7 +13,8 @@ predicate page_is_valid(page:int)
 
 function vmap(phys:int):int
 {
-    phys + KEVLAR_DIRECTMAP_VBASE()
+   KEVLAR_DIRECTMAP_VBASE() + G_SECURE_PHYSBASE() +
+        KEVLAR_PAGE_SIZE() * phys
 }
 
 predicate ValidAddrspace(s:state,base:int)
@@ -26,23 +27,30 @@ predicate ValidAddrspace(s:state,base:int)
 
 #endverbatim
 
-// procedure phys2monvaddr({:operand} phys:int, out {:operand} virt:int)
-//     requires/ensures
-//         ValidState(this);
-//         ValidStack(this);
-//         ValidOperand(this,@phys);
-//         ValidDestinationOperand(this,@virt);
-//         isUInt32(virt);
-//     requires
-//         isUInt32(KEVLAR_DIRECTMAP_VBASE()+phys);
-//         isUInt32(phys);
-//     ensures
-//         virt == old(KEVLAR_DIRECTMAP_VBASE() + phys);
-//         MemValidityPreserving(old(this),this);
-//         MemValuePreserving(old(this),this);
-// {
-//     ADD(virt,KEVLAR_DIRECTMAP_VBASE(),phys);
-// }
+procedure phys2monvaddr({:register op_r(1)} phys:int, out {:register op_r(0)} virt:int, ghost fcall_depth:int)
+    requires/ensures
+        ValidState(this);
+        ValidStack(this);
+        ValidMemIs32(this);
+        fcall_depth > 1;
+        can_fcall_n(this,fcall_depth);
+    requires
+        page_is_valid(phys);
+    ensures
+        virt == KEVLAR_DIRECTMAP_VBASE() + G_SECURE_PHYSBASE() +
+            KEVLAR_PAGE_SIZE() * phys;
+        WordAligned(virt);
+        MemValidityPreserving(old(this),this);
+        RegPreserving(old(this),this);
+        StackValuePreserving(old(this),this,fcall_depth);
+        NonStackValuePreserving(old(this),this);
+{
+    fcall_prologue(fcall_depth);
+    MUL(virt,phys,sp_op_const(KEVLAR_PAGE_SIZE()));
+    virt += sp_op_const(G_SECURE_PHYSBASE());
+    virt += sp_op_const(KEVLAR_DIRECTMAP_VBASE());
+    fcall_epilogue(fcall_depth-1);
+}
 
 //This is not quite the same as std::memset
 procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
@@ -135,7 +143,6 @@ procedure kev_smc_init_addrspace_success(
         addrspace_page != l1pt_page;
         page_is_valid(addrspace_page);
         page_is_valid(l1pt_page);
-        WordAligned(addrspace_page); //TODO REMOVE ME
         WordAligned(l1pt_page); 
         ValidAddrspace(this,vmap(addrspace_page));
         addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) ==
@@ -163,11 +170,20 @@ procedure kev_smc_init_addrspace_success(
 {
    fcall_prologue(fcall_depth);
 
-   ADD(r9, r1, sp_op_const(KEVLAR_DIRECTMAP_VBASE()));
+   r5 := addrspace_page;
+   r6 := l1pt_page;
+
+   phys2monvaddr(r1,r0,fcall_depth-1);
+   r9 := r0;
    assert r9 == vmap(l1pt_page);
 
-   ADD(r10, r0, sp_op_const(KEVLAR_DIRECTMAP_VBASE()));
+   r1 := r5;
+   phys2monvaddr(r1,r0,fcall_depth-1);
+   r10 := r0;
    assert r10 == vmap(addrspace_page);
+
+   r0 := r5;
+   r1 := r6;
 
    MUL(r7,r0,sp_op_const(PAGEDB_ENTRY_SIZE()));
    r7 += sp_op_const(G_PAGEDB());
@@ -235,6 +251,8 @@ procedure kev_smc_init_addrspace(
         !page_is_valid(addrspace_page) ==>
             err == KEV_ERR_INVALID_PAGENO();
         !page_is_valid(l1pt_page) ==>
+            err == KEV_ERR_INVALID_PAGENO();
+        !WordAligned(l1pt_page) ==>
             err == KEV_ERR_INVALID_PAGENO();
         page_is_valid(addrspace_page) && page_is_valid(l1pt_page) &&
             (addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) !=

@@ -51,6 +51,11 @@ function method KEVLAR_SECURE_NPAGES():int
     ensures KEVLAR_SECURE_NPAGES() == 256;
     { KEVLAR_SECURE_RESERVE() / KEVLAR_PAGE_SIZE() }
 
+//TODO FIXME
+function method G_SECURE_PHYSBASE():int
+    ensures G_SECURE_PHYSBASE() == 0x4000_0000;
+    { 0x4000_0000 }
+
 //These were picked arbitrarily 
 function method STACK_LOWER():int
     ensures STACK_LOWER() == 0x4000

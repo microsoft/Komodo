@@ -67,6 +67,10 @@ method printIns(ins:ins)
 			print("  MUL "); printOperand(dest); cma();
 				printOperand(src1); cma();
 				printOperand(src2); nl();
+        case UDIV(dest, src1, src2) =>
+			print("  UDIV "); printOperand(dest); cma();
+				printOperand(src1); cma();
+				printOperand(src2); nl();
         case AND(dest, src1, src2) => not_impl();
         case ORR(dest, src1, src2) => not_impl();
         case EOR(dest, src1, src2) => not_impl();

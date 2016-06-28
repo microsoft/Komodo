@@ -119,6 +119,9 @@ function method{:opaque} sp_code_SUB(dst:operand, src1:operand,
 function method{:opaque} sp_code_MUL(dst:operand, src1:operand,
 	src2:operand):code { Ins(MUL(dst, src1, src2)) }
 
+function method{:opaque} sp_code_UDIV(dst:operand, src1:operand,
+	src2:operand):code { Ins(UDIV(dst, src1, src2)) }
+
 function method{:opaque} sp_code_AND(dst:operand, src1:operand,
 	src2:operand):code { Ins(AND(dst, src1, src2)) }
 
@@ -219,6 +222,25 @@ lemma sp_lemma_MUL(s:state, r:state, ok:bool,
 {
 	reveal_sp_eval();
 	reveal_sp_code_MUL();
+}
+
+lemma sp_lemma_UDIV(s:state, r:state, ok:bool,
+	dst:operand, src1:operand, src2:operand)
+	requires ValidOperand(s,src1);
+	requires ValidOperand(s,src2);
+	requires ValidDestinationOperand(s, dst);
+    requires OperandContents(s,src2) > 0;
+	requires sp_eval(sp_code_UDIV(dst, src1, src2), s, r, ok);
+	requires 0 <= OperandContents(s, src1) < MaxVal();
+	requires 0 <= OperandContents(s, src2) < MaxVal();
+    requires 0 <= OperandContents(s, src1) / OperandContents(s, src2) < MaxVal();
+	ensures  evalUpdate(s, dst, OperandContents(s, src1) /
+		OperandContents(s, src2), r, ok);
+	ensures  ok;
+	ensures  0 <= OperandContents(r, dst) < MaxVal();
+{
+	reveal_sp_eval();
+	reveal_sp_code_UDIV();
 }
 
 lemma sp_lemma_AND(s:state, r:state, ok:bool,
