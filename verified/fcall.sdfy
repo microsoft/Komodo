@@ -58,7 +58,7 @@ predicate StackValuePreserving(s:sp_state, r:sp_state, depth:int)
 {
     // forall i:int :: !(eval_op(s,op_sp()) - 40*depth <= i < eval_op(s,op_sp())) &&
     //     ValidMem(s,Address(i)) ==> addrval(r,i) == addrval(s,i)
-    forall i:int :: ((STACK_LOWER() <= i < eval_op(s,op_sp()) - 40*depth) ||
+    forall i:int {:trgger Address(i)} :: ((STACK_LOWER() <= i < eval_op(s,op_sp()) - 40*depth) ||
         (eval_op(s,op_sp()) <= i < STACK_UPPER())) &&
         ValidMem(s,Address(i)) ==> addrval(r,i) == addrval(s,i)
 }
@@ -67,7 +67,7 @@ predicate NonStackValuePreserving(s:sp_state, r:sp_state)
     requires ValidState(s) && ValidState(r);
     requires MemValidityPreserving(s,r);
 {
-    forall i:int :: !(STACK_LOWER() <= i < STACK_UPPER()) &&
+    forall i:int {:trigger Address(i)} :: !(STACK_LOWER() <= i < STACK_UPPER()) &&
         ValidMem(s,Address(i)) ==> addrval(r,i) == addrval(s,i)
 }
 

@@ -195,6 +195,100 @@ procedure page_type(
     fcall_epilogue(fcall_depth-1);
 }
 
+procedure kev_smc_init_addrspace_success(
+    {:register op_r(0)} addrspace_page:int,
+    {:register op_r(1)} l1pt_page:int,
+    out {:register op_r(0)} err:int,
+    ghost fcall_depth:int)
+    requires/ensures
+        ValidState(this);
+        ValidStack(this);
+        fcall_depth > 2;
+        can_fcall_n(this,fcall_depth);
+        ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
+        ValidAddrspace(this,vmap(addrspace_page));
+        ValidMemIs32(this);
+        page_is_valid(addrspace_page);
+        page_is_valid(l1pt_page);
+        addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) ==
+            KEV_PAGE_FREE();
+        addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page))) ==
+            KEV_PAGE_FREE();
+    requires
+        addrspace_page != l1pt_page;
+    ensures
+        MemValidityPreserving(old(this),this);
+        StackValuePreserving(old(this),this,fcall_depth);
+        sp == old(sp);
+        // RegPreserving(old(this),this);
+
+        addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) ==
+            KEV_PAGE_ADDRSPACE();
+        addrval(this, PAGEDB_ENTRY_ADDRSPACE(G_PAGEDB_ENTRY(addrspace_page))) ==
+            vmap(addrspace_page);
+        addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page))) ==
+            KEV_PAGE_L1PTABLE();
+        addrval(this, PAGEDB_ENTRY_ADDRSPACE(G_PAGEDB_ENTRY(l1pt_page))) ==
+           vmap(addrspace_page);
+        addrval(this, ADDRSPACE_L1PT(vmap(addrspace_page))) == vmap(l1pt_page);
+        addrval(this, ADDRSPACE_L1PT_PHYS(vmap(addrspace_page))) == l1pt_page; 
+        addrval(this, ADDRSPACE_REF(vmap(addrspace_page))) == 1;
+        addrval(this, ADDRSPACE_STATE(vmap(addrspace_page))) ==
+            KEV_ADDRSPACE_INIT();
+{
+   fcall_prologue(fcall_depth);
+
+   r5 := addrspace_page;
+   r6 := l1pt_page;
+   
+   ADD(r9, r6, KEVLAR_DIRECTMAP_VBASE());
+   assert r9 == vmap(l1pt_page);
+
+   ADD(r10, r5, KEVLAR_DIRECTMAP_VBASE());
+   assert r10 == vmap(addrspace_page);
+
+   r0 := r5;
+   pagedb_entry(r0,r1,fcall_depth-1);
+   r7 := r1;
+   assert r7 == G_PAGEDB_ENTRY(addrspace_page);
+   
+   r0 := r6;
+   pagedb_entry(r0,r1,fcall_depth-1);
+   r8 := r1;
+   assert r8 == G_PAGEDB_ENTRY(l1pt_page);
+
+   STR(KEV_PAGE_ADDRSPACE(), r7, 0);
+   assert addrval(this,PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page)))
+       == KEV_PAGE_ADDRSPACE();
+   STR(r10, r7, 1);
+   assert addrval(this,PAGEDB_ENTRY_ADDRSPACE(G_PAGEDB_ENTRY(addrspace_page)))
+       == vmap(addrspace_page);
+   
+   STR(KEV_PAGE_L1PTABLE(), r8,0);
+   assert addrval(this,PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page)))
+       == KEV_PAGE_L1PTABLE();
+   
+   STR(r10, r8, 1);
+   assert addrval(this,PAGEDB_ENTRY_ADDRSPACE(G_PAGEDB_ENTRY(l1pt_page)))
+       == vmap(addrspace_page);
+
+   STR(r9,r10,0);
+   assert addrval(this,ADDRSPACE_L1PT(vmap(addrspace_page))) ==
+       vmap(l1pt_page);
+
+   STR(r6,r10,1);
+   assert addrval(this,ADDRSPACE_L1PT_PHYS(vmap(addrspace_page))) == l1pt_page;
+
+   STR(1,r10,2);
+   assert addrval(this,ADDRSPACE_REF(vmap(addrspace_page))) == 1;
+
+   STR(KEV_ADDRSPACE_INIT(),r10,3);
+   assert addrval(this,ADDRSPACE_STATE(vmap(addrspace_page))) ==
+       KEV_ADDRSPACE_INIT();
+   
+   fcall_epilogue(fcall_depth-1);
+}
+
 procedure kev_smc_init_addrspace(
     {:register op_r(0)} addrspace_page:int,
     {:register op_r(1)} l1pt_page:int,
@@ -207,20 +301,18 @@ procedure kev_smc_init_addrspace(
         can_fcall_n(this,fcall_depth);
         ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
         ValidAddrspace(this,vmap(addrspace_page));
-        // ValidMemRange(this,vmap(addrspace_page),vmap(addrspace_page)*ADDRSPACE_SIZE());
         ValidMemIs32(this);
     requires
         addrspace_page != l1pt_page;
-        // G_PAGEDB() <= addrspace_page < G_PAGEDB_END();
-        // G_PAGEDB() <= l1pt_page < G_PAGEDB_END();
-        // !(STACK_LOWER() <= addrspace_page < STACK_UPPER());
-        // !(STACK_LOWER() <= l1pt_page < STACK_UPPER());
     ensures
+        //RegPreserving(old(this),this);
         MemValidityPreserving(old(this),this); 
-        //(old(addrspace_page) >= KEVLAR_SECURE_NPAGES()) ==>
+        sp == old(sp);
+        StackValuePreserving(old(this),this,fcall_depth);
+
         !page_is_valid(addrspace_page) ==>
             err == KEV_ERR_INVALID_PAGENO();
-        !page_is_valid(addrspace_page) ==>
+        !page_is_valid(l1pt_page) ==>
             err == KEV_ERR_INVALID_PAGENO();
         page_is_valid(addrspace_page) && page_is_valid(l1pt_page) &&
             (addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) !=
@@ -228,8 +320,8 @@ procedure kev_smc_init_addrspace(
         page_is_valid(addrspace_page) && page_is_valid(l1pt_page) &&
             (addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page))) !=
                 KEV_PAGE_FREE()) ==> err == KEV_ERR_PAGEINUSE();
-        err == KEV_ERR_SUCCESS() ==> page_is_valid(addrspace_page);
-        err == KEV_ERR_SUCCESS() ==> page_is_valid(l1pt_page);
+        // err == KEV_ERR_SUCCESS() ==> page_is_valid(addrspace_page);
+        // err == KEV_ERR_SUCCESS() ==> page_is_valid(l1pt_page);
         err == KEV_ERR_SUCCESS() ==>
             (addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) ==
                 KEV_PAGE_ADDRSPACE());
@@ -283,6 +375,11 @@ procedure kev_smc_init_addrspace(
         } else if( r8 != KEV_PAGE_FREE() ) {
             err := KEV_ERR_PAGEINUSE();
         } else {
+            r0 := r5;
+            r1 := r6;
+            kev_smc_init_addrspace_success(r0,r1,err,fcall_depth-1);
+            
+            /*
             // assert ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
             assert page_is_valid(addrspace_page) && page_is_valid(l1pt_page);
             assert addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) ==
@@ -292,51 +389,8 @@ procedure kev_smc_init_addrspace(
 
             //TODO check word-alignment.
 
-            ADD(r9, r6, KEVLAR_DIRECTMAP_VBASE());
-            assert r9 == vmap(l1pt_page);
-
-            ADD(r10, r5, KEVLAR_DIRECTMAP_VBASE());
-            assert r10 == vmap(addrspace_page);
-
-            r0 := r5;
-            pagedb_entry(r0,r1,fcall_depth-1);
-            r7 := r1;
-            assert r7 == G_PAGEDB_ENTRY(addrspace_page);
-            
-            r0 := r6;
-            pagedb_entry(r0,r1,fcall_depth-1);
-            r8 := r1;
-            assert r8 == G_PAGEDB_ENTRY(l1pt_page);
-
-            STR(KEV_PAGE_ADDRSPACE(), r7, 0);
-            assert addrval(this,PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page)))
-                == KEV_PAGE_ADDRSPACE();
-            STR(r10, r7, 1);
-            assert addrval(this,PAGEDB_ENTRY_ADDRSPACE(G_PAGEDB_ENTRY(addrspace_page)))
-                == vmap(addrspace_page);
-            
-            STR(KEV_PAGE_L1PTABLE(), r8,0);
-            assert addrval(this,PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page)))
-                == KEV_PAGE_L1PTABLE();
-            
-            STR(r10, r8, 1);
-            assert addrval(this,PAGEDB_ENTRY_ADDRSPACE(G_PAGEDB_ENTRY(l1pt_page)))
-                == vmap(addrspace_page);
-
-            STR(r9,r10,0);
-            assert addrval(this,ADDRSPACE_L1PT(vmap(addrspace_page))) ==
-                vmap(l1pt_page);
-
-            STR(r6,r10,1);
-            assert addrval(this,ADDRSPACE_L1PT_PHYS(vmap(addrspace_page))) == l1pt_page;
-
-            STR(1,r10,2);
-            assert addrval(this,ADDRSPACE_REF(vmap(addrspace_page))) == 1;
-
-            STR(KEV_ADDRSPACE_INIT(),r10,3);
-            assert addrval(this,ADDRSPACE_STATE(vmap(addrspace_page))) ==
-                KEV_ADDRSPACE_INIT();
            
+            */
             err := KEV_ERR_SUCCESS();
         }
 
