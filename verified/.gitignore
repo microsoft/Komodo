@@ -4,3 +4,4 @@
 *.S
 ARMtest1.dfy
 smc_handler.dfy
+flycheck_*.dfy
