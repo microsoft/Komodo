@@ -32,8 +32,8 @@ $(dir)/ARMdef.dll: $(dir)/assembly.s.dfy
 $(dir)/ARMprint.dll: $(dir)/ARMdef.dfy
 $(dir)/ARMspartan.dll: $(dir)/ARMdef.dfy
 
-# keep these "intermediate" files around, to avoid pointless re-verification
-.SECONDARY: $(SPARTAN_DEPS)
+# keep all "intermediate" files around, to avoid pointless re-verification
+.SECONDARY:
 
 # temp target to produce a bootable image
 $(dir)/%.img: $(dir)/%.o
