@@ -6,15 +6,14 @@ include "assembly.s.dfy"
 datatype ARMReg = R(n:int) | SP(spm:mode) | LR(lpm: mode)
 // In FIQ, R8 to R12 are also banked
 
-datatype mem = Address(addr:int) // | GlobalVar(g:int) | LocalVar(l:int)
+datatype mem = Address(addr:int)
 datatype operand = OConst(n:int) | OReg(r:ARMReg) | OSP | OLR 
 
 datatype frame = Frame(locals:map<mem, int>)
 datatype state = State(regs:map<ARMReg, int>,
                        addresses:map<mem, int>,
-                       //globals:map<mem, int>,
+                       globals:map<string, seq<int>>,
                        // stack:seq<frame>,
-                       // heap:map<int, int>,
                        // ns:bool,
                        // cpsr:cpsr_val,
                        // spsr:map<mode, cpsr_val>,
@@ -158,11 +157,6 @@ predicate ValidOperand(s:state, o:operand)
             case SP(m) => false // not used directly 
             case LR(m) => false // not used directly 
         )
-        // case OMem(x) => (match x
-        //  case GlobalVar(g) => x in s.globals
-        //  case LocalVar(l)  => |s.stack| > 0 && x in s.stack[0].locals
-        //     case Address(a)   => x in s.addresses
-        // )
         case OSP => SP(mode_of_state(s)) in s.regs
         case OLR => LR(mode_of_state(s)) in s.regs
 }
@@ -234,11 +228,6 @@ function OperandContents(s:state, o:operand): int
     match o
         case OConst(n) => n
         case OReg(r) => s.regs[r]
-        // case OMem(x) => (match x
-        //  case GlobalVar(g) => s.globals[x]
-        //  case LocalVar(l) => s.stack[0].locals[x]
-        //     case Address(a) => s.addresses[x]
-        // )
         case OSP => s.regs[SP(mode_of_state(s))]
         case OLR => s.regs[LR(mode_of_state(s))]
 }
@@ -266,13 +255,6 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
         case OReg(reg) => r == s.(regs := s.regs[o.r := v])
         case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := v])
         case OSP => r == s.(regs := s.regs[SP(mode_of_state(s)) := v])
-        // case OMem(x) => ( match x
-        //     case Address(a) => r == s.(addresses:= s.addresses[o.x := v])
-        //  case GlobalVar(g) => r == s.(globals := s.globals[o.x := v])
-        //  case LocalVar(l) => r == s.(stack :=
-        //      [s.stack[0].(locals := s.stack[0].locals[o.x := v])] +
-        //          s.stack[1..])
-        // )
 }
 
 predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
@@ -281,6 +263,13 @@ predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
     ensures  ValidMem(s, m)
 {
     ok && r == s.(addresses := s.addresses[m := v])
+}
+
+predicate evalGlobalUpdate(s:state, g:string, offset:nat, v:int, r:state, ok:bool)
+    requires g in s.globals
+    requires WordAligned(offset) && offset / 4 < |s.globals[g]|
+{
+    ok && r == s.(globals := s.globals[g := s.globals[g][(offset / 4) := v]])
 }
 
 predicate evalModeUpdate(s:state, newmode:int, r:state, ok:bool)
@@ -464,4 +453,7 @@ predicate evalCode(c:code, s:state, r:state, ok:bool)
         case While(cond, body) => exists n:nat :: evalWhile(cond, body, n, s, r, ok)
 }
 
-predicate{:opaque} sp_eval(c:code, s:state, r:state, ok:bool) { evalCode(c, s, r, ok) }
+predicate{:opaque} sp_eval(c:code, s:state, r:state, ok:bool)
+{
+    evalCode(c, s, r, ok)
+}
