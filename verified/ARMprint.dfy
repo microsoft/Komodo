@@ -1,31 +1,30 @@
 include "ARMdef.dfy"
 
-method cma()       { print(", "); }
-method nl()        { print("\n"); }
-method not_impl()  { print("  !!!NOT IMPLEMENTED!!!"); }
+method nl()
+{
+    print("\n");
+}
 
 function method cmpNot(c:ocmp):ocmp
 {
-  match c
-    case OEq => ONe
-    case ONe => OEq
-    case OLe => OGt
-    case OGe => OLt
-    case OLt => OGe
-    case OGt => OLe
+    match c
+        case OEq => ONe
+        case ONe => OEq
+        case OLe => OGt
+        case OGe => OLt
+        case OLt => OGe
+        case OGt => OLe
 }
 
 method printBcc(c:ocmp)
 {
     match c
-    {
         case OEq => print("  BEQ ");
         case ONe => print("  BNE ");
         case OLe => print("  BLE ");
         case OGe => print("  BGE ");
         case OLt => print("  BLT ");
         case OGt => print("  BGT ");
-    }
 }
 
 /*
@@ -40,70 +39,104 @@ method printId(id:id)
 method printOperand(o:operand)
 {
     match o
-        case OConst(n) => print("#");print(n);
+        case OConst(n) => print("#"); print(n);
         case OReg(r) => {match r
             case R(n) => print("r"); print(n);
-            case SP(m) => print("this should never happen");
-            case LR(m) => print("this should never happen");
+            case SP(m) => print("XXX-badreg-bankedSP");
+            case LR(m) => print("XXX-badreg-bankedLR");
         }
         case OSP => print("sp");
         case OLR => print("lr");
         // case OMem(x) => not_impl();
 }
 
+method printIns3Op(instr:string, dest:operand, src1:operand, src2:operand)
+{
+    print("  ");
+    print(instr);
+    print(" ");
+    printOperand(dest);
+    print(", ");
+    printOperand(src1);
+    print(", ");
+    printOperand(src2);
+    nl();
+}
+
+method printIns2Op(instr:string, dest:operand, src:operand)
+{
+    print("  ");
+    print(instr);
+    print(" ");
+    printOperand(dest);
+    print(", ");
+    printOperand(src);
+    nl();
+}
+
+method printIns1Op(instr:string, op:operand)
+{
+    print("  ");
+    print(instr);
+    print(" ");
+    printOperand(op);
+    nl();
+}
+
+method printInsLdStr(instr:string, dest:operand, base:operand, offset:operand)
+{
+    print("  ");
+    print(instr);
+    print(" ");
+    printOperand(dest);
+    print(", [");
+    printOperand(base);
+    if (offset != OConst(0)) {
+        print(", ");
+        printOperand(offset);
+    }
+    print("]");
+    nl();
+}
+
 method printIns(ins:ins)
 {
     match ins
     {
-        case ADD(dest, src1, src2) =>
-            print("  ADD "); printOperand(dest); cma();
-                printOperand(src1); cma();
-                printOperand(src2); nl();
-        case SUB(dest, src1, src2) =>
-            print("  SUB "); printOperand(dest); cma();
-                printOperand(src1); cma();
-                printOperand(src2); nl();
-        case MUL(dest, src1, src2) =>
-            print("  MUL "); printOperand(dest); cma();
-                printOperand(src1); cma();
-                printOperand(src2); nl();
-        case UDIV(dest, src1, src2) =>
-            print("  UDIV "); printOperand(dest); cma();
-                printOperand(src1); cma();
-                printOperand(src2); nl();
-        case AND(dest, src1, src2) => not_impl();
-        case ORR(dest, src1, src2) => not_impl();
-        case EOR(dest, src1, src2) => not_impl();
-        case ROR(dest, src1, src2) => not_impl();
-        case LSL(dest, src1, src2) => not_impl();
-        case LSR(dest, src1, src2) => not_impl();
-        case MVN(dest, src) => not_impl();
-        case LDR(rd, base, ofs) =>
-            print("  LDR "); printOperand(rd); cma();
-                print("["); printOperand(base); cma();
-                printOperand(ofs); print("]"); nl();
-        case STR(rd, base, ofs) =>
-            print("  STR "); printOperand(rd); cma();
-                print("["); printOperand(base); cma();
-                printOperand(ofs); print("]"); nl();
-        case MOV(dst, src) =>
-            print("  MOV "); printOperand(dst); cma();
-                printOperand(src); nl();
-        case CPS(mod) =>
-            print("  CPS "); printOperand(mod); nl();
+        case ADD(dest, src1, src2) => printIns3Op("ADD", dest, src1, src2);
+        case SUB(dest, src1, src2) => printIns3Op("SUB", dest, src1, src2);
+        case MUL(dest, src1, src2) => printIns3Op("MUL", dest, src1, src2);
+        case UDIV(dest, src1, src2) => printIns3Op("UDIV", dest, src1, src2);
+        case AND(dest, src1, src2) => printIns3Op("AND", dest, src1, src2);
+        case ORR(dest, src1, src2) => printIns3Op("ORR", dest, src1, src2);
+        case EOR(dest, src1, src2) => printIns3Op("EOR", dest, src1, src2);
+        case ROR(dest, src1, src2) => printIns3Op("ROR", dest, src1, src2);
+        case LSL(dest, src1, src2) => printIns3Op("LSL", dest, src1, src2);
+        case LSR(dest, src1, src2) => printIns3Op("LSR", dest, src1, src2);
+        case MVN(dest, src) => printIns2Op("MVN", dest, src);
+        case LDR(rd, base, ofs) => printInsLdStr("LDR", rd, base, ofs);
+        case STR(rd, base, ofs) => printInsLdStr("STR", rd, base, ofs);
+        case MOV(dst, src) => printIns2Op("MOV", dst, src);
+        case CPS(mod) => printIns1Op("CPS", mod);
     }
 }
 
 method printBlock(b:codes, n:int) returns(n':int)
 {
-  n' := n;
-  var i := b;
-  while (i.sp_CCons?)
-    decreases i
-  {
-    n' := printCode(i.hd, n');
-    i := i.tl;
-  }
+    n' := n;
+    var i := b;
+    while (i.sp_CCons?)
+        decreases i
+    {
+        n' := printCode(i.hd, n');
+        i := i.tl;
+    }
+}
+
+method printLabel(n:int)
+{
+    print("L");
+    print(n);
 }
 
 method printCode(c:code, n:int) returns(n':int)
@@ -116,39 +149,40 @@ method printCode(c:code, n:int) returns(n':int)
             var false_branch := n;
             var end_of_block := n + 1;
             // Do comparison
-            print("  CMP "); printOperand(ifb.o1); cma();
-                printOperand(ifb.o2); nl();
+            printIns2Op("CMP", ifb.o1, ifb.o2);
             // Branch to false branch if cond is false
-            printBcc(cmpNot(ifb.cmp)); print("L"); print(false_branch); nl();
+            printBcc(cmpNot(ifb.cmp)); printLabel(false_branch); nl();
             // True branch
             n' := printCode(ift, n + 2);
-            print("  B L"); print(end_of_block); nl(); 
-            print("L"); print(false_branch); print(":\n");
+            print("  B "); printLabel(end_of_block); nl();
+            printLabel(false_branch); print(":"); nl();
             // False branch
             n' := printCode(iff, n');
             // Label end of block
-            print("L"); print(end_of_block); print(":\n");
+            printLabel(end_of_block); print(":"); nl();
         }   
         case While(b, loop) =>
         {
           var n1 := n;
           var n2 := n + 1;
-          print("  B L"); print(n2); print("\n");
-          print("L"); print(n1); print(":\n");
+          print("  B "); printLabel(n2); nl();
+          printLabel(n1); print(":"); nl();
           n' := printCode(loop, n + 2);
-          print("L"); print(n2); print(":\n");
-          print("  CMP "); printOperand(b.o1); print(", "); printOperand(b.o2); print("\n");
-          printBcc(cmpNot(b.cmp)); print("L"); print(n1); print("\n");
+          printLabel(n2); print(":"); nl();
+          printIns2Op("CMP", b.o1, b.o2);
+          printBcc(cmpNot(b.cmp)); printLabel(n1); nl();
         }
     }
 }
 
-method printHeader(symname:string){
-    print(".arm\n");
-    print(".section .text\n");
-    print(".global "); print(symname); print("\n");
-    print(symname); print(":\n");
+method printHeader(symname:string)
+{
+    print(".arm"); nl();
+    print(".section .text"); nl();
+    print(".global "); print(symname); nl();
+    print(symname); print(":"); nl();
 }
 
-method printFooter(){
+method printFooter()
+{
 }
