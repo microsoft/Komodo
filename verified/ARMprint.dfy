@@ -175,12 +175,17 @@ method printCode(c:code, n:int) returns(n':int)
     }
 }
 
-method printHeader(symname:string)
+method printFunction(symname:string, c:code, n:int) returns(n':int)
+{
+    print(".global "); print(symname); nl();
+    print(symname); print(":"); nl();
+    n' := printCode(c, n);
+}
+
+method printHeader()
 {
     print(".arm"); nl();
     print(".section .text"); nl();
-    print(".global "); print(symname); nl();
-    print(symname); print(":"); nl();
 }
 
 method printFooter()

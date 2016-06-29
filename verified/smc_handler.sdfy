@@ -398,11 +398,10 @@ procedure smc_handler(
 }
 
 #verbatim
-
 method Main()
 {
-  printHeader("smc_handler");
-  var n := printCode(sp_code_smc_handler(), 0);
+  printHeader();
+  var n := printFunction("smc_handler", sp_code_smc_handler(), 0);
   printFooter();
 }
 #endverbatim
