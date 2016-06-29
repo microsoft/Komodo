@@ -11,8 +11,25 @@ predicate page_is_valid(page:int)
     0 <= page < KEVLAR_SECURE_NPAGES()
 }
 
-function vmap(phys:int):int
+function {:opaque} vmap_helper(phys:int):bool
+    requires isUInt32(phys)
+    ensures  vmap_helper(phys) == true;
+    ensures  
+    (KEVLAR_DIRECTMAP_VBASE() + G_SECURE_PHYSBASE() +
+        KEVLAR_PAGE_SIZE() * phys) % 4 == 0;
 {
+   assert (KEVLAR_DIRECTMAP_VBASE() % 4) == 0;
+   assert (G_SECURE_PHYSBASE() % 4) == 0;
+   assert (KEVLAR_PAGE_SIZE() % 4) == 0;
+   assert ( (KEVLAR_PAGE_SIZE() * phys) % 4) == 0;
+   true
+}
+
+function vmap(phys:int):int
+    requires isUInt32(phys);
+    ensures (vmap(phys) % 4) == 0
+{
+   assert vmap_helper(phys);
    KEVLAR_DIRECTMAP_VBASE() + G_SECURE_PHYSBASE() +
         KEVLAR_PAGE_SIZE() * phys
 }
@@ -138,12 +155,14 @@ procedure kev_smc_init_addrspace_success(
         fcall_depth > 2;
         can_fcall_n(this,fcall_depth);
         ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
+        ValidMemRange(this,vmap(l1pt_page),vmap(l1pt_page)+KEVLAR_PAGE_SIZE()) &&
         ValidMemIs32(this);
     requires
         addrspace_page != l1pt_page;
         page_is_valid(addrspace_page);
         page_is_valid(l1pt_page);
         WordAligned(l1pt_page); 
+        WordAligned(vmap(l1pt_page)); 
         ValidAddrspace(this,vmap(addrspace_page));
         addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) ==
             KEV_PAGE_FREE();
@@ -165,8 +184,10 @@ procedure kev_smc_init_addrspace_success(
         addrval(this, ADDRSPACE_L1PT(vmap(addrspace_page))) == vmap(l1pt_page);
         addrval(this, ADDRSPACE_L1PT_PHYS(vmap(addrspace_page))) == l1pt_page; 
         addrval(this, ADDRSPACE_REF(vmap(addrspace_page))) == 1;
-        addrval(this, ADDRSPACE_STATE(vmap(addrspace_page))) ==
+        addrval(this, ADDRSPACE_STATE(vmap(addrspace_page))) == 
             KEV_ADDRSPACE_INIT();
+        forall i:int :: (vmap(l1pt_page) <= i < vmap(l1pt_page) + KEVLAR_PAGE_SIZE()) &&
+            WordAligned(i)  ==> addrval(this, i) == 0;
 {
    fcall_prologue(fcall_depth);
 
@@ -221,6 +242,11 @@ procedure kev_smc_init_addrspace_success(
    STR(sp_op_const(KEV_ADDRSPACE_INIT()),r10,12);
    assert addrval(this,ADDRSPACE_STATE(vmap(addrspace_page))) ==
        KEV_ADDRSPACE_INIT();
+  
+   r0 := r9; // vmap(l1pt_page)
+   ADD(r1, r9, sp_op_const(KEVLAR_PAGE_SIZE()));
+   r2 := 0;
+   memset(r0,r1,r2,fcall_depth-1);
    
    fcall_epilogue(fcall_depth-1);
 }
@@ -237,6 +263,7 @@ procedure kev_smc_init_addrspace(
         can_fcall_n(this,fcall_depth);
         ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
         ValidAddrspace(this,vmap(addrspace_page));
+        ValidMemRange(this,vmap(l1pt_page),vmap(l1pt_page)+KEVLAR_PAGE_SIZE()) &&
         ValidMemIs32(this);
     requires
         addrspace_page != l1pt_page;
@@ -245,7 +272,6 @@ procedure kev_smc_init_addrspace(
         MemValidityPreserving(old(this),this); 
         sp == old(sp);
         StackValuePreserving(old(this),this,fcall_depth);
-
         !page_is_valid(addrspace_page) ==>
             err == KEV_ERR_INVALID_PAGENO();
         !page_is_valid(l1pt_page) ==>
@@ -343,7 +369,7 @@ procedure smc_handler(
         ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
         callno == KEV_SMC_INIT_ADDRSPACE() ==>
             ValidMemRange(this,arg1,arg1+KEVLAR_PAGE_SIZE()) &&
-            ValidMemRange(this,arg2,arg2+KEVLAR_PAGE_SIZE()) &&
+            ValidMemRange(this,vmap(arg2),vmap(arg2)+KEVLAR_PAGE_SIZE()) &&
             // TODO violating these precond should throw errors. We shouldn't
             // assume trusted code won't violate them.
             (arg1 != arg2) &&
