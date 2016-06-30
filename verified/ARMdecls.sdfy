@@ -276,31 +276,25 @@ procedure xorEquals(inout{:operand} o1:int, {:operand} o2:int)
     ensures
         evalUpdate(old(this), @o1, old(xor32(o1,o2)), this, true);
 
-procedure loadAddrOfGlobal(out{:operand} rd:int, name:string)
+procedure loadAddrOfGlobal(out{:operand} rd:int, {:operand} name:string)
     requires/ensures
         ValidDestinationOperand(this, @rd);
-        isUInt32(rd);
-    requires
-        ValidGlobal(this, name);
+        ValidGlobal(this, @name);
     ensures
         evalHavocReg(old(this), @rd, this, true);
-        0 <= rd < MaxVal();
-        WordAligned(rd);
-        rd == AddressOfGlobal(this, name);
+        AddressOfGlobal(this, @name, rd);
 
-procedure LDRglobal(out{:operand} rd:int, name:string, {:operand} base:int, {:operand} ofs:int)
+procedure LDRglobal(out{:operand} rd:int, {:operand} name:string,
+                    {:operand} base:int, {:operand} ofs:int)
     requires/ensures
         ValidDestinationOperand(this, @rd);
         ValidOperand(this, @base);
         ValidOperand(this, @ofs);
+        ValidGlobalOffset(this, @name, ofs);
+        AddressOfGlobal(this, @name, base);
         isUInt32(rd);
-        isUInt32(base);
         isUInt32(ofs);
-    requires
-        ValidGlobal(this, name);
-        ValidGlobalOffset(this, name, ofs);
-        base == AddressOfGlobal(this, name);
     ensures
-        evalUpdate(old(this), @rd, GlobalContents(old(this), name, ofs), this, true);
+        evalUpdate(old(this), @rd, GlobalContents(old(this), @name, ofs), this, true);
         isUInt32(rd);
         0 <= rd < MaxVal();

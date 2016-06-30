@@ -149,6 +149,9 @@ function method{:opaque} sp_code_MOV(dst:operand, src:operand):code
 function method{:opaque} sp_code_LDR(rd:operand, base:operand, ofs:operand):code
     { Ins(LDR(rd, base, ofs)) }
 
+function method{:opaque} sp_code_LDRglobal(rd:operand, global:operand, base:operand, ofs:operand):code
+    { Ins(LDR_global(rd, global, base, ofs)) }
+
 function method{:opaque} sp_code_STR(rd:operand, base:operand, ofs:operand):code
     { Ins(STR(rd, base, ofs)) }
 
@@ -167,11 +170,8 @@ function method{:opaque} sp_code_xorEquals(o1:operand, o2:operand):code { Ins(EO
 //     Block(sp_CCons( i1, sp_CCons(i2, CNil) ))
 // }
 
-function method{:opaque} sp_code_loadAddrOfGlobal(rd:operand, name:string):code
+function method{:opaque} sp_code_loadAddrOfGlobal(rd:operand, name:operand):code
     { Ins(LDR_reloc(rd, name)) }
-
-function method{:opaque} sp_code_LDRglobal(rd:operand, name:string, base:operand, ofs:operand):code
-    { Ins(LDR(rd, base, ofs)) }
 
 //-----------------------------------------------------------------------------
 // Instruction Lemmas
@@ -414,6 +414,24 @@ lemma sp_lemma_LDR(s:state, r:state, ok:bool,
 {
     reveal_sp_eval();
     reveal_sp_code_LDR();
+}
+
+lemma sp_lemma_LDRglobal(s:state, r:state, ok:bool,
+    rd:operand, name:operand, base:operand, ofs:operand)
+    requires ValidDestinationOperand(s, rd);
+    requires ValidOperand(s, base);
+    requires ValidOperand(s, ofs);
+    requires ValidGlobalOffset(s, name, OperandContents(s, ofs));
+    requires AddressOfGlobal(s, name, OperandContents(s, base));
+    requires sp_eval(sp_code_LDRglobal(rd, name, base, ofs), s, r, ok);
+    ensures evalUpdate(s, rd, GlobalContents(s, name, OperandContents(s, ofs)), r, ok);
+    ensures ValidOperand(r, base);
+    ensures ValidOperand(r, ofs);
+    ensures ok;
+    ensures 0 <= OperandContents(r, rd) < MaxVal();
+{
+    reveal_sp_eval();
+    reveal_sp_code_LDRglobal();
 }
 
 lemma sp_lemma_STR(s:state, r:state, ok:bool,

@@ -48,6 +48,7 @@ method printOperand(o:operand)
         case OSP => print("sp");
         case OLR => print("lr");
         // case OMem(x) => not_impl();
+        case OSymbol(sym) => print "="; print(sym);
 }
 
 method printIns3Op(instr:string, dest:operand, src1:operand, src2:operand)
@@ -99,17 +100,6 @@ method printInsLdStr(instr:string, dest:operand, base:operand, offset:operand)
     nl();
 }
 
-method printInsReloc(instr:string, dest:operand, symname:string)
-{
-    print("  ");
-    print(instr);
-    print(" ");
-    printOperand(dest);
-    print(", =");
-    print(symname);
-    nl();
-}
-
 method printIns(ins:ins)
 {
     match ins
@@ -126,10 +116,11 @@ method printIns(ins:ins)
         case LSR(dest, src1, src2) => printIns3Op("LSR", dest, src1, src2);
         case MVN(dest, src) => printIns2Op("MVN", dest, src);
         case LDR(rd, base, ofs) => printInsLdStr("LDR", rd, base, ofs);
+        case LDR_global(rd, global, base, ofs) => printInsLdStr("LDR", rd, base, ofs);
+        case LDR_reloc(rd, sym) => printIns2Op("LDR", rd, sym);
         case STR(rd, base, ofs) => printInsLdStr("STR", rd, base, ofs);
         case MOV(dst, src) => printIns2Op("MOV", dst, src);
         case CPS(mod) => printIns1Op("CPS", mod);
-        case LDR_reloc(rd, name) => printInsReloc("LDR", rd, name);
     }
 }
 
