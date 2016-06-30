@@ -61,8 +61,8 @@ procedure SUB(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 
 procedure MUL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
-        ValidOperand(this, @src1);
-        ValidOperand(this, @src2);
+        ValidRegOperand(this, @src1);
+        ValidRegOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
     requires
         isUInt32(src1);
@@ -205,7 +205,7 @@ procedure LDR(out{:operand} rd:int, {:operand} base:int, {:operand} ofs:int)
 
 procedure STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
     requires/ensures
-        ValidOperand(this, @rd);
+        ValidRegOperand(this, @rd);
         ValidOperand(this, @base);
         ValidOperand(this, @ofs);
         isUInt32(rd);
@@ -221,7 +221,7 @@ procedure STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
 procedure CPS({:operand} mod:int)
     requires
         ValidOperand(this, @mod);
-        ValidMode(mod);
+        ValidModeEncoding(mod);
         isUInt32(mod);
     ensures
         evalModeUpdate(old(this), old(mod), this, true);

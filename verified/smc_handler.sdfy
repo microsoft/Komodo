@@ -76,7 +76,8 @@ procedure phys2monvaddr({:register op_r(1)} phys:int, out {:register op_r(0)} vi
         NonStackValuePreserving(old(this),this);
 {
     fcall_prologue(stack_bytes);
-    MUL(virt,phys,sp_op_const(KEVLAR_PAGE_SIZE()));
+    r4 := sp_op_const(KEVLAR_PAGE_SIZE());
+    MUL(virt,phys,r4);
     virt += sp_op_const(G_SECURE_PHYSBASE());
     virt += sp_op_const(KEVLAR_DIRECTMAP_VBASE());
     fcall_epilogue(stack_bytes-40);
@@ -220,22 +221,26 @@ procedure kev_smc_init_addrspace_success(
    r0 := r5;
    r1 := r6;
 
-   MUL(r7,r0,sp_op_const(PAGEDB_ENTRY_SIZE()));
+   r4 := sp_op_const(PAGEDB_ENTRY_SIZE());
+   MUL(r7,r0,r4);
    r7 += sp_op_const(G_PAGEDB());
    assert r7 == G_PAGEDB_ENTRY(addrspace_page);
    
-   MUL(r8,r1,sp_op_const(PAGEDB_ENTRY_SIZE()));
+   r4 := sp_op_const(PAGEDB_ENTRY_SIZE());
+   MUL(r8,r1,r4);
    r8 += sp_op_const(G_PAGEDB());
    assert r8 == G_PAGEDB_ENTRY(l1pt_page);
 
-   STR(sp_op_const(KEV_PAGE_ADDRSPACE()), r7, 0);
+   r4 := sp_op_const(KEV_PAGE_ADDRSPACE());
+   STR(r4, r7, 0);
    assert addrval(this,PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page)))
        == KEV_PAGE_ADDRSPACE();
    STR(r10, r7, 4);
    assert addrval(this,PAGEDB_ENTRY_ADDRSPACE(G_PAGEDB_ENTRY(addrspace_page)))
        == vmap(addrspace_page);
-   
-   STR(sp_op_const(KEV_PAGE_L1PTABLE()), r8,0);
+
+   r4 := sp_op_const(KEV_PAGE_L1PTABLE());
+   STR(r4, r8, 0);
    assert addrval(this,PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page)))
        == KEV_PAGE_L1PTABLE();
    
@@ -250,10 +255,12 @@ procedure kev_smc_init_addrspace_success(
    STR(r1,r10,4);
    assert addrval(this,ADDRSPACE_L1PT_PHYS(vmap(addrspace_page))) == l1pt_page;
 
-   STR(1,r10,8);
+   r4 := 1;
+   STR(r4,r10,8);
    assert addrval(this,ADDRSPACE_REF(vmap(addrspace_page))) == 1;
-
-   STR(sp_op_const(KEV_ADDRSPACE_INIT()),r10,12);
+   
+   r4 := sp_op_const(KEV_ADDRSPACE_INIT());
+   STR(r4,r10,12);
    assert addrval(this,ADDRSPACE_STATE(vmap(addrspace_page))) ==
        KEV_ADDRSPACE_INIT();
   
@@ -345,12 +352,14 @@ procedure kev_smc_init_addrspace(
         err := sp_op_const(KEV_ERR_INVALID_PAGENO());
     } else { 
         assert WordAligned(l1pt_page);
-        MUL(r7,r0,sp_op_const(PAGEDB_ENTRY_SIZE()));
+        r4 := sp_op_const(PAGEDB_ENTRY_SIZE());
+        MUL(r7,r0,r4);
         r7 += sp_op_const(G_PAGEDB());
         LDR(r7,r7,0);
         assert r7 == addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page)));
 
-        MUL(r8,r1,sp_op_const(PAGEDB_ENTRY_SIZE()));
+        r4 := sp_op_const(PAGEDB_ENTRY_SIZE());
+        MUL(r8,r1,r4);
         r8 += sp_op_const(G_PAGEDB());
         LDR(r8,r8,0);
         assert r8 == addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page)));

@@ -214,8 +214,8 @@ lemma sp_lemma_SUB(s:state, r:state, ok:bool,
 
 lemma sp_lemma_MUL(s:state, r:state, ok:bool,
     dst:operand, src1:operand, src2:operand)
-    requires ValidOperand(s,src1);
-    requires ValidOperand(s,src2);
+    requires ValidRegOperand(s,src1);
+    requires ValidRegOperand(s,src2);
     requires ValidDestinationOperand(s, dst);
     requires sp_eval(sp_code_MUL(dst, src1, src2), s, r, ok);
     requires 0 <= OperandContents(s, src1) < MaxVal();
@@ -418,7 +418,7 @@ lemma sp_lemma_LDR(s:state, r:state, ok:bool,
 
 lemma sp_lemma_STR(s:state, r:state, ok:bool,
     rd:operand, base:operand, ofs:operand)
-    requires ValidOperand(s, rd);
+    requires ValidRegOperand(s, rd);
     requires ValidOperand(s, base);
     requires ValidOperand(s, ofs);
     requires ValidMem(s, addr_mem(s, base, ofs));
@@ -437,7 +437,7 @@ lemma sp_lemma_STR(s:state, r:state, ok:bool,
 lemma sp_lemma_CPS(s:state, r:state, ok:bool, mod:operand)
     requires ValidOperand(s, mod);
     requires sp_eval(sp_code_CPS(mod), s, r, ok);
-    requires ValidMode(OperandContents(s, mod));
+    requires ValidModeEncoding(OperandContents(s, mod));
     requires 0 <= OperandContents(s, mod) < MaxVal();
     ensures  ok;
     ensures  evalModeUpdate(s, OperandContents(s, mod), r, ok);
