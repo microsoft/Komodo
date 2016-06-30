@@ -190,6 +190,13 @@ predicate ValidMode(m:int) {
 predicate ValidDestinationOperand(s:state, o:operand)
     { !o.OConst? && ValidOperand(s, o) }
 
+// MUL only operates on regs
+// Currently the same as ValidDestinationOperand, but in the future globals
+// might be valid destinations but not registers. 
+predicate ValidRegOperand(s:state, o:operand)
+    { !o.OConst? && ValidOperand(s, o) }
+
+
 //-----------------------------------------------------------------------------
 // Functions for bitwise operations
 //-----------------------------------------------------------------------------
@@ -316,8 +323,8 @@ predicate ValidInstruction(s:state, ins:ins)
         case SUB(dest, src1, src2) => ValidOperand(s, src1) &&
             ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
             (0 <= (eval_op(s,src1) - eval_op(s,src2)) < MaxVal())
-        case MUL(dest,src1,src2) => ValidOperand(s, src1) &&
-            ValidOperand(s, src2) && ValidDestinationOperand(s,dest) &&
+        case MUL(dest,src1,src2) => ValidRegOperand(s, src1) &&
+            ValidRegOperand(s, src2) && ValidDestinationOperand(s,dest) &&
             (0 <= (eval_op(s,src1) * eval_op(s,src2)) < MaxVal())
         case UDIV(dest,src1,src2) => ValidOperand(s, src1) &&
             ValidOperand(s, src2) && ValidDestinationOperand(s,dest) &&
@@ -359,7 +366,7 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
             //IsMemOperand(addr) && !IsMemOperand(rd)
         case STR(rd, base, ofs) =>
-            ValidOperand(s, rd) &&
+            ValidRegOperand(s, rd) &&
             ValidOperand(s, ofs) && ValidOperand(s, base) &&
             WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
             ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
