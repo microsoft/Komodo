@@ -11,11 +11,21 @@ predicate page_is_valid(page:int)
     0 <= page < KEVLAR_SECURE_NPAGES()
 }
 
-function {:opaque} vmap_helper(phys:int):bool
+// lemma vmap_lemma(phys:int)
+//     requires isUInt32(phys)
+//     ensures  (KEVLAR_DIRECTMAP_VBASE() + G_SECURE_PHYSBASE() +
+//         KEVLAR_PAGE_SIZE() * phys) % 4 == 0;
+// {
+//    assert (KEVLAR_DIRECTMAP_VBASE() % 4) == 0;
+//    assert (G_SECURE_PHYSBASE() % 4) == 0;
+//    assert (KEVLAR_PAGE_SIZE() % 4) == 0;
+//    assert ( (KEVLAR_PAGE_SIZE() * phys) % 4) == 0;
+// }
+
+predicate {:opaque} vmap_lemma(phys:int)
     requires isUInt32(phys)
-    ensures  vmap_helper(phys) == true;
-    ensures  
-    (KEVLAR_DIRECTMAP_VBASE() + G_SECURE_PHYSBASE() +
+    ensures vmap_lemma(phys) == true;
+    ensures  (KEVLAR_DIRECTMAP_VBASE() + G_SECURE_PHYSBASE() +
         KEVLAR_PAGE_SIZE() * phys) % 4 == 0;
 {
    assert (KEVLAR_DIRECTMAP_VBASE() % 4) == 0;
@@ -27,9 +37,12 @@ function {:opaque} vmap_helper(phys:int):bool
 
 function vmap(phys:int):int
     requires isUInt32(phys);
+    requires page_is_valid(phys);
     ensures (vmap(phys) % 4) == 0
 {
-   assert vmap_helper(phys);
+   // I want this to always be in scope
+   assert vmap_lemma(phys);
+
    KEVLAR_DIRECTMAP_VBASE() + G_SECURE_PHYSBASE() +
         KEVLAR_PAGE_SIZE() * phys
 }
@@ -44,13 +57,13 @@ predicate ValidAddrspace(s:state,base:int)
 
 #endverbatim
 
-procedure phys2monvaddr({:register op_r(1)} phys:int, out {:register op_r(0)} virt:int, ghost fcall_depth:int)
+procedure phys2monvaddr({:register op_r(1)} phys:int, out {:register op_r(0)} virt:int, ghost stack_bytes:int)
     requires/ensures
         ValidState(this);
         ValidStack(this);
         ValidMemIs32(this);
-        fcall_depth > 1;
-        can_fcall_n(this,fcall_depth);
+        stack_bytes >= 40;
+        can_fcall_n(this,stack_bytes);
     requires
         page_is_valid(phys);
     ensures
@@ -59,19 +72,19 @@ procedure phys2monvaddr({:register op_r(1)} phys:int, out {:register op_r(0)} vi
         WordAligned(virt);
         MemValidityPreserving(old(this),this);
         RegPreserving(old(this),this);
-        StackValuePreserving(old(this),this,fcall_depth);
+        StackValuePreserving(old(this),this,stack_bytes);
         NonStackValuePreserving(old(this),this);
 {
-    fcall_prologue(fcall_depth);
+    fcall_prologue(stack_bytes);
     MUL(virt,phys,sp_op_const(KEVLAR_PAGE_SIZE()));
     virt += sp_op_const(G_SECURE_PHYSBASE());
     virt += sp_op_const(KEVLAR_DIRECTMAP_VBASE());
-    fcall_epilogue(fcall_depth-1);
+    fcall_epilogue(stack_bytes-40);
 }
 
 //This is not quite the same as std::memset
 procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
-    {:register op_r(2)} val:int, ghost fcall_depth:int)
+    {:register op_r(2)} val:int, ghost stack_bytes:int)
     requires/ensures
         ValidState(this);
         ValidStack(this);
@@ -79,8 +92,8 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
         WordAligned(lower);
         WordAligned(upper);
         ValidMemIs32(this);
-        fcall_depth > 1;
-        can_fcall_n(this,fcall_depth);
+        stack_bytes >= 40;
+        can_fcall_n(this,stack_bytes);
     requires
         lower < upper;
         lower >= STACK_UPPER() || upper < STACK_LOWER();
@@ -93,13 +106,13 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
             ValidMem(old(this),Address(i)) ==>
                 addrval(this,i) == addrval(old(this),i);
         RegPreserving(old(this),this);
-        StackValuePreserving(old(this),this,fcall_depth);
+        StackValuePreserving(old(this),this,stack_bytes);
         r0 == old(r0);
         r1 == old(r1);
         r2 == old(r2);
 
 {
-    fcall_prologue(fcall_depth);
+    fcall_prologue(stack_bytes);
 
     ghost var loop_old_sp := sp;
     ghost var pre_loop_s := this;
@@ -116,8 +129,8 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
             MemValidityPreserving(old(this),pre_loop_s);
             MemValidityPreserving(pre_loop_s,this);
             ValidMemRange(old(this),lower,upper);
-            StackValuePreserving(pre_loop_s,this,fcall_depth-1);
-            can_fcall_n(this,fcall_depth-1);
+            StackValuePreserving(pre_loop_s,this,stack_bytes-40);
+            can_fcall_n(this,stack_bytes-40);
          
             WordAligned(r9);
                
@@ -141,21 +154,19 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
         STR(r2, r9, 0);
     }
             
-    fcall_epilogue(fcall_depth-1);
+    fcall_epilogue(stack_bytes-40);
 }
 
 procedure kev_smc_init_addrspace_success(
     {:register op_r(0)} addrspace_page:int,
     {:register op_r(1)} l1pt_page:int,
     out {:register op_r(0)} err:int,
-    ghost fcall_depth:int)
+    ghost stack_bytes:int)
     requires/ensures
         ValidState(this);
         ValidStack(this);
-        fcall_depth > 2;
-        can_fcall_n(this,fcall_depth);
-        ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
-        ValidMemRange(this,vmap(l1pt_page),vmap(l1pt_page)+KEVLAR_PAGE_SIZE()) &&
+        stack_bytes >= 80 ;
+        can_fcall_n(this,stack_bytes);
         ValidMemIs32(this);
     requires
         addrspace_page != l1pt_page;
@@ -164,6 +175,8 @@ procedure kev_smc_init_addrspace_success(
         WordAligned(l1pt_page); 
         WordAligned(vmap(l1pt_page)); 
         ValidAddrspace(this,vmap(addrspace_page));
+        ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
+        ValidMemRange(this,vmap(l1pt_page),vmap(l1pt_page)+KEVLAR_PAGE_SIZE()) &&
         addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) ==
             KEV_PAGE_FREE();
         addrval(old(this),PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(l1pt_page))) ==
@@ -171,7 +184,7 @@ procedure kev_smc_init_addrspace_success(
     ensures
         MemValidityPreserving(old(this),this);
         sp == old(sp);
-        StackValuePreserving(old(this),this,fcall_depth);
+        StackValuePreserving(old(this),this,stack_bytes);
 
         addrval(this, PAGEDB_ENTRY_TYPE(G_PAGEDB_ENTRY(addrspace_page))) ==
             KEV_PAGE_ADDRSPACE();
@@ -189,17 +202,18 @@ procedure kev_smc_init_addrspace_success(
         forall i:int :: (vmap(l1pt_page) <= i < vmap(l1pt_page) + KEVLAR_PAGE_SIZE()) &&
             WordAligned(i)  ==> addrval(this, i) == 0;
 {
-   fcall_prologue(fcall_depth);
+   fcall_prologue(stack_bytes);
+   assert StackValuePreserving(old(this), this, stack_bytes);
 
    r5 := addrspace_page;
    r6 := l1pt_page;
 
-   phys2monvaddr(r1,r0,fcall_depth-1);
+   phys2monvaddr(r1,r0,stack_bytes-40);
    r9 := r0;
    assert r9 == vmap(l1pt_page);
 
    r1 := r5;
-   phys2monvaddr(r1,r0,fcall_depth-1);
+   phys2monvaddr(r1,r0,stack_bytes-40);
    r10 := r0;
    assert r10 == vmap(addrspace_page);
 
@@ -246,32 +260,38 @@ procedure kev_smc_init_addrspace_success(
    r0 := r9; // vmap(l1pt_page)
    ADD(r1, r9, sp_op_const(KEVLAR_PAGE_SIZE()));
    r2 := 0;
-   memset(r0,r1,r2,fcall_depth-1);
+   assert ValidState(this);
+   memset(r0,r1,r2,stack_bytes-40);
    
-   fcall_epilogue(fcall_depth-1);
+   assert addrval(this,PAGEDB_ENTRY_ADDRSPACE(G_PAGEDB_ENTRY(l1pt_page)))
+       == vmap(addrspace_page);
+   
+   fcall_epilogue(stack_bytes-40);
 }
 
 procedure kev_smc_init_addrspace(
     {:register op_r(0)} addrspace_page:int,
     {:register op_r(1)} l1pt_page:int,
     out {:register op_r(3)} err:int,
-    ghost fcall_depth:int)
+    ghost stack_bytes:int)
     requires/ensures
         ValidState(this);
         ValidStack(this);
-        fcall_depth > 3;
-        can_fcall_n(this,fcall_depth);
-        ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
-        ValidAddrspace(this,vmap(addrspace_page));
-        ValidMemRange(this,vmap(l1pt_page),vmap(l1pt_page)+KEVLAR_PAGE_SIZE()) &&
+        stack_bytes >= 120;
+        can_fcall_n(this,stack_bytes);
         ValidMemIs32(this);
     requires
         addrspace_page != l1pt_page;
+        ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
+        page_is_valid(addrspace_page) ==>
+            ValidAddrspace(this,vmap(addrspace_page));
+        page_is_valid(l1pt_page) ==>
+            ValidMemRange(this,vmap(l1pt_page),vmap(l1pt_page)+KEVLAR_PAGE_SIZE());
     ensures
         //RegPreserving(old(this),this);
         MemValidityPreserving(old(this),this); 
         sp == old(sp);
-        StackValuePreserving(old(this),this,fcall_depth);
+        StackValuePreserving(old(this),this,stack_bytes);
         !page_is_valid(addrspace_page) ==>
             err == KEV_ERR_INVALID_PAGENO();
         !page_is_valid(l1pt_page) ==>
@@ -307,7 +327,7 @@ procedure kev_smc_init_addrspace(
         err == KEV_ERR_SUCCESS() ==>
             (addrval(this, ADDRSPACE_STATE(vmap(addrspace_page))) == KEV_ADDRSPACE_INIT());
 {
-    fcall_prologue(fcall_depth);
+    fcall_prologue(stack_bytes);
 
     assert 0 <= r1 < MaxVal();
     AND(r4,r1,3);
@@ -340,14 +360,14 @@ procedure kev_smc_init_addrspace(
         } else if( r8 != sp_op_const(KEV_PAGE_FREE()) ) {
             err := sp_op_const(KEV_ERR_PAGEINUSE());
         } else {
-            kev_smc_init_addrspace_success(r0,r1,err,fcall_depth-1);
+            kev_smc_init_addrspace_success(r0,r1,err,stack_bytes-40);
             
             err := OConst(KEV_ERR_SUCCESS());
         }
 
     }
     assert ValidState(this);
-    fcall_epilogue(fcall_depth-1);
+    fcall_epilogue(stack_bytes-40);
 }
 
 procedure smc_handler(
@@ -358,29 +378,20 @@ procedure smc_handler(
     {:register op_r(3)} arg4:int,
     out {:register op_r(11)} err:int,
     out {:register op_r(12)} retval:int,
-    ghost fcall_depth:int)
+    ghost stack_bytes:int)
     requires/ensures
         ValidState(this);
         ValidStack(this);
         ValidMemIs32(this);
-        fcall_depth > 20;
-        can_fcall_n(this,fcall_depth);
+        stack_bytes >= 120;
+        can_fcall_n(this,stack_bytes);
     requires
         ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
-        callno == KEV_SMC_INIT_ADDRSPACE() ==>
-            ValidMemRange(this,arg1,arg1+KEVLAR_PAGE_SIZE()) &&
-            ValidMemRange(this,vmap(arg2),vmap(arg2)+KEVLAR_PAGE_SIZE()) &&
-            // TODO violating these precond should throw errors. We shouldn't
-            // assume trusted code won't violate them.
+        callno == KEV_SMC_INIT_ADDRSPACE() ==> (
             (arg1 != arg2) &&
-            //WordAligned(arg2) && // TODO REMOVE ME
-            (G_PAGEDB() <= arg1 < G_PAGEDB_END()) &&
-            (G_PAGEDB() <= arg2 < G_PAGEDB_END()) &&
-            ValidAddrspace(this,vmap(arg1)); // && 
-            // ValidMemRange(this,vmap(arg1),vmap(arg1)*ADDRSPACE_SIZE());
-
-            // !(STACK_LOWER() <= arg1 < STACK_UPPER()) &&
-            // !(STACK_LOWER() <= arg2 < STACK_UPPER());
+            ( page_is_valid(arg1) ==> ValidAddrspace(this,vmap(arg1)) ) && 
+            ( page_is_valid(arg2) ==>
+                ValidMemRange(this,vmap(arg2),vmap(arg2)+KEVLAR_PAGE_SIZE()) ));
 {
     
     retval := 0;
@@ -391,7 +402,7 @@ procedure smc_handler(
         retval := sp_op_const(KEVLAR_SECURE_NPAGES());
         err := sp_op_const(KEV_ERR_SUCCESS());
     } else if(callno == sp_op_const(KEV_SMC_INIT_ADDRSPACE())) {
-        kev_smc_init_addrspace(arg1, arg2, r3, fcall_depth);
+        kev_smc_init_addrspace(arg1, arg2, r3, stack_bytes);
         err := r3;
     }
 

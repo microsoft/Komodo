@@ -2,7 +2,7 @@ procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
 
 procedure reg_preservation_inner(ghost stack_bytes:int)
     requires
-        stack_bytes > 80;
+        stack_bytes >= 40;
     requires/ensures
         ValidState(this);
         ValidStack(this);
@@ -15,13 +15,13 @@ procedure reg_preservation_inner(ghost stack_bytes:int)
         NonStackValuePreserving(old(this),this);
 {
     fcall_prologue(stack_bytes);
-    // r10 := 99;
+    r10 := 99;
     fcall_epilogue(stack_bytes-40);
 }
 
 procedure reg_preservation_test(ghost stack_bytes:int)
     requires
-        stack_bytes > 120;
+        stack_bytes >= 80;
     requires/ensures
         ValidState(this);
         ValidStack(this);
@@ -45,7 +45,7 @@ procedure main()
         ValidState(this);
         ValidStack(this);
         ValidMemIs32(this);
-        can_fcall_n(this,121);
+        can_fcall_n(this,80);
         ValidMem(this,Address(4));
     ensures
         r4 == 10;
@@ -53,7 +53,7 @@ procedure main()
 {
     r4 := 10;
     STR(5,4,0);
-    reg_preservation_test(121);
+    reg_preservation_test(80);
     
     // r4 wasn't clobbered!
     assert r4 == 10;

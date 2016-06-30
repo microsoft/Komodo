@@ -74,7 +74,7 @@ procedure fcall_prologue(ghost stack_bytes:int)
         ValidStack(this);
         ValidMemIs32(this);
     requires
-        stack_bytes > 80; // TODO get this to >= 1?
+        stack_bytes >= 40; 
         can_fcall_n(this,stack_bytes);
     ensures
         sp == old(sp-40);
@@ -105,10 +105,6 @@ procedure fcall_prologue(ghost stack_bytes:int)
 {
     SUB(sp, sp, 40);
 
-    assert MemValidityPreserving(old(this), this);
-    assert ValidMem(this, Address(sp+44)) ==>
-        addrval(this, sp+44) == addrval(old(this), sp+44);
-
     //push link register onto stack
     STR(lr, sp, 36);
 
@@ -122,9 +118,6 @@ procedure fcall_prologue(ghost stack_bytes:int)
     STR(r10, sp, 8);
     STR(r11, sp, 4);
     STR(r12, sp, 0);
-
-    assert ValidMem(this, Address(sp+44)) ==>
-        addrval(this, sp+44) == addrval(old(this), sp+44);
 
     // forall :: StackValuePreserving(old(this),this,40){
     //     assert forall i:int :: ValidMem(this, Address(i)) && WordAligned(i) &&
