@@ -187,7 +187,7 @@ predicate ValidGlobalOffset(s:state, g:string, offset:int)
     WordAligned(offset) && 0 <= offset < SizeOfGlobal(s, g)
 }
 
-lemma AddressOfGlobal(s:state, g:string) returns (a:int)
+lemma {:axiom} AddressOfGlobal(s:state, g:string) returns (a:int)
     requires ValidGlobal(s, g)
     ensures WordAligned(a) && 0 < a < MaxVal()
 
