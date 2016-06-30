@@ -431,7 +431,7 @@ lemma sp_lemma_STR(s:state, r:state, ok:bool,
 lemma sp_lemma_CPS(s:state, r:state, ok:bool, mod:operand)
     requires ValidOperand(s, mod);
     requires sp_eval(sp_code_CPS(mod), s, r, ok);
-    requires ValidMode(OperandContents(s, mod));
+    requires ValidModeEncoding(OperandContents(s, mod));
     requires 0 <= OperandContents(s, mod) < MaxVal();
     ensures  ok;
     ensures  evalModeUpdate(s, OperandContents(s, mod), r, ok);
