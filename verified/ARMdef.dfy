@@ -109,7 +109,8 @@ datatype ins =
     | MVN(dstMVN:operand, srcMVN:operand)
     | LDR(rdLDR:operand,  baseLDR:operand, ofsLDR:operand)
     | STR(rdSTR:operand,  baseSTR:operand, ofsSTR:operand)
-    | CPS(mod:operand) 
+    | CPS(mod:operand)
+    | LDR_reloc(rdLDR_reloc:operand, symname:string)
 
 //-----------------------------------------------------------------------------
 // Exception Handlers
@@ -160,6 +161,29 @@ predicate ValidOperand(s:state, o:operand)
         case OSP => SP(mode_of_state(s)) in s.regs
         case OLR => LR(mode_of_state(s)) in s.regs
 }
+
+predicate ValidGlobal(s:state, name:string)
+{
+    name in s.globals && 0 < |s.globals[name]| * 4 < MaxVal()
+}
+
+function SizeOfGlobal(s:state, g:string): int
+    requires ValidGlobal(s, g)
+    ensures WordAligned(SizeOfGlobal(s,g))
+    ensures 0 < SizeOfGlobal(s,g) < MaxVal()
+{
+    |s.globals[g]| * 4
+}
+
+predicate ValidGlobalOffset(s:state, g:string, offset:int)
+    requires ValidGlobal(s, g)
+{
+    WordAligned(offset) && 0 <= offset < SizeOfGlobal(s, g)
+}
+
+lemma AddressOfGlobal(s:state, g:string) returns (a:int)
+    requires ValidGlobal(s, g)
+    ensures WordAligned(a) && 0 < a < MaxVal()
 
 predicate Is32BitOperand(s:state, o:operand)
     requires ValidOperand(s, o);
@@ -239,6 +263,12 @@ function MemContents(s:state, m:mem): int
     s.addresses[m]
 }
 
+function GlobalContents(s:state, name:string, offset:int): int
+    requires ValidGlobal(s, name) && ValidGlobalOffset(s, name, offset)
+{
+    (s.globals[name])[offset / 4]
+}
+
 function eval_op(s:state, o:operand): int
     requires ValidOperand(s, o)
     { OperandContents(s,o) }
@@ -257,6 +287,15 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
         case OSP => r == s.(regs := s.regs[SP(mode_of_state(s)) := v])
 }
 
+predicate evalHavocReg(s:state, o:operand, r:state, ok:bool)
+    requires ValidDestinationOperand(s, o);
+{
+    ok && ValidDestinationOperand(r, o) && match o
+        case OReg(reg) => r == s.(regs := s.regs[o.r := r.regs[o.r]])
+        case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := r.regs[LR(mode_of_state(r))]])
+        case OSP => r == s.(regs := s.regs[SP(mode_of_state(s)) := r.regs[SP(mode_of_state(r))]])
+}
+
 predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
     requires ValidMem(s, m)
     requires WordAligned(m.addr)
@@ -266,8 +305,7 @@ predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
 }
 
 predicate evalGlobalUpdate(s:state, g:string, offset:nat, v:int, r:state, ok:bool)
-    requires g in s.globals
-    requires WordAligned(offset) && offset / 4 < |s.globals[g]|
+    requires ValidGlobal(s, g) && ValidGlobalOffset(s, g, offset)
 {
     ok && r == s.(globals := s.globals[g := s.globals[g][(offset / 4) := v]])
 }
@@ -359,6 +397,8 @@ predicate ValidInstruction(s:state, ins:ins)
             //!IsMemOperand(src) && !IsMemOperand(dst)
         case CPS(mod) => ValidOperand(s, mod) &&
             ValidMode(OperandContents(s, mod))
+        case LDR_reloc(rd, name) => 
+            ValidDestinationOperand(s, rd) && ValidGlobal(s, name)
 }
 
 predicate evalIns(ins:ins, s:state, r:state, ok:bool)
@@ -412,6 +452,8 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
         case CPS(mod) => evalModeUpdate(s,
             OperandContents(s, mod),
             r, ok)
+        case LDR_reloc(rd, name) =>
+            evalHavocReg(s, rd, r, ok)
 }
 
 predicate evalBlock(block:codes, s:state, r:state, ok:bool)

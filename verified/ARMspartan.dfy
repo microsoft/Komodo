@@ -167,6 +167,12 @@ function method{:opaque} sp_code_xorEquals(o1:operand, o2:operand):code { Ins(EO
 //     Block(sp_CCons( i1, sp_CCons(i2, CNil) ))
 // }
 
+function method{:opaque} sp_code_loadAddrOfGlobal(rd:operand, name:string):code
+    { Ins(LDR_reloc(rd, name)) }
+
+function method{:opaque} sp_code_LDRglobal(rd:operand, name:string, base:operand, ofs:operand):code
+    { Ins(LDR(rd, base, ofs)) }
+
 //-----------------------------------------------------------------------------
 // Instruction Lemmas
 //-----------------------------------------------------------------------------

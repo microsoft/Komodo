@@ -99,6 +99,17 @@ method printInsLdStr(instr:string, dest:operand, base:operand, offset:operand)
     nl();
 }
 
+method printInsReloc(instr:string, dest:operand, symname:string)
+{
+    print("  ");
+    print(instr);
+    print(" ");
+    printOperand(dest);
+    print(", =");
+    print(symname);
+    nl();
+}
+
 method printIns(ins:ins)
 {
     match ins
@@ -118,6 +129,7 @@ method printIns(ins:ins)
         case STR(rd, base, ofs) => printInsLdStr("STR", rd, base, ofs);
         case MOV(dst, src) => printIns2Op("MOV", dst, src);
         case CPS(mod) => printIns1Op("CPS", mod);
+        case LDR_reloc(rd, name) => printInsReloc("LDR", rd, name);
     }
 }
 
