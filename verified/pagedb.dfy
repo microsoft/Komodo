@@ -1,12 +1,5 @@
 include "kev_constants.dfy"
-
-datatype Maybe<T> = Nothing | Just(T)
-
-function fromJust<T>(x: Maybe<T>): T
-    requires x.Just?
-{
-    match x case Just(v) => v
-}
+include "Maybe.dfy"
 
 type PageNr = int
 type InsecurePageNr = int
