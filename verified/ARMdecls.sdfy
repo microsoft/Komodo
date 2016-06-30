@@ -221,7 +221,7 @@ procedure STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
 procedure CPS({:operand} mod:int)
     requires
         ValidOperand(this, @mod);
-        ValidMode(mod);
+        ValidModeEncoding(mod);
         isUInt32(mod);
     ensures
         evalModeUpdate(old(this), old(mod), this, true);
