@@ -8,16 +8,10 @@ predicate ValidStack(s:sp_state)
     (STACK_LOWER() <= eval_op(s, op_sp()) < STACK_UPPER())
 }
 
-predicate can_fcall(s:sp_state)
+predicate can_fcall_n(s:sp_state,bytes:int)
 {
     ValidState(s) && ValidStack(s) &&
-    (STACK_LOWER() + 40 <= eval_op(s,op_sp()) < STACK_UPPER())
-}
-
-predicate can_fcall_n(s:sp_state,n:int)
-{
-    ValidState(s) && ValidStack(s) &&
-    (STACK_LOWER() + 40*n <= eval_op(s,op_sp()) < STACK_UPPER())
+    (STACK_LOWER() + bytes <= eval_op(s,op_sp()) < STACK_UPPER())
 }
 
 predicate RegPreserving(s:sp_state, r:sp_state)
@@ -53,16 +47,15 @@ predicate MemValuePreserving(s:sp_state, r:sp_state)
         addrval(s,i) == addrval(r,i)
 }
 
-predicate StackValuePreserving(s:sp_state, r:sp_state, depth:int)
+predicate StackValuePreserving(s:sp_state, r:sp_state, bytes_touched:int)
     requires ValidState(s) && ValidState(r);
     requires ValidStack(s) && ValidStack(r);
     requires MemValidityPreserving(s,r);
 {
-    // forall i:int :: !(eval_op(s,op_sp()) - 40*depth <= i < eval_op(s,op_sp())) &&
-    //     ValidMem(s,Address(i)) ==> addrval(r,i) == addrval(s,i)
-    forall i:int {:trgger Address(i)} :: ((STACK_LOWER() <= i < eval_op(s,op_sp()) - 40*depth) ||
-        (eval_op(s,op_sp()) <= i < STACK_UPPER())) && WordAligned(i) &&
-        ValidMem(s,Address(i)) ==> addrval(r,i) == addrval(s,i)
+    forall i:int :: WordAligned(i) &&
+        !(eval_op(s,op_sp()) - bytes_touched <= i < eval_op(s,op_sp())) &&
+        (STACK_LOWER() <= i < STACK_UPPER()) && ValidMem(s,Address(i)) ==>
+            addrval(r,i) == addrval(s,i)
 }
 
 predicate NonStackValuePreserving(s:sp_state, r:sp_state)
@@ -75,14 +68,14 @@ predicate NonStackValuePreserving(s:sp_state, r:sp_state)
 
 #endverbatim
 
-procedure fcall_prologue(ghost fcalls_left:int)
+procedure fcall_prologue(ghost stack_bytes:int)
     requires/ensures
         ValidState(this);
         ValidStack(this);
         ValidMemIs32(this);
     requires
-        fcalls_left > 1; // TODO get this to >= 1?
-        can_fcall_n(this,fcalls_left);
+        stack_bytes >= 40; 
+        can_fcall_n(this,stack_bytes);
     ensures
         sp == old(sp-40);
         
@@ -106,9 +99,9 @@ procedure fcall_prologue(ghost fcalls_left:int)
 
         MemValidityPreserving(old(this),this);
         NonStackValuePreserving(old(this),this);
-        StackValuePreserving(old(this),this,fcalls_left-1);
+        StackValuePreserving(old(this),this,40);
         
-        can_fcall_n(this,fcalls_left-1);
+        can_fcall_n(this,stack_bytes-40);
 {
     SUB(sp, sp, 40);
 
@@ -125,9 +118,38 @@ procedure fcall_prologue(ghost fcalls_left:int)
     STR(r10, sp, 8);
     STR(r11, sp, 4);
     STR(r12, sp, 0);
+
+    // forall :: StackValuePreserving(old(this),this,40){
+    //     assert forall i:int :: ValidMem(this, Address(i)) && WordAligned(i) &&
+    //         (i >= sp + 40) ==> addrval(this, i) == addrval(old(this), i);
+    //     assert forall i:int :: ValidMem(this, Address(i)) && WordAligned(i) &&
+    //         (i >= old(sp)) ==> addrval(this, i) == addrval(old(this), i);
+    //     assert forall i:int :: ValidMem(this, Address(i)) && WordAligned(i) &&
+    //         (i < sp) ==> addrval(this, i) == addrval(old(this), i);
+    //     assert forall i:int :: ValidMem(this, Address(i)) && WordAligned(i) &&
+    //         (i < old(sp-40)) ==> addrval(this, i) == addrval(old(this), i);
+    //     assert forall i:int :: ValidMem(this, Address(i)) && WordAligned(i) &&
+    //         !(sp <= i < sp +40) ==> addrval(this, i) == addrval(old(this), i);
+    //     assert forall i:int :: ValidMem(this, Address(i)) && WordAligned(i) &&
+    //         !(old(sp-40) <= i < old(sp)) ==> addrval(this, i) == addrval(old(this), i);
+    // }
+
+    // forall :: StackValuePreserving(old(this),this,stack_bytes-40)
+    // {
+    //     assert NonStackValuePreserving(old(this),this);
+    //     assert addrval(this, old(sp-(stack_bytes-44))) == addrval(old(this), old(sp-(stack_bytes-44)));
+    //     assert addrval(this, old(sp-(stack_bytes-40))) == addrval(old(this), old(sp-(stack_bytes-40)));
+    //     assert forall i:int :: WordAligned(i) && ValidMem(old(this),Address(i)) &&
+    //         !(old(sp)-(stack_bytes-40) < i <= old(sp)) ==> addrval(this,i) == addrval(old(this), i);
+    //     // assert forall i:int :: !(old(sp)-(stack_bytes-40) < i <= old(sp)) &&
+    //     //     (STACK_LOWER() <= i < STACK_UPPER()) ==> !(old(sp)-(stack_bytes-40) < i <= old(sp));
+    //     // assert forall i:int :: WordAligned(i) && ValidMem(old(this),Address(i)) &&
+    //     //     (STACK_LOWER() <= i < STACK_UPPER()) &&
+    //     //     !( old(sp)-(stack_bytes-40) < i <= old(sp) ) ==> addrval(this,i) == addrval(old(this), i);
+    //     // assert StackValuePreserving(old(this),this,stack_bytes-40);
 }
 
-procedure fcall_epilogue(ghost fcalls_left:int)
+procedure fcall_epilogue(ghost stack_bytes_left:int)
     requires/ensures
         ValidState(this);
         ValidStack(this);
@@ -135,7 +157,7 @@ procedure fcall_epilogue(ghost fcalls_left:int)
     requires
         0 <= sp + 40 < MaxVal();
         sp + 40 < STACK_UPPER();
-        can_fcall_n(this,fcalls_left);
+        can_fcall_n(this,stack_bytes_left);
     ensures
         sp == old(sp+40);
        
@@ -160,7 +182,7 @@ procedure fcall_epilogue(ghost fcalls_left:int)
         MemValidityPreserving(old(this),this);        
         MemValuePreserving(old(this),this);
 
-        can_fcall_n(this,fcalls_left+1);
+        can_fcall_n(this,stack_bytes_left+40);
 {
     //pop r12 down to r4 from stack
     LDR(r12, sp, 0);

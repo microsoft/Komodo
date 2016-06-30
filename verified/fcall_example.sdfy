@@ -1,43 +1,43 @@
 procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
 
-procedure reg_preservation_inner(ghost call_depth:int)
+procedure reg_preservation_inner(ghost stack_bytes:int)
     requires
-        call_depth > 1;
+        stack_bytes >= 40;
     requires/ensures
         ValidState(this);
         ValidStack(this);
         ValidMemIs32(this);
-        can_fcall_n(this,call_depth);
+        can_fcall_n(this,stack_bytes);
     ensures
         MemValidityPreserving(old(this),this);
-        StackValuePreserving(old(this),this,call_depth);
+        StackValuePreserving(old(this),this,stack_bytes);
         RegPreserving(old(this),this);
         NonStackValuePreserving(old(this),this);
 {
-    fcall_prologue(call_depth);
+    fcall_prologue(stack_bytes);
     r10 := 99;
-    fcall_epilogue(call_depth-1);
+    fcall_epilogue(stack_bytes-40);
 }
 
-procedure reg_preservation_test(ghost call_depth:int)
+procedure reg_preservation_test(ghost stack_bytes:int)
     requires
-        call_depth > 2;
+        stack_bytes >= 80;
     requires/ensures
         ValidState(this);
         ValidStack(this);
         ValidMemIs32(this);
-        can_fcall_n(this,call_depth);
+        can_fcall_n(this,stack_bytes);
     ensures
         MemValidityPreserving(old(this),this);
-        StackValuePreserving(old(this),this,call_depth);
+        StackValuePreserving(old(this),this,stack_bytes);
         RegPreserving(old(this),this);
         NonStackValuePreserving(old(this),this);
 {
-    fcall_prologue(call_depth);
+    fcall_prologue(stack_bytes);
     r10 := 3000;
     r4  := 98;
-    reg_preservation_inner(call_depth-1);
-    fcall_epilogue(call_depth-1);
+    reg_preservation_inner(stack_bytes-40);
+    fcall_epilogue(stack_bytes-40);
 }
 
 procedure main()
@@ -45,7 +45,7 @@ procedure main()
         ValidState(this);
         ValidStack(this);
         ValidMemIs32(this);
-        can_fcall_n(this,3);
+        can_fcall_n(this,80);
         ValidMem(this,Address(4));
     ensures
         r4 == 10;
@@ -53,7 +53,7 @@ procedure main()
 {
     r4 := 10;
     STR(5,4,0);
-    reg_preservation_test(3);
+    reg_preservation_test(80);
     
     // r4 wasn't clobbered!
     assert r4 == 10;
@@ -65,7 +65,7 @@ procedure main()
 
 method Main()
 {
-  printHeader();
+  printHeader("fcall_example");
   var n := printCode(sp_code_main(), 0);
   printFooter();
 }

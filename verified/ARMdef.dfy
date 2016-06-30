@@ -1,4 +1,5 @@
 include "assembly.s.dfy"
+include "Maybe.dfy"
 
 //-----------------------------------------------------------------------------
 // Microarchitectural State
@@ -30,8 +31,9 @@ datatype cpsr_val = CPSR(
     // f:bool,             //FIQ mask
     m:mode)
 
-datatype mode = User | Supervisor | Monitor |Abort | Undefined | FIQ
-datatype priv = PL0 | PL1 // | PL2 // PL2 is only used in Hyp, not modeled
+// System mode is not modelled
+datatype mode = User | FIQ | IRQ | Supervisor | Abort | Undefined | Monitor
+datatype priv = PL0 | PL1 // PL2 is only used in Hyp, not modeled
 
 
 //-----------------------------------------------------------------------------
@@ -59,29 +61,33 @@ function method mode_of_state(s:state):mode
 
 function method priv_of_mode(m:mode):priv
 {
-    match m
-        case User => PL0
-        case Supervisor => PL1
-        case Monitor => PL1
-        case Abort => PL1
-        case Undefined => PL1
-        case FIQ => PL1
+    if m == User then PL0 else PL1
 }
 
 function method priv_of_state(s:state):priv
     { priv_of_mode(mode_of_state(s)) }
 
-
-function method mode_encoding(m:int):mode
-    requires ValidMode(m)
+function method decode_mode'(e:int):Maybe<mode>
 {
-         if m == 0x10 then User
-    else if m == 0x11 then FIQ
-    else if m == 0x13 then Supervisor
-    else if m == 0x16 then Monitor
-    else if m == 0x17 then Abort
-    else if m == 0x1B then Undefined
-    else User // should not happen
+    if e == 0x10 then Just(User)
+    else if e == 0x11 then Just(FIQ)
+    else if e == 0x12 then Just(IRQ)
+    else if e == 0x13 then Just(Supervisor)
+    else if e == 0x17 then Just(Abort)
+    else if e == 0x1b then Just(Undefined)
+    else if e == 0x16 then Just(Monitor)
+    else Nothing
+}
+
+predicate ValidModeEncoding(e:int)
+{
+    decode_mode'(e).Just?
+}
+
+function method decode_mode(e:int):mode
+    requires ValidModeEncoding(e)
+{
+    fromJust(decode_mode'(e))
 }
 
 function addr_mem(s:state, base:operand, ofs:operand):mem
@@ -201,10 +207,6 @@ predicate WordAligned(addr:int) { addr % 4 == 0}
 predicate ValidShiftOperand(s:state, o:operand)
     { ( o.OConst? && 0 <= o.n <= 32) || ValidOperand(s, o) }
 
-predicate ValidMode(m:int) {
-    m == 0x10 || m == 0x11 || m == 0x13 || m == 0x16 || m == 0x17 || m == 0x17 
-}
-
 predicate ValidDestinationOperand(s:state, o:operand)
     { !o.OConst? && ValidOperand(s, o) }
 
@@ -313,7 +315,7 @@ predicate evalGlobalUpdate(s:state, g:string, offset:nat, v:int, r:state, ok:boo
 predicate evalModeUpdate(s:state, newmode:int, r:state, ok:bool)
 {
     // ok && r == s.(cpsr := s.cpsr.(m := newmode))
-    ok && ValidMode(newmode) && r == s.(mod := mode_encoding(newmode))
+    ok && ValidModeEncoding(newmode) && r == s.(mod := decode_mode(newmode))
 }
 
 function evalCmp(c:ocmp, i1:int, i2:int):bool
@@ -396,7 +398,7 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidOperand(s, src) && Is32BitOperand(s, src)
             //!IsMemOperand(src) && !IsMemOperand(dst)
         case CPS(mod) => ValidOperand(s, mod) &&
-            ValidMode(OperandContents(s, mod))
+            ValidModeEncoding(OperandContents(s, mod))
         case LDR_reloc(rd, name) => 
             ValidDestinationOperand(s, rd) && ValidGlobal(s, name)
 }
