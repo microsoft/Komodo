@@ -13,6 +13,7 @@ datatype operand = OConst(n:int) | OReg(r:ARMReg) | OSP | OLR | OSymbol(sym:stri
 
 //datatype frame = Frame(locals:map<mem, int>)
 datatype globals = Globals(map<string, seq<int>>)
+datatype globaldecls = GlobalDecls(map<string, int>)
 datatype state = State(regs:map<ARMReg, int>,
                        addresses:map<mem, int>,
                        globals:globals,
@@ -203,12 +204,18 @@ predicate ValidGlobal(s:state, o:operand)
         && forall v :: v in gmap[SymbolName(o)] ==> isUInt32(v)
 }
 
-// takes a map from symbol name to size in words
-function InitialGlobals(defs: map<string, int>): globals
-    requires forall d :: d in defs ==> defs[d] > 0
-    ensures ValidGlobalState(InitialGlobals(defs))
+predicate ValidGlobalDecls(gdecls: globaldecls)
 {
-    Globals(map sym | sym in defs :: SeqRepeat<int>(defs[sym], 0))
+    match gdecls case GlobalDecls(decls) =>
+        forall d :: d in decls ==> decls[d] > 0 && WordAligned(decls[d])
+}
+
+function InitialGlobals(gdecls: globaldecls): globals
+    requires ValidGlobalDecls(gdecls)
+    ensures ValidGlobalState(InitialGlobals(gdecls))
+{
+    match gdecls case GlobalDecls(decls) =>
+        Globals(map sym | sym in decls :: SeqRepeat<int>(decls[sym], 0))
 }
 
 function SizeOfGlobal(s:state, g:operand): int

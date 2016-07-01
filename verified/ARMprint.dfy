@@ -181,6 +181,7 @@ method printCode(c:code, n:int) returns(n':int)
 
 method printFunction(symname:string, c:code, n:int) returns(n':int)
 {
+    nl();
     print(".global "); print(symname); nl();
     print(symname); print(":"); nl();
     n' := printCode(c, n);
@@ -190,6 +191,31 @@ method printHeader()
 {
     print(".arm"); nl();
     print(".section .text"); nl();
+}
+
+method printGlobal(symname: string, bytes: int)
+{
+    print(".lcomm ");
+    print(symname);
+    print(", ");
+    print(bytes);
+    nl();
+}
+
+method printBss(gdecls: globaldecls)
+{
+    nl();
+    print(".section .bss"); nl();
+    print(".align 2"); nl(); // 4-byte alignment
+    match gdecls case GlobalDecls(decls) =>
+        var syms := (set k | k in decls :: k);
+        while (|syms| > 0)
+            invariant forall s :: s in syms ==> s in decls;
+        {
+            var s :| s in syms;
+            printGlobal(s, decls[s]);
+            syms := syms - {s};
+        }
 }
 
 method printFooter()
