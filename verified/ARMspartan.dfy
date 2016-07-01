@@ -1,12 +1,6 @@
 include "ARMdef.dfy"
 
 //-----------------------------------------------------------------------------
-// Utilities 
-//-----------------------------------------------------------------------------
-function method pow2_32():int { 0x1_0000_0000 }
-predicate isUInt32(i:int) { 0 <= i < pow2_32() }
-
-//-----------------------------------------------------------------------------
 // Sequence Utilities
 //-----------------------------------------------------------------------------
 function SeqLength<T>(s:seq<T>) : int { |s| }
@@ -428,7 +422,7 @@ lemma sp_lemma_LDRglobal(s:state, r:state, ok:bool,
     ensures ValidOperand(r, base);
     ensures ValidOperand(r, ofs);
     ensures ok;
-    ensures 0 <= OperandContents(r, rd) < MaxVal();
+    ensures isUInt32(OperandContents(r, rd));
 {
     reveal_sp_eval();
     reveal_sp_code_LDRglobal();
@@ -534,6 +528,17 @@ lemma sp_lemma_xorEquals(s:sp_state, r:sp_state, ok:bool, o1:operand, o2:operand
 {
     reveal_sp_eval();
     reveal_sp_code_xorEquals();
+}
+
+lemma sp_lemma_loadAddrOfGlobal(s:state, r:state, ok:bool, rd:operand, name:operand)
+    requires ValidDestinationOperand(s, rd);
+    requires ValidGlobal(s, name);
+    requires sp_eval(sp_code_loadAddrOfGlobal(rd, name), s, r, ok);
+    ensures AddressOfGlobal(s, name, OperandContents(s, rd));
+    ensures ok;
+{
+    reveal_sp_eval();
+    reveal_sp_code_loadAddrOfGlobal();
 }
 
 //-----------------------------------------------------------------------------

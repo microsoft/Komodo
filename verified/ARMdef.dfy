@@ -141,9 +141,10 @@ datatype code =
 //-----------------------------------------------------------------------------
 // Microarch-Related Utilities
 //-----------------------------------------------------------------------------
-function Truncate(n:int) : int { n % 0x1_0000_0000 }
-function BytesPerWord() : int { 4 }
 function MaxVal() : int { 0x1_0000_0000 }
+predicate isUInt32(i:int) { 0 <= i < MaxVal() }
+//function Truncate(n:int) : int { n % MaxVal() }
+function BytesPerWord() : int ensures BytesPerWord() == 4 { 4 }
 
 //-----------------------------------------------------------------------------
 // Validity
@@ -182,18 +183,15 @@ predicate ValidGlobal(s:state, o:operand)
     o.OSymbol?
         // defined name
         && SymbolName(o) in s.globals
-        // size is bounded
-        && 0 < |s.globals[SymbolName(o)]| * 4 < MaxVal()
-        // each value is 32-bit
-        && forall v :: v in s.globals[SymbolName(o)] ==> 0 <= v < MaxVal()
+        // each word is 32-bit
+        && forall v :: v in s.globals[SymbolName(o)] ==> isUInt32(v)
 }
 
 function SizeOfGlobal(s:state, g:operand): int
     requires ValidGlobal(s, g)
     ensures WordAligned(SizeOfGlobal(s,g))
-    ensures 0 < SizeOfGlobal(s,g) < MaxVal()
 {
-    |s.globals[SymbolName(g)]| * 4
+    |s.globals[SymbolName(g)]| * BytesPerWord()
 }
 
 predicate ValidGlobalOffset(s:state, g:operand, offset:int)
@@ -214,7 +212,7 @@ predicate ValidMem(s:state, m:mem)
     m in s.addresses
 }
 
-predicate WordAligned(addr:int) { addr % 4 == 0}
+predicate WordAligned(addr:int) { addr % BytesPerWord() == 0}
 
 predicate ValidShiftOperand(s:state, o:operand)
     { ( o.OConst? && 0 <= o.n <= 32) || ValidOperand(s, o) }
@@ -286,8 +284,9 @@ function MemContents(s:state, m:mem): int
 
 function GlobalContents(s:state, g:operand, offset:int): int
     requires ValidGlobalOffset(s, g, offset)
+    ensures isUInt32(GlobalContents(s, g, offset))
 {
-    (s.globals[SymbolName(g)])[offset / 4]
+    (s.globals[SymbolName(g)])[offset / BytesPerWord()]
 }
 
 function eval_op(s:state, o:operand): int
@@ -326,10 +325,18 @@ predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
 }
 
 predicate evalGlobalUpdate(s:state, g:operand, offset:nat, v:int, r:state, ok:bool)
-    requires ValidGlobal(s, g) && ValidGlobalOffset(s, g, offset)
+    requires ValidGlobalOffset(s, g, offset)
 {
     var n := SymbolName(g);
-    ok && r == s.(globals := s.globals[n := s.globals[n][(offset / 4) := v]])
+    var oldval := s.globals[n];
+    var wordidx := offset / BytesPerWord();
+    assert offset < SizeOfGlobal(s, g);
+    assert |oldval| * BytesPerWord() == SizeOfGlobal(s, g);
+    assert wordidx * BytesPerWord() < SizeOfGlobal(s, g);
+    assert |oldval| == SizeOfGlobal(s, g) / BytesPerWord();
+    assert wordidx < |oldval|;
+    var newval := oldval[wordidx := v];
+    ok && r == s.(globals := s.globals[n := newval])
 }
 
 predicate evalModeUpdate(s:state, newmode:int, r:state, ok:bool)

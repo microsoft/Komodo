@@ -281,7 +281,6 @@ procedure loadAddrOfGlobal(out{:operand} rd:int, {:operand} name:string)
         ValidDestinationOperand(this, @rd);
         ValidGlobal(this, @name);
     ensures
-        evalHavocReg(old(this), @rd, this, true);
         AddressOfGlobal(this, @name, rd);
 
 procedure LDRglobal(out{:operand} rd:int, {:operand} name:string,
