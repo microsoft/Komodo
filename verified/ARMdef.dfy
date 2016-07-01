@@ -143,8 +143,10 @@ datatype code =
 //-----------------------------------------------------------------------------
 function MaxVal() : int { 0x1_0000_0000 }
 predicate isUInt32(i:int) { 0 <= i < MaxVal() }
-//function Truncate(n:int) : int { n % MaxVal() }
-function BytesPerWord() : int ensures BytesPerWord() == 4 { 4 }
+function BytesPerWord() : int { 4 }
+predicate WordAligned(addr:int) { addr % 4 == 0}
+function WordsToBytes(w:int) : int { 4 * w }
+function BytesToWords(b:int) : int requires WordAligned(b) { b / 4 }
 
 //-----------------------------------------------------------------------------
 // Validity
@@ -191,7 +193,7 @@ function SizeOfGlobal(s:state, g:operand): int
     requires ValidGlobal(s, g)
     ensures WordAligned(SizeOfGlobal(s,g))
 {
-    |s.globals[SymbolName(g)]| * BytesPerWord()
+    WordsToBytes(|s.globals[SymbolName(g)]|)
 }
 
 predicate ValidGlobalOffset(s:state, g:operand, offset:int)
@@ -211,8 +213,6 @@ predicate ValidMem(s:state, m:mem)
 {
     m in s.addresses
 }
-
-predicate WordAligned(addr:int) { addr % BytesPerWord() == 0}
 
 predicate ValidShiftOperand(s:state, o:operand)
     { ( o.OConst? && 0 <= o.n <= 32) || ValidOperand(s, o) }
@@ -286,7 +286,7 @@ function GlobalContents(s:state, g:operand, offset:int): int
     requires ValidGlobalOffset(s, g, offset)
     ensures isUInt32(GlobalContents(s, g, offset))
 {
-    (s.globals[SymbolName(g)])[offset / BytesPerWord()]
+    (s.globals[SymbolName(g)])[BytesToWords(offset)]
 }
 
 function eval_op(s:state, o:operand): int
@@ -329,13 +329,7 @@ predicate evalGlobalUpdate(s:state, g:operand, offset:nat, v:int, r:state, ok:bo
 {
     var n := SymbolName(g);
     var oldval := s.globals[n];
-    var wordidx := offset / BytesPerWord();
-    assert offset < SizeOfGlobal(s, g);
-    assert |oldval| * BytesPerWord() == SizeOfGlobal(s, g);
-    assert wordidx * BytesPerWord() < SizeOfGlobal(s, g);
-    assert |oldval| == SizeOfGlobal(s, g) / BytesPerWord();
-    assert wordidx < |oldval|;
-    var newval := oldval[wordidx := v];
+    var newval := oldval[BytesToWords(offset) := v];
     ok && r == s.(globals := s.globals[n := newval])
 }
 
