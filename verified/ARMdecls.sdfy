@@ -276,24 +276,34 @@ procedure xorEquals(inout{:operand} o1:int, {:operand} o2:int)
     ensures
         evalUpdate(old(this), @o1, old(xor32(o1,o2)), this, true);
 
-procedure loadAddrOfGlobal(out{:operand} rd:int, {:operand} name:string)
-    requires/ensures
+procedure LDRglobaladdr(out{:operand} rd:int, {:operand} name:string)
+    requires
         ValidDestinationOperand(this, @rd);
         ValidGlobal(this, @name);
     ensures
-        AddressOfGlobal(this, @name, rd);
+        evalUpdate(old(this), @rd, AddressOfGlobal(@name), this, true);
+        isUInt32(rd);
 
 procedure LDRglobal(out{:operand} rd:int, {:operand} name:string,
                     {:operand} base:int, {:operand} ofs:int)
-    requires/ensures
+    requires
         ValidDestinationOperand(this, @rd);
         ValidOperand(this, @base);
         ValidOperand(this, @ofs);
         ValidGlobalOffset(this, @name, ofs);
-        AddressOfGlobal(this, @name, base);
-        isUInt32(rd);
-        isUInt32(ofs);
+        AddressOfGlobal(@name) == base;
     ensures
-        evalUpdate(old(this), @rd, GlobalContents(old(this), @name, ofs), this, true);
+        evalUpdate(old(this), @rd, old(GlobalContents(this, @name, ofs)), this, true);
         isUInt32(rd);
-        0 <= rd < MaxVal();
+
+procedure STRglobal({:operand} rd:int, {:operand} name:string,
+                    {:operand} base:int, {:operand} ofs:int)
+    requires
+        ValidRegOperand(this, @rd);
+        ValidOperand(this, @base);
+        ValidOperand(this, @ofs);
+        ValidGlobalOffset(this, @name, ofs);
+        AddressOfGlobal(@name) == base;
+        isUInt32(rd);
+    ensures
+        evalGlobalUpdate(old(this), @name, old(ofs), old(rd), this, true);

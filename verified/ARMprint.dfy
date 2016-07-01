@@ -119,6 +119,7 @@ method printIns(ins:ins)
         case LDR_global(rd, global, base, ofs) => printInsLdStr("LDR", rd, base, ofs);
         case LDR_reloc(rd, sym) => printIns2Op("LDR", rd, sym);
         case STR(rd, base, ofs) => printInsLdStr("STR", rd, base, ofs);
+        case STR_global(rd, global, base, ofs) => printInsLdStr("STR", rd, base, ofs);
         case MOV(dst, src) => printIns2Op("MOV", dst, src);
         case CPS(mod) => printIns1Op("CPS", mod);
     }

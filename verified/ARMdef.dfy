@@ -1,5 +1,6 @@
 include "assembly.s.dfy"
 include "Maybe.dfy"
+include "Seq.dfy"
 
 //-----------------------------------------------------------------------------
 // Microarchitectural State
@@ -10,10 +11,11 @@ datatype ARMReg = R(n:int) | SP(spm:mode) | LR(lpm: mode)
 datatype mem = Address(addr:int)
 datatype operand = OConst(n:int) | OReg(r:ARMReg) | OSP | OLR | OSymbol(sym:string)
 
-datatype frame = Frame(locals:map<mem, int>)
+//datatype frame = Frame(locals:map<mem, int>)
+datatype globals = Globals(map<string, seq<int>>)
 datatype state = State(regs:map<ARMReg, int>,
                        addresses:map<mem, int>,
-                       globals:map<string, seq<int>>,
+                       globals:globals,
                        // stack:seq<frame>,
                        // ns:bool,
                        // cpsr:cpsr_val,
@@ -35,7 +37,6 @@ datatype cpsr_val = CPSR(
 datatype mode = User | FIQ | IRQ | Supervisor | Abort | Undefined | Monitor
 datatype priv = PL0 | PL1 // PL2 is only used in Hyp, not modeled
 
-
 //-----------------------------------------------------------------------------
 // State-related Utilities
 //-----------------------------------------------------------------------------
@@ -48,6 +49,9 @@ function method op_sp():operand
 
 function method op_lr():operand
     { OLR }
+
+function method op_sym(sym:string):operand
+    { OSymbol(sym) }
 
 // function method addr(base:int, ofs:int):mem
 //     { Address(base + ofs) }
@@ -114,10 +118,12 @@ datatype ins =
     | MOV(dstMOV:operand, srcMOV:operand)
     | MVN(dstMVN:operand, srcMVN:operand)
     | LDR(rdLDR:operand,  baseLDR:operand, ofsLDR:operand)
-    | LDR_global(rdLDR_global:operand, global:operand,
+    | LDR_global(rdLDR_global:operand, globalLDR:operand,
                  baseLDR_global:operand, ofsLDR_global:operand)
     | LDR_reloc(rdLDR_reloc:operand, symLDR_reloc:operand)
     | STR(rdSTR:operand,  baseSTR:operand, ofsSTR:operand)
+    | STR_global(rdSTRR_global:operand, globalSTR:operand,
+                 baseSTR_global:operand, ofsSTR_global:operand)
     | CPS(mod:operand)
 
 //-----------------------------------------------------------------------------
@@ -156,8 +162,16 @@ predicate ValidState(s:state)
     (forall m:mode {:trigger SP(m)} {:trigger LR(m)} ::
         SP(m) in s.regs && 0 <= s.regs[SP(m)] < MaxVal() &&
         LR(m) in s.regs && 0 <= s.regs[LR(m)] < MaxVal()) &&
-     (forall i:int {:trigger R(i)} :: 0 <= i <= 12 ==> R(i) in s.regs && 
-            0 <= s.regs[R(i)] < MaxVal())
+    (forall i:int {:trigger R(i)} :: 0 <= i <= 12 ==> R(i) in s.regs && 
+        0 <= s.regs[R(i)] < MaxVal()) &&
+    ValidGlobalState(s.globals)
+}
+
+predicate ValidGlobalState(gs:globals)
+{
+    match gs case Globals(gmap) =>
+        // non-zero size, all uint32 values
+        forall g :: g in gmap ==> |gmap[g]| > 0 && forall v :: v in gmap[g] ==> isUInt32(v)
 }
 
 predicate ValidOperand(s:state, o:operand)
@@ -182,18 +196,27 @@ function method SymbolName(o:operand): string
 
 predicate ValidGlobal(s:state, o:operand)
 {
-    o.OSymbol?
+    match s.globals case Globals(gmap) =>
         // defined name
-        && SymbolName(o) in s.globals
-        // each word is 32-bit
-        && forall v :: v in s.globals[SymbolName(o)] ==> isUInt32(v)
+        o.OSymbol? && SymbolName(o) in gmap
+        // 32-bit words
+        && forall v :: v in gmap[SymbolName(o)] ==> isUInt32(v)
+}
+
+// takes a map from symbol name to size in words
+function InitialGlobals(defs: map<string, int>): globals
+    requires forall d :: d in defs ==> defs[d] > 0
+    ensures ValidGlobalState(InitialGlobals(defs))
+{
+    Globals(map sym | sym in defs :: SeqRepeat<int>(defs[sym], 0))
 }
 
 function SizeOfGlobal(s:state, g:operand): int
     requires ValidGlobal(s, g)
     ensures WordAligned(SizeOfGlobal(s,g))
 {
-    WordsToBytes(|s.globals[SymbolName(g)]|)
+    match s.globals case Globals(gmap) =>
+        WordsToBytes(|gmap[SymbolName(g)]|)
 }
 
 predicate ValidGlobalOffset(s:state, g:operand, offset:int)
@@ -201,7 +224,9 @@ predicate ValidGlobalOffset(s:state, g:operand, offset:int)
     ValidGlobal(s, g) && WordAligned(offset) && 0 <= offset < SizeOfGlobal(s, g)
 }
 
-predicate {:axiom} AddressOfGlobal(s:state, g:operand, a:int)
+// globals have an unknown (uint32) address, only establised by LDR-reloc
+function {:axiom} AddressOfGlobal(g:operand): int
+    ensures isUInt32(AddressOfGlobal(g));
 
 predicate Is32BitOperand(s:state, o:operand)
     requires ValidOperand(s, o);
@@ -286,7 +311,8 @@ function GlobalContents(s:state, g:operand, offset:int): int
     requires ValidGlobalOffset(s, g, offset)
     ensures isUInt32(GlobalContents(s, g, offset))
 {
-    (s.globals[SymbolName(g)])[BytesToWords(offset)]
+    match s.globals case Globals(gmap) =>
+        (gmap[SymbolName(g)])[BytesToWords(offset)]
 }
 
 function eval_op(s:state, o:operand): int
@@ -326,11 +352,13 @@ predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
 
 predicate evalGlobalUpdate(s:state, g:operand, offset:nat, v:int, r:state, ok:bool)
     requires ValidGlobalOffset(s, g, offset)
+    requires isUInt32(v)
 {
-    var n := SymbolName(g);
-    var oldval := s.globals[n];
-    var newval := oldval[BytesToWords(offset) := v];
-    ok && r == s.(globals := s.globals[n := newval])
+    match s.globals case Globals(gmap) =>
+        var n := SymbolName(g);
+        var oldval := gmap[n];
+        var newval := oldval[BytesToWords(offset) := v];
+        ok && r == s.(globals := Globals(gmap[n := newval]))
 }
 
 predicate evalModeUpdate(s:state, newmode:int, r:state, ok:bool)
@@ -411,7 +439,7 @@ predicate ValidInstruction(s:state, ins:ins)
         case LDR_global(rd, global, base, ofs) => 
             ValidDestinationOperand(s, rd) &&
             ValidOperand(s, base) && ValidOperand(s, ofs) &&
-            AddressOfGlobal(s, global, OperandContents(s, base)) &&
+            AddressOfGlobal(global) == OperandContents(s, base) &&
             ValidGlobalOffset(s, global, OperandContents(s, ofs))
         case LDR_reloc(rd, global) => 
             ValidDestinationOperand(s, rd) && ValidGlobal(s, global)
@@ -422,6 +450,11 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
             //ValidDestinationOperand(s, addr_op(s, base, ofs))
             //IsMemOperand(addr) && !IsMemOperand(rd)
+        case STR_global(rd, global, base, ofs) => 
+            ValidRegOperand(s, rd) && isUInt32(OperandContents(s, rd)) &&
+            ValidOperand(s, base) && ValidOperand(s, ofs) &&
+            AddressOfGlobal(global) == OperandContents(s, base) &&
+            ValidGlobalOffset(s, global, OperandContents(s, ofs))
         case MOV(dst, src) => ValidDestinationOperand(s, dst) &&
             ValidOperand(s, src) && Is32BitOperand(s, src)
             //!IsMemOperand(src) && !IsMemOperand(dst)
@@ -474,11 +507,12 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
         case LDR_global(rd, global, base, ofs) => 
             evalUpdate(s, rd, GlobalContents(s, global, OperandContents(s, ofs)), r, ok)
         case LDR_reloc(rd, name) =>
-            evalHavocReg(s, rd, r, ok)
-            && AddressOfGlobal(s, name, OperandContents(s, rd))
+            evalUpdate(s, rd, AddressOfGlobal(name), r, ok)
         case STR(rd, base, ofs) => 
             evalMemUpdate(s, Address(OperandContents(s, base) +
                 OperandContents(s, ofs)), OperandContents(s, rd), r, ok)
+        case STR_global(rd, global, base, ofs) => 
+            evalGlobalUpdate(s, global, OperandContents(s, ofs), OperandContents(s, rd), r, ok)
         case MOV(dst, src) => evalUpdate(s, dst,
             OperandContents(s, src),
             r, ok)
