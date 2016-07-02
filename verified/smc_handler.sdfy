@@ -395,6 +395,7 @@ procedure smc_handler(
         stack_bytes >= 120;
         can_fcall_n(this,stack_bytes);
     requires
+        mode_of_state(this) == Monitor;
         ValidMemRange(this,G_PAGEDB(),G_PAGEDB_END());
         callno == KEV_SMC_INIT_ADDRSPACE() ==> (
             (arg1 != arg2) &&
