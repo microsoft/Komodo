@@ -178,9 +178,9 @@ predicate ValidGlobalState(gs:globals)
 predicate ValidOperand(s:state, o:operand)
 {
     match o
-        case OConst(n) => 0 <= n < MaxVal()
+        case OConst(n) => isUInt32(n)
         case OReg(r) => (match r
-            case R(n) => r in s.regs 
+            case R(n) => 0 <= n <= 12 && r in s.regs
             case SP(m) => false // not used directly 
             case LR(m) => false // not used directly 
         )
@@ -238,12 +238,24 @@ function {:axiom} AddressOfGlobal(g:operand): int
 predicate Is32BitOperand(s:state, o:operand)
     requires ValidOperand(s, o);
 {
-    0 <= OperandContents(s, o) < MaxVal()
+    isUInt32(OperandContents(s, o))
 }
 
 predicate ValidMem(s:state, m:mem)
 {
-    m in s.addresses
+    WordAligned(m.addr) && m in s.addresses && isUInt32(MemContents(s, m))
+}
+
+predicate ValidMemRange(s:state, lwr:int, upr:int)
+{
+    forall i:int :: lwr <= i <= upr && WordAligned(i) ==>
+        ValidMem(s, Address(i))
+}
+
+// redundant alias for ValidMemRange
+predicate MemRangeIs32(s:state, lwr:int, upr:int)
+{
+    ValidMemRange(s, lwr, upr)
 }
 
 predicate ValidShiftOperand(s:state, o:operand)
@@ -308,7 +320,7 @@ function OperandContents(s:state, o:operand): int
 }
 
 function MemContents(s:state, m:mem): int
-    requires ValidMem(s, m)
+    requires m in s.addresses
     requires WordAligned(m.addr)
 {
     s.addresses[m]
@@ -350,8 +362,9 @@ predicate evalHavocReg(s:state, o:operand, r:state, ok:bool)
 }
 
 predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
-    requires ValidMem(s, m)
     requires WordAligned(m.addr)
+    requires ValidMem(s, m)
+    requires isUInt32(v)
     ensures  ValidMem(s, m)
 {
     ok && r == s.(addresses := s.addresses[m := v])
@@ -451,7 +464,7 @@ predicate ValidInstruction(s:state, ins:ins)
         case LDR_reloc(rd, global) => 
             ValidDestinationOperand(s, rd) && ValidGlobal(s, global)
         case STR(rd, base, ofs) =>
-            ValidRegOperand(s, rd) &&
+            ValidRegOperand(s, rd) && isUInt32(OperandContents(s, rd)) &&
             ValidOperand(s, ofs) && ValidOperand(s, base) &&
             WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
             ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))

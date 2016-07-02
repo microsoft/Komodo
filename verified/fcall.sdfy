@@ -36,8 +36,7 @@ predicate MemValidityPreserving(s:sp_state, r:sp_state)
 
 predicate ValidMemIs32(s:sp_state)
 {
-    forall i:int :: ValidMem(s,Address(i)) && WordAligned(i)
-        ==> isUInt32(addrval(s,i))
+    true
 }
 
 predicate MemValuePreserving(s:sp_state, r:sp_state)

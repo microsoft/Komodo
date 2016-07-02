@@ -1,3 +1,5 @@
+function{:operand} fromOperand(o:oprnd):operand
+
 procedure wrapIncr(ghost g1:int, inout{:operand} o:int, ghost g2:int, ghost g3:int, {:inline} k:int) returns (ghost b:bool)
   requires
     ValidDestinationOperand(this, @o);

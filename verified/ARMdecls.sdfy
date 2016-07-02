@@ -15,8 +15,6 @@ var{:register op_r(12)} r12:int;
 var{:register op_sp()}  sp:int;
 var{:register op_lr()}  lr:int;
 
-// TODO: delete fromOperand as it's pointless in new Spartan
-function{:operand} fromOperand(o:oprnd):operand
 function{:operand} sp_op_const(n:int):operand
 
 // var{:register op_sp(User)}      spUser:int;
@@ -174,7 +172,6 @@ procedure MVN(out{:operand} dst:int, {:operand} src:int)
     ensures
         isUInt32(dst);
         evalUpdate(old(this), @dst, old(not32(src)), this, true);
-        0 <= dst < MaxVal();
 
 procedure MOV(out{:operand} dst:int, {:operand} src:int)
     requires/ensures
@@ -184,7 +181,6 @@ procedure MOV(out{:operand} dst:int, {:operand} src:int)
     ensures
         evalUpdate(old(this), @dst, old(src), this, true);
         isUInt32(dst);
-        0 <= dst < MaxVal();
 
 procedure LDR(out{:operand} rd:int, {:operand} base:int, {:operand} ofs:int)
     requires/ensures
@@ -195,13 +191,11 @@ procedure LDR(out{:operand} rd:int, {:operand} base:int, {:operand} ofs:int)
         isUInt32(base);
         isUInt32(ofs);
     requires
-        ValidMem(this, addr_mem(this, @base, @ofs));
         WordAligned(base + ofs);
-        isUInt32(addrval(this, base + ofs));
+        ValidMem(this, addr_mem(this, @base, @ofs));
     ensures
         evalUpdate(old(this), @rd, MemContents(old(this), addr_mem(old(this), @base, @ofs)), this, true);
         isUInt32(rd);
-        0 <= rd < MaxVal();
 
 procedure STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
     requires/ensures
@@ -216,7 +210,6 @@ procedure STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
         ValidMem(this, addr_mem(this, @base, @ofs));
     ensures
         evalMemUpdate(old(this), addr_mem(old(this), @base, @ofs), old(rd), this, true);
-        isUInt32(addrval(this, base + ofs));
 
 procedure CPS({:operand} mod:int)
     requires
