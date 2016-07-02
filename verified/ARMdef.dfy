@@ -1,5 +1,6 @@
 include "assembly.s.dfy"
 include "Maybe.dfy"
+include "Seq.dfy"
 
 //-----------------------------------------------------------------------------
 // Microarchitectural State
@@ -7,15 +8,16 @@ include "Maybe.dfy"
 datatype ARMReg = R(n:int) | SP(spm:mode) | LR(lpm: mode)
 // In FIQ, R8 to R12 are also banked
 
-datatype mem = Address(addr:int) // | GlobalVar(g:int) | LocalVar(l:int)
-datatype operand = OConst(n:int) | OReg(r:ARMReg) | OSP | OLR 
+datatype mem = Address(addr:int)
+datatype operand = OConst(n:int) | OReg(r:ARMReg) | OSP | OLR | OSymbol(sym:string)
 
-datatype frame = Frame(locals:map<mem, int>)
+//datatype frame = Frame(locals:map<mem, int>)
+datatype globals = Globals(map<string, seq<int>>)
+datatype globaldecls = GlobalDecls(map<string, int>)
 datatype state = State(regs:map<ARMReg, int>,
                        addresses:map<mem, int>,
-                       //globals:map<mem, int>,
+                       globals:globals,
                        // stack:seq<frame>,
-                       // heap:map<int, int>,
                        // ns:bool,
                        // cpsr:cpsr_val,
                        // spsr:map<mode, cpsr_val>,
@@ -36,7 +38,6 @@ datatype cpsr_val = CPSR(
 datatype mode = User | FIQ | IRQ | Supervisor | Abort | Undefined | Monitor
 datatype priv = PL0 | PL1 // PL2 is only used in Hyp, not modeled
 
-
 //-----------------------------------------------------------------------------
 // State-related Utilities
 //-----------------------------------------------------------------------------
@@ -49,6 +50,9 @@ function method op_sp():operand
 
 function method op_lr():operand
     { OLR }
+
+function method op_sym(sym:string):operand
+    { OSymbol(sym) }
 
 // function method addr(base:int, ofs:int):mem
 //     { Address(base + ofs) }
@@ -115,8 +119,13 @@ datatype ins =
     | MOV(dstMOV:operand, srcMOV:operand)
     | MVN(dstMVN:operand, srcMVN:operand)
     | LDR(rdLDR:operand,  baseLDR:operand, ofsLDR:operand)
+    | LDR_global(rdLDR_global:operand, globalLDR:operand,
+                 baseLDR_global:operand, ofsLDR_global:operand)
+    | LDR_reloc(rdLDR_reloc:operand, symLDR_reloc:operand)
     | STR(rdSTR:operand,  baseSTR:operand, ofsSTR:operand)
-    | CPS(mod:operand) 
+    | STR_global(rdSTRR_global:operand, globalSTR:operand,
+                 baseSTR_global:operand, ofsSTR_global:operand)
+    | CPS(mod:operand)
 
 //-----------------------------------------------------------------------------
 // Exception Handlers
@@ -139,9 +148,12 @@ datatype code =
 //-----------------------------------------------------------------------------
 // Microarch-Related Utilities
 //-----------------------------------------------------------------------------
-function Truncate(n:int) : int { n % 0x1_0000_0000 }
-function BytesPerWord() : int { 4 }
 function MaxVal() : int { 0x1_0000_0000 }
+predicate isUInt32(i:int) { 0 <= i < MaxVal() }
+function BytesPerWord() : int { 4 }
+predicate WordAligned(addr:int) { addr % 4 == 0}
+function WordsToBytes(w:int) : int { 4 * w }
+function BytesToWords(b:int) : int requires WordAligned(b) { b / 4 }
 
 //-----------------------------------------------------------------------------
 // Validity
@@ -151,8 +163,16 @@ predicate ValidState(s:state)
     (forall m:mode {:trigger SP(m)} {:trigger LR(m)} ::
         SP(m) in s.regs && 0 <= s.regs[SP(m)] < MaxVal() &&
         LR(m) in s.regs && 0 <= s.regs[LR(m)] < MaxVal()) &&
-     (forall i:int {:trigger R(i)} :: 0 <= i <= 12 ==> R(i) in s.regs && 
-            0 <= s.regs[R(i)] < MaxVal())
+    (forall i:int {:trigger R(i)} :: 0 <= i <= 12 ==> R(i) in s.regs && 
+        0 <= s.regs[R(i)] < MaxVal()) &&
+    ValidGlobalState(s.globals)
+}
+
+predicate ValidGlobalState(gs:globals)
+{
+    match gs case Globals(gmap) =>
+        // non-zero size, all uint32 values
+        forall g :: g in gmap ==> |gmap[g]| > 0 && forall v :: v in gmap[g] ==> isUInt32(v)
 }
 
 predicate ValidOperand(s:state, o:operand)
@@ -164,14 +184,56 @@ predicate ValidOperand(s:state, o:operand)
             case SP(m) => false // not used directly 
             case LR(m) => false // not used directly 
         )
-        // case OMem(x) => (match x
-        //  case GlobalVar(g) => x in s.globals
-        //  case LocalVar(l)  => |s.stack| > 0 && x in s.stack[0].locals
-        //     case Address(a)   => x in s.addresses
-        // )
         case OSP => SP(mode_of_state(s)) in s.regs
         case OLR => LR(mode_of_state(s)) in s.regs
+        case OSymbol(s) => false
 }
+
+function method SymbolName(o:operand): string
+    requires o.OSymbol?
+{
+    match o case OSymbol(name) => name
+}
+
+predicate ValidGlobal(s:state, o:operand)
+{
+    match s.globals case Globals(gmap) =>
+        // defined name
+        o.OSymbol? && SymbolName(o) in gmap
+        // 32-bit words
+        && forall v :: v in gmap[SymbolName(o)] ==> isUInt32(v)
+}
+
+predicate ValidGlobalDecls(gdecls: globaldecls)
+{
+    match gdecls case GlobalDecls(decls) =>
+        forall d :: d in decls ==> decls[d] > 0 && WordAligned(decls[d])
+}
+
+function InitialGlobals(gdecls: globaldecls): globals
+    requires ValidGlobalDecls(gdecls)
+    ensures ValidGlobalState(InitialGlobals(gdecls))
+{
+    match gdecls case GlobalDecls(decls) =>
+        Globals(map sym | sym in decls :: SeqRepeat<int>(decls[sym], 0))
+}
+
+function SizeOfGlobal(s:state, g:operand): int
+    requires ValidGlobal(s, g)
+    ensures WordAligned(SizeOfGlobal(s,g))
+{
+    match s.globals case Globals(gmap) =>
+        WordsToBytes(|gmap[SymbolName(g)]|)
+}
+
+predicate ValidGlobalOffset(s:state, g:operand, offset:int)
+{
+    ValidGlobal(s, g) && WordAligned(offset) && 0 <= offset < SizeOfGlobal(s, g)
+}
+
+// globals have an unknown (uint32) address, only establised by LDR-reloc
+function {:axiom} AddressOfGlobal(g:operand): int
+    ensures isUInt32(AddressOfGlobal(g));
 
 predicate Is32BitOperand(s:state, o:operand)
     requires ValidOperand(s, o);
@@ -183,8 +245,6 @@ predicate ValidMem(s:state, m:mem)
 {
     m in s.addresses
 }
-
-predicate WordAligned(addr:int) { addr % 4 == 0}
 
 predicate ValidShiftOperand(s:state, o:operand)
     { ( o.OConst? && 0 <= o.n <= 32) || ValidOperand(s, o) }
@@ -243,11 +303,6 @@ function OperandContents(s:state, o:operand): int
     match o
         case OConst(n) => n
         case OReg(r) => s.regs[r]
-        // case OMem(x) => (match x
-        //  case GlobalVar(g) => s.globals[x]
-        //  case LocalVar(l) => s.stack[0].locals[x]
-        //     case Address(a) => s.addresses[x]
-        // )
         case OSP => s.regs[SP(mode_of_state(s))]
         case OLR => s.regs[LR(mode_of_state(s))]
 }
@@ -257,6 +312,14 @@ function MemContents(s:state, m:mem): int
     requires WordAligned(m.addr)
 {
     s.addresses[m]
+}
+
+function GlobalContents(s:state, g:operand, offset:int): int
+    requires ValidGlobalOffset(s, g, offset)
+    ensures isUInt32(GlobalContents(s, g, offset))
+{
+    match s.globals case Globals(gmap) =>
+        (gmap[SymbolName(g)])[BytesToWords(offset)]
 }
 
 function eval_op(s:state, o:operand): int
@@ -275,13 +338,15 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
         case OReg(reg) => r == s.(regs := s.regs[o.r := v])
         case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := v])
         case OSP => r == s.(regs := s.regs[SP(mode_of_state(s)) := v])
-        // case OMem(x) => ( match x
-        //     case Address(a) => r == s.(addresses:= s.addresses[o.x := v])
-        //  case GlobalVar(g) => r == s.(globals := s.globals[o.x := v])
-        //  case LocalVar(l) => r == s.(stack :=
-        //      [s.stack[0].(locals := s.stack[0].locals[o.x := v])] +
-        //          s.stack[1..])
-        // )
+}
+
+predicate evalHavocReg(s:state, o:operand, r:state, ok:bool)
+    requires ValidDestinationOperand(s, o);
+{
+    ok && ValidDestinationOperand(r, o) && match o
+        case OReg(reg) => r == s.(regs := s.regs[o.r := r.regs[o.r]])
+        case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := r.regs[LR(mode_of_state(r))]])
+        case OSP => r == s.(regs := s.regs[SP(mode_of_state(s)) := r.regs[SP(mode_of_state(r))]])
 }
 
 predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
@@ -290,6 +355,17 @@ predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
     ensures  ValidMem(s, m)
 {
     ok && r == s.(addresses := s.addresses[m := v])
+}
+
+predicate evalGlobalUpdate(s:state, g:operand, offset:nat, v:int, r:state, ok:bool)
+    requires ValidGlobalOffset(s, g, offset)
+    requires isUInt32(v)
+{
+    match s.globals case Globals(gmap) =>
+        var n := SymbolName(g);
+        var oldval := gmap[n];
+        var newval := oldval[BytesToWords(offset) := v];
+        ok && r == s.(globals := Globals(gmap[n := newval]))
 }
 
 predicate evalModeUpdate(s:state, newmode:int, r:state, ok:bool)
@@ -367,6 +443,13 @@ predicate ValidInstruction(s:state, ins:ins)
             WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
             ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
             //IsMemOperand(addr) && !IsMemOperand(rd)
+        case LDR_global(rd, global, base, ofs) => 
+            ValidDestinationOperand(s, rd) &&
+            ValidOperand(s, base) && ValidOperand(s, ofs) &&
+            AddressOfGlobal(global) == OperandContents(s, base) &&
+            ValidGlobalOffset(s, global, OperandContents(s, ofs))
+        case LDR_reloc(rd, global) => 
+            ValidDestinationOperand(s, rd) && ValidGlobal(s, global)
         case STR(rd, base, ofs) =>
             ValidRegOperand(s, rd) &&
             ValidOperand(s, ofs) && ValidOperand(s, base) &&
@@ -374,6 +457,11 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
             //ValidDestinationOperand(s, addr_op(s, base, ofs))
             //IsMemOperand(addr) && !IsMemOperand(rd)
+        case STR_global(rd, global, base, ofs) => 
+            ValidRegOperand(s, rd) && isUInt32(OperandContents(s, rd)) &&
+            ValidOperand(s, base) && ValidOperand(s, ofs) &&
+            AddressOfGlobal(global) == OperandContents(s, base) &&
+            ValidGlobalOffset(s, global, OperandContents(s, ofs))
         case MOV(dst, src) => ValidDestinationOperand(s, dst) &&
             ValidOperand(s, src) && Is32BitOperand(s, src)
             //!IsMemOperand(src) && !IsMemOperand(dst)
@@ -423,9 +511,15 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
         case LDR(rd, base, ofs) => 
             evalUpdate(s, rd, MemContents(s, Address(OperandContents(s, base) +
                 OperandContents(s, ofs))), r, ok)
+        case LDR_global(rd, global, base, ofs) => 
+            evalUpdate(s, rd, GlobalContents(s, global, OperandContents(s, ofs)), r, ok)
+        case LDR_reloc(rd, name) =>
+            evalUpdate(s, rd, AddressOfGlobal(name), r, ok)
         case STR(rd, base, ofs) => 
             evalMemUpdate(s, Address(OperandContents(s, base) +
                 OperandContents(s, ofs)), OperandContents(s, rd), r, ok)
+        case STR_global(rd, global, base, ofs) => 
+            evalGlobalUpdate(s, global, OperandContents(s, ofs), OperandContents(s, rd), r, ok)
         case MOV(dst, src) => evalUpdate(s, dst,
             OperandContents(s, src),
             r, ok)
@@ -473,4 +567,7 @@ predicate evalCode(c:code, s:state, r:state, ok:bool)
         case While(cond, body) => exists n:nat :: evalWhile(cond, body, n, s, r, ok)
 }
 
-predicate{:opaque} sp_eval(c:code, s:state, r:state, ok:bool) { evalCode(c, s, r, ok) }
+predicate{:opaque} sp_eval(c:code, s:state, r:state, ok:bool)
+{
+    evalCode(c, s, r, ok)
+}

@@ -1,22 +1,6 @@
 include "ARMdef.dfy"
 
 //-----------------------------------------------------------------------------
-// Utilities 
-//-----------------------------------------------------------------------------
-function method pow2_32():int { 0x1_0000_0000 }
-predicate isUInt32(i:int) { 0 <= i < pow2_32() }
-
-//-----------------------------------------------------------------------------
-// Sequence Utilities
-//-----------------------------------------------------------------------------
-function SeqLength<T>(s:seq<T>) : int { |s| }
-function SeqDrop<T>(s:seq<T>, tail:int) : seq<T> 
-    requires 0 <= tail <= |s|;                                           
-    { s[..tail] }
-function SeqAppendElt<T>(s:seq<T>, elt:T) : seq<T> { s + [elt] }
-function SeqBuild<T>(elt:T) : seq<T> { [elt] }
-
-//-----------------------------------------------------------------------------
 // Spartan Types
 //-----------------------------------------------------------------------------
 type sp_int = int
@@ -149,8 +133,14 @@ function method{:opaque} sp_code_MOV(dst:operand, src:operand):code
 function method{:opaque} sp_code_LDR(rd:operand, base:operand, ofs:operand):code
     { Ins(LDR(rd, base, ofs)) }
 
+function method{:opaque} sp_code_LDRglobal(rd:operand, global:operand, base:operand, ofs:operand):code
+    { Ins(LDR_global(rd, global, base, ofs)) }
+
 function method{:opaque} sp_code_STR(rd:operand, base:operand, ofs:operand):code
     { Ins(STR(rd, base, ofs)) }
+
+function method{:opaque} sp_code_STRglobal(rd:operand, global:operand, base:operand, ofs:operand):code
+    { Ins(STR_global(rd, global, base, ofs)) }
 
 function method{:opaque} sp_code_CPS(mod:operand):code
     { Ins(CPS(mod)) }
@@ -166,6 +156,9 @@ function method{:opaque} sp_code_xorEquals(o1:operand, o2:operand):code { Ins(EO
 //     var i2 := Ins(STR(o, OSP, OConst(0)));
 //     Block(sp_CCons( i1, sp_CCons(i2, CNil) ))
 // }
+
+function method{:opaque} sp_code_LDRglobaladdr(rd:operand, name:operand):code
+    { Ins(LDR_reloc(rd, name)) }
 
 //-----------------------------------------------------------------------------
 // Instruction Lemmas
@@ -410,6 +403,21 @@ lemma sp_lemma_LDR(s:state, r:state, ok:bool,
     reveal_sp_code_LDR();
 }
 
+lemma sp_lemma_LDRglobal(s:state, r:state, ok:bool,
+    rd:operand, name:operand, base:operand, ofs:operand)
+    requires ValidDestinationOperand(s, rd);
+    requires ValidOperand(s, base);
+    requires ValidOperand(s, ofs);
+    requires ValidGlobalOffset(s, name, OperandContents(s, ofs));
+    requires AddressOfGlobal(name) == OperandContents(s, base);
+    requires sp_eval(sp_code_LDRglobal(rd, name, base, ofs), s, r, ok);
+    ensures evalUpdate(s, rd, GlobalContents(s, name, OperandContents(s, ofs)), r, ok);
+    ensures isUInt32(OperandContents(r, rd));
+{
+    reveal_sp_eval();
+    reveal_sp_code_LDRglobal();
+}
+
 lemma sp_lemma_STR(s:state, r:state, ok:bool,
     rd:operand, base:operand, ofs:operand)
     requires ValidRegOperand(s, rd);
@@ -426,6 +434,21 @@ lemma sp_lemma_STR(s:state, r:state, ok:bool,
 {
     reveal_sp_eval();
     reveal_sp_code_STR();
+}
+
+lemma sp_lemma_STRglobal(s:state, r:state, ok:bool,
+    rd:operand, name:operand, base:operand, ofs:operand)
+    requires ValidRegOperand(s, rd);
+    requires ValidOperand(s, base);
+    requires ValidOperand(s, ofs);
+    requires ValidGlobalOffset(s, name, OperandContents(s, ofs));
+    requires AddressOfGlobal(name) == OperandContents(s, base);
+    requires sp_eval(sp_code_STRglobal(rd, name, base, ofs), s, r, ok);
+    requires isUInt32(OperandContents(s, rd));
+    ensures evalGlobalUpdate(s, name, OperandContents(s, ofs), OperandContents(s, rd), r, ok);
+{
+    reveal_sp_eval();
+    reveal_sp_code_STRglobal();
 }
 
 lemma sp_lemma_CPS(s:state, r:state, ok:bool, mod:operand)
@@ -510,6 +533,18 @@ lemma sp_lemma_xorEquals(s:sp_state, r:sp_state, ok:bool, o1:operand, o2:operand
 {
     reveal_sp_eval();
     reveal_sp_code_xorEquals();
+}
+
+lemma sp_lemma_LDRglobaladdr(s:state, r:state, ok:bool, rd:operand, name:operand)
+    requires ValidDestinationOperand(s, rd);
+    requires ValidGlobal(s, name);
+    requires sp_eval(sp_code_LDRglobaladdr(rd, name), s, r, ok);
+    ensures evalUpdate(s, rd, AddressOfGlobal(name), r, ok);
+    ensures isUInt32(OperandContents(r, rd));
+    ensures AddressOfGlobal(name) == OperandContents(r, rd);
+{
+    reveal_sp_eval();
+    reveal_sp_code_LDRglobaladdr();
 }
 
 //-----------------------------------------------------------------------------

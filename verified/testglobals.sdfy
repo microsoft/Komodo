@@ -1,0 +1,33 @@
+procedure main()
+  requires
+    this.globals == InitialGlobals(MyGlobalDecls());
+    ValidGlobalOffset(this, MyGlobal(), 0);
+    ValidOperand(this, op_r(1));
+    ValidOperand(this, op_r(2));
+  ensures
+    ValidGlobalOffset(this, MyGlobal(), 0);
+    GlobalContents(this, MyGlobal(), 0) == 42;
+{
+    LDRglobaladdr(r1, MyGlobal());
+    LDRglobal(r2, MyGlobal(), r1, 0);
+    ADD(r2,r2,42);
+    STRglobal(r2, MyGlobal(), r1, 0);
+}
+
+#verbatim
+function method MyGlobalName(): string { "myglobal" }
+function method MyGlobal(): operand { op_sym(MyGlobalName()) }
+function method MyGlobalDecls(): globaldecls
+{
+    GlobalDecls(map[MyGlobalName() := 4])
+}
+
+method Main()
+{
+  printHeader();
+  var n := printCode(sp_code_main(), 0);
+  printBss(MyGlobalDecls());
+  printFooter();
+}
+#endverbatim
+

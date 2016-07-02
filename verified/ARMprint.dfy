@@ -48,6 +48,7 @@ method printOperand(o:operand)
         case OSP => print("sp");
         case OLR => print("lr");
         // case OMem(x) => not_impl();
+        case OSymbol(sym) => print "="; print(sym);
 }
 
 method printIns3Op(instr:string, dest:operand, src1:operand, src2:operand)
@@ -115,7 +116,10 @@ method printIns(ins:ins)
         case LSR(dest, src1, src2) => printIns3Op("LSR", dest, src1, src2);
         case MVN(dest, src) => printIns2Op("MVN", dest, src);
         case LDR(rd, base, ofs) => printInsLdStr("LDR", rd, base, ofs);
+        case LDR_global(rd, global, base, ofs) => printInsLdStr("LDR", rd, base, ofs);
+        case LDR_reloc(rd, sym) => printIns2Op("LDR", rd, sym);
         case STR(rd, base, ofs) => printInsLdStr("STR", rd, base, ofs);
+        case STR_global(rd, global, base, ofs) => printInsLdStr("STR", rd, base, ofs);
         case MOV(dst, src) => printIns2Op("MOV", dst, src);
         case CPS(mod) => printIns1Op("CPS", mod);
     }
@@ -177,6 +181,7 @@ method printCode(c:code, n:int) returns(n':int)
 
 method printFunction(symname:string, c:code, n:int) returns(n':int)
 {
+    nl();
     print(".global "); print(symname); nl();
     print(symname); print(":"); nl();
     n' := printCode(c, n);
@@ -186,6 +191,31 @@ method printHeader()
 {
     print(".arm"); nl();
     print(".section .text"); nl();
+}
+
+method printGlobal(symname: string, bytes: int)
+{
+    print(".lcomm ");
+    print(symname);
+    print(", ");
+    print(bytes);
+    nl();
+}
+
+method printBss(gdecls: globaldecls)
+{
+    nl();
+    print(".section .bss"); nl();
+    print(".align 2"); nl(); // 4-byte alignment
+    match gdecls case GlobalDecls(decls) =>
+        var syms := (set k | k in decls :: k);
+        while (|syms| > 0)
+            invariant forall s :: s in syms ==> s in decls;
+        {
+            var s :| s in syms;
+            printGlobal(s, decls[s]);
+            syms := syms - {s};
+        }
 }
 
 method printFooter()
