@@ -524,7 +524,7 @@ lemma sp_lemma_block(b:codes, s0:state, r:state, ok:bool) returns(r1:state, ok1:
 {
   reveal_sp_eval();
   assert evalBlock(b, s0, r, ok);
-  r1, ok1 :| sp_eval(b.hd, s0, r1, ok1) && (if !ok1 then !ok else evalBlock(b.tl, r1, r, ok));
+  r1, ok1 :| evalCode(b.hd, s0, r1, ok1) && (if !ok1 then !ok else evalBlock(b.tl, r1, r, ok));
   c0 := b.hd;
   b1 := b.tl;
 }
