@@ -174,7 +174,8 @@ uint32_t kev_smc_get_phys_pages(void)
 kev_err_t kev_smc_init_addrspace(kev_secure_pageno_t addrspace_page,
                                  kev_secure_pageno_t l1pt_page)
 {
-    if (!(page_is_valid(addrspace_page) && page_is_valid(l1pt_page))) {
+    if (addrspace_page == l1pt_page
+        || !(page_is_valid(addrspace_page) && page_is_valid(l1pt_page))) {
         return KEV_ERR_INVALID_PAGENO;
     }
 
