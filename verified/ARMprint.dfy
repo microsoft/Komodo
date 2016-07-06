@@ -203,6 +203,7 @@ method printGlobal(symname: string, bytes: int)
 }
 
 method printBss(gdecls: globaldecls)
+    requires ValidGlobalDecls(gdecls)
 {
     nl();
     print(".section .bss"); nl();
@@ -213,7 +214,7 @@ method printBss(gdecls: globaldecls)
             invariant forall s :: s in syms ==> s in decls;
         {
             var s :| s in syms;
-            printGlobal(s, decls[s]);
+            printGlobal(SymbolName(s), decls[s]);
             syms := syms - {s};
         }
 }

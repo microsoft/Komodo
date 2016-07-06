@@ -74,6 +74,7 @@ function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
 function addrval(s:sp_state, a:int):int
     requires WordAligned(a)
     requires ValidMem(s, Address(a))
+    ensures isUInt32(addrval(s, a))
 {
     MemContents(s, Address(a))
 }
@@ -144,21 +145,20 @@ function method{:opaque} sp_code_xorEquals(o1:operand, o2:operand):code { Ins(EO
 //     Block(sp_CCons( i1, sp_CCons(i2, CNil) ))
 // }
 
-function method{:opaque} sp_code_LDRglobaladdr(rd:operand, name:operand):code
-    { Ins(LDR_reloc(rd, name)) }
+function method{:opaque} sp_code_LDRglobaladdr(rd:operand, g:operand):code
+    { Ins(LDR_reloc(rd, g)) }
 
 //-----------------------------------------------------------------------------
 // Instruction Lemmas
 //-----------------------------------------------------------------------------
 lemma sp_lemma_ADD(s:state, r:state, ok:bool,
     dst:operand, src1:operand, src2:operand)
+    requires ValidState(s);
     requires ValidOperand(s,src1);
     requires ValidOperand(s,src2);
     requires ValidDestinationOperand(s, dst);
-    requires sp_eval(sp_code_ADD(dst, src1, src2), s, r, ok);
-    requires isUInt32(OperandContents(s, src1));
-    requires isUInt32(OperandContents(s, src2));
     requires isUInt32(OperandContents(s, src1) + OperandContents(s, src2));
+    requires sp_eval(sp_code_ADD(dst, src1, src2), s, r, ok);
     ensures  evalUpdate(s, dst, OperandContents(s, src1) +
         OperandContents(s, src2), r, ok);
     ensures  isUInt32(OperandContents(r, dst));
@@ -169,12 +169,11 @@ lemma sp_lemma_ADD(s:state, r:state, ok:bool,
 
 lemma sp_lemma_SUB(s:state, r:state, ok:bool,
     dst:operand, src1:operand, src2:operand)
+    requires ValidState(s);
     requires ValidOperand(s,src1);
     requires ValidOperand(s,src2);
     requires ValidDestinationOperand(s, dst);
     requires sp_eval(sp_code_SUB(dst, src1, src2), s, r, ok);
-    requires isUInt32(OperandContents(s, src1));
-    requires isUInt32(OperandContents(s, src2));
     requires isUInt32(OperandContents(s, src1) - OperandContents(s, src2));
     ensures  evalUpdate(s, dst, OperandContents(s, src1) -
         OperandContents(s, src2), r, ok);
@@ -186,12 +185,11 @@ lemma sp_lemma_SUB(s:state, r:state, ok:bool,
 
 lemma sp_lemma_MUL(s:state, r:state, ok:bool,
     dst:operand, src1:operand, src2:operand)
+    requires ValidState(s);
     requires ValidRegOperand(s,src1);
     requires ValidRegOperand(s,src2);
     requires ValidDestinationOperand(s, dst);
     requires sp_eval(sp_code_MUL(dst, src1, src2), s, r, ok);
-    requires isUInt32(OperandContents(s, src1));
-    requires isUInt32(OperandContents(s, src2));
     requires isUInt32(OperandContents(s, src1) * OperandContents(s, src2));
     ensures  evalUpdate(s, dst, OperandContents(s, src1) *
         OperandContents(s, src2), r, ok);
@@ -203,13 +201,12 @@ lemma sp_lemma_MUL(s:state, r:state, ok:bool,
 
 lemma sp_lemma_UDIV(s:state, r:state, ok:bool,
     dst:operand, src1:operand, src2:operand)
+    requires ValidState(s);
     requires ValidOperand(s,src1);
     requires ValidOperand(s,src2);
     requires ValidDestinationOperand(s, dst);
     requires OperandContents(s,src2) > 0;
     requires sp_eval(sp_code_UDIV(dst, src1, src2), s, r, ok);
-    requires isUInt32(OperandContents(s, src1));
-    requires isUInt32(OperandContents(s, src2));
     requires isUInt32(OperandContents(s, src1) / OperandContents(s, src2));
     ensures  evalUpdate(s, dst, OperandContents(s, src1) /
         OperandContents(s, src2), r, ok);
@@ -221,12 +218,11 @@ lemma sp_lemma_UDIV(s:state, r:state, ok:bool,
 
 lemma sp_lemma_AND(s:state, r:state, ok:bool,
     dst:operand, src1:operand, src2:operand)
+    requires ValidState(s);
     requires ValidOperand(s,src1);
     requires ValidOperand(s,src2);
     requires ValidDestinationOperand(s, dst);
     requires sp_eval(sp_code_AND(dst, src1, src2), s, r, ok);
-    requires isUInt32(OperandContents(s, src1));
-    requires isUInt32(OperandContents(s, src2));
     ensures evalUpdate(s, dst, and32(eval_op(s, src1),
         eval_op(s, src2)), r, ok);
     ensures  isUInt32(OperandContents(r, dst));
@@ -237,12 +233,11 @@ lemma sp_lemma_AND(s:state, r:state, ok:bool,
 
 lemma sp_lemma_ORR(s:state, r:state, ok:bool,
     dst:operand, src1:operand, src2:operand)
+    requires ValidState(s);
     requires ValidOperand(s,src1);
     requires ValidOperand(s,src2);
     requires ValidDestinationOperand(s, dst);
     requires sp_eval(sp_code_ORR(dst, src1, src2), s, r, ok);
-    requires isUInt32(OperandContents(s, src1));
-    requires isUInt32(OperandContents(s, src2));
     ensures evalUpdate(s, dst, or32(eval_op(s, src1),
         eval_op(s, src2)), r, ok);
     ensures  isUInt32(OperandContents(r, dst));
@@ -253,12 +248,11 @@ lemma sp_lemma_ORR(s:state, r:state, ok:bool,
 
 lemma sp_lemma_EOR(s:state, r:state, ok:bool,
     dst:operand, src1:operand, src2:operand)
+    requires ValidState(s);
     requires ValidOperand(s,src1);
     requires ValidOperand(s,src2);
     requires ValidDestinationOperand(s, dst);
     requires sp_eval(sp_code_EOR(dst, src1, src2), s, r, ok);
-    requires isUInt32(OperandContents(s, src1));
-    requires isUInt32(OperandContents(s, src2));
     ensures evalUpdate(s, dst, xor32(eval_op(s, src1),
         eval_op(s, src2)), r, ok);
     ensures  isUInt32(OperandContents(r, dst));
@@ -269,14 +263,12 @@ lemma sp_lemma_EOR(s:state, r:state, ok:bool,
 
 lemma sp_lemma_ROR(s:state, r:state, ok:bool,
     dst:operand, src1:operand, src2:operand)
+    requires ValidState(s);
     requires ValidOperand(s,src1);
-    requires ValidOperand(s,src2);
+    requires ValidShiftOperand(s,src2);
     requires ValidDestinationOperand(s, dst);
     requires sp_eval(sp_code_ROR(dst, src1, src2), s, r, ok);
-    requires isUInt32(OperandContents(s, src1));
-    requires isUInt32(OperandContents(s, src2));
     requires src2.OConst?;
-    requires 0 <= eval_op(s, src2) < 32;
     ensures evalUpdate(s, dst, ror32(eval_op(s, src1),
         eval_op(s, src2)), r, ok);
     ensures  isUInt32(OperandContents(r, dst));
@@ -287,14 +279,12 @@ lemma sp_lemma_ROR(s:state, r:state, ok:bool,
 
 lemma sp_lemma_LSL(s:state, r:state, ok:bool,
     dst:operand, src1:operand, src2:operand)
+    requires ValidState(s);
     requires ValidOperand(s,src1);
-    requires ValidOperand(s,src2);
+    requires ValidShiftOperand(s,src2);
     requires ValidDestinationOperand(s, dst);
     requires sp_eval(sp_code_LSL(dst, src1, src2), s, r, ok);
-    requires isUInt32(OperandContents(s, src1));
-    requires isUInt32(OperandContents(s, src2));
     requires src2.OConst?;
-    requires 0 <= eval_op(s, src2) < 32;
     ensures evalUpdate(s, dst, shl32(eval_op(s, src1),
         eval_op(s, src2)), r, ok);
     ensures  isUInt32(OperandContents(r, dst));
@@ -305,14 +295,12 @@ lemma sp_lemma_LSL(s:state, r:state, ok:bool,
 
 lemma sp_lemma_LSR(s:state, r:state, ok:bool,
     dst:operand, src1:operand, src2:operand)
+    requires ValidState(s);
     requires ValidOperand(s,src1);
-    requires ValidOperand(s,src2);
+    requires ValidShiftOperand(s,src2);
     requires ValidDestinationOperand(s, dst);
     requires sp_eval(sp_code_LSR(dst, src1, src2), s, r, ok);
-    requires isUInt32(OperandContents(s, src1));
-    requires isUInt32(OperandContents(s, src2));
     requires src2.OConst?;
-    requires 0 <= eval_op(s, src2) < 32;
     ensures evalUpdate(s, dst, shr32(eval_op(s, src1),
         eval_op(s, src2)), r, ok);
     ensures  isUInt32(OperandContents(r, dst));
@@ -323,10 +311,10 @@ lemma sp_lemma_LSR(s:state, r:state, ok:bool,
 
 lemma sp_lemma_MVN(s:state, r:state, ok:bool,
     dst:operand, src:operand)
+    requires ValidState(s);
     requires ValidOperand(s,src);
     requires ValidDestinationOperand(s, dst);
     requires sp_eval(sp_code_MVN(dst, src), s, r, ok);
-    requires isUInt32(OperandContents(s, src));
     ensures evalUpdate(s, dst, not32(eval_op(s, src)),
         r, ok);
     ensures  isUInt32(OperandContents(r, dst));
@@ -337,10 +325,10 @@ lemma sp_lemma_MVN(s:state, r:state, ok:bool,
 
 lemma sp_lemma_MOV(s:state, r:state, ok:bool,
     dst:operand, src:operand)
+    requires ValidState(s);
     requires ValidOperand(s, src);
     requires ValidDestinationOperand(s, dst);
     requires sp_eval(sp_code_MOV(dst, src), s, r, ok);
-    requires isUInt32(OperandContents(s, src));
     ensures evalUpdate(s, dst, OperandContents(s, src), r, ok);
     ensures isUInt32(OperandContents(r, dst));
 {
@@ -350,14 +338,13 @@ lemma sp_lemma_MOV(s:state, r:state, ok:bool,
 
 lemma sp_lemma_LDR(s:state, r:state, ok:bool,
     rd:operand, base:operand, ofs:operand)
+    requires ValidState(s);
     requires ValidDestinationOperand(s, rd);
     requires ValidOperand(s, base);
     requires ValidOperand(s, ofs);
     requires WordAligned(OperandContents(s, base) + OperandContents(s, ofs));
     requires ValidMem(s, addr_mem(s, base, ofs));
     requires sp_eval(sp_code_LDR(rd, base, ofs), s, r, ok);
-    requires isUInt32(OperandContents(s, base));
-    requires isUInt32(OperandContents(s, ofs));
     ensures evalUpdate(s, rd, MemContents(s, Address(OperandContents(s, base) + OperandContents(s, ofs))), r, ok)
     ensures isUInt32(OperandContents(r, rd));
 {
@@ -366,14 +353,16 @@ lemma sp_lemma_LDR(s:state, r:state, ok:bool,
 }
 
 lemma sp_lemma_LDRglobal(s:state, r:state, ok:bool,
-    rd:operand, name:operand, base:operand, ofs:operand)
+    rd:operand, g:operand, base:operand, ofs:operand)
+    requires ValidState(s);
     requires ValidDestinationOperand(s, rd);
     requires ValidOperand(s, base);
     requires ValidOperand(s, ofs);
-    requires ValidGlobalOffset(s, name, OperandContents(s, ofs));
-    requires AddressOfGlobal(name) == OperandContents(s, base);
-    requires sp_eval(sp_code_LDRglobal(rd, name, base, ofs), s, r, ok);
-    ensures evalUpdate(s, rd, GlobalContents(s, name, OperandContents(s, ofs)), r, ok);
+    requires ValidGlobalState(s);
+    requires ValidGlobalOffset(g, OperandContents(s, ofs));
+    requires AddressOfGlobal(g) == OperandContents(s, base);
+    requires sp_eval(sp_code_LDRglobal(rd, g, base, ofs), s, r, ok);
+    ensures evalUpdate(s, rd, GlobalContents(s, g, OperandContents(s, ofs)), r, ok);
     ensures isUInt32(OperandContents(r, rd));
 {
     reveal_sp_eval();
@@ -382,37 +371,39 @@ lemma sp_lemma_LDRglobal(s:state, r:state, ok:bool,
 
 lemma sp_lemma_STR(s:state, r:state, ok:bool,
     rd:operand, base:operand, ofs:operand)
+    requires ValidState(s);
     requires ValidRegOperand(s, rd);
     requires ValidOperand(s, base);
     requires ValidOperand(s, ofs);
     requires WordAligned(OperandContents(s, base) + OperandContents(s, ofs));
     requires ValidMem(s, addr_mem(s, base, ofs));
     requires sp_eval(sp_code_STR(rd, base, ofs), s, r, ok);
-    requires isUInt32(OperandContents(s, rd));
     ensures evalMemUpdate(s, Address(OperandContents(s, base) + OperandContents(s, ofs)),
         OperandContents(s, rd), r, ok)
-    ensures isUInt32(MemContents(r, addr_mem(s, base, ofs)));
+    ensures ValidMem(r, addr_mem(s, base, ofs));
 {
     reveal_sp_eval();
     reveal_sp_code_STR();
 }
 
 lemma sp_lemma_STRglobal(s:state, r:state, ok:bool,
-    rd:operand, name:operand, base:operand, ofs:operand)
+    rd:operand, g:operand, base:operand, ofs:operand)
+    requires ValidState(s);
     requires ValidRegOperand(s, rd);
     requires ValidOperand(s, base);
     requires ValidOperand(s, ofs);
-    requires ValidGlobalOffset(s, name, OperandContents(s, ofs));
-    requires AddressOfGlobal(name) == OperandContents(s, base);
-    requires sp_eval(sp_code_STRglobal(rd, name, base, ofs), s, r, ok);
-    requires isUInt32(OperandContents(s, rd));
-    ensures evalGlobalUpdate(s, name, OperandContents(s, ofs), OperandContents(s, rd), r, ok);
+    requires ValidGlobalState(s);
+    requires ValidGlobalOffset(g, OperandContents(s, ofs));
+    requires AddressOfGlobal(g) == OperandContents(s, base);
+    requires sp_eval(sp_code_STRglobal(rd, g, base, ofs), s, r, ok);
+    ensures evalGlobalUpdate(s, g, OperandContents(s, ofs), OperandContents(s, rd), r, ok);
 {
     reveal_sp_eval();
     reveal_sp_code_STRglobal();
 }
 
 lemma sp_lemma_CPS(s:state, r:state, ok:bool, mod:operand)
+    requires ValidState(s);
     requires ValidOperand(s, mod);
     requires sp_eval(sp_code_CPS(mod), s, r, ok);
     requires ValidModeEncoding(OperandContents(s, mod));
@@ -424,13 +415,14 @@ lemma sp_lemma_CPS(s:state, r:state, ok:bool, mod:operand)
 
 // Lemmas for frontend functions
 lemma sp_lemma_incr(s:sp_state, r:sp_state, ok:bool, o:operand)
-  requires ValidDestinationOperand(s, o)
-  requires sp_eval(sp_code_incr(o), s, r, ok)
-  requires isUInt32(eval_op(s, o) + 1);
-  ensures  evalUpdate(s, o, OperandContents(s, o) + 1, r, ok)
+    requires ValidState(s);
+    requires ValidDestinationOperand(s, o)
+    requires sp_eval(sp_code_incr(o), s, r, ok)
+    requires isUInt32(eval_op(s, o) + 1);
+    ensures  evalUpdate(s, o, OperandContents(s, o) + 1, r, ok)
 {
-  reveal_sp_eval();
-  reveal_sp_code_incr();
+    reveal_sp_eval();
+    reveal_sp_code_incr();
 }
 
 // lemma sp_lemma_push(s:sp_state, r:sp_state, ok:bool, o:operand)
@@ -451,12 +443,10 @@ lemma sp_lemma_incr(s:sp_state, r:sp_state, ok:bool, o:operand)
 // }
 
 lemma sp_lemma_plusEquals(s:sp_state, r:sp_state, ok:bool, o1:operand, o2:operand)
+    requires ValidState(s);
     requires ValidDestinationOperand(s, o1);
     requires ValidOperand(s, o2);
-    requires ValidOperand(s, o1);
     requires sp_eval(sp_code_plusEquals(o1, o2), s, r, ok);
-    requires isUInt32(OperandContents(s, o1));
-    requires isUInt32(OperandContents(s, o2));
     requires isUInt32(OperandContents(s, o1) + OperandContents(s, o2));
     ensures evalUpdate(s, o1, OperandContents(s, o1) +
         OperandContents(s, o2), r, ok);
@@ -466,12 +456,10 @@ lemma sp_lemma_plusEquals(s:sp_state, r:sp_state, ok:bool, o1:operand, o2:operan
 }
 
 lemma sp_lemma_andEquals(s:sp_state, r:sp_state, ok:bool, o1:operand, o2:operand)
+    requires ValidState(s);
     requires ValidDestinationOperand(s, o1);
     requires ValidOperand(s, o2);
-    requires ValidOperand(s, o1);
     requires sp_eval(sp_code_andEquals(o1, o2), s, r, ok);
-    requires isUInt32(OperandContents(s, o1));
-    requires isUInt32(OperandContents(s, o2));
     ensures evalUpdate(s, o1, and32(eval_op(s, o1), eval_op(s, o2)), r, ok);
 {
     reveal_sp_eval();
@@ -479,25 +467,24 @@ lemma sp_lemma_andEquals(s:sp_state, r:sp_state, ok:bool, o1:operand, o2:operand
 }
 
 lemma sp_lemma_xorEquals(s:sp_state, r:sp_state, ok:bool, o1:operand, o2:operand)
+    requires ValidState(s);
     requires ValidDestinationOperand(s, o1);
     requires ValidOperand(s, o2);
-    requires ValidOperand(s, o1);
     requires sp_eval(sp_code_xorEquals(o1, o2), s, r, ok);
-    requires isUInt32(OperandContents(s, o1));
-    requires isUInt32(OperandContents(s, o2));
     ensures evalUpdate(s, o1, xor32(eval_op(s, o1), eval_op(s, o2)), r, ok);
 {
     reveal_sp_eval();
     reveal_sp_code_xorEquals();
 }
 
-lemma sp_lemma_LDRglobaladdr(s:state, r:state, ok:bool, rd:operand, name:operand)
+lemma sp_lemma_LDRglobaladdr(s:state, r:state, ok:bool, rd:operand, g:operand)
+    requires ValidState(s);
     requires ValidDestinationOperand(s, rd);
-    requires ValidGlobal(s, name);
-    requires sp_eval(sp_code_LDRglobaladdr(rd, name), s, r, ok);
-    ensures evalUpdate(s, rd, AddressOfGlobal(name), r, ok);
+    requires ValidGlobal(g);
+    requires sp_eval(sp_code_LDRglobaladdr(rd, g), s, r, ok);
+    ensures evalUpdate(s, rd, AddressOfGlobal(g), r, ok);
     ensures isUInt32(OperandContents(r, rd));
-    ensures AddressOfGlobal(name) == OperandContents(r, rd);
+    ensures AddressOfGlobal(g) == OperandContents(r, rd);
 {
     reveal_sp_eval();
     reveal_sp_code_LDRglobaladdr();

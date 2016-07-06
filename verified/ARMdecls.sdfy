@@ -33,12 +33,11 @@ function{:operand} sp_op_const(n:int):operand
 
 procedure ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
+        ValidState(this);
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
     requires
-        isUInt32(src1);
-        isUInt32(src2);
         isUInt32(src1 + src2);
     ensures
         isUInt32(dst);
@@ -46,12 +45,11 @@ procedure ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 
 procedure SUB(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
+        ValidState(this);
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
     requires
-        isUInt32(src1);
-        isUInt32(src2);
         isUInt32(src1 - src2);
     ensures
         isUInt32(dst);
@@ -59,12 +57,11 @@ procedure SUB(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 
 procedure MUL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
+        ValidState(this);
         ValidRegOperand(this, @src1);
         ValidRegOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
     requires
-        isUInt32(src1);
-        isUInt32(src2);
         isUInt32(src1 * src2);
     ensures
         isUInt32(dst);
@@ -72,13 +69,12 @@ procedure MUL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 
 procedure UDIV(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
+        ValidState(this);
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
     requires
         src2 > 0;
-        isUInt32(src1);
-        isUInt32(src2);
         isUInt32(src1 / src2);
     ensures
         isUInt32(dst);
@@ -86,11 +82,10 @@ procedure UDIV(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 
 procedure AND(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
+        ValidState(this);
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
-        isUInt32(src1);
-        isUInt32(src2);
     ensures
         isUInt32(dst);
         evalUpdate(old(this), @dst, old(and32(src1, src2)), this, true);
@@ -98,12 +93,10 @@ procedure AND(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 
 procedure ORR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
+        ValidState(this);
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
-    requires
-        isUInt32(src1);
-        isUInt32(src2);
     ensures
         isUInt32(dst);
         evalUpdate(old(this), @dst, old(or32(src1,src2)), this, true);
@@ -111,24 +104,21 @@ procedure ORR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 
 procedure EOR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
+        ValidState(this);
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
-    requires
-        isUInt32(src1);
-        isUInt32(src2);
     ensures
         isUInt32(dst);
         evalUpdate(old(this), @dst, old(xor32(src1,src2)), this, true);
 
 procedure ROR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
+        ValidState(this);
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
     requires
-        isUInt32(src1);
-        isUInt32(src2);
         @src2 is OConst;
         0 <= src2 < 32;
     ensures
@@ -137,12 +127,11 @@ procedure ROR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 
 procedure LSL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
+        ValidState(this);
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
     requires
-        isUInt32(src1);
-        isUInt32(src2);
         @src2 is OConst;
         0 <= src2 < 32;
     ensures
@@ -151,12 +140,11 @@ procedure LSL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 
 procedure LSR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
+        ValidState(this);
         ValidOperand(this, @src1);
         ValidOperand(this, @src2);
         ValidDestinationOperand(this, @dst);
     requires
-        isUInt32(src1);
-        isUInt32(src2);
         @src2 is OConst;
         0 <= src2 < 32;
     ensures
@@ -165,31 +153,28 @@ procedure LSR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 
 procedure MVN(out{:operand} dst:int, {:operand} src:int)
     requires/ensures
+        ValidState(this);
         ValidOperand(this, @src);
         ValidDestinationOperand(this, @dst);
-    requires
-        isUInt32(src);
     ensures
         isUInt32(dst);
         evalUpdate(old(this), @dst, old(not32(src)), this, true);
 
 procedure MOV(out{:operand} dst:int, {:operand} src:int)
     requires/ensures
+        ValidState(this);
         ValidOperand(this, @src);
         ValidDestinationOperand(this, @dst);
-        isUInt32(src);
     ensures
         evalUpdate(old(this), @dst, old(src), this, true);
         isUInt32(dst);
 
 procedure LDR(out{:operand} rd:int, {:operand} base:int, {:operand} ofs:int)
     requires/ensures
+        ValidState(this);
         ValidDestinationOperand(this, @rd);
         ValidOperand(this, @base);
         ValidOperand(this, @ofs);
-        isUInt32(rd);
-        isUInt32(base);
-        isUInt32(ofs);
     requires
         WordAligned(base + ofs);
         ValidMem(this, addr_mem(this, @base, @ofs));
@@ -199,12 +184,10 @@ procedure LDR(out{:operand} rd:int, {:operand} base:int, {:operand} ofs:int)
 
 procedure STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
     requires/ensures
+        ValidState(this);
         ValidRegOperand(this, @rd);
         ValidOperand(this, @base);
         ValidOperand(this, @ofs);
-        isUInt32(rd);
-        isUInt32(base);
-        isUInt32(ofs);
     requires
         WordAligned(base + ofs);
         ValidMem(this, addr_mem(this, @base, @ofs));
@@ -213,19 +196,19 @@ procedure STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
 
 procedure CPS({:operand} mod:int)
     requires
+        ValidState(this);
         ValidOperand(this, @mod);
         ValidModeEncoding(mod);
-        isUInt32(mod);
     ensures
         evalModeUpdate(old(this), old(mod), this, true);
 
 procedure incr(inout{:operand} o:int)
-  requires
-    ValidDestinationOperand(this, @o);
-    isUInt32(o);
-    isUInt32(o + 1);
-  ensures
-    evalUpdate(old(this), @o, old(o) + 1, this, true);
+    requires
+        ValidState(this);
+        ValidDestinationOperand(this, @o);
+        isUInt32(o + 1);
+    ensures
+        evalUpdate(old(this), @o, old(o) + 1, this, true);
 
 // procedure push({:operand} o:int)
 //     requires
@@ -241,62 +224,60 @@ procedure incr(inout{:operand} o:int)
 
 procedure plusEquals(inout{:operand} o1:int, {:operand} o2:int)
     requires
+        ValidState(this);
         ValidDestinationOperand(this, @o1);
         ValidOperand(this, @o2);
-        isUInt32(o1);
-        isUInt32(o2);
         isUInt32(o1 + o2);
     ensures
         evalUpdate(old(this), @o1, old(o1 + o2), this, true);
 
 procedure andEquals(inout{:operand} o1:int, {:operand} o2:int)
     requires
+        ValidState(this);
         ValidDestinationOperand(this, @o1);
         ValidOperand(this, @o2);
-        isUInt32(o1);
-        isUInt32(o2);
-        0 <= o1 < MaxVal();
     ensures
         evalUpdate(old(this), @o1, old(and32(o1,o2)), this, true);
 
 procedure xorEquals(inout{:operand} o1:int, {:operand} o2:int)
     requires
+        ValidState(this);
         ValidDestinationOperand(this, @o1);
         ValidOperand(this, @o2);
-        isUInt32(o1);
-        isUInt32(o2);
-        0 <= o1 < MaxVal();
     ensures
         evalUpdate(old(this), @o1, old(xor32(o1,o2)), this, true);
 
-procedure LDRglobaladdr(out{:operand} rd:int, {:operand} name:string)
+procedure LDRglobaladdr(out{:operand} rd:int, {:operand} g:string)
     requires
+        ValidState(this);
         ValidDestinationOperand(this, @rd);
-        ValidGlobal(this, @name);
+        ValidGlobal(@g);
     ensures
-        evalUpdate(old(this), @rd, AddressOfGlobal(@name), this, true);
+        evalUpdate(old(this), @rd, AddressOfGlobal(@g), this, true);
         isUInt32(rd);
 
-procedure LDRglobal(out{:operand} rd:int, {:operand} name:string,
+procedure LDRglobal(out{:operand} rd:int, {:operand} g:string,
                     {:operand} base:int, {:operand} ofs:int)
     requires
+        ValidState(this);
         ValidDestinationOperand(this, @rd);
         ValidOperand(this, @base);
         ValidOperand(this, @ofs);
-        ValidGlobalOffset(this, @name, ofs);
-        AddressOfGlobal(@name) == base;
+        ValidGlobalOffset(@g, ofs);
+        AddressOfGlobal(@g) == base;
     ensures
-        evalUpdate(old(this), @rd, old(GlobalContents(this, @name, ofs)), this, true);
+        evalUpdate(old(this), @rd, old(GlobalContents(this, @g, ofs)), this, true);
         isUInt32(rd);
 
-procedure STRglobal({:operand} rd:int, {:operand} name:string,
+procedure STRglobal({:operand} rd:int, {:operand} g:string,
                     {:operand} base:int, {:operand} ofs:int)
     requires
+        ValidState(this);
         ValidRegOperand(this, @rd);
         ValidOperand(this, @base);
         ValidOperand(this, @ofs);
-        ValidGlobalOffset(this, @name, ofs);
-        AddressOfGlobal(@name) == base;
+        ValidGlobalOffset(@g, ofs);
+        AddressOfGlobal(@g) == base;
         isUInt32(rd);
     ensures
-        evalGlobalUpdate(old(this), @name, old(ofs), old(rd), this, true);
+        evalGlobalUpdate(old(this), @g, old(ofs), old(rd), this, true);

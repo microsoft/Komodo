@@ -12,8 +12,7 @@ datatype mem = Address(addr:int)
 datatype operand = OConst(n:int) | OReg(r:ARMReg) | OSP | OLR | OSymbol(sym:string)
 
 //datatype frame = Frame(locals:map<mem, int>)
-datatype globals = Globals(map<string, seq<int>>)
-datatype globaldecls = GlobalDecls(map<string, int>)
+datatype globals = Globals(map<operand, seq<int>>)
 datatype state = State(regs:map<ARMReg, int>,
                        addresses:map<mem, int>,
                        globals:globals,
@@ -148,8 +147,7 @@ datatype code =
 //-----------------------------------------------------------------------------
 // Microarch-Related Utilities
 //-----------------------------------------------------------------------------
-function MaxVal() : int { 0x1_0000_0000 }
-predicate isUInt32(i:int) { 0 <= i < MaxVal() }
+predicate isUInt32(i:int) { 0 <= i < 0x1_0000_0000 }
 function BytesPerWord() : int { 4 }
 predicate WordAligned(addr:int) { addr % 4 == 0}
 function WordsToBytes(w:int) : int { 4 * w }
@@ -161,18 +159,23 @@ function BytesToWords(b:int) : int requires WordAligned(b) { b / 4 }
 predicate ValidState(s:state)
 {
     (forall m:mode {:trigger SP(m)} {:trigger LR(m)} ::
-        SP(m) in s.regs && 0 <= s.regs[SP(m)] < MaxVal() &&
-        LR(m) in s.regs && 0 <= s.regs[LR(m)] < MaxVal()) &&
-    (forall i:int {:trigger R(i)} :: 0 <= i <= 12 ==> R(i) in s.regs && 
-        0 <= s.regs[R(i)] < MaxVal()) &&
-    ValidGlobalState(s.globals)
+        SP(m) in s.regs && isUInt32(s.regs[SP(m)]) &&
+        LR(m) in s.regs && isUInt32(s.regs[LR(m)]))
+        && (forall i:int {:trigger R(i)} :: 0 <= i <= 12
+            ==> R(i) in s.regs && isUInt32(s.regs[R(i)]))
+        && ValidGlobalState(s)
 }
 
-predicate ValidGlobalState(gs:globals)
+predicate ValidGlobalState(s:state)
 {
-    match gs case Globals(gmap) =>
-        // non-zero size, all uint32 values
-        forall g :: g in gmap ==> |gmap[g]| > 0 && forall v :: v in gmap[g] ==> isUInt32(v)
+    match TheGlobalDecls() case GlobalDecls(decls) =>
+    match s.globals case Globals(gmap) =>
+        // same names as decls
+        forall g :: g in decls ==> g in gmap
+        // correct size, all uint32 values
+        && forall g :: g in gmap ==> (g in decls
+            && WordsToBytes(|gmap[g]|) == decls[g]
+            && forall v :: v in gmap[g] ==> isUInt32(v))
 }
 
 predicate ValidOperand(s:state, o:operand)
@@ -189,77 +192,19 @@ predicate ValidOperand(s:state, o:operand)
         case OSymbol(s) => false
 }
 
-function method SymbolName(o:operand): string
-    requires o.OSymbol?
-{
-    match o case OSymbol(name) => name
-}
-
-predicate ValidGlobal(s:state, o:operand)
-{
-    match s.globals case Globals(gmap) =>
-        // defined name
-        o.OSymbol? && SymbolName(o) in gmap
-        // 32-bit words
-        && forall v :: v in gmap[SymbolName(o)] ==> isUInt32(v)
-}
-
-predicate ValidGlobalDecls(gdecls: globaldecls)
-{
-    match gdecls case GlobalDecls(decls) =>
-        forall d :: d in decls ==> decls[d] > 0 && WordAligned(decls[d])
-}
-
-function InitialGlobals(gdecls: globaldecls): globals
-    requires ValidGlobalDecls(gdecls)
-    ensures ValidGlobalState(InitialGlobals(gdecls))
-{
-    match gdecls case GlobalDecls(decls) =>
-        Globals(map sym | sym in decls :: SeqRepeat<int>(decls[sym], 0))
-}
-
-function SizeOfGlobal(s:state, g:operand): int
-    requires ValidGlobal(s, g)
-    ensures WordAligned(SizeOfGlobal(s,g))
-{
-    match s.globals case Globals(gmap) =>
-        WordsToBytes(|gmap[SymbolName(g)]|)
-}
-
-predicate ValidGlobalOffset(s:state, g:operand, offset:int)
-{
-    ValidGlobal(s, g) && WordAligned(offset) && 0 <= offset < SizeOfGlobal(s, g)
-}
-
-// globals have an unknown (uint32) address, only establised by LDR-reloc
-function {:axiom} AddressOfGlobal(g:operand): int
-    ensures isUInt32(AddressOfGlobal(g));
-
-predicate Is32BitOperand(s:state, o:operand)
-    requires ValidOperand(s, o);
-{
-    isUInt32(OperandContents(s, o))
-}
-
 predicate ValidMem(s:state, m:mem)
 {
     WordAligned(m.addr) && m in s.addresses && isUInt32(MemContents(s, m))
 }
 
-predicate ValidMemRange(s:state, lwr:int, upr:int)
+predicate ValidMemRange(s:state, base:int, limit:int)
 {
-    forall i:int :: lwr <= i <= upr && WordAligned(i) ==>
+    forall i:int :: base <= i < limit && WordAligned(i) ==>
         ValidMem(s, Address(i))
 }
 
-// redundant alias for ValidMemRange
-predicate MemRangeIs32(s:state, lwr:int, upr:int)
-{
-    ValidMemRange(s, lwr, upr)
-}
-
 predicate ValidShiftOperand(s:state, o:operand)
-    { ( o.OConst? && 0 <= o.n <= 32) || ValidOperand(s, o) }
+    { ValidOperand(s, o) && OperandContents(s, o) < 32 }
 
 predicate ValidDestinationOperand(s:state, o:operand)
     { !o.OConst? && ValidOperand(s, o) }
@@ -270,40 +215,93 @@ predicate ValidDestinationOperand(s:state, o:operand)
 predicate ValidRegOperand(s:state, o:operand)
     { !o.OConst? && ValidOperand(s, o) }
 
+//-----------------------------------------------------------------------------
+// Globals
+//-----------------------------------------------------------------------------
+
+datatype globaldecls = GlobalDecls(map<operand, int>)
+
+function method SymbolName(o:operand): string
+    requires o.OSymbol?
+{
+    match o case OSymbol(name) => name
+}
+
+predicate ValidGlobal(o:operand)
+{
+    match TheGlobalDecls() case GlobalDecls(declmap) =>
+        o.OSymbol? && o in declmap
+}
+
+predicate ValidGlobalDecls(gd:globaldecls)
+{
+    gd.GlobalDecls? && match gd case GlobalDecls(decls) =>
+        forall d :: d in decls ==> d.OSymbol? && decls[d] > 0 && WordAligned(decls[d])
+}
+
+predicate ValidGlobalOffset(g:operand, offset:int)
+{
+    ValidGlobal(g) && WordAligned(offset) && 0 <= offset < SizeOfGlobal(g)
+}
+
+// globals have an unknown (uint32) address, only establised by LDR-reloc
+function {:axiom} AddressOfGlobal(g:operand): int
+    ensures isUInt32(AddressOfGlobal(g));
+
+/*
+function InitialGlobals(): globals
+    requires ValidGlobalDecls(TheGlobalDecls())
+    ensures ValidGlobalState(InitialGlobals())
+{
+    match TheGlobalDecls() case GlobalDecls(decls) =>
+        Globals(map sym | sym in decls :: SeqRepeat<int>(decls[sym], 0))
+}
+*/
+
+function SizeOfGlobal(g:operand): int
+    requires ValidGlobal(g)
+    ensures WordAligned(SizeOfGlobal(g))
+{
+    match TheGlobalDecls() case GlobalDecls(declmap) => declmap[g]
+}
+
+// global declarations are the responsibility of the program, as long as they're valid
+function {:axiom} TheGlobalDecls(): globaldecls
+    ensures ValidGlobalDecls(TheGlobalDecls());
 
 //-----------------------------------------------------------------------------
 // Functions for bitwise operations
 //-----------------------------------------------------------------------------
 function xor32(x:int, y:int) : int  
-    requires 0 <= x < 0x1_0000_0000 && 0 <= y < 0x1_0000_0000;
+    requires isUInt32(x) && isUInt32(y);
     { int(BitwiseXor(uint32(x), uint32(y))) }
 
 function and32(x:int, y:int) : int  
-    requires 0 <= x < 0x1_0000_0000 && 0 <= y < 0x1_0000_0000;
+    requires isUInt32(x) && isUInt32(y);
     { int(BitwiseAnd(uint32(x), uint32(y))) }
 
 function or32(x:int, y:int) : int  
-    requires 0 <= x < 0x1_0000_0000 && 0 <= y < 0x1_0000_0000;
+    requires isUInt32(x) && isUInt32(y);
     { int(BitwiseOr(uint32(x), uint32(y))) }
 
 function not32(x:int) : int  
-    requires 0 <= x < 0x1_0000_0000;
+    requires isUInt32(x);
     { int(BitwiseNot(uint32(x))) }
 
 function rol32(x:int, amount:int) : int 
-    requires 0 <= x < 0x1_0000_0000 && 0 <= amount < 32;
+    requires isUInt32(x) && 0 <= amount < 32;
     { int(RotateLeft(uint32(x), uint32(amount))) }
 
 function ror32(x:int, amount:int) : int 
-    requires 0 <= x < 0x1_0000_0000 && 0 <= amount < 32;
+    requires isUInt32(x) && 0 <= amount < 32;
     { int(RotateRight(uint32(x), uint32(amount))) }
 
 function shl32(x:int, amount:int) : int 
-    requires 0 <= x < 0x1_0000_0000 && 0 <= amount < 32;
+    requires isUInt32(x) && 0 <= amount < 32;
     { int(LeftShift(uint32(x), uint32(amount))) }
 
 function shr32(x:int, amount:int) : int 
-    requires 0 <= x < 0x1_0000_0000 && 0 <= amount < 32;
+    requires isUInt32(x) && 0 <= amount < 32;
     { int(RightShift(uint32(x), uint32(amount))) }
 
 //-----------------------------------------------------------------------------
@@ -327,11 +325,12 @@ function MemContents(s:state, m:mem): int
 }
 
 function GlobalContents(s:state, g:operand, offset:int): int
-    requires ValidGlobalOffset(s, g, offset)
+    requires ValidGlobalOffset(g, offset)
+    requires ValidGlobalState(s)
     ensures isUInt32(GlobalContents(s, g, offset))
 {
     match s.globals case Globals(gmap) =>
-        (gmap[SymbolName(g)])[BytesToWords(offset)]
+        (gmap[g])[BytesToWords(offset)]
 }
 
 function eval_op(s:state, o:operand): int
@@ -352,14 +351,14 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
         case OSP => r == s.(regs := s.regs[SP(mode_of_state(s)) := v])
 }
 
-predicate evalHavocReg(s:state, o:operand, r:state, ok:bool)
-    requires ValidDestinationOperand(s, o);
-{
-    ok && ValidDestinationOperand(r, o) && match o
-        case OReg(reg) => r == s.(regs := s.regs[o.r := r.regs[o.r]])
-        case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := r.regs[LR(mode_of_state(r))]])
-        case OSP => r == s.(regs := s.regs[SP(mode_of_state(s)) := r.regs[SP(mode_of_state(r))]])
-}
+// predicate evalHavocReg(s:state, o:operand, r:state, ok:bool)
+//     requires ValidDestinationOperand(s, o);
+// {
+//     ok && ValidDestinationOperand(r, o) && match o
+//         case OReg(reg) => r == s.(regs := s.regs[o.r := r.regs[o.r]])
+//         case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := r.regs[LR(mode_of_state(r))]])
+//         case OSP => r == s.(regs := s.regs[SP(mode_of_state(s)) := r.regs[SP(mode_of_state(r))]])
+// }
 
 predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
     requires WordAligned(m.addr)
@@ -371,14 +370,16 @@ predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
 }
 
 predicate evalGlobalUpdate(s:state, g:operand, offset:nat, v:int, r:state, ok:bool)
-    requires ValidGlobalOffset(s, g, offset)
+    requires ValidGlobalOffset(g, offset)
+    requires ValidGlobalState(s)
     requires isUInt32(v)
+    ensures ValidGlobalState(s)
 {
     match s.globals case Globals(gmap) =>
-        var n := SymbolName(g);
-        var oldval := gmap[n];
+        var oldval := gmap[g];
         var newval := oldval[BytesToWords(offset) := v];
-        ok && r == s.(globals := Globals(gmap[n := newval]))
+        assert |newval| == |oldval|;
+        ok && r == s.(globals := Globals(gmap[g := newval]))
 }
 
 predicate evalModeUpdate(s:state, newmode:int, r:state, ok:bool)
@@ -407,77 +408,57 @@ function evalOBool(s:state, o:obool):bool
 
 predicate ValidInstruction(s:state, ins:ins)
 {
-    match ins
+    ValidState(s) && match ins
         case ADD(dest, src1, src2) => ValidOperand(s, src1) &&
             ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
-            (0 <= (eval_op(s,src1) + eval_op(s,src2)) < MaxVal())
+            isUInt32(eval_op(s,src1) + eval_op(s,src2))
         case SUB(dest, src1, src2) => ValidOperand(s, src1) &&
             ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
-            (0 <= (eval_op(s,src1) - eval_op(s,src2)) < MaxVal())
+            isUInt32(eval_op(s,src1) - eval_op(s,src2))
         case MUL(dest,src1,src2) => ValidRegOperand(s, src1) &&
             ValidRegOperand(s, src2) && ValidDestinationOperand(s,dest) &&
-            (0 <= (eval_op(s,src1) * eval_op(s,src2)) < MaxVal())
+            isUInt32(eval_op(s,src1) * eval_op(s,src2))
         case UDIV(dest,src1,src2) => ValidOperand(s, src1) &&
             ValidOperand(s, src2) && ValidDestinationOperand(s,dest) &&
-            (eval_op(s,src2) > 0) &&
-            (0 <= (eval_op(s,src1) / eval_op(s,src2)) < MaxVal())
-            //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+            (eval_op(s,src2) > 0) && isUInt32(eval_op(s,src1) / eval_op(s,src2))
         case AND(dest, src1, src2) => ValidOperand(s, src1) &&
-            ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
-            Is32BitOperand(s, src1) && Is32BitOperand(s, src2)
-            //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+            ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
         case ORR(dest, src1, src2) => ValidOperand(s, src1) &&
-            ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
-            Is32BitOperand(s, src1) && Is32BitOperand(s, src2)
-            //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+            ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
         case EOR(dest, src1, src2) => ValidOperand(s, src1) &&
-            ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
-            Is32BitOperand(s, src1) && Is32BitOperand(s, src2)
-            //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+            ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
         case ROR(dest, src1, src2) => ValidOperand(s, src1) &&
-            ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest) &&
-            Is32BitOperand(s, src1) && Is32BitOperand(s, src2)
-            //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+            ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest)
         case LSL(dest, src1, src2) => ValidOperand(s, src1) &&
-            ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest) &&
-            Is32BitOperand(s, src1) && Is32BitOperand(s, src2)
-            //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+            ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest)
         case LSR(dest, src1, src2) => ValidOperand(s, src1) &&
-            ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest) &&
-            Is32BitOperand(s, src1) && Is32BitOperand(s, src2)
-            //!IsMemOperand(src1) && !IsMemOperand(src2) && !IsMemOperand(dest)
+            ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest)
         case MVN(dest, src) => ValidOperand(s, src) &&
-            ValidDestinationOperand(s, dest) &&
-            Is32BitOperand(s, src)
-            //!IsMemOperand(src) && !IsMemOperand(dest)
+            ValidDestinationOperand(s, dest)
         case LDR(rd, base, ofs) => 
             ValidDestinationOperand(s, rd) &&
             ValidOperand(s, base) && ValidOperand(s, ofs) &&
             WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
             ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
-            //IsMemOperand(addr) && !IsMemOperand(rd)
         case LDR_global(rd, global, base, ofs) => 
-            ValidDestinationOperand(s, rd) &&
+            ValidDestinationOperand(s, rd) && ValidGlobalState(s) &&
             ValidOperand(s, base) && ValidOperand(s, ofs) &&
             AddressOfGlobal(global) == OperandContents(s, base) &&
-            ValidGlobalOffset(s, global, OperandContents(s, ofs))
+            ValidGlobalOffset(global, OperandContents(s, ofs))
         case LDR_reloc(rd, global) => 
-            ValidDestinationOperand(s, rd) && ValidGlobal(s, global)
+            ValidDestinationOperand(s, rd) && ValidGlobal(global)
         case STR(rd, base, ofs) =>
             ValidRegOperand(s, rd) && isUInt32(OperandContents(s, rd)) &&
             ValidOperand(s, ofs) && ValidOperand(s, base) &&
             WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
             ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
-            //ValidDestinationOperand(s, addr_op(s, base, ofs))
-            //IsMemOperand(addr) && !IsMemOperand(rd)
         case STR_global(rd, global, base, ofs) => 
             ValidRegOperand(s, rd) && isUInt32(OperandContents(s, rd)) &&
             ValidOperand(s, base) && ValidOperand(s, ofs) &&
             AddressOfGlobal(global) == OperandContents(s, base) &&
-            ValidGlobalOffset(s, global, OperandContents(s, ofs))
+            ValidGlobalOffset(global, OperandContents(s, ofs))
         case MOV(dst, src) => ValidDestinationOperand(s, dst) &&
-            ValidOperand(s, src) && Is32BitOperand(s, src)
-            //!IsMemOperand(src) && !IsMemOperand(dst)
+            ValidOperand(s, src)
         case CPS(mod) => ValidOperand(s, mod) &&
             ValidModeEncoding(OperandContents(s, mod))
 }
@@ -551,7 +532,7 @@ predicate evalBlock(block:codes, s:state, r:state, ok:bool)
 }
 
 predicate evalWhile(b:obool, c:code, n:nat, s:state, r:state, ok:bool)
-  decreases c, n
+    decreases c, n
 {
     if ValidOperand(s, b.o1) && ValidOperand(s, b.o2) then
         if n == 0 then
@@ -564,7 +545,7 @@ predicate evalWhile(b:obool, c:code, n:nat, s:state, r:state, ok:bool)
 }
 
 predicate evalCode(c:code, s:state, r:state, ok:bool)
-  decreases c, 0
+    decreases c, 0
 {
     match c
         case Ins(ins) => evalIns(ins, s, r, ok)

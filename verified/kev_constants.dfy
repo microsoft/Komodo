@@ -67,39 +67,24 @@ function method STACK_UPPER():int
 //-----------------------------------------------------------------------------
 // Data Structures
 //-----------------------------------------------------------------------------
-// start of G_PAGEDB chosen arbitrarily
-function method G_PAGEDB():int 
-    ensures G_PAGEDB() == KEVLAR_MON_VBASE();
-    { KEVLAR_MON_VBASE() }
-function method G_PAGEDB_END():int 
-    ensures G_PAGEDB_END() == G_PAGEDB() + KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE()
-    { G_PAGEDB() + KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE() }
+function method G_PAGEDB_SIZE():int
+    ensures G_PAGEDB_SIZE() == KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE();
+    { KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE() }
+
+// computes byte offset of a specific pagedb entry
 function method G_PAGEDB_ENTRY(pageno:int):int 
     requires 0 <= pageno < KEVLAR_SECURE_NPAGES();
-    ensures G_PAGEDB_ENTRY(pageno) == G_PAGEDB() + pageno * PAGEDB_ENTRY_SIZE();
+    ensures G_PAGEDB_ENTRY(pageno) == pageno * PAGEDB_ENTRY_SIZE();
     ensures WordAligned(G_PAGEDB_ENTRY(pageno))
-    { 
-        assert WordAligned(G_PAGEDB());
-        assert WordAligned(PAGEDB_ENTRY_SIZE());
-        assert WordAligned(pageno*PAGEDB_ENTRY_SIZE());
-        G_PAGEDB() + pageno * PAGEDB_ENTRY_SIZE()
-    }
+{
+    assert WordAligned(PAGEDB_ENTRY_SIZE());
+    pageno * PAGEDB_ENTRY_SIZE()
+}
 
-// entry = start address of pagedb entry
-function method PAGEDB_ENTRY_TYPE(entry:int):int
-    requires WordAligned(entry);
-    requires G_PAGEDB() <= entry < G_PAGEDB_END();
-    ensures WordAligned(PAGEDB_ENTRY_TYPE(entry));
-    ensures PAGEDB_ENTRY_TYPE(entry) == entry;
-    { entry }
-function method PAGEDB_ENTRY_ADDRSPACE(entry:int):int
-    requires WordAligned(entry);
-    requires G_PAGEDB() <= entry + 1 < G_PAGEDB_END();
-    ensures PAGEDB_ENTRY_ADDRSPACE(entry) == entry + 4;
-    { entry + 4 }
-function method PAGEDB_ENTRY_SIZE():int
-    ensures PAGEDB_ENTRY_SIZE() == 8
-    { 8 }
+// entry = start offset of pagedb entry
+function method PAGEDB_ENTRY_TYPE():int { 0 }
+function method PAGEDB_ENTRY_ADDRSPACE():int { 4 }
+function method PAGEDB_ENTRY_SIZE():int { 8 }
 
 // addrspc = start address of address space metadata
 function method ADDRSPACE_L1PT(addrspace:int):int
@@ -133,8 +118,6 @@ function method KEV_PAGE_L2PTABLE():int
     ensures KEV_PAGE_L2PTABLE() == 4; { 4 }
 function method KEV_PAGE_DATA():int
     ensures KEV_PAGE_DATA() == 5; { 5 }
-function method KEV_PAGE_INVALID():int
-    ensures KEV_PAGE_INVALID() == 6; { 6 }
 
 //-----------------------------------------------------------------------------
 // Address Space States

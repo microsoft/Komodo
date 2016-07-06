@@ -3,7 +3,6 @@ predicate ValidStack(s:sp_state)
     requires ValidState(s)
 {
     ValidMemRange(s, STACK_LOWER(), STACK_UPPER()) &&
-    MemRangeIs32(s, STACK_LOWER(), STACK_UPPER()) &&
     WordAligned(eval_op(s, op_sp())) &&
     (STACK_LOWER() <= eval_op(s, op_sp()) < STACK_UPPER())
 }
@@ -34,11 +33,6 @@ predicate MemValidityPreserving(s:sp_state, r:sp_state)
     forall i:int :: ValidMem(s,Address(i)) ==> ValidMem(r,Address(i))
 }
 
-predicate ValidMemIs32(s:sp_state)
-{
-    true
-}
-
 predicate MemValuePreserving(s:sp_state, r:sp_state)
     requires MemValidityPreserving(s,r);
 {
@@ -65,13 +59,19 @@ predicate NonStackValuePreserving(s:sp_state, r:sp_state)
         ValidMem(s,Address(i)) && WordAligned(i) ==> addrval(r,i) == addrval(s,i)
 }
 
+predicate GlobalValuePreserving(s:sp_state, r:sp_state)
+    requires ValidState(s) && ValidState(r);
+{
+    forall g, o :: ValidGlobalOffset(g, o)
+      ==> GlobalContents(s, g, o) == GlobalContents(r, g, o)
+}
+
 #endverbatim
 
 procedure fcall_prologue(ghost stack_bytes:int)
     requires/ensures
         ValidState(this);
         ValidStack(this);
-        ValidMemIs32(this);
     requires
         stack_bytes >= 40; 
         can_fcall_n(this,stack_bytes);
@@ -99,6 +99,7 @@ procedure fcall_prologue(ghost stack_bytes:int)
         MemValidityPreserving(old(this),this);
         NonStackValuePreserving(old(this),this);
         StackValuePreserving(old(this),this,40);
+        GlobalValuePreserving(old(this),this);
         
         can_fcall_n(this,stack_bytes-40);
 {
@@ -152,9 +153,8 @@ procedure fcall_epilogue(ghost stack_bytes_left:int)
     requires/ensures
         ValidState(this);
         ValidStack(this);
-        ValidMemIs32(this);
     requires
-        0 <= sp + 40 < MaxVal();
+        isUInt32(sp + 40);
         sp + 40 < STACK_UPPER();
         can_fcall_n(this,stack_bytes_left);
     ensures
@@ -180,6 +180,7 @@ procedure fcall_epilogue(ghost stack_bytes_left:int)
 
         MemValidityPreserving(old(this),this);        
         MemValuePreserving(old(this),this);
+        GlobalValuePreserving(old(this),this);
 
         can_fcall_n(this,stack_bytes_left+40);
 {
