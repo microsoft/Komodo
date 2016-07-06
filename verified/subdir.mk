@@ -10,6 +10,7 @@ SDFY_INCLUDES =  $(dir)/ARMdecls.sdfy $(dir)/fcall.sdfy
 
 %.dfy: %.sdfy $(SDFY_INCLUDES) $(ARMSPARTAN_DEPS) $(KEVLAR_DEPS)
 	$(SPARTAN) $(SDFY_INCLUDES) $< -out $@ $(ARMSPARTAN_INCLUDES) $(KEVLAR_INCLUDES)
+	which dos2unix >/dev/null && dos2unix $@ || true
 
 # We use .verified files as a timestamp/placeholder to indicate that
 # a given Dafny source has been verified
