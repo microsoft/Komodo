@@ -18,6 +18,13 @@ function sp_eval_op(s:state, o:operand):int
     requires ValidOperand(s, o);
     { OperandContents(s, o) }
 
+predicate sp_eq_ops(s1:sp_state, s2:sp_state, o:operand)
+{
+    ValidOperand(s1, o)
+        && ValidOperand(s2, o)
+        && sp_eval_op(s1, o) == sp_eval_op(s2, o)
+}
+
 function sp_eval_mem(s:state, m:mem):int
     requires WordAligned(m.addr);
     requires ValidMem(s, m);
