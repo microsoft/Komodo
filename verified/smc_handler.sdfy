@@ -81,80 +81,68 @@ procedure phys2monvaddr({:operand} phys:int, out {:operand} virt:int)
     virt += sp_op_const(KEVLAR_DIRECTMAP_VBASE());
 }
 
-//This is not quite the same as std::memset
-procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
-    {:register op_r(2)} val:int, ghost stack_bytes:int)
+procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand} size:int)
     requires/ensures
         ValidState(this);
         ValidStack(this);
-        ValidMemRange(this,lower,upper);
-        WordAligned(lower);
-        WordAligned(upper);
-        stack_bytes >= 40;
-        can_fcall_n(this,stack_bytes);
     requires
-        lower < upper;
-        lower >= STACK_UPPER() || upper < STACK_LOWER();
+        ValidRegOperand(this, @base);
+        ValidRegOperand(this, @size);
+        ValidRegOperand(this, @val);
+        @base != @size;
+        @base != @val;
+        @size != @val;
+        @base != @sp;
+        @val != @sp;
+        @size != @sp;
+        WordAligned(base);
+        WordAligned(size);
+        isUInt32(val);
+        isUInt32(base + size);
+        ValidMemRange(this, base, base + size);
+        base >= STACK_UPPER() || base + size <= STACK_LOWER();
     ensures
         MemValidityPreserving(old(this),this);
         GlobalValuePreserving(old(this),this);
-        forall i:int :: (lower <= i < upper) && WordAligned(i) ==>
-            addrval(this,i) == val;
-        forall i:int :: !(lower <= i < upper) && WordAligned(i) &&
+        forall i:int :: (old(base) <= i < old(base + size)) && WordAligned(i) ==>
+            addrval(this,i) == old(val);
+        forall i:int :: !(old(base) <= i < old(base + size)) && WordAligned(i) &&
             !(STACK_LOWER() <= i < STACK_UPPER()) &&
             ValidMem(old(this),Address(i)) ==>
                 addrval(this,i) == addrval(old(this),i);
-        NonvolatileRegPreserving(old(this),this);
-        StackValuePreserving(old(this),this,stack_bytes);
-        r0 == old(r0);
-        r1 == old(r1);
-        r2 == old(r2);
-
+        StackValuePreserving(old(this),this,0);
+        RegPreservingExcept(old(this), this, [@base,@size]);
 {
-    fcall_prologue(stack_bytes);
+    ghost var lower := base;
+    ghost var limit := base + size;
 
-    ghost var loop_old_sp := sp;
-    ghost var pre_loop_s := this;
+    // beyond this point, "base" is where we're up to, and "size" is the limit
+    size += base;
 
-    assert upper == old(upper);
-    assert upper == r1;
-
-    for (r9 := lower; r9 < upper; r9+=4)
+    for (; base < size; base += 4)
         invariant
             ValidState(this);
             ValidStack(this);
-            sp == loop_old_sp;
-            MemValidityPreserving(old(this),pre_loop_s);
-            MemValidityPreserving(pre_loop_s,this);
-            GlobalValuePreserving(old(this),pre_loop_s);
-            GlobalValuePreserving(pre_loop_s,this);
-            ValidMemRange(old(this),lower,upper);
-            StackValuePreserving(pre_loop_s,this,stack_bytes-40);
-            can_fcall_n(this,stack_bytes-40);
-         
-            WordAligned(r9);
-               
-            r0 == old(lower);
-            r1 == old(upper);
-            r2 == old(val);
-            lower < upper;
-            lower <= r9 <= upper;
-            lower >= STACK_UPPER() || upper < STACK_LOWER();
-            
-            forall i:int :: (lower <= i < r9) && WordAligned(i) ==>
-                addrval(this,i) == val;
-            forall i:int :: !(lower <= i < r9 ) && WordAligned(i) &&
-                !(STACK_LOWER() <= i < STACK_UPPER()) &&
-                ValidMem(pre_loop_s,Address(i)) ==>
-                    addrval(this,i) == addrval(pre_loop_s,i);
-
+            sp == old(sp);
+            size == limit;
+            MemValidityPreserving(old(this),this);
+            GlobalValuePreserving(old(this),this);
+            ValidMemRange(old(this),lower,limit);
+            StackValuePreserving(old(this),this,0);
+            RegPreservingExcept(old(this), this, [@base,@size]);
+            WordAligned(base);
+            lower <= base <= limit;
+            lower >= STACK_UPPER() || limit <= STACK_LOWER();
+            forall i:int :: (lower <= i < base) && WordAligned(i) ==>
+                addrval(this,i) == old(val);
+            forall i:int :: !(lower <= i < base) && WordAligned(i) &&
+                ValidMem(old(this),Address(i)) ==>
+                    addrval(this,i) == addrval(old(this),i);
         decreases
-            upper - r9;
+            size - base;
     {
-        STR(r2, r9, 0);
+        STR(val, base, 0);
     }
-            
-    fcall_epilogue(stack_bytes-40);
 }
 
 procedure kev_smc_init_addrspace_success(
@@ -250,15 +238,14 @@ procedure kev_smc_init_addrspace_success(
     STR(r4,r10,12);
     assert addrval(this,ADDRSPACE_STATE(vmap(addrspace_page))) == KEV_ADDRSPACE_INIT();
   
-    r0 := r9; // vmap(l1pt_page)
-    ADD(r1, r9, sp_op_const(KEVLAR_PAGE_SIZE()));
+    r1 := sp_op_const(KEVLAR_PAGE_SIZE());
     r2 := 0;
     assert ValidState(this);
     assert GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_ADDRSPACE()) == vmap(addrspace_page);
-    memset(r0,r1,r2,stack_bytes-40);
-   
+    memset(r9,r2,r1); //vmap(l1pt_page)
+
     assert GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_ADDRSPACE()) == vmap(addrspace_page);
-   
+
     fcall_epilogue(stack_bytes-40);
 }
 
