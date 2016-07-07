@@ -23,7 +23,7 @@ predicate page_is_valid(page:int)
 // }
 
 predicate {:opaque} vmap_lemma(phys:int)
-    requires isUInt32(phys)
+    requires page_is_valid(phys)
     ensures vmap_lemma(phys) == true;
     ensures  (KEVLAR_DIRECTMAP_VBASE() + G_SECURE_PHYSBASE() +
         KEVLAR_PAGE_SIZE() * phys) % 4 == 0;
@@ -36,7 +36,6 @@ predicate {:opaque} vmap_lemma(phys:int)
 }
 
 function vmap(phys:int):int
-    requires isUInt32(phys);
     requires page_is_valid(phys);
     ensures (vmap(phys) % 4) == 0
 {
@@ -57,29 +56,29 @@ predicate ValidAddrspace(s:state,base:int)
 
 #endverbatim
 
-procedure phys2monvaddr({:register op_r(1)} phys:int, out {:register op_r(0)} virt:int, ghost stack_bytes:int)
+procedure phys2monvaddr({:operand} phys:int, out {:operand} virt:int)
     requires/ensures
         ValidState(this);
         ValidStack(this);
-        stack_bytes >= 40;
-        can_fcall_n(this,stack_bytes);
     requires
+        ValidRegOperand(this, @phys);
+        ValidRegOperand(this, @virt);
+        @phys != @virt;
+        @phys != op_sp();
+        @virt != op_sp();
         page_is_valid(phys);
     ensures
-        virt == KEVLAR_DIRECTMAP_VBASE() + G_SECURE_PHYSBASE() +
-            KEVLAR_PAGE_SIZE() * phys;
         WordAligned(virt);
+        virt == vmap(old(phys));
         MemValidityPreserving(old(this),this);
-        RegPreserving(old(this),this);
-        StackValuePreserving(old(this),this,stack_bytes);
+        RegPreservingExcept(old(this), this, [@virt]);
+        StackValuePreserving(old(this),this,0);
         NonStackValuePreserving(old(this),this);
 {
-    fcall_prologue(stack_bytes);
-    r4 := sp_op_const(KEVLAR_PAGE_SIZE());
-    MUL(virt,phys,r4);
+    virt := sp_op_const(KEVLAR_PAGE_SIZE());
+    MUL(virt,phys,virt);
     virt += sp_op_const(G_SECURE_PHYSBASE());
     virt += sp_op_const(KEVLAR_DIRECTMAP_VBASE());
-    fcall_epilogue(stack_bytes-40);
 }
 
 //This is not quite the same as std::memset
@@ -105,7 +104,7 @@ procedure memset({:register op_r(0)} lower:int, {:register op_r(1)} upper:int,
             !(STACK_LOWER() <= i < STACK_UPPER()) &&
             ValidMem(old(this),Address(i)) ==>
                 addrval(this,i) == addrval(old(this),i);
-        RegPreserving(old(this),this);
+        NonvolatileRegPreserving(old(this),this);
         StackValuePreserving(old(this),this,stack_bytes);
         r0 == old(r0);
         r1 == old(r1);
@@ -205,20 +204,11 @@ procedure kev_smc_init_addrspace_success(
 
     LDRglobaladdr(r11, PageDb());
 
-    r5 := addrspace_page;
-    r6 := l1pt_page;
-
-    phys2monvaddr(r1,r0,stack_bytes-40);
-    r9 := r0;
+    phys2monvaddr(l1pt_page,r9);
     assert r9 == vmap(l1pt_page);
 
-    r1 := r5;
-    phys2monvaddr(r1,r0,stack_bytes-40);
-    r10 := r0;
+    phys2monvaddr(addrspace_page,r10);
     assert r10 == vmap(addrspace_page);
-
-    r0 := r5;
-    r1 := r6;
 
     r4 := sp_op_const(PAGEDB_ENTRY_SIZE());
     MUL(r7,r0,r4);
@@ -291,7 +281,7 @@ procedure kev_smc_init_addrspace(
         page_is_valid(l1pt_page) ==>
             ValidMemRange(this,vmap(l1pt_page),vmap(l1pt_page)+KEVLAR_PAGE_SIZE());
     ensures
-        //RegPreserving(old(this),this);
+        //NonvolatileRegPreserving(old(this),this);
         MemValidityPreserving(old(this),this); 
         sp == old(sp);
         StackValuePreserving(old(this),this,stack_bytes);

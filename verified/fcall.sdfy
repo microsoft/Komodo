@@ -13,19 +13,32 @@ predicate can_fcall_n(s:sp_state,bytes:int)
     (STACK_LOWER() + bytes <= eval_op(s,op_sp()) < STACK_UPPER())
 }
 
-predicate RegPreserving(s:sp_state, r:sp_state)
+predicate RegPreservingExcept(s:sp_state, r:sp_state, trashed:seq<operand>)
+    requires ValidState(s) && ValidState(r);
+    requires forall o :: o in trashed ==> ValidRegOperand(s, o) && ValidRegOperand(r, o);
+{
+    //forall n :: 0 <= n <= 12 && (op_r(n) in trashed || eval_op(s,op_r(n)) == eval_op(r,op_r(n)))
+    (op_r(0) in trashed || eval_op(s,op_r(0)) == eval_op(r,op_r(0)))
+    && (op_r(1) in trashed || eval_op(s,op_r(1)) == eval_op(r,op_r(1)))
+    && (op_r(2) in trashed || eval_op(s,op_r(2)) == eval_op(r,op_r(2)))
+    && (op_r(3) in trashed || eval_op(s,op_r(3)) == eval_op(r,op_r(3)))
+    && (op_r(4) in trashed || eval_op(s,op_r(4)) == eval_op(r,op_r(4)))
+    && (op_r(5) in trashed || eval_op(s,op_r(5)) == eval_op(r,op_r(5)))
+    && (op_r(6) in trashed || eval_op(s,op_r(6)) == eval_op(r,op_r(6)))
+    && (op_r(7) in trashed || eval_op(s,op_r(7)) == eval_op(r,op_r(7)))
+    && (op_r(8) in trashed || eval_op(s,op_r(8)) == eval_op(r,op_r(8)))
+    && (op_r(9) in trashed || eval_op(s,op_r(9)) == eval_op(r,op_r(9)))
+    && (op_r(10) in trashed || eval_op(s,op_r(10)) == eval_op(r,op_r(10)))
+    && (op_r(11) in trashed || eval_op(s,op_r(11)) == eval_op(r,op_r(11)))
+    && (op_r(12) in trashed || eval_op(s,op_r(12)) == eval_op(r,op_r(12)))
+    && (op_sp() in trashed || eval_op(s,op_sp()) == eval_op(r,op_sp()))
+    && (op_lr() in trashed || eval_op(s,op_lr()) == eval_op(r,op_lr()))
+}
+
+predicate NonvolatileRegPreserving(s:sp_state, r:sp_state)
     requires ValidState(s) && ValidState(r);
 {
-    eval_op(s,op_r(4))  == eval_op(r,op_r(4))  &&
-    eval_op(s,op_r(5))  == eval_op(r,op_r(5))  &&
-    eval_op(s,op_r(6))  == eval_op(r,op_r(6))  &&
-    eval_op(s,op_r(7))  == eval_op(r,op_r(7))  &&
-    eval_op(s,op_r(8))  == eval_op(r,op_r(8))  &&
-    eval_op(s,op_r(9))  == eval_op(r,op_r(9))  &&
-    eval_op(s,op_r(10)) == eval_op(r,op_r(10)) &&
-    eval_op(s,op_r(11)) == eval_op(r,op_r(11)) &&
-    eval_op(s,op_r(12)) == eval_op(r,op_r(12)) &&
-    eval_op(s,op_sp())  == eval_op(r,op_sp())
+    RegPreservingExcept(s, r, [op_r(0), op_r(1), op_r(2), op_r(3)])
 }
 
 predicate MemValidityPreserving(s:sp_state, r:sp_state)
