@@ -22,9 +22,8 @@ predicate page_is_valid(page:int)
 //    assert ( (KEVLAR_PAGE_SIZE() * phys) % 4) == 0;
 // }
 
-predicate {:opaque} vmap_lemma(phys:int)
+ lemma vmap_lemma(phys:int)
     requires page_is_valid(phys)
-    ensures vmap_lemma(phys) == true;
     ensures  (KEVLAR_DIRECTMAP_VBASE() + G_SECURE_PHYSBASE() +
         KEVLAR_PAGE_SIZE() * phys) % 4 == 0;
 {
@@ -32,16 +31,12 @@ predicate {:opaque} vmap_lemma(phys:int)
    assert (G_SECURE_PHYSBASE() % 4) == 0;
    assert (KEVLAR_PAGE_SIZE() % 4) == 0;
    assert ( (KEVLAR_PAGE_SIZE() * phys) % 4) == 0;
-   true
 }
 
 function vmap(phys:int):int
     requires page_is_valid(phys);
     ensures (vmap(phys) % 4) == 0
 {
-   // I want this to always be in scope
-   assert vmap_lemma(phys);
-
    KEVLAR_DIRECTMAP_VBASE() + G_SECURE_PHYSBASE() +
         KEVLAR_PAGE_SIZE() * phys
 }

@@ -16,7 +16,7 @@ datatype AddrspaceState = InitState | FinalState | StoppedState
 
 datatype PageDbEntryTyped
     = Addrspace(l1ptnr: PageNr, refcount: nat, state: AddrspaceState)
-    | Dispatcher(entered: bool)
+    | Dispatcher(entrypoint:int, entered: bool)
     | L1PTable(l1pt: seq<Maybe<PageNr>>)
     | L2PTable(l2pt: seq<L2PTE>)
     | DataPage
@@ -59,7 +59,7 @@ predicate validPageDbEntryTyped(d: PageDb, n: PageNr)
     // type-specific checks
     && (
         var addrspaceIsStopped := addrspace.entry.state == StoppedState;
-        (e.entry.Addrspace? && validAddrspace(d, n))
+        (e.entry.Addrspace? && wellFormedAddrspace(d, n))
         || (e.entry.L1PTable? && (addrspaceIsStopped || validL1PTable(d, n)))
         || (e.entry.L2PTable? && (addrspaceIsStopped || validL2PTable(d, n)))
         || (e.entry.Dispatcher?)
@@ -111,7 +111,10 @@ predicate validL2PTE(d: PageDb, addrspace: PageNr, pte: PageNr)
 }
 
 predicate validAddrspace(d: PageDb, n: PageNr)
-    requires n in d && d[n].PageDbEntryTyped? && d[n].entry.Addrspace?
+    { n in d && d[n].PageDbEntryTyped? && d[n].entry.Addrspace? }
+   
+predicate wellFormedAddrspace(d: PageDb, n: PageNr)
+    requires validAddrspace(d, n);
 {
     var a := d[n].entry;
     // valid L1PT page
