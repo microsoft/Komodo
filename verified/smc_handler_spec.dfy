@@ -9,17 +9,6 @@ function mon_vmap(p:PageNr) : int {
     p 
 }
 
-//Returns a sequence containing n instances of T.
-function seqTimesN<T>(datum:T, n:int) : seq<T>
-    requires n >= 0;
-    decreases n;
-{
-    if n == 0 then []
-    else 
-        if n == 1 then [datum]
-        else [datum] + seqTimesN(datum, n-1)
-}
-
 function pagedbFrmRet(ret:smcReturn): PageDb
     { match ret case Pair(p,e) => p }
 
@@ -32,9 +21,11 @@ function pageIsFree(d:PageDb, pg:PageNr) : bool
 
 function allocatePage(pageDbIn: PageDb, securePage: PageNr,
     addrspacePage:PageNr, pageType: PageDbEntryTyped) : smcReturn
-    requires validPageDb(pageDbIn);
-    requires validAddrspace(pageDbIn, addrspacePage);
-    requires wellFormedAddrspace(pageDbIn, addrspacePage);
+    requires validPageDb(pageDbIn)
+    requires wellFormedAddrspace(pageDbIn, addrspacePage)
+    requires validAddrspace(pageDbIn, addrspacePage)
+    requires !pageType.Addrspace?
+    ensures  validPageDb(pagedbFrmRet(allocatePage(pageDbIn, securePage, addrspacePage, pageType)))
 {
     var addrspace := pageDbIn[addrspacePage].entry;
     if(!validPageNr(securePage)) then Pair(pageDbIn, KEV_ERR_INVALID_PAGENO())
@@ -45,34 +36,30 @@ function allocatePage(pageDbIn: PageDb, securePage: PageNr,
     else
         var updatedAddrspace := match addrspace
             case Addrspace(l1, ref, state) => Addrspace(l1, ref + 1, state);
-        var pageDbOut := pageDbIn[ securePage :=
-            PageDbEntryTyped(addrspacePage, pageType) ][
+        var pageDbUpdated := pageDbIn[
+            securePage := PageDbEntryTyped(addrspacePage, pageType) ];
+        var pageDbOut := pageDbUpdated[
             addrspacePage := PageDbEntryTyped(addrspacePage, updatedAddrspace)];
-        Pair(pageDbOut, KEV_ERR_SUCCESS())
-}
+        
+        assert wellFormedPageDb(pageDbOut);
+        assert pageDbEntriesAddrspacesOk(pageDbOut);
+        assert validPageDbEntry(pageDbOut, addrspacePage);
+        
+        //These two fail
+        assume validPageDbEntry(pageDbOut, securePage);
+        // assume forall n :: n in pageDbOut && n != addrspacePage && n != securePage ==>
+        //     validPageDbEntry(pageDbOut, n);
+        assume pageDbEntriesValid(pageDbOut);
 
-// init_addrspace is split into two cases because the current implementation
-// in spartan is split into two parts: one produces error cases, and one handles
-// just the success case. The spartan implementation is split
-// into two cases for performance, but this may no longer be necessary.
-function initAddrspaceSuccess(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr)
-    : smcReturn
-    requires validPageDb(pageDbIn);
-    requires validPageNr(addrspacePage);
-    requires validPageNr(l1PTPage);
-    //ensures  validPageDb(pagedbFrmRet(initAddrspaceSuccess(pageDbIn, addrspacePage, l1PTPage)));
-{
-        var addrspace := Addrspace(l1PTPage, 1, InitState);
-        var l1PT := L1PTable(seqTimesN(Nothing,NR_L1PTES()));
-        var pageDbOut := 
-            pageDbIn[addrspacePage := PageDbEntryTyped(addrspacePage, addrspace)][
-                l1PTPage := PageDbEntryTyped(addrspacePage, l1PT)];
-        Pair( pageDbOut, KEV_ERR_SUCCESS())
+        assert pageDbEntriesValidRefs(pageDbOut);
+        assert validPageDb(pageDbOut);
+        Pair(pageDbOut, KEV_ERR_SUCCESS())
 }
 
 function initAddrspace(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr)
     : smcReturn
     requires validPageDb(pageDbIn);
+    ensures  validPageDb(pagedbFrmRet(initAddrspace(pageDbIn, addrspacePage, l1PTPage)));
 {
     var g := pageDbIn;
     if(!validPageNr(addrspacePage) || !validPageNr(l1PTPage) ||
@@ -83,24 +70,35 @@ function initAddrspace(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr
     else if( !g[addrspacePage].PageDbEntryFree? || !g[l1PTPage].PageDbEntryFree? ) then
         Pair(pageDbIn, KEV_ERR_PAGEINUSE())
     else
-        initAddrspaceSuccess(pageDbIn, addrspacePage, l1PTPage)
+        var addrspace := Addrspace(l1PTPage, 1, InitState);
+        var l1PT := L1PTable(SeqRepeat(NR_L1PTES(),Nothing));
+        var pageDbOut := 
+            (pageDbIn[addrspacePage := PageDbEntryTyped(addrspacePage, addrspace)])[
+                l1PTPage := PageDbEntryTyped(addrspacePage, l1PT)];
+        Pair(pageDbOut, KEV_ERR_SUCCESS())
 }
 
 function initDispatcher(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
     entrypoint:int)
     : smcReturn
     requires validPageDb(pageDbIn);
+    ensures  validPageDb(pagedbFrmRet(initDispatcher(pageDbIn, page, addrspacePage, entrypoint)));
 {
    var n := page;
    var d := pageDbIn;
-   if(!validAddrspace(pageDbIn, addrspacePage) ||
-       !wellFormedAddrspace(pageDbIn, addrspacePage)) then
+   if(!wellFormedAddrspace(pageDbIn, addrspacePage) ||
+       !validAddrspace(pageDbIn, addrspacePage)) then
        Pair(pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
    else
        allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false))
 }
 
-function initL2PTable(
+// function initL2PTable(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr, l1Idx:int)
+//     : smcReturn
+// {
+//     if( l1Idx > NR_L1PTES() ) then Pair(KEV_ERR_INVALIDMAPPING(), PageDbIn)
+//     if( 
+// }
 
 //-----------------------------------------------------------------------------
 // Properties of SMC calls

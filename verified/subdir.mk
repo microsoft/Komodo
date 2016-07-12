@@ -1,4 +1,4 @@
-DAFNYFLAGS = /noNLarith /timeLimit:20 /trace
+DAFNYFLAGS = /noNLarith /timeLimit:60 /trace
 # NB: Spartan include paths are relative to the (generated) dfy file, not the CWD
 ARMSPARTAN_NAMES = ARMdef ARMprint ARMspartan
 ARMSPARTAN_DEPS = $(foreach n,$(ARMSPARTAN_NAMES),$(dir)/$(n).verified)
