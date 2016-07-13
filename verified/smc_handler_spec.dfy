@@ -56,10 +56,9 @@ function allocateDispatcherPage(pageDbIn: PageDb, securePage: PageNr,
         Pair(pageDbOut, KEV_ERR_SUCCESS())
 }
 
-function initAddrspace(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr)
+function initAddrspace_inner(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr)
     : smcReturn
     requires validPageDb(pageDbIn);
-    ensures  validPageDb(pagedbFrmRet(initAddrspace(pageDbIn, addrspacePage, l1PTPage)));
 {
     var g := pageDbIn;
     if(!validPageNr(addrspacePage) || !validPageNr(l1PTPage) ||
@@ -75,35 +74,17 @@ function initAddrspace(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr
         var pageDbOut := 
             (pageDbIn[addrspacePage := PageDbEntryTyped(addrspacePage, addrspace)])[
                 l1PTPage := PageDbEntryTyped(addrspacePage, l1PT)];
-
-        // Necessary semi-manual proof of validPageDbEntry(pageDbOut, l1PTPage)
-        // The interesting part of the proof deals with the contents of addrspaceRefs
-        assert forall p :: p != l1PTPage ==> !(p in addrspaceRefs(pageDbOut, addrspacePage));
-		assert l1PTPage in addrspaceRefs(pageDbOut, addrspacePage);
-        assert addrspaceRefs(pageDbOut, addrspacePage) == {l1PTPage};
-        // only kept for readability
-        assert validPageDbEntry(pageDbOut, l1PTPage);
-
-
-        // Manual proof that the umodified pageDb entries are still valid. The only
-        // interesting case is for addrspaces other than the newly created one.
-        // Specifically, the only non-trivial aspect of validity is the reference
-        // count. Their references are not corrupted because the only touched
-        // pages only reference the newly created page.
-        ghost var otherAddrspaces := set n : PageNr | 0 <= n < KEVLAR_SECURE_NPAGES()
-             && pageDbOut[n].PageDbEntryTyped?
-             && pageDbOut[n].entry.Addrspace?
-             && n != addrspacePage && n != l1PTPage;
-        assert forall n :: n in otherAddrspaces ==>
-            addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
-        // only kept for readability
-        assert forall n :: n in otherAddrspaces  ==>
-            validPageDbEntryTyped(pageDbOut, n);
-
-        assert pageDbEntriesValid(pageDbOut);
-
-        assert validPageDb(pageDbOut);
         Pair(pageDbOut, KEV_ERR_SUCCESS())
+}
+
+
+function initAddrspace(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr)
+    : smcReturn
+    requires validPageDb(pageDbIn);
+    ensures  validPageDb(pagedbFrmRet(initAddrspace(pageDbIn, addrspacePage, l1PTPage)));
+{
+    initAddrspaceSuccessPreservesPageDBValidity(pageDbIn, addrspacePage, l1PTPage);
+    initAddrspace_inner(pageDbIn, addrspacePage, l1PTPage)
 }
 
 function initDispatcher(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
@@ -121,18 +102,48 @@ function initDispatcher(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
        allocateDispatcherPage(pageDbIn, page, addrspacePage, entrypoint)
 }
 
-// function initL2PTable(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr, l1Idx:int)
-//     : smcReturn
-// {
-//     if( l1Idx > NR_L1PTES() ) then Pair(KEV_ERR_INVALIDMAPPING(), PageDbIn)
-//     if( 
-// }
+//=============================================================================
+// Properties of SMC calls
+//=============================================================================
 
 //-----------------------------------------------------------------------------
-// Properties of SMC calls
+// PageDb Validity Preservation
 //-----------------------------------------------------------------------------
-//  lemma initAddrspaceSuccessValidPageDB(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr)
-//      ensures 
-//          validPageDb(pagedbFrmRet(initAddrspaceSuccess(pageDbIn, addrspacePage, l1PTPage)))
-//  {
-//  }
+lemma initAddrspaceSuccessPreservesPageDBValidity(pageDbIn : PageDb,
+    addrspacePage : PageNr, l1PTPage : PageNr)
+    requires validPageDb(pageDbIn)
+    ensures validPageDb(pagedbFrmRet(initAddrspace_inner(pageDbIn, addrspacePage, l1PTPage)))
+{
+     var pageDbOut := pagedbFrmRet(initAddrspace_inner(pageDbIn, addrspacePage, l1PTPage));
+     var errOut := errFrmRet(initAddrspace_inner(pageDbIn, addrspacePage, l1PTPage));
+
+     // The error case is trivial
+     if( errOut == KEV_ERR_SUCCESS() ) {
+         // Necessary semi-manual proof of validPageDbEntry(pageDbOut, l1PTPage)
+         // The interesting part of the proof deals with the contents of addrspaceRefs
+         assert forall p :: p != l1PTPage ==> !(p in addrspaceRefs(pageDbOut, addrspacePage));
+	     assert l1PTPage in addrspaceRefs(pageDbOut, addrspacePage);
+         assert addrspaceRefs(pageDbOut, addrspacePage) == {l1PTPage};
+         // only kept for readability
+         assert validPageDbEntry(pageDbOut, l1PTPage);
+
+
+         // Manual proof that the umodified pageDb entries are still valid. The only
+         // interesting case is for addrspaces other than the newly created one.
+         // Specifically, the only non-trivial aspect of validity is the reference
+         // count. Their references are not corrupted because the only touched
+         // pages only reference the newly created page.
+         ghost var otherAddrspaces := set n : PageNr
+            | 0 <= n < KEVLAR_SECURE_NPAGES()
+              && pageDbOut[n].PageDbEntryTyped?
+              && pageDbOut[n].entry.Addrspace?
+              && n != addrspacePage && n != l1PTPage;
+         assert forall n :: n in otherAddrspaces ==>
+             addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
+         // only kept for readability
+         assert forall n :: n in otherAddrspaces  ==>
+             validPageDbEntryTyped(pageDbOut, n);
+
+         assert pageDbEntriesValid(pageDbOut);
+    }
+}
