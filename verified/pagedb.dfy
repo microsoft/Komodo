@@ -157,8 +157,7 @@ predicate validAddrspace(d: PageDb, n: PageNr)
     var a := d[n].entry;
     // valid L1PT page
     wellFormedAddrspace(d, n)
-        // TODO: put this back in
-        // addrspaceL1Unique(d, n)
+        && addrspaceL1Unique(d, n)
         && validPageNr(a.l1ptnr)
         && a.l1ptnr in d
         && d[a.l1ptnr].PageDbEntryTyped?

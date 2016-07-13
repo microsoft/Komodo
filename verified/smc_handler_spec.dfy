@@ -2,12 +2,10 @@ include "kev_constants.dfy"
 include "Maybe.dfy"
 include "pagedb.dfy"
 
+//=============================================================================
+// Utilities
+//=============================================================================
 datatype smcReturn = Pair(pageDbOut: PageDb, err: int)
-
-// TODO FIXME!!
-function mon_vmap(p:PageNr) : int {
-    p 
-}
 
 function pagedbFrmRet(ret:smcReturn): PageDb
     { match ret case Pair(p,e) => p }
@@ -19,43 +17,9 @@ function pageIsFree(d:PageDb, pg:PageNr) : bool
     requires pg in d;
     { d[pg].PageDbEntryFree? }
 
-
-function allocateDispatcherPage(pageDbIn: PageDb, securePage: PageNr,
-    addrspacePage:PageNr, entrypoint:int) : smcReturn
-    requires validPageDb(pageDbIn)
-    requires wellFormedAddrspace(pageDbIn, addrspacePage)
-    requires validAddrspace(pageDbIn, addrspacePage)
-    // ensures  validPageDb(pagedbFrmRet(allocateDispatcherPage(pageDbIn, securePage, addrspacePage, entrypoint )))
-{
-    var addrspace := pageDbIn[addrspacePage].entry;
-    if(!validPageNr(securePage)) then Pair(pageDbIn, KEV_ERR_INVALID_PAGENO())
-    else if(!pageIsFree(pageDbIn, securePage)) then Pair(pageDbIn, KEV_ERR_PAGEINUSE())
-    else if(addrspace.state != InitState) then
-        Pair(pageDbIn,KEV_ERR_ALREADY_FINAL())
-    // Model page clearing for non-data pages?
-    else
-        var updatedAddrspace := match addrspace
-            case Addrspace(l1, ref, state) => Addrspace(l1, ref + 1, state);
-        var pageDbUpdated := pageDbIn[
-            securePage := PageDbEntryTyped(addrspacePage, Dispatcher(entrypoint, false))];
-        var pageDbOut := pageDbUpdated[
-            addrspacePage := PageDbEntryTyped(addrspacePage, updatedAddrspace)];
-        
-        // assert wellFormedPageDb(pageDbOut);
-        // assert pageDbEntriesWellTypedAddrspace(pageDbOut);
-        // assert validPageDbEntry(pageDbOut, addrspacePage);
-        // 
-        // //These two fail
-        // assert validPageDbEntry(pageDbOut, securePage);
-        // assert forall n :: n in pageDbOut && n != addrspacePage && n != securePage ==>
-        //     validPageDbEntry(pageDbOut, n);
-        // assert pageDbEntriesValid(pageDbOut);
-
-        // assert pageDbEntriesValidRefs(pageDbOut);
-        // assert validPageDb(pageDbOut);
-        Pair(pageDbOut, KEV_ERR_SUCCESS())
-}
-
+//a============================================================================
+// Behavioral Specification of Monitor Calls
+//=============================================================================
 function initAddrspace_inner(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr)
     : smcReturn
     requires validPageDb(pageDbIn);
@@ -77,21 +41,10 @@ function initAddrspace_inner(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: 
         Pair(pageDbOut, KEV_ERR_SUCCESS())
 }
 
-
-function initAddrspace(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr)
-    : smcReturn
-    requires validPageDb(pageDbIn);
-    ensures  validPageDb(pagedbFrmRet(initAddrspace(pageDbIn, addrspacePage, l1PTPage)));
-{
-    initAddrspaceSuccessPreservesPageDBValidity(pageDbIn, addrspacePage, l1PTPage);
-    initAddrspace_inner(pageDbIn, addrspacePage, l1PTPage)
-}
-
-function initDispatcher(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
+function initDispatcher_inner(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
     entrypoint:int)
     : smcReturn
     requires validPageDb(pageDbIn);
-    // ensures  validPageDb(pagedbFrmRet(initDispatcher(pageDbIn, page, addrspacePage, entrypoint)));
 {
    var n := page;
    var d := pageDbIn;
@@ -99,17 +52,71 @@ function initDispatcher(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
        !validAddrspace(pageDbIn, addrspacePage)) then
        Pair(pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
    else
-       allocateDispatcherPage(pageDbIn, page, addrspacePage, entrypoint)
+       allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false))
+}
+
+function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
+    addrspacePage:PageNr, entry:PageDbEntryTyped) : smcReturn
+    requires validPageDb(pageDbIn)
+    requires wellFormedAddrspace(pageDbIn, addrspacePage)
+    requires validAddrspace(pageDbIn, addrspacePage)
+{
+    var addrspace := pageDbIn[addrspacePage].entry;
+    if(!validPageNr(securePage)) then Pair(pageDbIn, KEV_ERR_INVALID_PAGENO())
+    else if(!pageIsFree(pageDbIn, securePage)) then Pair(pageDbIn, KEV_ERR_PAGEINUSE())
+    else if(addrspace.state != InitState) then
+        Pair(pageDbIn,KEV_ERR_ALREADY_FINAL())
+    // TODO ?? Model page clearing for non-data pages?
+    else
+        var updatedAddrspace := match addrspace
+            case Addrspace(l1, ref, state) => Addrspace(l1, ref + 1, state);
+        var pageDbOut := (pageDbIn[
+            securePage := PageDbEntryTyped(addrspacePage, entry)])[
+            addrspacePage := PageDbEntryTyped(addrspacePage, updatedAddrspace)];
+        Pair(pageDbOut, KEV_ERR_SUCCESS())
 }
 
 //=============================================================================
-// Properties of SMC calls
+// Hoare Specification of Monitor Calls
+//=============================================================================
+// (i.e. specs with postconditions)
+
+function initAddrspace(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr)
+    : smcReturn
+    requires validPageDb(pageDbIn);
+    ensures  validPageDb(pagedbFrmRet(initAddrspace(pageDbIn, addrspacePage, l1PTPage)));
+{
+    initAddrspacePreservesPageDBValidity(pageDbIn, addrspacePage, l1PTPage);
+    initAddrspace_inner(pageDbIn, addrspacePage, l1PTPage)
+}
+
+function initDispatcher(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
+    entrypoint:int)
+    : smcReturn
+    requires validPageDb(pageDbIn);
+    ensures  validPageDb(pagedbFrmRet(initDispatcher(pageDbIn, page, addrspacePage, entrypoint)));
+{
+    initDispatcher_inner(pageDbIn, page, addrspacePage, entrypoint)
+}
+
+function allocatePage(pageDbIn: PageDb, securePage: PageNr,
+    addrspacePage:PageNr, entry:PageDbEntryTyped ) : smcReturn
+    requires validPageDb(pageDbIn)
+    requires wellFormedAddrspace(pageDbIn, addrspacePage)
+    requires validAddrspace(pageDbIn, addrspacePage)
+    ensures  validPageDb(pagedbFrmRet(allocatePage(pageDbIn, securePage, addrspacePage, entry)));
+{
+    allocatePagePreservesPageDBValidity(pageDbIn, securePage, addrspacePage, entry);
+    allocatePage_inner(pageDbIn, securePage, addrspacePage, entry)
+}
+//=============================================================================
+// Properties of Monitor Calls
 //=============================================================================
 
 //-----------------------------------------------------------------------------
 // PageDb Validity Preservation
 //-----------------------------------------------------------------------------
-lemma initAddrspaceSuccessPreservesPageDBValidity(pageDbIn : PageDb,
+lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
     addrspacePage : PageNr, l1PTPage : PageNr)
     requires validPageDb(pageDbIn)
     ensures validPageDb(pagedbFrmRet(initAddrspace_inner(pageDbIn, addrspacePage, l1PTPage)))
@@ -126,7 +133,6 @@ lemma initAddrspaceSuccessPreservesPageDBValidity(pageDbIn : PageDb,
          assert addrspaceRefs(pageDbOut, addrspacePage) == {l1PTPage};
          // only kept for readability
          assert validPageDbEntry(pageDbOut, l1PTPage);
-
 
          // Manual proof that the umodified pageDb entries are still valid. The only
          // interesting case is for addrspaces other than the newly created one.
@@ -146,4 +152,14 @@ lemma initAddrspaceSuccessPreservesPageDBValidity(pageDbIn : PageDb,
 
          assert pageDbEntriesValid(pageDbOut);
     }
+}
+
+lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
+    securePage: PageNr, addrspacePage: PageNr, entry: PageDbEntryTyped)
+    requires validPageDb(pageDbIn)
+    requires wellFormedAddrspace(pageDbIn, addrspacePage)
+    requires validAddrspace(pageDbIn, addrspacePage)
+    ensures  validPageDb(pagedbFrmRet(allocatePage_inner(
+        pageDbIn, securePage, addrspacePage, entry)));
+{
 }
