@@ -75,137 +75,36 @@ function initAddrspace(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr
         var pageDbOut := 
             (pageDbIn[addrspacePage := PageDbEntryTyped(addrspacePage, addrspace)])[
                 l1PTPage := PageDbEntryTyped(addrspacePage, l1PT)];
-        
 
         // Necessary semi-manual proof of validPageDbEntry(pageDbOut, l1PTPage)
         // The interesting part of the proof deals with the contents of addrspaceRefs
         assert forall p :: p != l1PTPage ==> !(p in addrspaceRefs(pageDbOut, addrspacePage));
 		assert l1PTPage in addrspaceRefs(pageDbOut, addrspacePage);
         assert addrspaceRefs(pageDbOut, addrspacePage) == {l1PTPage};
+        // only kept for readability
         assert validPageDbEntry(pageDbOut, l1PTPage);
 
 
-        // begin proof off [pages other than l1PTPage and AddrspacePage are valid]
-        ghost var otherPages := set n : PageNr | 0 <= n < KEVLAR_SECURE_NPAGES()
-             && n != addrspacePage && n != l1PTPage;
-
-        //Typed page case
-        ghost var otherPagesTyped := set n : PageNr | 0 <= n < KEVLAR_SECURE_NPAGES()
-             && pageDbOut[n].PageDbEntryTyped?
-             && n != addrspacePage && n != l1PTPage;
-
-        assert forall n :: n in otherPages && pageDbOut[n].PageDbEntryTyped? ==>
-            pageDbEntryWellTypedAddrspace(pageDbOut, n);
-        
-        // set of typed pages is preserved 
-        assert forall n :: n in otherPages && pageDbIn[n].PageDbEntryTyped? ==> 
-            pageDbOut[n].PageDbEntryTyped?;
-        assert forall n :: n in otherPages && !(pageDbIn[n].PageDbEntryTyped?) ==> 
-            !(pageDbOut[n].PageDbEntryTyped?);
-
-
-        // addrspace of typed entries is preserved
-        assert forall n :: n in otherPagesTyped ==>// && pageDbOut[n].PageDbEntryTyped? ==>
-            pageDbOut[n].addrspace == pageDbIn[n].addrspace;
-
-        // entry of typed entries is preserved
-        assert forall n :: n in otherPagesTyped ==>// && pageDbOut[n].PageDbEntryTyped? ==>
-            pageDbOut[n].entry == pageDbIn[n].entry;
-
-
-        assert forall n :: n in otherPagesTyped ==>// && pageDbIn[n].PageDbEntryTyped? ==>
-            validPageDbEntry(pageDbIn, n);
-
-        // prove validPageDbEntryTyped by cases on type of entry
-        
-        //Trivial cases
-        assert forall n :: n in otherPagesTyped && pageDbOut[n].entry.Dispatcher? ==>
-            validPageDbEntryTyped(pageDbOut, n);
-        assert forall n :: n in otherPagesTyped && pageDbOut[n].entry.DataPage? ==>
-            validPageDbEntryTyped(pageDbOut, n);
-        assert forall n :: n in otherPagesTyped && pageDbOut[n].entry.L1PTable? ==>
-            validPageDbEntryTyped(pageDbOut, n);
-        assert forall n :: n in otherPagesTyped && pageDbOut[n].entry.L2PTable? ==>
-            validPageDbEntryTyped(pageDbOut, n);
-
-
-        // begin proof of [other addrspaces valid]
+        // Manual proof that the umodified pageDb entries are still valid. The only
+        // interesting case is for addrspaces other than the newly created one.
+        // Specifically, the only non-trivial aspect of validity is the reference
+        // count. Their references are not corrupted because the only touched
+        // pages only reference the newly created page.
         ghost var otherAddrspaces := set n : PageNr | 0 <= n < KEVLAR_SECURE_NPAGES()
              && pageDbOut[n].PageDbEntryTyped?
              && pageDbOut[n].entry.Addrspace?
              && n != addrspacePage && n != l1PTPage;
-        
-        assert forall n :: n in otherAddrspaces  ==>
-            wellFormedAddrspace(pageDbOut, n);
-       
-        // begin proof of [validAddrspace of otherAddrspaces] 
-        assert forall n :: n in otherAddrspaces ==>
-            validPageNr(pageDbOut[n].entry.l1ptnr);
-        assert forall n :: n in otherAddrspaces ==>
-            pageDbOut[n].entry.l1ptnr in pageDbOut;
-        assert forall n :: n in otherAddrspaces ==>
-            pageDbOut[pageDbOut[n].entry.l1ptnr].PageDbEntryTyped?;
-        assert forall n :: n in otherAddrspaces ==>
-            pageDbOut[pageDbOut[n].entry.l1ptnr].entry.L1PTable?;
-
-
-        // begin proof of [other addrspace refs ok]
         assert forall n :: n in otherAddrspaces ==>
             addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
-        assert forall n :: n in otherAddrspaces ==>
-            pageDbOut[n].entry.refcount == pageDbIn[n].entry.refcount;
-
-        assert forall n :: n in otherAddrspaces ==>
-            pageDbIn[n].entry.refcount == |addrspaceRefs(pageDbIn, n)|;
-
-        // [other addrspace refs ok] needs proof
-        assert forall n :: n in otherAddrspaces ==>
-            pageDbOut[n].entry.refcount == |addrspaceRefs(pageDbOut, n)|;
-
-        // [validAddrspace of otherAddrspaces] needs manual proof
-        assert forall n :: n in otherAddrspaces  ==>
-            validAddrspace(pageDbOut, n);
-        
+        // only kept for readability
         assert forall n :: n in otherAddrspaces  ==>
             validPageDbEntryTyped(pageDbOut, n);
-
-        // [other addrspaces valid]: Only nontrivial case
-        assert forall n :: n in otherPagesTyped && pageDbOut[n].entry.Addrspace? ==>
-            validPageDbEntryTyped(pageDbOut, n);
-
-        assert forall n :: n in otherPagesTyped ==>// && pageDbOut[n].PageDbEntryTyped? ==>
-            validPageDbEntryTyped(pageDbOut, n);
-
-        assert forall n :: n in otherPagesTyped ==>// && pageDbOut[n].PageDbEntryTyped? ==>
-            validPageDbEntry(pageDbOut, n);
-
-        assert forall n :: n in otherPagesTyped ==>// && pageDbOut[n].PageDbEntryFree? ==>
-            validPageDbEntry(pageDbOut, n);
-        
-        // Free page case trivial
-
-        // [pages other than l1PTPage and AddrspacePage are valid] needs proof
-        assert forall n :: n in otherPages ==> validPageDbEntry(pageDbOut, n);
-        assert forall n :: validPageNr(n) && n != addrspacePage && n != l1PTPage ==>
-            validPageDbEntry(pageDbOut, n);
-
 
         assert pageDbEntriesValid(pageDbOut);
 
         assert validPageDb(pageDbOut);
         Pair(pageDbOut, KEV_ERR_SUCCESS())
 }
-
-// lemma eqEntryEqAddrspace(dIn: PageDb, dOut: PageDb, p: PageNr)
-//     requires validPageDb(dIn)
-//     requires wellFormedPageDb(dOut)
-//     requires validPageNr(p)
-//     requires dIn[p] == dOut[p]
-//     ensures  dIn[p].PageDbEntryTyped? ==>
-//        dIn[p].addrspace == dOut[p].addrspace
-// {
-// 
-// }
 
 function initDispatcher(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
     entrypoint:int)
