@@ -15,7 +15,7 @@ SDFY_INCLUDES =  $(dir)/ARMdecls.sdfy $(dir)/fcall.sdfy
 # We use .verified files as a timestamp/placeholder to indicate that
 # a given Dafny source has been verified
 %.verified: %.dfy
-	$(MINDY) $(DAFNYFLAGS) /compile:0 $< && touch $@
+	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< && touch $@
 
 # these files don't verify in Mindy, so we force the use of Dafny
 $(dir)/Seq.verified: $(dir)/Seq.dfy
