@@ -8,26 +8,23 @@ KEVLAR_DEPS = $(foreach n,$(KEVLAR_NAMES),$(dir)/$(n).verified)
 KEVLAR_INCLUDES = $(foreach n,$(KEVLAR_NAMES),-i $(n).dfy)
 SDFY_INCLUDES =  $(dir)/ARMdecls.sdfy $(dir)/fcall.sdfy
 
-%.dfy: %.sdfy $(SDFY_INCLUDES) $(ARMSPARTAN_DEPS) $(KEVLAR_DEPS)
+%.gen.dfy: %.sdfy $(SDFY_INCLUDES) $(ARMSPARTAN_DEPS) $(KEVLAR_DEPS)
 	$(SPARTAN) $(SDFY_INCLUDES) $< -out $@ $(ARMSPARTAN_INCLUDES) $(KEVLAR_INCLUDES)
 	which dos2unix >/dev/null && dos2unix $@ || true
 
 # We use .verified files as a timestamp/placeholder to indicate that
-# a given Dafny source has been verified
-%.verified: %.dfy
+# a given source has been verified. We use Mindy only for verifying
+# Spartan-generated files (it tends to choke on more general .dfy files).
+%.verified: %.gen.dfy
 	$(MINDY) $(DAFNYFLAGS) /compile:0 $< && touch $@
 
-# these files don't verify in Mindy, so we force the use of Dafny
-$(dir)/Seq.verified: $(dir)/Seq.dfy
-	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< && touch $@
-
-$(dir)/smc_handler_spec.verified: $(dir)/smc_handler_spec.dfy
+%.verified: %.dfy
 	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< && touch $@
 
 # Mindy can't compile, but since we rely on .verified, we can just use
 # Dafny to compile without verifying
-%.exe: %.dfy %.verified
-	$(DAFNY) $(DAFNYFLAGS) /noVerify /compile:2 $<
+%.exe: %.gen.dfy %.verified
+	$(DAFNY) $(DAFNYFLAGS) /noVerify /compile:2 /out:$@ $<
 
 %.S: %.exe
 	$< > $@
@@ -36,12 +33,12 @@ $(dir)/smc_handler_spec.verified: $(dir)/smc_handler_spec.dfy
 $(dir)/%.img: $(dir)/%.o
 	$(OBJCOPY) $< -O binary $@
 
-CLEAN := $(CLEAN) $(dir)/*.exe $(dir)/*.dll $(dir)/*.pdb $(dir)/*.S $(dir)/*.o $(dir)/*.verified
+CLEAN := $(CLEAN) $(dir)/*.exe $(dir)/*.dll $(dir)/*.pdb $(dir)/*.S $(dir)/*.o $(dir)/*.verified $(dir)/*.gen.dfy
 
 # keep all "intermediate" files around, to avoid pointless re-verification
 .SECONDARY:
 
-# delte output files if the command failed
+# delete output files if the command failed
 .DELETE_ON_ERROR:
 
 # manual deps for all Dafny/Spartan code

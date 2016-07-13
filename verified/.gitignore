@@ -3,7 +3,5 @@
 *.pdb
 *.S
 *.verified
-ARMtest1.dfy
-smc_handler.dfy
+*.gen.dfy
 flycheck_*.dfy
-testglobals.dfy
