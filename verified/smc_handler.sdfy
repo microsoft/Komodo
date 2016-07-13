@@ -22,7 +22,7 @@ predicate page_is_valid(page:int)
 //    assert ( (KEVLAR_PAGE_SIZE() * phys) % 4) == 0;
 // }
 
- lemma vmap_lemma(phys:int)
+lemma vmap_lemma(phys:int)
     requires page_is_valid(phys)
     ensures  (KEVLAR_DIRECTMAP_VBASE() + G_SECURE_PHYSBASE() +
         KEVLAR_PAGE_SIZE() * phys) % 4 == 0;
@@ -149,7 +149,7 @@ procedure kev_smc_init_addrspace_success(
         ValidState(this);
         ValidStack(this);
         stack_bytes >= 80 ;
-        can_fcall_n(this,stack_bytes);
+        StackBytesRemaining(this,stack_bytes);
     requires
         MyGlobalDecls() == TheGlobalDecls();
         addrspace_page != l1pt_page;
@@ -253,7 +253,7 @@ procedure kev_smc_init_addrspace(
         ValidState(this);
         ValidStack(this);
         stack_bytes >= 120;
-        can_fcall_n(this,stack_bytes);
+        StackBytesRemaining(this,stack_bytes);
     requires
         MyGlobalDecls() == TheGlobalDecls();
         isUInt32(addrspace_page);
@@ -361,7 +361,7 @@ procedure smc_handler(
         ValidState(this);
         ValidStack(this);
         stack_bytes >= 120;
-        can_fcall_n(this,stack_bytes);
+        StackBytesRemaining(this,stack_bytes);
         // TODO: mode_of_state(this) == Monitor;
     requires
         callno == KEV_SMC_INIT_ADDRSPACE() ==> (

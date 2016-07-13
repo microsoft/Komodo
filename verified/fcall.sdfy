@@ -7,7 +7,7 @@ predicate ValidStack(s:sp_state)
     (STACK_LOWER() <= eval_op(s, op_sp()) < STACK_UPPER())
 }
 
-predicate can_fcall_n(s:sp_state,bytes:int)
+predicate StackBytesRemaining(s:sp_state,bytes:int)
 {
     ValidState(s) && ValidStack(s) &&
     (STACK_LOWER() + bytes <= eval_op(s,op_sp()) < STACK_UPPER())
@@ -87,7 +87,7 @@ procedure fcall_prologue(ghost stack_bytes:int)
         ValidStack(this);
     requires
         stack_bytes >= 40; 
-        can_fcall_n(this,stack_bytes);
+        StackBytesRemaining(this,stack_bytes);
     ensures
         sp == old(sp-40);
         
@@ -114,7 +114,7 @@ procedure fcall_prologue(ghost stack_bytes:int)
         StackValuePreserving(old(this),this,40);
         GlobalValuePreserving(old(this),this);
         
-        can_fcall_n(this,stack_bytes-40);
+        StackBytesRemaining(this,stack_bytes-40);
 {
     SUB(sp, sp, 40);
 
@@ -169,7 +169,7 @@ procedure fcall_epilogue(ghost stack_bytes_left:int)
     requires
         isUInt32(sp + 40);
         sp + 40 < STACK_UPPER();
-        can_fcall_n(this,stack_bytes_left);
+        StackBytesRemaining(this,stack_bytes_left);
     ensures
         sp == old(sp+40);
        
@@ -195,7 +195,7 @@ procedure fcall_epilogue(ghost stack_bytes_left:int)
         MemValuePreserving(old(this),this);
         GlobalValuePreserving(old(this),this);
 
-        can_fcall_n(this,stack_bytes_left+40);
+        StackBytesRemaining(this,stack_bytes_left+40);
 {
     //pop r12 down to r4 from stack
     LDR(r12, sp, 0);
