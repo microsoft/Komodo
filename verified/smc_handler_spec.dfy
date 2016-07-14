@@ -48,8 +48,7 @@ function initDispatcher_inner(pageDbIn: PageDb, page:PageNr, addrspacePage:PageN
 {
    var n := page;
    var d := pageDbIn;
-   if(!wellFormedAddrspace(pageDbIn, addrspacePage) ||
-       !validAddrspace(pageDbIn, addrspacePage)) then
+   if(!validAddrspacePage(pageDbIn, addrspacePage)) then
        Pair(pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
    else
        allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false))
@@ -58,8 +57,11 @@ function initDispatcher_inner(pageDbIn: PageDb, page:PageNr, addrspacePage:PageN
 function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
     addrspacePage:PageNr, entry:PageDbEntryTyped) : smcReturn
     requires validPageDb(pageDbIn)
-    requires wellFormedAddrspace(pageDbIn, addrspacePage)
-    requires validAddrspace(pageDbIn, addrspacePage)
+    requires validAddrspacePage(pageDbIn, addrspacePage)
+    requires wellFormedPageDbEntry(pageDbIn, entry)
+    requires !entry.L1PTable?
+    requires !entry.L2PTable?
+    requires !entry.Addrspace?
 {
     var addrspace := pageDbIn[addrspacePage].entry;
     if(!validPageNr(securePage)) then Pair(pageDbIn, KEV_ERR_INVALID_PAGENO())
@@ -102,8 +104,11 @@ function initDispatcher(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
 function allocatePage(pageDbIn: PageDb, securePage: PageNr,
     addrspacePage:PageNr, entry:PageDbEntryTyped ) : smcReturn
     requires validPageDb(pageDbIn)
-    requires wellFormedAddrspace(pageDbIn, addrspacePage)
-    requires validAddrspace(pageDbIn, addrspacePage)
+    requires validAddrspacePage(pageDbIn, addrspacePage)
+    requires wellFormedPageDbEntry(pageDbIn, entry)
+    requires !entry.L1PTable?
+    requires !entry.L2PTable?
+    requires !entry.Addrspace?
     ensures  validPageDb(pagedbFrmRet(allocatePage(pageDbIn, securePage, addrspacePage, entry)));
 {
     allocatePagePreservesPageDBValidity(pageDbIn, securePage, addrspacePage, entry);
@@ -124,8 +129,9 @@ lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
      var pageDbOut := pagedbFrmRet(initAddrspace_inner(pageDbIn, addrspacePage, l1PTPage));
      var errOut := errFrmRet(initAddrspace_inner(pageDbIn, addrspacePage, l1PTPage));
 
-     // The error case is trivial
-     if( errOut == KEV_ERR_SUCCESS() ) {
+     if( errOut != KEV_ERR_SUCCESS() ) {
+        // The error case is trivial because PageDbOut == PageDbIn
+     } else {
          // Necessary semi-manual proof of validPageDbEntry(pageDbOut, l1PTPage)
          // The interesting part of the proof deals with the contents of addrspaceRefs
          assert forall p :: p != l1PTPage ==> !(p in addrspaceRefs(pageDbOut, addrspacePage));
@@ -151,15 +157,57 @@ lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
              validPageDbEntryTyped(pageDbOut, n);
 
          assert pageDbEntriesValid(pageDbOut);
+         assert validPageDb(pageDbOut);
     }
 }
+
 
 lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
     securePage: PageNr, addrspacePage: PageNr, entry: PageDbEntryTyped)
     requires validPageDb(pageDbIn)
-    requires wellFormedAddrspace(pageDbIn, addrspacePage)
-    requires validAddrspace(pageDbIn, addrspacePage)
+    requires validAddrspacePage(pageDbIn, addrspacePage)
+    requires wellFormedPageDbEntry(pageDbIn, entry)
+    requires !entry.Addrspace?
+    requires !entry.L1PTable?
+    // Supporting  L1/L2 PTables would requires correctly setting the addrspace
+    // of the entries. We can possibly do that here, but for now
+    // it just isn't supported.
+    requires !entry.L2PTable?
     ensures  validPageDb(pagedbFrmRet(allocatePage_inner(
         pageDbIn, securePage, addrspacePage, entry)));
 {
+    var pageDbOut := pagedbFrmRet(allocatePage_inner(
+        pageDbIn, securePage, addrspacePage, entry));
+    var errOut := errFrmRet(allocatePage_inner(
+        pageDbIn, securePage, addrspacePage, entry));
+
+    if ( errOut != KEV_ERR_SUCCESS() ){
+        // The error case is trivial because PageDbOut == PageDbIn
+    } else {
+      
+        forall () ensures validPageDbEntry(pageDbOut, addrspacePage);
+        {
+            var oldRefs := addrspaceRefs(pageDbIn, addrspacePage);
+            assert addrspaceRefs(pageDbOut, addrspacePage ) == oldRefs + {securePage};
+            
+            var addrspace := pageDbOut[addrspacePage].entry;
+            assert addrspace.refcount == |addrspaceRefs(pageDbOut, addrspacePage)|;
+            assert validAddrspacePage(pageDbOut, addrspacePage);
+        }
+
+        forall ( n | validPageNr(n) && n != addrspacePage && n != securePage )
+            ensures validPageDbEntry(pageDbOut, n)
+        {
+            assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
+        }
+
+        assert pageDbEntriesValid(pageDbOut);
+        assert validPageDb(pageDbOut);
+    }
 }
+
+
+
+
+
+
