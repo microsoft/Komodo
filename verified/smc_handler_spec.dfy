@@ -60,6 +60,7 @@ function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
     requires validAddrspacePage(pageDbIn, addrspacePage)
     requires wellFormedPageDbEntry(pageDbIn, entry)
     requires !entry.L1PTable?
+    requires !entry.L2PTable?
     requires !entry.Addrspace?
 {
     var addrspace := pageDbIn[addrspacePage].entry;
@@ -106,6 +107,7 @@ function allocatePage(pageDbIn: PageDb, securePage: PageNr,
     requires validAddrspacePage(pageDbIn, addrspacePage)
     requires wellFormedPageDbEntry(pageDbIn, entry)
     requires !entry.L1PTable?
+    requires !entry.L2PTable?
     requires !entry.Addrspace?
     ensures  validPageDb(pagedbFrmRet(allocatePage(pageDbIn, securePage, addrspacePage, entry)));
 {
@@ -167,6 +169,10 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
     requires wellFormedPageDbEntry(pageDbIn, entry)
     requires !entry.Addrspace?
     requires !entry.L1PTable?
+    // Supporting  L1/L2 PTables would requires correctly setting the addrspace
+    // of the entries. We can possibly do that here, but for now
+    // it just isn't supported.
+    requires !entry.L2PTable?
     ensures  validPageDb(pagedbFrmRet(allocatePage_inner(
         pageDbIn, securePage, addrspacePage, entry)));
 {
@@ -189,32 +195,10 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
             assert validAddrspacePage(pageDbOut, addrspacePage);
         }
 
-        forall () ensures validPageDbEntry(pageDbOut, securePage);
-        {
-            if(pageDbOut[securePage].PageDbEntryFree?){
-                // trivial
-            } else {
-                var e := pageDbOut[securePage].entry;
-                var addrspace := pageDbOut[securePage].addrspace;
-
-                assert e == entry;
-
-                if( e.Addrspace? ){
-                    assert validPageDbEntryTyped(pageDbOut, securePage);
-                } else if (e.L2PTable?) {
-                    assert validPageDbEntryTyped(pageDbOut, securePage);
-                } else {
-                    assert e.Dispatcher? || e.DataPage?;
-                    // these two cases trivial L1PTable not allowed
-                }
-
-                assert validPageDbEntryTyped(pageDbOut, securePage);
-            }
-        }
-       
         forall ( n | validPageNr(n) && n != addrspacePage && n != securePage )
             ensures validPageDbEntry(pageDbOut, n)
         {
+            assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
         }
 
         assert pageDbEntriesValid(pageDbOut);
