@@ -26,8 +26,9 @@ predicate sp_eq_ops(s1:sp_state, s2:sp_state, o:operand)
 }
 
 function sp_eval_mem(s:state, m:mem):int
-    requires WordAligned(m.addr);
+    requires ValidState(s);
     requires ValidMem(s, m);
+    ensures isUInt32(sp_eval_mem(s,m));
     { MemContents(s, m) }
 
 function method sp_CNil():codes { CNil }
@@ -79,7 +80,7 @@ function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
 // Address Helper Functions
 //-----------------------------------------------------------------------------
 function addrval(s:sp_state, a:int):int
-    requires WordAligned(a)
+    requires ValidState(s)
     requires ValidMem(s, Address(a))
     ensures isUInt32(addrval(s, a))
 {

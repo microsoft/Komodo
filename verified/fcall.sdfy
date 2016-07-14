@@ -1,16 +1,27 @@
 #verbatim
+// we don't know where the stack is exactly, but we know how big it is
+function {:axiom} StackLimit():int
+    ensures WordAligned(StackLimit())
+    ensures KEVLAR_MON_VBASE() <= StackLimit()
+    ensures StackLimit() <= KEVLAR_DIRECTMAP_VBASE() - KEVLAR_STACK_SIZE()
+
+function StackBase():int
+{
+    StackLimit() + KEVLAR_STACK_SIZE()
+}
+
 predicate ValidStack(s:sp_state)
     requires ValidState(s)
 {
-    ValidMemRange(s, STACK_LOWER(), STACK_UPPER()) &&
-    WordAligned(eval_op(s, op_sp())) &&
-    (STACK_LOWER() <= eval_op(s, op_sp()) < STACK_UPPER())
+    WordAligned(eval_op(s, op_sp()))
+    && StackLimit() < eval_op(s, op_sp()) <= StackBase()
+    && ValidMemRange(s, StackLimit(), StackBase())
 }
 
 predicate StackBytesRemaining(s:sp_state,bytes:int)
 {
     ValidState(s) && ValidStack(s) &&
-    (STACK_LOWER() + bytes <= eval_op(s,op_sp()) < STACK_UPPER())
+    (StackLimit() + bytes < eval_op(s,op_sp()) <= StackBase())
 }
 
 predicate RegPreservingExcept(s:sp_state, r:sp_state, trashed:seq<operand>)
@@ -41,40 +52,49 @@ predicate NonvolatileRegPreserving(s:sp_state, r:sp_state)
     RegPreservingExcept(s, r, [op_r(0), op_r(1), op_r(2), op_r(3)])
 }
 
+// XXX: delete this nonsense, as soon as we can figure out how
 predicate MemValidityPreserving(s:sp_state, r:sp_state)
+    requires ValidState(s) && ValidState(r);
 {
     forall i:int :: ValidMem(s,Address(i)) ==> ValidMem(r,Address(i))
 }
 
-predicate MemValuePreserving(s:sp_state, r:sp_state)
-    requires MemValidityPreserving(s,r);
+predicate MemPreserving(s:sp_state, r:sp_state)
+    requires ValidState(s) && ValidState(r);
 {
-    forall i:int :: ValidMem(s,Address(i)) && WordAligned(i) ==>
-        addrval(s,i) == addrval(r,i)
+    forall i:int :: ValidMem(s,Address(i)) ==>
+        ValidMem(r,Address(i)) && addrval(s,i) == addrval(r,i)
 }
 
-predicate StackValuePreserving(s:sp_state, r:sp_state, bytes_touched:int)
+predicate ParentStackPreserving(s:sp_state, r:sp_state)
     requires ValidState(s) && ValidState(r);
     requires ValidStack(s) && ValidStack(r);
-    requires MemValidityPreserving(s,r);
 {
-    forall i:int :: WordAligned(i) &&
-        !(eval_op(s,op_sp()) - bytes_touched <= i < eval_op(s,op_sp())) &&
-        (STACK_LOWER() <= i < STACK_UPPER()) && ValidMem(s,Address(i)) ==>
-            addrval(r,i) == addrval(s,i)
+    var sp := eval_op(s,op_sp());
+    forall i :: ValidMem(s,Address(i)) && (sp <= i < StackBase())
+      ==> ValidMem(r,Address(i)) && addrval(r,i) == addrval(s,i)
 }
 
-predicate NonStackValuePreserving(s:sp_state, r:sp_state)
+predicate StackPreserving(s:sp_state, r:sp_state)
     requires ValidState(s) && ValidState(r);
-    requires MemValidityPreserving(s,r);
+    requires ValidStack(s) && ValidStack(r);
 {
-    forall i:int {:trigger Address(i)} :: !(STACK_LOWER() <= i < STACK_UPPER()) &&
-        ValidMem(s,Address(i)) && WordAligned(i) ==> addrval(r,i) == addrval(s,i)
+    eval_op(s,op_sp()) == eval_op(r,op_sp())
+    && ParentStackPreserving(s, r)
+}
+
+predicate NonStackMemPreserving(s:sp_state, r:sp_state)
+    requires ValidState(s) && ValidState(r);
+{
+    forall i:int {:trigger Address(i)}
+        :: !(StackLimit() <= i < StackBase()) && ValidMem(s,Address(i))
+        ==> ValidMem(r,Address(i)) && addrval(r,i) == addrval(s,i)
 }
 
 predicate GlobalValuePreserving(s:sp_state, r:sp_state)
     requires ValidState(s) && ValidState(r);
 {
+    assert ValidGlobalState(s) && ValidGlobalState(r);
     forall g, o :: ValidGlobalOffset(g, o)
       ==> GlobalContents(s, g, o) == GlobalContents(r, g, o)
 }
@@ -109,9 +129,8 @@ procedure fcall_prologue(ghost stack_bytes:int)
         addrval(this, sp+32) == old(r4);
         addrval(this, sp+36) == old(lr);
 
-        MemValidityPreserving(old(this),this);
-        NonStackValuePreserving(old(this),this);
-        StackValuePreserving(old(this),this,40);
+        NonStackMemPreserving(old(this),this);
+        ParentStackPreserving(old(this),this);
         GlobalValuePreserving(old(this),this);
         
         StackBytesRemaining(this,stack_bytes-40);
@@ -131,35 +150,6 @@ procedure fcall_prologue(ghost stack_bytes:int)
     STR(r10, sp, 8);
     STR(r11, sp, 4);
     STR(r12, sp, 0);
-
-    // forall :: StackValuePreserving(old(this),this,40){
-    //     assert forall i:int :: ValidMem(this, Address(i)) && WordAligned(i) &&
-    //         (i >= sp + 40) ==> addrval(this, i) == addrval(old(this), i);
-    //     assert forall i:int :: ValidMem(this, Address(i)) && WordAligned(i) &&
-    //         (i >= old(sp)) ==> addrval(this, i) == addrval(old(this), i);
-    //     assert forall i:int :: ValidMem(this, Address(i)) && WordAligned(i) &&
-    //         (i < sp) ==> addrval(this, i) == addrval(old(this), i);
-    //     assert forall i:int :: ValidMem(this, Address(i)) && WordAligned(i) &&
-    //         (i < old(sp-40)) ==> addrval(this, i) == addrval(old(this), i);
-    //     assert forall i:int :: ValidMem(this, Address(i)) && WordAligned(i) &&
-    //         !(sp <= i < sp +40) ==> addrval(this, i) == addrval(old(this), i);
-    //     assert forall i:int :: ValidMem(this, Address(i)) && WordAligned(i) &&
-    //         !(old(sp-40) <= i < old(sp)) ==> addrval(this, i) == addrval(old(this), i);
-    // }
-
-    // forall :: StackValuePreserving(old(this),this,stack_bytes-40)
-    // {
-    //     assert NonStackValuePreserving(old(this),this);
-    //     assert addrval(this, old(sp-(stack_bytes-44))) == addrval(old(this), old(sp-(stack_bytes-44)));
-    //     assert addrval(this, old(sp-(stack_bytes-40))) == addrval(old(this), old(sp-(stack_bytes-40)));
-    //     assert forall i:int :: WordAligned(i) && ValidMem(old(this),Address(i)) &&
-    //         !(old(sp)-(stack_bytes-40) < i <= old(sp)) ==> addrval(this,i) == addrval(old(this), i);
-    //     // assert forall i:int :: !(old(sp)-(stack_bytes-40) < i <= old(sp)) &&
-    //     //     (STACK_LOWER() <= i < STACK_UPPER()) ==> !(old(sp)-(stack_bytes-40) < i <= old(sp));
-    //     // assert forall i:int :: WordAligned(i) && ValidMem(old(this),Address(i)) &&
-    //     //     (STACK_LOWER() <= i < STACK_UPPER()) &&
-    //     //     !( old(sp)-(stack_bytes-40) < i <= old(sp) ) ==> addrval(this,i) == addrval(old(this), i);
-    //     // assert StackValuePreserving(old(this),this,stack_bytes-40);
 }
 
 procedure fcall_epilogue(ghost stack_bytes_left:int)
@@ -168,7 +158,7 @@ procedure fcall_epilogue(ghost stack_bytes_left:int)
         ValidStack(this);
     requires
         isUInt32(sp + 40);
-        sp + 40 < STACK_UPPER();
+        sp + 40 <= StackBase();
         StackBytesRemaining(this,stack_bytes_left);
     ensures
         sp == old(sp+40);
@@ -191,8 +181,7 @@ procedure fcall_epilogue(ghost stack_bytes_left:int)
         r11 == old(addrval(this, sp+4));
         r12 == old(addrval(this, sp));
 
-        MemValidityPreserving(old(this),this);        
-        MemValuePreserving(old(this),this);
+        MemPreserving(old(this),this);
         GlobalValuePreserving(old(this),this);
 
         StackBytesRemaining(this,stack_bytes_left+40);

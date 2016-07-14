@@ -163,6 +163,7 @@ predicate ValidState(s:state)
         LR(m) in s.regs && isUInt32(s.regs[LR(m)]))
         && (forall i:int {:trigger R(i)} :: 0 <= i <= 12
             ==> R(i) in s.regs && isUInt32(s.regs[R(i)]))
+        && (forall m:mem :: m in s.addresses ==> isUInt32(s.addresses[m]))
         && ValidGlobalState(s)
 }
 
@@ -194,7 +195,7 @@ predicate ValidOperand(s:state, o:operand)
 
 predicate ValidMem(s:state, m:mem)
 {
-    WordAligned(m.addr) && m in s.addresses && isUInt32(MemContents(s, m))
+    WordAligned(m.addr) && m in s.addresses
 }
 
 predicate ValidMemRange(s:state, base:int, limit:int)
@@ -318,9 +319,12 @@ function OperandContents(s:state, o:operand): int
 }
 
 function MemContents(s:state, m:mem): int
-    requires m in s.addresses
-    requires WordAligned(m.addr)
+    requires ValidState(s)
+    requires ValidMem(s,m)
+    ensures isUInt32(MemContents(s,m))
 {
+    assert m in s.addresses;
+    assert isUInt32(s.addresses[m]);
     s.addresses[m]
 }
 
@@ -361,10 +365,12 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
 // }
 
 predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
+    requires ValidState(s)
     requires WordAligned(m.addr)
     requires ValidMem(s, m)
     requires isUInt32(v)
-    ensures  ValidMem(s, m)
+    ensures ValidMem(s, m)
+    ensures ValidState(s)
 {
     ok && r == s.(addresses := s.addresses[m := v])
 }
@@ -456,7 +462,7 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidRegOperand(s, rd) && isUInt32(OperandContents(s, rd)) &&
             ValidOperand(s, base) && ValidOperand(s, ofs) &&
             AddressOfGlobal(global) == OperandContents(s, base) &&
-            ValidGlobalOffset(global, OperandContents(s, ofs))
+            ValidGlobalState(s) && ValidGlobalOffset(global, OperandContents(s, ofs))
         case MOV(dst, src) => ValidDestinationOperand(s, dst) &&
             ValidOperand(s, src)
         case CPS(mod) => ValidOperand(s, mod) &&

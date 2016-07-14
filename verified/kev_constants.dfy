@@ -37,6 +37,10 @@ function method KEV_ERR_INVALID():int            { 0x1_0000_0000 }
 function method KEVLAR_PAGE_SIZE():int
     ensures KEVLAR_PAGE_SIZE() == 0x1000
     { 0x1000 }
+function method KEVLAR_PAGE_SHIFT():int
+    ensures KEVLAR_PAGE_SHIFT() == 12
+    //ensures shl32(1, KEVLAR_PAGE_SHIFT()) == KEVLAR_PAGE_SIZE()
+    { 12 }
 function method KEVLAR_MON_VBASE():int        
     ensures KEVLAR_MON_VBASE() == 0x4000_0000;
     { 0x4000_0000 }  
@@ -51,18 +55,12 @@ function method KEVLAR_SECURE_NPAGES():int
     ensures KEVLAR_SECURE_NPAGES() == 256;
     { KEVLAR_SECURE_RESERVE() / KEVLAR_PAGE_SIZE() }
 
-//TODO FIXME
-function method G_SECURE_PHYSBASE():int
-    ensures G_SECURE_PHYSBASE() == 0x4000_0000;
+// we don't support/consider more than 1GB of physical memory in our maps
+function method KEVLAR_PHYSMEM_LIMIT():int
     { 0x4000_0000 }
 
-//These were picked arbitrarily 
-function method STACK_LOWER():int
-    ensures STACK_LOWER() == 0x4000
+function KEVLAR_STACK_SIZE():int
     { 0x4000 }
-function method STACK_UPPER():int
-    ensures STACK_UPPER() == 0x8000
-    { 0x8000 }
 
 //-----------------------------------------------------------------------------
 // Data Structures
