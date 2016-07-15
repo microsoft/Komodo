@@ -78,6 +78,32 @@ function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
         Pair(pageDbOut, KEV_ERR_SUCCESS())
 }
 
+function remove_inner(pageDbIn: PageDb, page: PageNr) : smcReturn
+    requires validPageDb(pageDbIn)
+{
+    if(!validPageNr(page)) then
+        Pair(pageDbIn, KEV_ERR_INVALID_PAGENO())
+    else if(pageDbIn[page].PageDbEntryFree?) then
+        Pair(pageDbIn, KEV_ERR_SUCCESS())
+    else if( var e := pageDbIn[page].entry;
+        e.Addrspace? && e.refcount != 0) then
+        Pair(pageDbIn, KEV_ERR_PAGEINUSE())
+    else 
+        var a := pageDbIn[pageDbIn[page].addrspace].entry;
+        if(!a.state.StoppedState?) then
+            Pair(pageDbIn, KEV_ERR_NOT_STOPPED())
+        else if(!(a.refcount > 0)) then
+            Pair(pageDbIn, KEV_ERR_INVALID())
+    else
+        var addrspacePage := pageDbIn[page].addrspace;
+        var addrspace := pageDbIn[addrspacePage].entry;
+        var updatedAddrspace := match addrspace
+            case Addrspace(l1, ref, state) => Addrspace(l1, ref - 1, state);
+        var pageDbOut := (pageDbIn[page := PageDbEntryFree])[
+            addrspacePage := PageDbEntryTyped(addrspacePage, updatedAddrspace)];
+        Pair(pageDbOut, KEV_ERR_SUCCESS())
+}
+
 //=============================================================================
 // Hoare Specification of Monitor Calls
 //=============================================================================
@@ -114,6 +140,15 @@ function allocatePage(pageDbIn: PageDb, securePage: PageNr,
     allocatePagePreservesPageDBValidity(pageDbIn, securePage, addrspacePage, entry);
     allocatePage_inner(pageDbIn, securePage, addrspacePage, entry)
 }
+
+function remove(pageDbIn: PageDb, page: PageNr) : smcReturn
+    requires validPageDb(pageDbIn)
+    ensures  validPageDb(pagedbFrmRet(remove(pageDbIn, page)))
+{
+    removePreservesPageDBValidity(pageDbIn, page);
+    remove_inner(pageDbIn, page)
+}
+
 //=============================================================================
 // Properties of Monitor Calls
 //=============================================================================
@@ -198,6 +233,24 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
             assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
         }
 
+        assert pageDbEntriesValid(pageDbOut);
+        assert validPageDb(pageDbOut);
+    }
+}
+
+
+lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
+    requires validPageDb(pageDbIn)
+    ensures  validPageDb(pagedbFrmRet(remove_inner(pageDbIn, page)))
+{
+
+    var pageDbOut := pagedbFrmRet(remove_inner(pageDbIn, page));
+    var errOut := errFrmRet(remove_inner(pageDbIn, page));
+
+    if ( errOut != KEV_ERR_SUCCESS() ){
+        // The error case is trivial because PageDbOut == PageDbIn
+    } else {
+     
         assert pageDbEntriesValid(pageDbOut);
         assert validPageDb(pageDbOut);
     }
