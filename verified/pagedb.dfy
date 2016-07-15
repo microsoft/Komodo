@@ -48,7 +48,8 @@ predicate validPageDb(d: PageDb)
 predicate pageDbEntriesWellTypedAddrspace(d:PageDb)
     requires wellFormedPageDb(d)
 {
-    forall n :: n in d && d[n].PageDbEntryTyped? ==> pageDbEntryWellTypedAddrspace(d, n)
+    forall n {:trigger pageDbEntryWellTypedAddrspace(d, n)} ::
+        n in d && d[n].PageDbEntryTyped? ==> pageDbEntryWellTypedAddrspace(d, n)
 }
 
 predicate pageDbEntriesValid(d:PageDb)
