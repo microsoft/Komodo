@@ -126,9 +126,8 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
 }
 
 procedure kev_smc_init_addrspace_success(
-    {:register op_r(0)} addrspace_page:int,
-    {:register op_r(1)} l1pt_page:int,
-    out {:register op_r(0)} err:int,
+    {:register op_r(1)} addrspace_page:int,
+    {:register op_r(2)} l1pt_page:int,
     ghost stack_bytes:int)
     requires/ensures
         SaneState(this);
@@ -144,6 +143,7 @@ procedure kev_smc_init_addrspace_success(
         GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
                              + PAGEDB_ENTRY_TYPE()) == KEV_PAGE_FREE();
     ensures
+        NonvolatileRegPreserving(old(this),this);
         StackPreserving(old(this),this);
 
         GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(addrspace_page)
@@ -165,18 +165,15 @@ procedure kev_smc_init_addrspace_success(
 
     LDRglobaladdr(r11, PageDb());
 
-    phys2monvaddr(addrspace_page,r9,r2);
-    assert r9 == page_monvaddr(this, addrspace_page);
-
-    phys2monvaddr(l1pt_page,r10,r2);
-    assert r10 == page_monvaddr(this, l1pt_page);
+    phys2monvaddr(addrspace_page,r9,r0);
+    phys2monvaddr(l1pt_page,r10,r0);
 
     r4 := sp_op_const(PAGEDB_ENTRY_SIZE());
-    MUL(r7,r0,r4);
+    MUL(r7,addrspace_page,r4);
     assert r7 == G_PAGEDB_ENTRY(addrspace_page);
 
     //r4 := sp_op_const(PAGEDB_ENTRY_SIZE());
-    MUL(r8,r1,r4);
+    MUL(r8,l1pt_page,r4);
     assert r8 == G_PAGEDB_ENTRY(l1pt_page);
 
     r4 := sp_op_const(KEV_PAGE_ADDRSPACE());
@@ -200,7 +197,7 @@ procedure kev_smc_init_addrspace_success(
     STR(r10,r9,0);
     assert addrval(this,ADDRSPACE_L1PT(page_monvaddr(this, addrspace_page))) == page_monvaddr(this, l1pt_page);
 
-    STR(r1,r9,4);
+    STR(l1pt_page,r9,4);
     assert addrval(this,ADDRSPACE_L1PT_PHYS(page_monvaddr(this, addrspace_page))) == l1pt_page;
 
     r4 := 1;
@@ -212,27 +209,23 @@ procedure kev_smc_init_addrspace_success(
     assert addrval(this,ADDRSPACE_STATE(page_monvaddr(this, addrspace_page))) == KEV_ADDRSPACE_INIT();
   
     r1 := sp_op_const(KEVLAR_PAGE_SIZE());
-    r2 := 0;
-    assert ValidState(this);
-    assert GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_ADDRSPACE()) == page_monvaddr(this, addrspace_page);
-    memset(r10,r2,r1); //page_monvaddr(this, l1pt_page)
-
-    assert GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_ADDRSPACE()) == page_monvaddr(this, addrspace_page);
+    r0 := 0;
+    memset(r10,r0,r1); //page_monvaddr(this, l1pt_page)
 
     fcall_epilogue(stack_bytes-40);
 }
 
 procedure kev_smc_init_addrspace(
-    {:register op_r(0)} addrspace_page:int,
-    {:register op_r(1)} l1pt_page:int,
-    out {:register op_r(3)} err:int,
+    {:register op_r(1)} addrspace_page:int,
+    {:register op_r(2)} l1pt_page:int,
+    out {:register op_r(0)} err:int,
     ghost stack_bytes:int)
     requires/ensures
         SaneState(this);
         stack_bytes >= 120;
         StackBytesRemaining(this,stack_bytes);
     ensures
-        //NonvolatileRegPreserving(old(this),this);
+        NonvolatileRegPreserving(old(this),this);
         StackPreserving(old(this),this);
         addrspace_page == l1pt_page ==>
             err == KEV_ERR_INVALID_PAGENO();
@@ -260,14 +253,11 @@ procedure kev_smc_init_addrspace(
     } else {
         r4 := sp_op_const(PAGEDB_ENTRY_SIZE());
         LDRglobaladdr(r6, PageDb());
-        MUL(r5,r0,r4); // addrspace_page * pagedb_entry_size
-        assert r5 == addrspace_page * PAGEDB_ENTRY_SIZE();
-        assert r5 == G_PAGEDB_ENTRY(addrspace_page);
-        assert r5 == G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_TYPE();
+        MUL(r5,addrspace_page,r4); // addrspace_page * pagedb_entry_size
         LDRglobal(r5, PageDb(), r6, r5);
         assert r5 == GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_TYPE());
 
-        MUL(r7,r1,r4); // l1pt_page * pagedb_entry_size
+        MUL(r7,l1pt_page,r4); // l1pt_page * pagedb_entry_size
         LDRglobal(r7, PageDb(), r6, r7);
         assert r7 == GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_TYPE());
 
@@ -276,32 +266,30 @@ procedure kev_smc_init_addrspace(
         } else if( r7 != sp_op_const(KEV_PAGE_FREE()) ) {
             err := sp_op_const(KEV_ERR_PAGEINUSE());
         } else {
-            kev_smc_init_addrspace_success(r0,r1,err,stack_bytes-40);
+            kev_smc_init_addrspace_success(r1,r2,stack_bytes-40);
             
             err := OConst(KEV_ERR_SUCCESS());
         }
     }
-    assert ValidState(this);
+
     fcall_epilogue(stack_bytes-40);
 }
 
 procedure smc_handler(
-    {:register op_r(4)} callno:int,
-    {:register op_r(0)} arg1:int,
-    {:register op_r(1)} arg2:int,
-    {:register op_r(2)} arg3:int,
-    {:register op_r(3)} arg4:int,
-    out {:register op_r(11)} err:int,
-    out {:register op_r(12)} retval:int,
-    ghost stack_bytes:int)
-    requires
-        
+    {:register op_r(0)} callno:int,
+    {:register op_r(1)} arg1:int,
+    {:register op_r(2)} arg2:int,
+    {:register op_r(3)} arg3:int,
+    {:register op_r(4)} arg4:int,
+    out {:register op_r(0)} err:int,
+    out {:register op_r(1)} retval:int)
     requires/ensures
         SaneState(this);
-        stack_bytes >= 120;
-        StackBytesRemaining(this,stack_bytes);
-        // TODO: mode_of_state(this) == Monitor;
+        StackBytesRemaining(this,120);
+    ensures
+        NonvolatileRegPreserving(old(this),this);
 {
+    ghost var stack_bytes := 120;
     retval := 0;
     
     if(callno == sp_op_const(KEV_SMC_QUERY())) {
@@ -310,8 +298,7 @@ procedure smc_handler(
         retval := sp_op_const(KEVLAR_SECURE_NPAGES());
         err := sp_op_const(KEV_ERR_SUCCESS());
     } else if(callno == sp_op_const(KEV_SMC_INIT_ADDRSPACE())) {
-        kev_smc_init_addrspace(arg1, arg2, r3, stack_bytes);
-        err := r3;
+        kev_smc_init_addrspace(arg1, arg2, err, stack_bytes);
     }
 
 }
