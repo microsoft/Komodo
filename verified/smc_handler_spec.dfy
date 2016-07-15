@@ -60,8 +60,8 @@ function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
     requires validAddrspacePage(pageDbIn, addrspacePage)
     requires wellFormedPageDbEntry(pageDbIn, entry)
     requires !entry.L1PTable?
-    requires !entry.L2PTable?
     requires !entry.Addrspace?
+    requires entry.L2PTable? ==> entry.l2pt == []
 {
     var addrspace := pageDbIn[addrspacePage].entry;
     if(!validPageNr(securePage)) then Pair(pageDbIn, KEV_ERR_INVALID_PAGENO())
@@ -107,8 +107,8 @@ function allocatePage(pageDbIn: PageDb, securePage: PageNr,
     requires validAddrspacePage(pageDbIn, addrspacePage)
     requires wellFormedPageDbEntry(pageDbIn, entry)
     requires !entry.L1PTable?
-    requires !entry.L2PTable?
     requires !entry.Addrspace?
+    requires entry.L2PTable? ==> entry.l2pt == []
     ensures  validPageDb(pagedbFrmRet(allocatePage(pageDbIn, securePage, addrspacePage, entry)));
 {
     allocatePagePreservesPageDBValidity(pageDbIn, securePage, addrspacePage, entry);
@@ -169,10 +169,7 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
     requires wellFormedPageDbEntry(pageDbIn, entry)
     requires !entry.Addrspace?
     requires !entry.L1PTable?
-    // Supporting  L1/L2 PTables would requires correctly setting the addrspace
-    // of the entries. We can possibly do that here, but for now
-    // it just isn't supported.
-    requires !entry.L2PTable?
+    requires entry.L2PTable? ==> entry.l2pt == []
     ensures  validPageDb(pagedbFrmRet(allocatePage_inner(
         pageDbIn, securePage, addrspacePage, entry)));
 {
@@ -205,9 +202,3 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
         assert validPageDb(pageDbOut);
     }
 }
-
-
-
-
-
-
