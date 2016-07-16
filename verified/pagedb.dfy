@@ -41,19 +41,17 @@ predicate validPageDb(d: PageDb)
 {
     wellFormedPageDb(d)
     && pageDbEntriesValidRefs(d)
-    && pageDbEntriesWellTypedAddrspace(d)
     && pageDbEntriesValid(d)
 }
 
-predicate pageDbEntriesWellTypedAddrspace(d:PageDb)
-    requires wellFormedPageDb(d)
-{
-    forall n :: n in d && d[n].PageDbEntryTyped? ==> pageDbEntryWellTypedAddrspace(d, n)
-}
+// predicate pageDbEntriesWellTypedAddrspace(d:PageDb)
+//     requires wellFormedPageDb(d)
+// {
+//     forall n :: n in d && d[n].PageDbEntryTyped? ==> pageDbEntryWellTypedAddrspace(d, n)
+// }
 
 predicate pageDbEntriesValid(d:PageDb)
     requires wellFormedPageDb(d)
-    requires pageDbEntriesWellTypedAddrspace(d)
 {
     forall n :: n in d ==> validPageDbEntry(d, n)
 }
@@ -76,8 +74,17 @@ predicate validPageDbEntryTyped(d: PageDb, n: PageNr)
     requires n in d && d[n].PageDbEntryTyped?
 {
     var e := d[n].entry;
-    wellFormedPageDbEntry(d, e) && pageDbEntryWellTypedAddrspace(d, n)
-    // TODO!!!! || stopped
+    (wellFormedPageDbEntry(d, e) || stoppedAddrspace(d, n)) &&
+    pageDbEntryWellTypedAddrspace(d, n)
+    //|| stoppedAddrspace(d, n)
+}
+
+predicate stoppedAddrspace(d: PageDb, n: PageNr)
+    requires n in d && d[n].PageDbEntryTyped?
+{
+    var a := d[n].addrspace;
+    a in d && d[a].PageDbEntryTyped? && d[a].entry.Addrspace? &&
+        d[a].entry.state == StoppedState
 }
 
 
@@ -93,8 +100,8 @@ predicate pageDbEntryWellTypedAddrspace(d: PageDb, n: PageNr)
     && d[addrspace].entry.Addrspace?
     // Type-specific requirements
     && ( (entry.Addrspace? && addrspaceOkAddrspace(d, n, addrspace))
-       || (entry.L1PTable? && addrspaceOkL1PTable(d, n, addrspace))
-       || (entry.L2PTable? && addrspaceOkL2PTable(d, n, addrspace))
+       || (entry.L1PTable? && (stoppedAddrspace(d, n) || addrspaceOkL1PTable(d, n, addrspace)))
+       || (entry.L2PTable? && (stoppedAddrspace(d, n) || addrspaceOkL2PTable(d, n, addrspace)))
        || (entry.Dispatcher?)
        || (entry.DataPage?) )
     
@@ -207,10 +214,11 @@ predicate validAddrspacePage(d: PageDb, n: PageNr)
 predicate validAddrspace(d: PageDb, a: PageDbEntryTyped)
     requires a.Addrspace?
 {
-        validPageNr(a.l1ptnr)
+        a.state == StoppedState || 
+        (validPageNr(a.l1ptnr)
         && a.l1ptnr in d
         && d[a.l1ptnr].PageDbEntryTyped?
-        && d[a.l1ptnr].entry.L1PTable?
+        && d[a.l1ptnr].entry.L1PTable?)
 }
 
 predicate addrspaceL1Unique(d: PageDb, n: PageNr)
