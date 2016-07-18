@@ -95,11 +95,8 @@ function remove_inner(pageDbIn: PageDb, page: PageNr) : smcReturn
         else 
             if( !addrspace.state.StoppedState?) then
                 Pair(pageDbIn, KEV_ERR_NOT_STOPPED())
-        // This should never happen because validPageDb(pageDbIn)
-        // I would like to avoid calling a lemma here... hack for now...
-            else if( !(addrspace.refcount > 0)) then
-                Pair(pageDbIn, KEV_ERR_INVALID())
             else 
+                assert page in addrspaceRefs(pageDbIn, addrspacePage);
                 var updatedAddrspace := match addrspace
                     case Addrspace(l1, ref, state) => Addrspace(l1, ref - 1, state);
                 var pageDbOut := (pageDbIn[page := PageDbEntryFree])[
