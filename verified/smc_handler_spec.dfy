@@ -322,11 +322,8 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
                 } else {
 
                     if (e.Addrspace?) {
-                        assert validPageNr(e.l1ptnr);
-                        assert e.l1ptnr in d;
-
                         var l1a := pageDbIn[e.l1ptnr].addrspace;
-
+                        
                         assert l1a == n;
                         assert l1a != addrspacePage;
 
@@ -346,8 +343,6 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
         assert validPageDb(pageDbOut);
     }
 }
-
-
 
 
 
