@@ -41,20 +41,11 @@ predicate validPageDb(d: PageDb)
 {
     wellFormedPageDb(d)
     && pageDbEntriesValidRefs(d)
-    && pageDbEntriesWellTypedAddrspace(d)
     && pageDbEntriesValid(d)
-}
-
-predicate pageDbEntriesWellTypedAddrspace(d:PageDb)
-    requires wellFormedPageDb(d)
-{
-    forall n {:trigger pageDbEntryWellTypedAddrspace(d, n)} ::
-        n in d && d[n].PageDbEntryTyped? ==> pageDbEntryWellTypedAddrspace(d, n)
 }
 
 predicate pageDbEntriesValid(d:PageDb)
     requires wellFormedPageDb(d)
-    requires pageDbEntriesWellTypedAddrspace(d)
 {
     forall n :: n in d ==> validPageDbEntry(d, n)
 }
@@ -77,8 +68,17 @@ predicate validPageDbEntryTyped(d: PageDb, n: PageNr)
     requires n in d && d[n].PageDbEntryTyped?
 {
     var e := d[n].entry;
-    wellFormedPageDbEntry(d, e) && pageDbEntryWellTypedAddrspace(d, n)
-    // TODO!!!! || stopped
+    (wellFormedPageDbEntry(d, e) || stoppedAddrspace(d, n)) &&
+    pageDbEntryWellTypedAddrspace(d, n)
+    //|| stoppedAddrspace(d, n)
+}
+
+predicate stoppedAddrspace(d: PageDb, n: PageNr)
+    requires n in d && d[n].PageDbEntryTyped?
+{
+    var a := d[n].addrspace;
+    a in d && d[a].PageDbEntryTyped? && d[a].entry.Addrspace? &&
+        d[a].entry.state == StoppedState
 }
 
 
@@ -94,8 +94,8 @@ predicate pageDbEntryWellTypedAddrspace(d: PageDb, n: PageNr)
     && d[addrspace].entry.Addrspace?
     // Type-specific requirements
     && ( (entry.Addrspace? && addrspaceOkAddrspace(d, n, addrspace))
-       || (entry.L1PTable? && addrspaceOkL1PTable(d, n, addrspace))
-       || (entry.L2PTable? && addrspaceOkL2PTable(d, n, addrspace))
+       || (entry.L1PTable? && (stoppedAddrspace(d, n) || addrspaceOkL1PTable(d, n, addrspace)))
+       || (entry.L2PTable? && (stoppedAddrspace(d, n) || addrspaceOkL2PTable(d, n, addrspace)))
        || (entry.Dispatcher?)
        || (entry.DataPage?) )
     
@@ -106,9 +106,14 @@ predicate addrspaceOkAddrspace(d: PageDb, n: PageNr, a: PageNr)
     requires a in d && d[a].PageDbEntryTyped? && d[a].entry.Addrspace?
 {
         ghost var addrspace := d[a].entry;
-        n == a && 
-        addrspaceL1Unique(d, a) &&
-        addrspace.refcount == |addrspaceRefs(d, a)|
+        n == a
+        && addrspaceL1Unique(d, a)
+        && addrspace.refcount == |addrspaceRefs(d, a)|
+        && (stoppedAddrspace(d, n) ||  (
+            d[addrspace.l1ptnr].PageDbEntryTyped? &&
+            d[addrspace.l1ptnr].entry.L1PTable? &&
+            d[addrspace.l1ptnr].addrspace == n
+        ))
         // TODO CHECK L1PTPAGE UNIQUENESS HERE
 }
 
@@ -118,6 +123,8 @@ predicate addrspaceOkL1PTable(d: PageDb, n: PageNr, a: PageNr)
 {
     var e := d[n];
     var l1pt := e.entry.l1pt;
+    // var addrspace := d[a].entry;
+    // addrspace.l1ptnr == n &&
     forall pte :: pte in l1pt && pte.Just? ==> ( var pteE := fromJust(pte);
         pteE in d && d[pteE].PageDbEntryTyped? && d[pteE].addrspace == a)
 }
@@ -142,13 +149,6 @@ predicate wellFormedPageDbEntry(d: PageDb, e: PageDbEntryTyped)
     || (e.DataPage? )
 }
 
-// predicate addrspaceOfEntryIsStopped(d: PageDb, n: PageNr)
-//     requires pageDbEntryWellTypedAddrspace(d, n)
-// {
-//     var e := d[n];
-//     d[e.addrspace].entry.state == StoppedState
-// }
-
 // Free pages and non-addrspace entries should have a refcount of 0
 predicate pageDbEntryValidRefs(d: PageDb, n: PageNr)
     requires n in d
@@ -163,16 +163,14 @@ predicate validL1PTable(d: PageDb, e: PageDbEntryTyped)
     requires e.L1PTable?
     // requires var a := d[n].addrspace; a in d && d[a].PageDbEntryTyped? && d[a].entry.Addrspace?
 {
-    // our addrspace points to us as the L1PT (there should be only one)
-    // d[e.addrspace].entry.l1ptnr == n
-        // it's the right length (all page tables are this length)
-        var l1pt := e.l1pt;
-        |l1pt| == NR_L1PTES()
-        // each non-zero entry is a valid L2PT belonging to this address space
-        && forall pte :: pte in l1pt && pte.Just? ==> validL1PTE(d, fromJust(pte))
-        // no L2PT is referenced twice
-        && forall i, j :: 0 <= i < |l1pt| && 0 <= j < |l1pt| && l1pt[i].Just? && i != j
-            ==> l1pt[i] != l1pt[j]
+    var l1pt := e.l1pt;
+    // it's the right length (all page tables are this length)
+    |l1pt| == NR_L1PTES()
+    // each non-zero entry is a valid L2PT belonging to this address space
+    && forall pte :: pte in l1pt && pte.Just? ==> validL1PTE(d, fromJust(pte))
+    // no L2PT is referenced twice
+    && forall i, j :: 0 <= i < |l1pt| && 0 <= j < |l1pt| && l1pt[i].Just? && i != j
+        ==> l1pt[i] != l1pt[j]
 }
 
 predicate validL1PTE(d: PageDb, pte: PageNr)
@@ -208,10 +206,11 @@ predicate validAddrspacePage(d: PageDb, n: PageNr)
 predicate validAddrspace(d: PageDb, a: PageDbEntryTyped)
     requires a.Addrspace?
 {
-        validPageNr(a.l1ptnr)
+        a.state == StoppedState || 
+        (validPageNr(a.l1ptnr)
         && a.l1ptnr in d
         && d[a.l1ptnr].PageDbEntryTyped?
-        && d[a.l1ptnr].entry.L1PTable?
+        && d[a.l1ptnr].entry.L1PTable?)
 }
 
 predicate addrspaceL1Unique(d: PageDb, n: PageNr)

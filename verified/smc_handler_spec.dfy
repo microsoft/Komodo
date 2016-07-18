@@ -85,23 +85,23 @@ function remove_inner(pageDbIn: PageDb, page: PageNr) : smcReturn
         Pair(pageDbIn, KEV_ERR_INVALID_PAGENO())
     else if(pageDbIn[page].PageDbEntryFree?) then
         Pair(pageDbIn, KEV_ERR_SUCCESS())
-    else if( var e := pageDbIn[page].entry;
-        e.Addrspace? && e.refcount != 0) then
-        Pair(pageDbIn, KEV_ERR_PAGEINUSE())
     else 
-        var a := pageDbIn[pageDbIn[page].addrspace].entry;
-        if(!a.state.StoppedState?) then
-            Pair(pageDbIn, KEV_ERR_NOT_STOPPED())
-        else if(!(a.refcount > 0)) then
-            Pair(pageDbIn, KEV_ERR_INVALID())
-    else
+        var e := pageDbIn[page].entry;
         var addrspacePage := pageDbIn[page].addrspace;
         var addrspace := pageDbIn[addrspacePage].entry;
-        var updatedAddrspace := match addrspace
-            case Addrspace(l1, ref, state) => Addrspace(l1, ref - 1, state);
-        var pageDbOut := (pageDbIn[page := PageDbEntryFree])[
-            addrspacePage := PageDbEntryTyped(addrspacePage, updatedAddrspace)];
-        Pair(pageDbOut, KEV_ERR_SUCCESS())
+        if( e.Addrspace? ) then
+           if(e.refcount !=0) then Pair(pageDbIn, KEV_ERR_PAGEINUSE())
+           else Pair(pageDbIn[page := PageDbEntryFree], KEV_ERR_SUCCESS())
+        else 
+            if( !addrspace.state.StoppedState?) then
+                Pair(pageDbIn, KEV_ERR_NOT_STOPPED())
+            else 
+                assert page in addrspaceRefs(pageDbIn, addrspacePage);
+                var updatedAddrspace := match addrspace
+                    case Addrspace(l1, ref, state) => Addrspace(l1, ref - 1, state);
+                var pageDbOut := (pageDbIn[page := PageDbEntryFree])[
+                    addrspacePage := PageDbEntryTyped(addrspacePage, updatedAddrspace)];
+                Pair(pageDbOut, KEV_ERR_SUCCESS())
 }
 
 //=============================================================================
@@ -248,10 +248,76 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
     var errOut := errFrmRet(remove_inner(pageDbIn, page));
 
     if ( errOut != KEV_ERR_SUCCESS() ){
-        // The error case is trivial because PageDbOut == PageDbIn
+       // trivial
+    } else if( pageDbIn[page].PageDbEntryFree?) {
+        // trivial
     } else {
-     
+
+        var entry := pageDbIn[page].entry;
+        var addrspacePage := pageDbIn[page].addrspace;
+
+        forall () ensures validPageDbEntry(pageDbOut, addrspacePage);
+        {
+            if(entry.Addrspace?){
+            } else {
+                var addrspace := pageDbOut[addrspacePage].entry;
+
+                var oldRefs := addrspaceRefs(pageDbIn, addrspacePage);
+                assert addrspaceRefs(pageDbOut, addrspacePage) == oldRefs - {page};
+                assert addrspace.refcount == |addrspaceRefs(pageDbOut, addrspacePage)|;
+                
+                assert validAddrspace(pageDbOut, addrspace);
+                assert validAddrspacePage(pageDbOut, addrspacePage);
+            }
+        }
+
+        assert validPageDbEntry(pageDbOut, page);
+
+        forall ( n | validPageNr(n) && n != addrspacePage && n != page )
+            ensures validPageDbEntry(pageDbOut, n)
+        {
+            if(pageDbOut[n].PageDbEntryFree?) {
+                // trivial
+            } else {
+                var e := pageDbOut[n].entry;
+                var d := pageDbOut;
+                var a := pageDbOut[n].addrspace;
+
+                assert pageDbOut[n] == pageDbIn[n];
+
+                
+                forall () ensures pageDbEntryWellTypedAddrspace(d, n){
+                  
+                    // This is a proof that the addrspace of n is still an addrspace
+                    //
+                    // The only interesting case is when the page that was
+                    // removed is the addrspace of n (i.e. a == page). This
+                    // case causes an error because a must have been valid in
+                    // pageDbIn and therefore n has a reference to it.
+                    forall() ensures a in d && d[a].PageDbEntryTyped?
+                        && d[a].entry.Addrspace?;
+                    {
+                        assert a == page ==> n in addrspaceRefs(pageDbIn, a);
+                        assert a == page ==> pageDbIn[a].entry.refcount > 0;
+                        assert a != page;
+                    }
+
+                    if( a == addrspacePage ) {
+                        var oldRefs := addrspaceRefs(pageDbIn, addrspacePage);
+                        assert addrspaceRefs(pageDbOut, addrspacePage) == oldRefs - {page};
+                        assert pageDbOut[a].entry.refcount == |addrspaceRefs(pageDbOut, addrspacePage)|;
+                    } else {
+                        assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
+                        assert addrspaceRefs(pageDbIn, a) == addrspaceRefs(pageDbOut, a);
+                    }
+
+                }
+
+            }
+        }
+
         assert pageDbEntriesValid(pageDbOut);
         assert validPageDb(pageDbOut);
     }
 }
+
