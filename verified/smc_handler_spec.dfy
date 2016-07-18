@@ -295,9 +295,8 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
                     //
                     // The only interesting case is when the page that was
                     // removed is the addrspace of n (i.e. a == page). This
-                    // case is disallowed because a must have been valid in
+                    // case causes an error because a must have been valid in
                     // pageDbIn and therefore n has a reference to it.
-
                     forall() ensures a in d && d[a].PageDbEntryTyped?
                         && d[a].entry.Addrspace?;
                     {
@@ -310,7 +309,6 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
                         var oldRefs := addrspaceRefs(pageDbIn, addrspacePage);
                         assert addrspaceRefs(pageDbOut, addrspacePage) == oldRefs - {page};
                         assert pageDbOut[a].entry.refcount == |addrspaceRefs(pageDbOut, addrspacePage)|;
-
                     } else {
                         assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
                         assert addrspaceRefs(pageDbIn, a) == addrspaceRefs(pageDbOut, a);
@@ -318,24 +316,6 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
 
                 }
 
-                if( stoppedAddrspace(d, n) ) {
-                } else {
-
-                    if (e.Addrspace?) {
-                        var l1a := pageDbIn[e.l1ptnr].addrspace;
-                        
-                        assert l1a == n;
-                        assert l1a != addrspacePage;
-
-                        assert pageDbIn[e.l1ptnr].addrspace != addrspacePage;
-                        assert d[e.l1ptnr].PageDbEntryTyped?;
-                        assert d[e.l1ptnr].entry.L1PTable?;
-                        assert validAddrspace(d, e);
-                    } else {
-                    }
-
-                    assert wellFormedPageDbEntry(d, e);
-                }
             }
         }
 
@@ -343,6 +323,4 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
         assert validPageDb(pageDbOut);
     }
 }
-
-
 
