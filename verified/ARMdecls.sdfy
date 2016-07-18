@@ -266,7 +266,7 @@ procedure LDRglobal(out{:operand} rd:int, {:operand} g:string,
         ValidGlobalOffset(@g, ofs);
         AddressOfGlobal(@g) == base;
     ensures
-        evalUpdate(old(this), @rd, old(GlobalContents(this, @g, ofs)), this, true);
+        evalUpdate(old(this), @rd, old(GlobalWord(this, @g, ofs)), this, true);
         isUInt32(rd);
 
 procedure STRglobal({:operand} rd:int, {:operand} g:string,

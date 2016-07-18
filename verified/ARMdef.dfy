@@ -158,13 +158,21 @@ function BytesToWords(b:int) : int requires WordAligned(b) { b / 4 }
 //-----------------------------------------------------------------------------
 predicate ValidState(s:state)
 {
+    ValidRegState(s) && ValidMemState(s) && ValidGlobalState(s)
+}
+
+predicate ValidRegState(s:state)
+{
     (forall m:mode {:trigger SP(m)} {:trigger LR(m)} ::
         SP(m) in s.regs && isUInt32(s.regs[SP(m)]) &&
         LR(m) in s.regs && isUInt32(s.regs[LR(m)]))
         && (forall i:int {:trigger R(i)} :: 0 <= i <= 12
-            ==> R(i) in s.regs && isUInt32(s.regs[R(i)]))
-        && (forall m:mem :: m in s.addresses ==> isUInt32(s.addresses[m]))
-        && ValidGlobalState(s)
+            <==> R(i) in s.regs && isUInt32(s.regs[R(i)]))
+}
+
+predicate ValidMemState(s:state)
+{
+    forall m:mem :: m in s.addresses ==> WordAligned(m.addr) && isUInt32(s.addresses[m])
 }
 
 predicate ValidGlobalState(s:state)
@@ -328,13 +336,20 @@ function MemContents(s:state, m:mem): int
     s.addresses[m]
 }
 
-function GlobalContents(s:state, g:operand, offset:int): int
+function GlobalFullContents(s:state, g:operand): seq<int>
+    requires ValidGlobalState(s)
+    requires ValidGlobal(g)
+    ensures forall w :: w in GlobalFullContents(s, g) ==> isUInt32(w)
+{
+    match s.globals case Globals(gmap) => gmap[g]
+}
+
+function GlobalWord(s:state, g:operand, offset:int): int
     requires ValidGlobalOffset(g, offset)
     requires ValidGlobalState(s)
-    ensures isUInt32(GlobalContents(s, g, offset))
+    ensures isUInt32(GlobalWord(s, g, offset))
 {
-    match s.globals case Globals(gmap) =>
-        (gmap[g])[BytesToWords(offset)]
+    GlobalFullContents(s, g)[BytesToWords(offset)]
 }
 
 function eval_op(s:state, o:operand): int
@@ -512,7 +527,7 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
             evalUpdate(s, rd, MemContents(s, Address(OperandContents(s, base) +
                 OperandContents(s, ofs))), r, ok)
         case LDR_global(rd, global, base, ofs) => 
-            evalUpdate(s, rd, GlobalContents(s, global, OperandContents(s, ofs)), r, ok)
+            evalUpdate(s, rd, GlobalWord(s, global, OperandContents(s, ofs)), r, ok)
         case LDR_reloc(rd, name) =>
             evalUpdate(s, rd, AddressOfGlobal(name), r, ok)
         case STR(rd, base, ofs) => 

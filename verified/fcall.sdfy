@@ -95,16 +95,14 @@ predicate GlobalValuePreserving(s:sp_state, r:sp_state)
     requires ValidState(s) && ValidState(r);
 {
     assert ValidGlobalState(s) && ValidGlobalState(r);
-    forall g, o :: ValidGlobalOffset(g, o)
-      ==> GlobalContents(s, g, o) == GlobalContents(r, g, o)
+    forall g :: ValidGlobal(g) ==> GlobalFullContents(s, g) == GlobalFullContents(r, g)
 }
 
 #endverbatim
 
 procedure fcall_prologue(ghost stack_bytes:int)
     requires/ensures
-        ValidState(this);
-        ValidStack(this);
+        SaneState(this);
     requires
         stack_bytes >= 40; 
         StackBytesRemaining(this,stack_bytes);
@@ -154,8 +152,7 @@ procedure fcall_prologue(ghost stack_bytes:int)
 
 procedure fcall_epilogue(ghost stack_bytes_left:int)
     requires/ensures
-        ValidState(this);
-        ValidStack(this);
+        SaneState(this);
     requires
         isUInt32(sp + 40);
         sp + 40 <= StackBase();
