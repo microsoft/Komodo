@@ -127,12 +127,9 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
 
 procedure kev_smc_init_addrspace_success(
     {:register op_r(1)} addrspace_page:int,
-    {:register op_r(2)} l1pt_page:int,
-    ghost stack_bytes:int)
+    {:register op_r(2)} l1pt_page:int)
     requires/ensures
         SaneState(this);
-        stack_bytes >= 80 ;
-        StackBytesRemaining(this,stack_bytes);
     requires
         addrspace_page != l1pt_page;
         page_is_valid(addrspace_page);
@@ -143,7 +140,6 @@ procedure kev_smc_init_addrspace_success(
         GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
                              + PAGEDB_ENTRY_TYPE()) == KEV_PAGE_FREE();
     ensures
-        NonvolatileRegPreserving(old(this),this);
         StackPreserving(old(this),this);
 
         GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(addrspace_page)
@@ -161,8 +157,6 @@ procedure kev_smc_init_addrspace_success(
         forall i:int :: (page_monvaddr(this, l1pt_page) <= i < page_monvaddr(this, l1pt_page) + KEVLAR_PAGE_SIZE()) &&
             WordAligned(i) ==> addrval(this, i) == 0;
 {
-    fcall_prologue(stack_bytes);
-
     LDRglobaladdr(r11, PageDb());
 
     phys2monvaddr(addrspace_page,r9,r0);
@@ -211,21 +205,15 @@ procedure kev_smc_init_addrspace_success(
     r1 := sp_op_const(KEVLAR_PAGE_SIZE());
     r0 := 0;
     memset(r10,r0,r1); //page_monvaddr(this, l1pt_page)
-
-    fcall_epilogue(stack_bytes-40);
 }
 
 procedure kev_smc_init_addrspace(
     {:register op_r(1)} addrspace_page:int,
     {:register op_r(2)} l1pt_page:int,
-    out {:register op_r(0)} err:int,
-    ghost stack_bytes:int)
+    out {:register op_r(0)} err:int)
     requires/ensures
         SaneState(this);
-        stack_bytes >= 120;
-        StackBytesRemaining(this,stack_bytes);
     ensures
-        NonvolatileRegPreserving(old(this),this);
         StackPreserving(old(this),this);
         addrspace_page == l1pt_page ==>
             err == KEV_ERR_INVALID_PAGENO();
@@ -236,8 +224,6 @@ procedure kev_smc_init_addrspace(
         !WordAligned(l1pt_page) ==>
             err == KEV_ERR_INVALID_PAGENO();
 {
-    fcall_prologue(stack_bytes);
-
     // check alignment of l1pt page
     AND(r4,l1pt_page,3);
     assert r4 == l1pt_page % 4;
@@ -266,13 +252,11 @@ procedure kev_smc_init_addrspace(
         } else if( r7 != sp_op_const(KEV_PAGE_FREE()) ) {
             err := sp_op_const(KEV_ERR_PAGEINUSE());
         } else {
-            kev_smc_init_addrspace_success(r1,r2,stack_bytes-40);
+            kev_smc_init_addrspace_success(r1,r2);
             
             err := OConst(KEV_ERR_SUCCESS());
         }
     }
-
-    fcall_epilogue(stack_bytes-40);
 }
 
 procedure smc_handler(
@@ -290,17 +274,30 @@ procedure smc_handler(
         NonvolatileRegPreserving(old(this),this);
 {
     ghost var stack_bytes := 120;
+
+    fcall_prologue(stack_bytes);
+
     retval := 0;
-    
+
     if(callno == sp_op_const(KEV_SMC_QUERY())) {
         err := sp_op_const(KEV_MAGIC());
     } else if(callno == sp_op_const(KEV_SMC_GETPHYSPAGES())) {
         retval := sp_op_const(KEVLAR_SECURE_NPAGES());
         err := sp_op_const(KEV_ERR_SUCCESS());
     } else if(callno == sp_op_const(KEV_SMC_INIT_ADDRSPACE())) {
-        kev_smc_init_addrspace(arg1, arg2, err, stack_bytes);
+        kev_smc_init_addrspace(arg1, arg2, err);
     }
 
+    // remind the verifier to think about our invariant...
+    assert SaneState(this);
+
+    fcall_epilogue(stack_bytes-40);
+
+    // zero other volatiles to prevent information leakage
+    r2 := 0;
+    r3 := 0;
+
+    // TODO: return path (movs pc, lr etc.)
 }
 
 #verbatim
