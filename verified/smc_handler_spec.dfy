@@ -17,7 +17,51 @@ function pageIsFree(d:PageDb, pg:PageNr) : bool
     requires pg in d;
     { d[pg].PageDbEntryFree? }
 
-//a============================================================================
+//=============================================================================
+// Mapping
+//=============================================================================
+datatype Mapping = Mapping(l1index: int, l2index: int, perm: Perm)
+datatype Perm = Perm(r: bool, w: bool, x: bool)
+
+function lookup_pte(d: PageDb, a: PageNr, mapping: Mapping)
+    : (int, L2PTE) // (ERROR, pageNr)
+    requires validPageDb(d)
+    requires validPageNr(a)
+    requires d[a].PageDbEntryTyped? && d[a].entry.Addrspace?
+    requires d[a].entry.state.InitState?
+{
+    var addrspace := d[a].entry;
+    if(!(0 <= mapping.l1index < 256) || !(0 <= mapping.l2index < 1024) ) then
+        (KEV_ERR_INVALID_MAPPING(), NoMapping)
+    else
+        var l1 := d[addrspace.l1ptnr].entry;
+        var l1pte := l1.l1pt[mapping.l1index];
+        if(l1pte.Nothing?) then (KEV_ERR_INVALID_MAPPING(), NoMapping)
+        else
+            var l2pt := phys2monvaddr(fromJust(l1pte));
+            var l2pte := d[l2pt].entry.l2pt[mapping.l2index];
+            (KEV_ERR_SUCCESS(), l2pte)
+}
+
+function is_valid_mapping_target(d: PageDb, a: PageNr, mapping: Mapping)
+    : int // KEV_ERROR
+    requires validPageDb(d)
+    requires validPageNr(a)
+    requires d[a].PageDbEntryTyped? && d[a].entry.Addrspace?
+{
+    var addrspace := d[a].entry;
+    if(!addrspace.state.InitState?) then
+        KEV_ERR_ALREADY_FINAL()
+    else if(!mapping.perm.r) then KEV_ERR_INVALID_MAPPING()
+    else lookup_pte(d, a, mapping).0
+}
+
+//TODO FIXME!!!!
+function phys2monvaddr(phys: int) : int {
+    phys
+}
+
+//============================================================================
 // Behavioral Specification of Monitor Calls
 //=============================================================================
 function initAddrspace_inner(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr)

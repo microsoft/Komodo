@@ -142,7 +142,7 @@ predicate addrspaceOkL2PTable(d: PageDb, n: PageNr, a: PageNr)
 
 predicate wellFormedPageDbEntry(d: PageDb, e: PageDbEntryTyped)
 {
-    (e.Addrspace? &&  validAddrspace(d, e))
+    (e.Addrspace? && validAddrspace(d, e))
     || (e.L1PTable? && validL1PTable(d, e))
     || (e.L2PTable? && validL2PTable(d, e))
     || (e.Dispatcher? )
