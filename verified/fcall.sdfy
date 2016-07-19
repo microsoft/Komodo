@@ -28,20 +28,19 @@ predicate RegPreservingExcept(s:sp_state, r:sp_state, trashed:seq<operand>)
     requires ValidState(s) && ValidState(r);
     requires forall o :: o in trashed ==> ValidRegOperand(s, o) && ValidRegOperand(r, o);
 {
-    //forall n :: 0 <= n <= 12 && (op_r(n) in trashed || eval_op(s,op_r(n)) == eval_op(r,op_r(n)))
-    (op_r(0) in trashed || eval_op(s,op_r(0)) == eval_op(r,op_r(0)))
-    && (op_r(1) in trashed || eval_op(s,op_r(1)) == eval_op(r,op_r(1)))
-    && (op_r(2) in trashed || eval_op(s,op_r(2)) == eval_op(r,op_r(2)))
-    && (op_r(3) in trashed || eval_op(s,op_r(3)) == eval_op(r,op_r(3)))
-    && (op_r(4) in trashed || eval_op(s,op_r(4)) == eval_op(r,op_r(4)))
-    && (op_r(5) in trashed || eval_op(s,op_r(5)) == eval_op(r,op_r(5)))
-    && (op_r(6) in trashed || eval_op(s,op_r(6)) == eval_op(r,op_r(6)))
-    && (op_r(7) in trashed || eval_op(s,op_r(7)) == eval_op(r,op_r(7)))
-    && (op_r(8) in trashed || eval_op(s,op_r(8)) == eval_op(r,op_r(8)))
-    && (op_r(9) in trashed || eval_op(s,op_r(9)) == eval_op(r,op_r(9)))
-    && (op_r(10) in trashed || eval_op(s,op_r(10)) == eval_op(r,op_r(10)))
-    && (op_r(11) in trashed || eval_op(s,op_r(11)) == eval_op(r,op_r(11)))
-    && (op_r(12) in trashed || eval_op(s,op_r(12)) == eval_op(r,op_r(12)))
+    (OReg(R0) in trashed || eval_op(s,OReg(R0)) == eval_op(r,OReg(R0)))
+    && (OReg(R1) in trashed || eval_op(s,OReg(R1)) == eval_op(r,OReg(R1)))
+    && (OReg(R2) in trashed || eval_op(s,OReg(R2)) == eval_op(r,OReg(R2)))
+    && (OReg(R3) in trashed || eval_op(s,OReg(R3)) == eval_op(r,OReg(R3)))
+    && (OReg(R4) in trashed || eval_op(s,OReg(R4)) == eval_op(r,OReg(R4)))
+    && (OReg(R5) in trashed || eval_op(s,OReg(R5)) == eval_op(r,OReg(R5)))
+    && (OReg(R6) in trashed || eval_op(s,OReg(R6)) == eval_op(r,OReg(R6)))
+    && (OReg(R7) in trashed || eval_op(s,OReg(R7)) == eval_op(r,OReg(R7)))
+    && (OReg(R8) in trashed || eval_op(s,OReg(R8)) == eval_op(r,OReg(R8)))
+    && (OReg(R9) in trashed || eval_op(s,OReg(R9)) == eval_op(r,OReg(R9)))
+    && (OReg(R10) in trashed || eval_op(s,OReg(R10)) == eval_op(r,OReg(R10)))
+    && (OReg(R11) in trashed || eval_op(s,OReg(R11)) == eval_op(r,OReg(R11)))
+    && (OReg(R12) in trashed || eval_op(s,OReg(R12)) == eval_op(r,OReg(R12)))
     && (op_sp() in trashed || eval_op(s,op_sp()) == eval_op(r,op_sp()))
     && (op_lr() in trashed || eval_op(s,op_lr()) == eval_op(r,op_lr()))
 }
@@ -49,7 +48,7 @@ predicate RegPreservingExcept(s:sp_state, r:sp_state, trashed:seq<operand>)
 predicate NonvolatileRegPreserving(s:sp_state, r:sp_state)
     requires ValidState(s) && ValidState(r);
 {
-    RegPreservingExcept(s, r, [op_r(0), op_r(1), op_r(2), op_r(3)])
+    RegPreservingExcept(s, r, [OReg(R0), OReg(R1), OReg(R2), OReg(R3)])
 }
 
 // XXX: delete this nonsense, as soon as we can figure out how
@@ -95,16 +94,14 @@ predicate GlobalValuePreserving(s:sp_state, r:sp_state)
     requires ValidState(s) && ValidState(r);
 {
     assert ValidGlobalState(s) && ValidGlobalState(r);
-    forall g, o :: ValidGlobalOffset(g, o)
-      ==> GlobalContents(s, g, o) == GlobalContents(r, g, o)
+    forall g :: ValidGlobal(g) ==> GlobalFullContents(s, g) == GlobalFullContents(r, g)
 }
 
 #endverbatim
 
 procedure fcall_prologue(ghost stack_bytes:int)
     requires/ensures
-        ValidState(this);
-        ValidStack(this);
+        SaneState(this);
     requires
         stack_bytes >= 40; 
         StackBytesRemaining(this,stack_bytes);
@@ -154,8 +151,7 @@ procedure fcall_prologue(ghost stack_bytes:int)
 
 procedure fcall_epilogue(ghost stack_bytes_left:int)
     requires/ensures
-        ValidState(this);
-        ValidStack(this);
+        SaneState(this);
     requires
         isUInt32(sp + 40);
         sp + 40 <= StackBase();

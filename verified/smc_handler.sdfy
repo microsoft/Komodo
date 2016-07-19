@@ -6,58 +6,210 @@ procedure operator(++) (inout{:operand} dst:int) := incr
 procedure operator(+=) (inout{:operand} dst:int, {:operand} src:int) := plusEquals
 
 #verbatim
-predicate page_is_valid(page:int)
-{
-    0 <= page < KEVLAR_SECURE_NPAGES()
-}
-
+/*
 lemma valid_pagenr_ensures_valid_mem(s:state, pagenr: int)
       requires SaneState(s)
-      requires page_is_valid(pagenr)
+      requires validPageNr(pagenr)
       ensures ValidMemRange(s, page_monvaddr(s, pagenr), page_monvaddr(s, pagenr) + KEVLAR_PAGE_SIZE())
 {}
+*/
 
-function page_monvaddr(s:state,pagenr:int):int
-    requires page_is_valid(pagenr)
-    requires SaneGlobals(s)
-    ensures WordAligned(page_monvaddr(s,pagenr))
+function page_paddr(pagenr:PageNr):int
+    requires validPageNr(pagenr)
+    ensures WordAligned(page_paddr(pagenr))
 {
-    GlobalContents(s, SecurePhysBase(), 0)
-        + KEVLAR_DIRECTMAP_VBASE() + KEVLAR_PAGE_SIZE() * pagenr
+    SecurePhysBaseValue() + KEVLAR_PAGE_SIZE() * pagenr
+}
+
+function page_monvaddr(pagenr:PageNr):int
+    requires validPageNr(pagenr)
+    ensures WordAligned(page_monvaddr(pagenr))
+{
+    page_paddr(pagenr) + KEVLAR_DIRECTMAP_VBASE()
+}
+
+function addrsInPage(p:PageNr): set<mem>
+    requires validPageNr(p)
+{
+    (set a:int | WordAligned(a) &&
+        page_monvaddr(p) <= a < page_monvaddr(p) + KEVLAR_PAGE_SIZE() :: Address(a))
+}
+
+predicate memContainsPage(memmap: map<mem, int>, p:PageNr)
+    requires validPageNr(p)
+{
+    forall m:mem :: m in addrsInPage(p) ==> m in memmap
+}
+
+function extractPageDbEntry(s:state, p:PageNr): seq<int>
+    requires SaneState(s)
+    requires validPageNr(p)
+    ensures |extractPageDbEntry(s,p)| == PAGEDB_ENTRY_SIZE()/BytesPerWord()
+    ensures forall o :: WordAligned(o) && 0 <= o < PAGEDB_ENTRY_SIZE()
+        ==> GlobalWord(s, PageDb(), G_PAGEDB_ENTRY(p) + o)
+            == extractPageDbEntry(s,p)[o / BytesPerWord()]
+{
+    var dbofstate := GlobalFullContents(s, PageDb());
+    var entrylen := PAGEDB_ENTRY_SIZE() / BytesPerWord();
+    dbofstate[p*entrylen..p*entrylen+entrylen]
+}
+
+function extractPage(s:state, p:PageNr): map<mem, int>
+    requires SaneState(s)
+    requires validPageNr(p)
+    ensures memContainsPage(extractPage(s,p), p)
+{
+    (map m:mem | m in addrsInPage(p) :: s.addresses[m])
+}
+
+predicate pageDbCorresponds(s:state, pagedb:PageDb)
+    requires SaneState(s)
+    requires pageDbClosedRefs(pagedb)
+{
+    // XXX: unpack the entry and page contents to help dafny see
+    // that we have no other dependencies on the state
+    forall p {:trigger validPageNr(p)} :: validPageNr(p)
+        ==> (pageDbEntryCorresponds(p, pagedb[p], extractPageDbEntry(s, p))
+            && pageContentsCorresponds(p, pagedb[p], extractPage(s, p)))
+}
+
+predicate pageDbCorrespondsExcluding(s:state, pagedb:PageDb, modifiedPage:PageNr)
+    requires SaneState(s)
+    requires pageDbClosedRefs(pagedb)
+{
+    forall p {:trigger validPageNr(p)} :: validPageNr(p) && p != modifiedPage
+        ==> (pageDbEntryCorresponds(p, pagedb[p], extractPageDbEntry(s, p))
+            && pageContentsCorresponds(p, pagedb[p], extractPage(s, p)))
+}
+
+predicate pageDbCorrespondsOnly(s:state, pagedb:PageDb, p:PageNr)
+    requires SaneState(s)
+    requires pageDbClosedRefs(pagedb)
+    requires validPageNr(p)
+{
+    pageDbEntryCorresponds(p, pagedb[p], extractPageDbEntry(s, p))
+    && pageContentsCorresponds(p, pagedb[p], extractPage(s, p))
+}
+
+predicate pageDbEntryCorresponds(p:PageNr, e:PageDbEntry, entryWords:seq<int>)
+    requires validPageNr(p)
+    requires |entryWords| == PAGEDB_ENTRY_SIZE()/BytesPerWord()
+    requires e.PageDbEntryTyped?
+        ==> validPageNr(e.addrspace) && closedRefsPageDbEntry(e.entry)
+{
+    pageDbEntryTypeVal(e) == entryWords[PAGEDB_ENTRY_TYPE() / BytesPerWord()]
+    && match e {
+        case PageDbEntryFree => true
+        case PageDbEntryTyped(addrspace, entry) =>
+            entryWords[PAGEDB_ENTRY_ADDRSPACE()/BytesPerWord()]
+                == page_monvaddr(addrspace)
+    }
+}
+
+predicate pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:map<mem, int>)
+    requires validPageNr(p)
+    requires memContainsPage(page, p)
+    requires e.PageDbEntryFree? || closedRefsPageDbEntry(e.entry)
+{
+    e.PageDbEntryFree? || (e.PageDbEntryTyped? && (
+        var et := e.entry;
+        (et.Addrspace? && pageDbAddrspaceCorresponds(p, et, page))
+        || (et.Dispatcher? /* && pageDbDispatcherCorresponds(p, et, page) */)
+        || (et.L1PTable? /* && pageDbL1PTableCorresponds(p, et, page) */)
+        || (et.L2PTable? /* && pageDbL2PTableCorresponds(p, et, page) */)
+        || et.DataPage?))
+}
+
+predicate pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
+    requires validPageNr(p)
+    requires memContainsPage(page, p)
+    requires e.Addrspace?
+    requires closedRefsPageDbEntry(e)
+{
+    var base := page_monvaddr(p);
+    page[Address(ADDRSPACE_L1PT(base))] == page_monvaddr(e.l1ptnr)
+    && page[Address(ADDRSPACE_L1PT_PHYS(base))] == page_paddr(e.l1ptnr)
+    && page[Address(ADDRSPACE_REF(base))] == e.refcount
+    && page[Address(ADDRSPACE_STATE(base))] == pageDbAddrspaceStateVal(e.state)
+}
+
+function pageDbEntryTypeVal(e: PageDbEntry): int
+    ensures isUInt32(pageDbEntryTypeVal(e))
+{
+    if e.PageDbEntryFree? then KEV_PAGE_FREE()
+    else match e.entry {
+    case Addrspace(l1pt, ref, state) => KEV_PAGE_ADDRSPACE()
+    case Dispatcher(ep, entered) => KEV_PAGE_DISPATCHER()
+    case L1PTable(pt) => KEV_PAGE_L1PTABLE()
+    case L2PTable(pt) => KEV_PAGE_L2PTABLE()
+    case DataPage => KEV_PAGE_DATA()
+    }
+}
+
+function pageDbAddrspaceStateVal(s: AddrspaceState): int
+    ensures isUInt32(pageDbAddrspaceStateVal(s))
+{
+    match s {
+    case InitState => KEV_ADDRSPACE_INIT()
+    case FinalState => KEV_ADDRSPACE_FINAL()
+    case StoppedState => KEV_ADDRSPACE_STOPPED()
+    }
 }
 
 #endverbatim
 
-procedure phys2monvaddr({:operand} phys:int, out {:operand} virt:int, out {:operand} tmp:int)
+procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:operand} tmp:int)
     requires/ensures
         SaneState(this);
     requires
         ValidRegOperand(this, @phys);
-        ValidRegOperand(this, @virt);
+        ValidRegOperand(this, @pagenr);
         ValidRegOperand(this, @tmp);
-        // NB: @phys == @virt is supported
+        // NB: @phys == @pagenr is supported
         @phys != @tmp;
+        @pagenr != @tmp;
+        @phys != op_sp();
+        @tmp != op_sp();
+        validPageNr(pagenr);
+    ensures
+        GlobalValuePreserving(old(this),this);
+        RegPreservingExcept(old(this), this, [@phys, @tmp]);
+        MemPreserving(old(this),this);
+        WordAligned(phys);
+        phys == page_paddr(old(pagenr));
+{
+    tmp := sp_op_const(KEVLAR_PAGE_SIZE());
+    MUL(phys,pagenr,tmp);
+    // LSL(phys, pagenr, sp_op_const(KEVLAR_PAGE_SHIFT()));
+    assert phys == old(pagenr) * KEVLAR_PAGE_SIZE();
+
+    LDRglobaladdr(tmp, SecurePhysBase());
+    LDRglobal(tmp, SecurePhysBase(), tmp, 0);
+    assert WordAligned(tmp);
+    phys += tmp;
+}
+
+procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out {:operand} tmp:int)
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidRegOperand(this, @virt);
+        ValidRegOperand(this, @pagenr);
+        ValidRegOperand(this, @tmp);
+        // NB: @pagenr == @virt is supported
+        @pagenr != @tmp;
         @virt != @tmp;
         @virt != op_sp();
         @tmp != op_sp();
-        page_is_valid(phys);
+        validPageNr(pagenr);
     ensures
         GlobalValuePreserving(old(this),this);
         RegPreservingExcept(old(this), this, [@virt, @tmp]);
         MemPreserving(old(this),this);
         WordAligned(virt);
-        virt == page_monvaddr(old(this), old(phys));
+        virt == page_monvaddr(old(pagenr));
 {
-    tmp := sp_op_const(KEVLAR_PAGE_SIZE());
-    MUL(virt,phys,tmp);
-    // LSL(virt, phys, sp_op_const(KEVLAR_PAGE_SHIFT()));
-    assert virt == old(phys) * KEVLAR_PAGE_SIZE();
-
-    LDRglobaladdr(tmp, SecurePhysBase());
-    LDRglobal(tmp, SecurePhysBase(), tmp, 0);
-    assert WordAligned(tmp);
-    virt += tmp;
-    assert WordAligned(virt);
+    page_paddr_impl(virt, pagenr, tmp);
     virt += sp_op_const(KEVLAR_DIRECTMAP_VBASE());
 }
 
@@ -84,12 +236,10 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
         // XXX: I shouldn't have to say this! :(
         MemValidityPreserving(old(this), this);
         GlobalValuePreserving(old(this),this);
-        forall i:int :: (old(base) <= i < old(base + size)) && WordAligned(i) ==>
+        forall i :: (old(base) <= i < old(base + size)) && WordAligned(i) ==>
             addrval(this,i) == old(val);
-        forall i:int :: !(old(base) <= i < old(base + size)) && WordAligned(i) &&
-            !(StackLimit() <= i < StackBase()) &&
-            ValidMem(old(this),Address(i)) ==>
-                addrval(this,i) == addrval(old(this),i);
+        forall i :: !(old(base) <= i < old(base + size)) && ValidMem(old(this),Address(i))
+             ==> addrval(this,i) == addrval(old(this),i);
         StackPreserving(old(this),this);
         RegPreservingExcept(old(this), this, [@base,@size]);
 {
@@ -104,20 +254,20 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
             ValidState(this);
             ValidStack(this);
             sp == old(sp);
-            size == limit;
+            SaneState(this);
             GlobalValuePreserving(old(this),this);
-            ValidMemRange(old(this),lower,limit);
+            ValidMemRange(this,lower,limit);
             MemValidityPreserving(old(this), this);
             StackPreserving(old(this),this);
             RegPreservingExcept(old(this), this, [@base,@size]);
             WordAligned(base);
+            size == limit;
             lower <= base <= limit;
             lower >= StackBase() || limit <= StackLimit();
-            forall i:int :: (lower <= i < base) && WordAligned(i) ==>
-                addrval(this,i) == old(val);
-            forall i:int :: !(lower <= i < base) && WordAligned(i) &&
-                ValidMem(old(this),Address(i)) ==>
-                    addrval(this,i) == addrval(old(this),i);
+            forall i :: (lower <= i < base) && WordAligned(i)
+                ==> addrval(this,i) == old(val);
+            forall i :: !(lower <= i < limit) && ValidMem(old(this),Address(i))
+                ==> addrval(this,i) == addrval(old(this),i);
         decreases
             size - base;
     {
@@ -125,108 +275,148 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
     }
 }
 
+/* Register allocation for init_addrspace paths:
+ * r0 temp / err out
+ * r1 addrspace_pagenr in
+ * r2 l1pt_pagenr in
+ * r3 temp
+ * r4 addrspace_page pagedb entry offset
+ * r5 l1pt_page pagedb entry offset
+ * r6 addrspace monvaddr
+ * r7 l1pt paddr & monvaddr
+ * r12 pagedb global base
+ */
+
 procedure kev_smc_init_addrspace_success(
-    {:register op_r(1)} addrspace_page:int,
-    {:register op_r(2)} l1pt_page:int)
+    {:register OReg(R1)} addrspace_page:int,
+    {:register OReg(R2)} l1pt_page:int,
+    {:register OReg(R4)} addrspace_entry:int,
+    {:register OReg(R5)} l1pt_entry:int,
+    {:register OReg(R12)} pagedb_base:int,
+    ghost pagedb_in: PageDb) returns (ghost pagedb: PageDb)
     requires/ensures
         SaneState(this);
     requires
         addrspace_page != l1pt_page;
-        page_is_valid(addrspace_page);
-        page_is_valid(l1pt_page);
-        WordAligned(l1pt_page);
-        GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(addrspace_page)
-                             + PAGEDB_ENTRY_TYPE()) == KEV_PAGE_FREE();
-        GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
-                             + PAGEDB_ENTRY_TYPE()) == KEV_PAGE_FREE();
+        validPageNr(addrspace_page);
+        validPageNr(l1pt_page);
+        l1pt_page % 4 == 0;
+        addrspace_entry == G_PAGEDB_ENTRY(addrspace_page);
+        l1pt_entry == G_PAGEDB_ENTRY(l1pt_page);
+        pagedb_base == AddressOfGlobal(PageDb());
+        validPageDb(pagedb_in);
+        pageDbCorresponds(this, pagedb_in);
+        pageIsFree(pagedb_in, addrspace_page);
+        pageIsFree(pagedb_in, l1pt_page);
     ensures
         StackPreserving(old(this),this);
-
-        GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(addrspace_page)
-                             + PAGEDB_ENTRY_TYPE()) == KEV_PAGE_ADDRSPACE();
-        GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(addrspace_page)
-                             + PAGEDB_ENTRY_ADDRSPACE()) == page_monvaddr(this, addrspace_page);
-        GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
-                             + PAGEDB_ENTRY_TYPE()) == KEV_PAGE_L1PTABLE();
-        GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
-                             + PAGEDB_ENTRY_ADDRSPACE()) == page_monvaddr(this, addrspace_page);
-        addrval(this, ADDRSPACE_L1PT(page_monvaddr(this, addrspace_page))) == page_monvaddr(this, l1pt_page);
-        addrval(this, ADDRSPACE_L1PT_PHYS(page_monvaddr(this, addrspace_page))) == l1pt_page; 
-        addrval(this, ADDRSPACE_REF(page_monvaddr(this, addrspace_page))) == 1;
-        addrval(this, ADDRSPACE_STATE(page_monvaddr(this, addrspace_page))) == KEV_ADDRSPACE_INIT();
-        forall i:int :: (page_monvaddr(this, l1pt_page) <= i < page_monvaddr(this, l1pt_page) + KEVLAR_PAGE_SIZE()) &&
-            WordAligned(i) ==> addrval(this, i) == 0;
+        old(initAddrspace(pagedb_in, addrspace_page, l1pt_page)) == Pair(pagedb, KEV_ERR_SUCCESS());
+        pageDbCorresponds(this, pagedb);
+        validPageDb(pagedb);
 {
-    LDRglobaladdr(r11, PageDb());
+    pagedb := pagedb_in;
 
-    phys2monvaddr(addrspace_page,r9,r0);
-    phys2monvaddr(l1pt_page,r10,r0);
+    ghost var gaddrspace_entry := PageDbEntryTyped(addrspace_page, Addrspace(l1pt_page, 1, InitState));
+    ghost var gl1pt_entry := PageDbEntryTyped(addrspace_page, L1PTable(SeqRepeat(NR_L1PTES(), Nothing)));
 
-    r4 := sp_op_const(PAGEDB_ENTRY_SIZE());
-    MUL(r7,addrspace_page,r4);
-    assert r7 == G_PAGEDB_ENTRY(addrspace_page);
+    // compute addrs
+    page_monvaddr_impl(r6,addrspace_page,r0);
+    page_paddr_impl(r7,l1pt_page,r0);
 
-    //r4 := sp_op_const(PAGEDB_ENTRY_SIZE());
-    MUL(r8,l1pt_page,r4);
-    assert r8 == G_PAGEDB_ENTRY(l1pt_page);
+    /* Update addrspace page in memory */
+    STR(r7,r6,4);
+    assert addrval(this,ADDRSPACE_L1PT_PHYS(page_monvaddr(addrspace_page))) == page_paddr(l1pt_page);
 
-    r4 := sp_op_const(KEV_PAGE_ADDRSPACE());
-    STRglobal(r4, PageDb(), r11, r7);
-    assert GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(addrspace_page)
-                          + PAGEDB_ENTRY_TYPE()) == KEV_PAGE_ADDRSPACE();
-    r7 += sp_op_const(PAGEDB_ENTRY_ADDRSPACE());
-    STRglobal(r9, PageDb(), r11, r7);
-    assert GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(addrspace_page)
-                          + PAGEDB_ENTRY_ADDRSPACE()) == page_monvaddr(this, addrspace_page);
+    r7 += sp_op_const(KEVLAR_DIRECTMAP_VBASE());
+    assert r7 == page_monvaddr(l1pt_page);
+    STR(r7,r6,0);
+    assert addrval(this,ADDRSPACE_L1PT(page_monvaddr(addrspace_page))) == page_monvaddr(l1pt_page);
 
-    r4 := sp_op_const(KEV_PAGE_L1PTABLE());
-    STRglobal(r4, PageDb(), r11, r8);
-    assert GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
+    r0 := 1;
+    STR(r0,r6,8);
+    assert addrval(this,ADDRSPACE_REF(page_monvaddr(addrspace_page))) == 1;
+
+    r0 := sp_op_const(KEV_ADDRSPACE_INIT());
+    STR(r0,r6,12);
+    assert addrval(this,ADDRSPACE_STATE(page_monvaddr(addrspace_page))) == KEV_ADDRSPACE_INIT();
+
+    assert pageContentsCorresponds(addrspace_page, gaddrspace_entry,
+                                   extractPage(this, addrspace_page));
+    // NB: pageDb still corresponds because the page is marked free at this point
+    assert pageDbCorresponds(this, pagedb);
+
+    /* Update addrspace entry in PageDb */
+    r0 := sp_op_const(KEV_PAGE_ADDRSPACE());
+    assert r4 == G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_TYPE();
+    assert r12 == AddressOfGlobal(PageDb());
+    STRglobal(r0, PageDb(), r12, r4);
+    assert extractPageDbEntry(this, addrspace_page)[PAGEDB_ENTRY_TYPE()/BytesPerWord()]
+           == KEV_PAGE_ADDRSPACE();
+
+    r4 += sp_op_const(PAGEDB_ENTRY_ADDRSPACE());
+    assert r4 == G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_ADDRSPACE();
+    assert r6 == page_monvaddr(addrspace_page);
+    STRglobal(r6, PageDb(), r12, r4);
+    assert extractPageDbEntry(this, addrspace_page)[PAGEDB_ENTRY_ADDRSPACE()/BytesPerWord()]
+           == page_monvaddr(addrspace_page);
+    assert pageDbEntryCorresponds(addrspace_page, gaddrspace_entry,
+                                  extractPageDbEntry(this, addrspace_page));
+    assert pageContentsCorresponds(addrspace_page, gaddrspace_entry,
+                                   extractPage(this, addrspace_page));
+    assert pageDbCorrespondsExcluding(this, pagedb, addrspace_page);
+
+    pagedb := pagedb[addrspace_page := gaddrspace_entry];
+    assert pageDbCorrespondsOnly(this, pagedb, addrspace_page);
+    assert pageDbCorresponds(this, pagedb);
+
+    /* Update l1pt entry in pagedb */
+    r0 := sp_op_const(KEV_PAGE_L1PTABLE());
+    STRglobal(r0, PageDb(), r12, r5);
+    assert GlobalWord(this, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
                           + PAGEDB_ENTRY_TYPE()) == KEV_PAGE_L1PTABLE();
-    r8 += sp_op_const(PAGEDB_ENTRY_ADDRSPACE());
-    STRglobal(r9, PageDb(), r11, r8);
-    assert GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
-                          + PAGEDB_ENTRY_ADDRSPACE()) == page_monvaddr(this, addrspace_page);
+    r5 += sp_op_const(PAGEDB_ENTRY_ADDRSPACE());
+    //assert r6 == page_monvaddr(addrspace_page);
+    //assert r5 == G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_ADDRSPACE();
+    //assert r12 == AddressOfGlobal(PageDb());
+    STRglobal(r6, PageDb(), r12, r5);
+    assert GlobalWord(this, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
+                          + PAGEDB_ENTRY_ADDRSPACE()) == page_monvaddr(addrspace_page);
+    assert pageDbEntryCorresponds(l1pt_page, gl1pt_entry,
+                                  extractPageDbEntry(this, l1pt_page));
 
-    STR(r10,r9,0);
-    assert addrval(this,ADDRSPACE_L1PT(page_monvaddr(this, addrspace_page))) == page_monvaddr(this, l1pt_page);
-
-    STR(l1pt_page,r9,4);
-    assert addrval(this,ADDRSPACE_L1PT_PHYS(page_monvaddr(this, addrspace_page))) == l1pt_page;
-
-    r4 := 1;
-    STR(r4,r9,8);
-    assert addrval(this,ADDRSPACE_REF(page_monvaddr(this, addrspace_page))) == 1;
-   
-    r4 := sp_op_const(KEV_ADDRSPACE_INIT());
-    STR(r4,r9,12);
-    assert addrval(this,ADDRSPACE_STATE(page_monvaddr(this, addrspace_page))) == KEV_ADDRSPACE_INIT();
-  
-    r1 := sp_op_const(KEVLAR_PAGE_SIZE());
+    r3 := sp_op_const(KEVLAR_PAGE_SIZE());
     r0 := 0;
-    memset(r10,r0,r1); //page_monvaddr(this, l1pt_page)
+    memset(r7,r0,r3);
+
+    assert pageContentsCorresponds(l1pt_page, gl1pt_entry,
+                                   extractPage(this, l1pt_page));
+
+    pagedb := pagedb[l1pt_page := gl1pt_entry];
+    assert pageDbCorresponds(this, pagedb);
+    assert validPageDb(pagedb);
 }
 
 procedure kev_smc_init_addrspace(
-    {:register op_r(1)} addrspace_page:int,
-    {:register op_r(2)} l1pt_page:int,
-    out {:register op_r(0)} err:int)
+    {:register OReg(R1)} addrspace_page:int,
+    {:register OReg(R2)} l1pt_page:int,
+    out {:register OReg(R0)} err:int,
+    ghost pagedb_in: PageDb) returns (ghost pagedb: PageDb)
     requires/ensures
         SaneState(this);
+    requires
+        validPageDb(pagedb_in);
+        pageDbCorresponds(this, pagedb_in);
     ensures
         StackPreserving(old(this),this);
-        addrspace_page == l1pt_page ==>
-            err == KEV_ERR_INVALID_PAGENO();
-        !page_is_valid(addrspace_page) ==>
-            err == KEV_ERR_INVALID_PAGENO();
-        !page_is_valid(l1pt_page) ==>
-            err == KEV_ERR_INVALID_PAGENO();
-        !WordAligned(l1pt_page) ==>
-            err == KEV_ERR_INVALID_PAGENO();
+        old(initAddrspace(pagedb_in, addrspace_page, l1pt_page)) == Pair(pagedb, err);
+        pageDbCorresponds(this, pagedb);
+        validPageDb(pagedb);
 {
+    pagedb := pagedb_in;
+
     // check alignment of l1pt page
-    AND(r4,l1pt_page,3);
-    assert r4 == l1pt_page % 4;
+    AND(r0,l1pt_page,3);
+    assert r0 == l1pt_page % 4;
 
     if (addrspace_page == l1pt_page) {
         err := sp_op_const(KEV_ERR_INVALID_PAGENO());
@@ -234,48 +424,65 @@ procedure kev_smc_init_addrspace(
         err := sp_op_const(KEV_ERR_INVALID_PAGENO());
     } else if (l1pt_page >= sp_op_const(KEVLAR_SECURE_NPAGES())) {
         err := sp_op_const(KEV_ERR_INVALID_PAGENO());
-    } else if (r4 != 0) {
+    } else if (r0 != 0) {
         err := sp_op_const(KEV_ERR_INVALID_PAGENO());
     } else {
-        r4 := sp_op_const(PAGEDB_ENTRY_SIZE());
-        LDRglobaladdr(r6, PageDb());
-        MUL(r5,addrspace_page,r4); // addrspace_page * pagedb_entry_size
-        LDRglobal(r5, PageDb(), r6, r5);
-        assert r5 == GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_TYPE());
+        assert validPageNr(addrspace_page) && validPageNr(l1pt_page);
+        LDRglobaladdr(r12, PageDb());
+        r0 := sp_op_const(PAGEDB_ENTRY_SIZE());
+        MUL(r4,addrspace_page,r0);
+        assert r4 == G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_TYPE();
+        LDRglobal(r3, PageDb(), r12, r4);
+        assert r3 == pageDbEntryTypeVal(pagedb[addrspace_page]);
+        MUL(r5,l1pt_page,r0);
+        assert r5 == G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_TYPE();
+        LDRglobal(r0, PageDb(), r12, r5);
+        assert r0 == pageDbEntryTypeVal(pagedb[l1pt_page]);
 
-        MUL(r7,l1pt_page,r4); // l1pt_page * pagedb_entry_size
-        LDRglobal(r7, PageDb(), r6, r7);
-        assert r7 == GlobalContents(this, PageDb(), G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_TYPE());
+        // XXX: remind the verifier to think about our invariant
+        assert pageDbCorresponds(this, pagedb);
 
-        if( r5 != sp_op_const(KEV_PAGE_FREE()) ) {
+        if( r3 != sp_op_const(KEV_PAGE_FREE()) ) {
             err := sp_op_const(KEV_ERR_PAGEINUSE());
-        } else if( r7 != sp_op_const(KEV_PAGE_FREE()) ) {
+        } else if( r0 != sp_op_const(KEV_PAGE_FREE()) ) {
             err := sp_op_const(KEV_ERR_PAGEINUSE());
         } else {
-            kev_smc_init_addrspace_success(r1,r2);
-            
+            pagedb := kev_smc_init_addrspace_success(addrspace_page, l1pt_page,
+                                                     r4, r5, r12, pagedb);
+            assert pageDbCorresponds(this, pagedb);
             err := OConst(KEV_ERR_SUCCESS());
         }
     }
 }
 
 procedure smc_handler(
-    {:register op_r(0)} callno:int,
-    {:register op_r(1)} arg1:int,
-    {:register op_r(2)} arg2:int,
-    {:register op_r(3)} arg3:int,
-    {:register op_r(4)} arg4:int,
-    out {:register op_r(0)} err:int,
-    out {:register op_r(1)} retval:int)
+    {:register OReg(R0)} callno:int,
+    {:register OReg(R1)} arg1:int,
+    {:register OReg(R2)} arg2:int,
+    {:register OReg(R3)} arg3:int,
+    {:register OReg(R4)} arg4:int,
+    out {:register OReg(R0)} err:int,
+    out {:register OReg(R1)} retval:int,
+    ghost pagedb_in: PageDb) returns (ghost pagedb: PageDb)
     requires/ensures
         SaneState(this);
         StackBytesRemaining(this,120);
+    requires
+        validPageDb(pagedb_in);
+        pageDbCorresponds(this, pagedb_in);
     ensures
         NonvolatileRegPreserving(old(this),this);
+        validPageDb(pagedb);
+        pageDbCorresponds(this, pagedb);
 {
     ghost var stack_bytes := 120;
+    pagedb := pagedb_in;
 
     fcall_prologue(stack_bytes);
+
+    // XXX: remind the verifier to think about our invariants...
+    assert SaneState(this);
+    assert pageDbCorresponds(this, pagedb);
 
     retval := 0;
 
@@ -285,13 +492,20 @@ procedure smc_handler(
         retval := sp_op_const(KEVLAR_SECURE_NPAGES());
         err := sp_op_const(KEV_ERR_SUCCESS());
     } else if(callno == sp_op_const(KEV_SMC_INIT_ADDRSPACE())) {
-        kev_smc_init_addrspace(arg1, arg2, err);
+        pagedb := kev_smc_init_addrspace(arg1, arg2, err, pagedb);
+        assert pageDbCorresponds(this, pagedb);
+        retval := 0;
     }
 
-    // remind the verifier to think about our invariant...
+    // XXX: remind the verifier to think about our invariants...
     assert SaneState(this);
+    assert pageDbCorresponds(this, pagedb);
 
     fcall_epilogue(stack_bytes-40);
+
+    // XXX: remind the verifier to think about our invariants...
+    assert SaneState(this);
+    assert pageDbCorresponds(this, pagedb);
 
     // zero other volatiles to prevent information leakage
     r2 := 0;
@@ -304,6 +518,11 @@ procedure smc_handler(
 function method PageDb(): operand { op_sym("g_pagedb") }
 function method SecurePhysBase(): operand { op_sym("g_secure_physbase") }
 
+// the phys base is unknown, but never changes
+function {:axiom} SecurePhysBaseValue(): int
+    ensures 0 < SecurePhysBaseValue() <= KEVLAR_PHYSMEM_LIMIT() - KEVLAR_SECURE_RESERVE();
+    ensures WordAligned(SecurePhysBaseValue());
+
 function method MyGlobalDecls(): globaldecls
     ensures ValidGlobalDecls(MyGlobalDecls());
 {
@@ -315,9 +534,7 @@ predicate SaneGlobals(s:state)
 {
     MyGlobalDecls() == TheGlobalDecls()
         && ValidGlobalState(s)
-        && WordAligned(GlobalContents(s, SecurePhysBase(), 0))
-        && GlobalContents(s, SecurePhysBase(), 0)
-            <= KEVLAR_PHYSMEM_LIMIT() - KEVLAR_SECURE_RESERVE()
+        && GlobalFullContents(s, SecurePhysBase()) == [SecurePhysBaseValue()]
         // XXX: workaround so dafny sees that these are distinct
         && SecurePhysBase() != PageDb()
 }
@@ -325,17 +542,19 @@ predicate SaneGlobals(s:state)
 predicate SaneMemRanges(s:state)
 {
     ValidState(s) && SaneGlobals(s)
-    // our phys mapping must be valid to the top of the secure region
-    && ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE(),
-        (KEVLAR_DIRECTMAP_VBASE() + GlobalContents(s, SecurePhysBase(), 0)
-            + KEVLAR_SECURE_RESERVE()))
+    // TODO: our insecure phys mapping must be valid
+    //&& ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE(),
+    //    (KEVLAR_DIRECTMAP_VBASE() + MonitorPhysBaseValue()))
+    // our secure phys mapping must be valid
+    && ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE() + SecurePhysBaseValue(),
+        (KEVLAR_DIRECTMAP_VBASE() + SecurePhysBaseValue() + KEVLAR_SECURE_RESERVE()))
     // the stack must be mapped
     && ValidMemRange(s, StackLimit(), StackBase())
 }
 
 predicate SaneState(s:state)
 {
-    ValidState(s) && ValidStack(s) && SaneGlobals(s) && SaneMemRanges(s)
+    s.mod == Monitor && ValidState(s) && ValidStack(s) && SaneGlobals(s) && SaneMemRanges(s)
 }
 
 method Main()

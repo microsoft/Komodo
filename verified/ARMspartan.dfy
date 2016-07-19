@@ -370,7 +370,7 @@ lemma sp_lemma_LDRglobal(s:state, r:state, ok:bool,
     requires ValidGlobalOffset(g, OperandContents(s, ofs));
     requires AddressOfGlobal(g) == OperandContents(s, base);
     requires sp_eval(sp_code_LDRglobal(rd, g, base, ofs), s, r, ok);
-    ensures evalUpdate(s, rd, GlobalContents(s, g, OperandContents(s, ofs)), r, ok);
+    ensures evalUpdate(s, rd, GlobalWord(s, g, OperandContents(s, ofs)), r, ok);
     ensures isUInt32(OperandContents(r, rd));
 {
     reveal_sp_eval();

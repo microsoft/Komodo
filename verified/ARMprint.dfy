@@ -41,7 +41,19 @@ method printOperand(o:operand)
     match o
         case OConst(n) => print("#"); print(n);
         case OReg(r) => {match r
-            case R(n) => print("r"); print(n);
+            case R0 => print("r0");
+            case R1 => print("r1");
+            case R2 => print("r2");
+            case R3 => print("r3");
+            case R4 => print("r4");
+            case R5 => print("r5");
+            case R6 => print("r6");
+            case R7 => print("r7");
+            case R8 => print("r8");
+            case R9 => print("r9");
+            case R10 => print("r10");
+            case R11 => print("r11");
+            case R12 => print("r12");
             case SP(m) => print("XXX-badreg-bankedSP");
             case LR(m) => print("XXX-badreg-bankedLR");
         }

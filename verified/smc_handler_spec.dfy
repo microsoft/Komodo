@@ -19,6 +19,7 @@ function pageIsFree(d:PageDb, pg:PageNr) : bool
 
 // a points to an address space and it is closed
 predicate validAddrspacePage(d: PageDb, a: PageNr)
+    requires wellFormedPageDb(d)
 {
     isAddrspace(d, a) && d[a].entry.l1ptnr in d
 }
@@ -106,7 +107,7 @@ function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
     addrspacePage:PageNr, entry:PageDbEntryTyped) : smcReturn
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires closedRefsPageDbEntry(pageDbIn, entry)
+    requires closedRefsPageDbEntry(entry)
     requires !entry.L1PTable?
     requires !entry.Addrspace?
     requires entry.L2PTable? ==> entry.l2pt == []
@@ -229,7 +230,7 @@ function allocatePage(pageDbIn: PageDb, securePage: PageNr,
     addrspacePage:PageNr, entry:PageDbEntryTyped ) : smcReturn
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires closedRefsPageDbEntry(pageDbIn, entry)
+    requires closedRefsPageDbEntry(entry)
     requires !entry.L1PTable?
     requires !entry.Addrspace?
     requires entry.L2PTable? ==> entry.l2pt == []
@@ -273,22 +274,24 @@ lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
          // only kept for readability
          assert validPageDbEntry(pageDbOut, l1PTPage);
 
-         // Manual proof that the umodified pageDb entries are still valid. The only
-         // interesting case is for addrspaces other than the newly created one.
-         // Specifically, the only non-trivial aspect of validity is the reference
-         // count. Their references are not corrupted because the only touched
-         // pages only reference the newly created page.
-         ghost var otherAddrspaces := set n : PageNr
-            | 0 <= n < KEVLAR_SECURE_NPAGES()
-              && pageDbOut[n].PageDbEntryTyped?
-              && pageDbOut[n].entry.Addrspace?
-              && n != addrspacePage && n != l1PTPage;
-         assert forall n :: n in otherAddrspaces ==>
-             addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
-         // only kept for readability
-         assert forall n :: n in otherAddrspaces  ==>
-             validPageDbEntryTyped(pageDbOut, n);
 
+         // forall () ensures validPageDbEntry(pageDbOut, addrspacePage)
+         // {
+         //     var addrspace := pageDbOut[addrspacePage].entry;
+         //     assert addrspaceL1Unique(pageDbOut, addrspacePage);
+         //     assert addrspace.refcount == |addrspaceRefs(pageDbOut, addrspacePage)|;
+         //     assert validAddrspace(pageDbOut, addrspacePage);
+         // }
+
+         forall ( n | validPageNr(n)
+             && pageDbOut[n].PageDbEntryTyped?
+             && n != addrspacePage && n != l1PTPage)
+             ensures validPageDbEntryTyped(pageDbOut, n)
+         {
+             assert pageDbOut[n] == pageDbIn[n];
+             assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
+         }
+              
          assert pageDbEntriesValid(pageDbOut);
          assert validPageDb(pageDbOut);
     }
@@ -299,7 +302,7 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
     securePage: PageNr, addrspacePage: PageNr, entry: PageDbEntryTyped)
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires closedRefsPageDbEntry(pageDbIn, entry)
+    requires closedRefsPageDbEntry(entry)
     requires !entry.Addrspace?
     requires !entry.L1PTable?
     requires entry.L2PTable? ==> entry.l2pt == []
