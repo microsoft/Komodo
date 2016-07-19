@@ -1,4 +1,6 @@
 DAFNYFLAGS = /noNLarith /timeLimit:60 /trace
+SPARTANFLAGS = -assumeUpdates 1
+
 # NB: Spartan include paths are relative to the (generated) dfy file, not the CWD
 ARMSPARTAN_NAMES = ARMdef ARMprint ARMspartan
 ARMSPARTAN_DEPS = $(foreach n,$(ARMSPARTAN_NAMES),$(dir)/$(n).verified)
@@ -9,7 +11,7 @@ KEVLAR_INCLUDES = $(foreach n,$(KEVLAR_NAMES),-i $(n).dfy)
 SDFY_INCLUDES =  $(dir)/ARMdecls.sdfy $(dir)/fcall.sdfy
 
 %.gen.dfy: %.sdfy $(SDFY_INCLUDES) $(ARMSPARTAN_DEPS) $(KEVLAR_DEPS)
-	$(SPARTAN) $(SDFY_INCLUDES) $< -out $@ $(ARMSPARTAN_INCLUDES) $(KEVLAR_INCLUDES)
+	$(SPARTAN) $(SPARTANFLAGS) $(SDFY_INCLUDES) $< -out $@ $(ARMSPARTAN_INCLUDES) $(KEVLAR_INCLUDES)
 	which dos2unix >/dev/null && dos2unix $@ || true
 
 # We use .verified files as a timestamp/placeholder to indicate that
