@@ -64,7 +64,7 @@ function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
     addrspacePage:PageNr, entry:PageDbEntryTyped) : smcReturn
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires closedRefsPageDbEntry(pageDbIn, entry)
+    requires closedRefsPageDbEntry(entry)
     requires !entry.L1PTable?
     requires !entry.Addrspace?
     requires entry.L2PTable? ==> entry.l2pt == []
@@ -137,7 +137,7 @@ function allocatePage(pageDbIn: PageDb, securePage: PageNr,
     addrspacePage:PageNr, entry:PageDbEntryTyped ) : smcReturn
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires closedRefsPageDbEntry(pageDbIn, entry)
+    requires closedRefsPageDbEntry(entry)
     requires !entry.L1PTable?
     requires !entry.Addrspace?
     requires entry.L2PTable? ==> entry.l2pt == []
@@ -207,7 +207,7 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
     securePage: PageNr, addrspacePage: PageNr, entry: PageDbEntryTyped)
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires closedRefsPageDbEntry(pageDbIn, entry)
+    requires closedRefsPageDbEntry(entry)
     requires !entry.Addrspace?
     requires !entry.L1PTable?
     requires entry.L2PTable? ==> entry.l2pt == []

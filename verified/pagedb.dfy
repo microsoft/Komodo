@@ -44,6 +44,18 @@ predicate validPageDb(d: PageDb)
     && pageDbEntriesValid(d)
 }
 
+// this is a weak predicate that simply says the page number refs are valid
+predicate pageDbClosedRefs(d: PageDb)
+{
+    wellFormedPageDb(d) && (forall n :: (validPageNr(n) && d[n].PageDbEntryTyped?)
+        ==> (validPageNr(d[n].addrspace) && closedRefsPageDbEntry(d[n].entry)))
+}
+
+lemma validPageDbImpliesClosedRefs(d: PageDb)
+    requires validPageDb(d)
+    ensures pageDbClosedRefs(d)
+{}
+
 predicate pageDbEntriesValid(d:PageDb)
     requires wellFormedPageDb(d)
 {
@@ -78,7 +90,7 @@ predicate validPageDbEntryTyped(d: PageDb, n: PageNr)
     requires n in d && d[n].PageDbEntryTyped?
 {
     var e := d[n].entry;
-    closedRefsPageDbEntry(d, e) && pageDbEntryOk(d, n)
+    closedRefsPageDbEntry(e) && pageDbEntryOk(d, n)
 }
 
 predicate isAddrspace(d: PageDb, n: PageNr)
@@ -194,31 +206,31 @@ predicate validL2PTE(d: PageDb, pte: PageNr)
         && d[pte].entry.DataPage?
 }
 
-predicate closedRefsPageDbEntry(d: PageDb, e: PageDbEntryTyped)
+predicate closedRefsPageDbEntry(e: PageDbEntryTyped)
 {
-    (e.Addrspace? && e.l1ptnr in d )
-    || (e.L1PTable? && closedRefsL1PTable(d, e))
-    || (e.L2PTable? && closedRefsL2PTable(d, e))
+    (e.Addrspace? && validPageNr(e.l1ptnr) )
+    || (e.L1PTable? && closedRefsL1PTable(e))
+    || (e.L2PTable? && closedRefsL2PTable(e))
     || (e.Dispatcher? )
     || (e.DataPage? )
 }
 
-predicate closedRefsL1PTable(d: PageDb, e: PageDbEntryTyped)
+predicate closedRefsL1PTable(e: PageDbEntryTyped)
     requires e.L1PTable?
 {
     var l1pt := e.l1pt;
     |l1pt| == NR_L1PTES()
-    && forall pte :: pte in l1pt && pte.Just? ==> fromJust(pte) in d
+    && forall pte :: pte in l1pt && pte.Just? ==> validPageNr(fromJust(pte))
 }
 
-predicate closedRefsL2PTable(d: PageDb, e: PageDbEntryTyped)
+predicate closedRefsL2PTable(e: PageDbEntryTyped)
     requires e.L2PTable?
 {
     var l2pt := e.l2pt;
     |l2pt| == NR_L2PTES()
     && forall pte :: pte in l2pt ==> (match pte
-        case SecureMapping(p, w, e) => p in d
-        case InsecureMapping(p) => p in d
+        case SecureMapping(p, w, e) => validPageNr(p)
+        case InsecureMapping(p) => true
         case NoMapping => true)
 }
 
