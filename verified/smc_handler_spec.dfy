@@ -292,7 +292,7 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
                 assert pageDbOut[n] == pageDbIn[n];
 
                 
-                forall () ensures pageDbEntryWellTypedAddrspace(d, n){
+                forall () ensures pageDbEntryOk(d, n){
                   
                     // This is a proof that the addrspace of n is still an addrspace
                     //
