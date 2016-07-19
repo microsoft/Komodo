@@ -489,8 +489,11 @@ predicate SaneGlobals(s:state)
 predicate SaneMemRanges(s:state)
 {
     ValidState(s) && SaneGlobals(s)
-    // our phys mapping must be valid to the top of the secure region
-    && ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE(),
+    // TODO: our insecure phys mapping must be valid
+    //&& ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE(),
+    //    (KEVLAR_DIRECTMAP_VBASE() + MonitorPhysBaseValue()))
+    // our secure phys mapping must be valid
+    && ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE() + SecurePhysBaseValue(),
         (KEVLAR_DIRECTMAP_VBASE() + SecurePhysBaseValue() + KEVLAR_SECURE_RESERVE()))
     // the stack must be mapped
     && ValidMemRange(s, StackLimit(), StackBase())
