@@ -17,6 +17,12 @@ function pageIsFree(d:PageDb, pg:PageNr) : bool
     requires pg in d;
     { d[pg].PageDbEntryFree? }
 
+// a points to an address space and it is closed
+predicate validAddrspacePage(d: PageDb, a: PageNr)
+{
+    isAddrspace(d, a) && d[a].entry.l1ptnr in d
+}
+
 //a============================================================================
 // Behavioral Specification of Monitor Calls
 //=============================================================================
@@ -48,7 +54,7 @@ function initDispatcher_inner(pageDbIn: PageDb, page:PageNr, addrspacePage:PageN
 {
    var n := page;
    var d := pageDbIn;
-   if(!validAddrspacePage(pageDbIn, addrspacePage)) then
+   if(!isAddrspace(pageDbIn, addrspacePage)) then
        Pair(pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
    else
        allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false))
@@ -58,7 +64,7 @@ function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
     addrspacePage:PageNr, entry:PageDbEntryTyped) : smcReturn
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires wellFormedPageDbEntry(pageDbIn, entry)
+    requires closedRefsPageDbEntry(pageDbIn, entry)
     requires !entry.L1PTable?
     requires !entry.Addrspace?
     requires entry.L2PTable? ==> entry.l2pt == []
@@ -131,7 +137,7 @@ function allocatePage(pageDbIn: PageDb, securePage: PageNr,
     addrspacePage:PageNr, entry:PageDbEntryTyped ) : smcReturn
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires wellFormedPageDbEntry(pageDbIn, entry)
+    requires closedRefsPageDbEntry(pageDbIn, entry)
     requires !entry.L1PTable?
     requires !entry.Addrspace?
     requires entry.L2PTable? ==> entry.l2pt == []
@@ -201,7 +207,7 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
     securePage: PageNr, addrspacePage: PageNr, entry: PageDbEntryTyped)
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires wellFormedPageDbEntry(pageDbIn, entry)
+    requires closedRefsPageDbEntry(pageDbIn, entry)
     requires !entry.Addrspace?
     requires !entry.L1PTable?
     requires entry.L2PTable? ==> entry.l2pt == []
@@ -266,7 +272,7 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
                 assert addrspaceRefs(pageDbOut, addrspacePage) == oldRefs - {page};
                 assert addrspace.refcount == |addrspaceRefs(pageDbOut, addrspacePage)|;
                 
-                assert validAddrspace(pageDbOut, addrspace);
+                //assert validAddrspace(pageDbOut, addrspace);
                 assert validAddrspacePage(pageDbOut, addrspacePage);
             }
         }
