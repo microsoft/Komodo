@@ -43,6 +43,7 @@ function updateL2Pte(pageDbIn: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
     var l1 := pageDbIn[addrspace.l1ptnr].entry;
     var l1pte := fromJust(l1.l1pt[mapping.l1index]);
     var l2pt := pageDbIn[l1pte].entry.l2pt;
+    validPageDbImpliesClosedRefs(pageDbIn);
     pageDbIn[ l1pte := PageDbEntryTyped(a, L2PTable(l2pt[mapping.l2index := l2e])) ]
 
 }
@@ -57,7 +58,8 @@ function isValidMappingTarget(d: PageDb, a: PageNr, mapping: Mapping)
     if(!addrspace.state.InitState?) then
         KEV_ERR_ALREADY_FINAL()
     else if(!mapping.perm.r) then KEV_ERR_INVALID_MAPPING()
-    else if(!(0 <= mapping.l1index < 256) || !(0 <= mapping.l2index < 1024) ) then
+    else if(!(0 <= mapping.l1index < NR_L1PTES())
+        || !(0 <= mapping.l2index < NR_L2PTES()) ) then
         KEV_ERR_INVALID_MAPPING()
     else
         var l1 := d[addrspace.l1ptnr].entry;
@@ -176,7 +178,7 @@ predicate physPageIsSecure( physPage: int )
         page_paddr(KEVLAR_SECURE_NPAGES())
 }
 
-function mapSecure(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
+function mapSecure_inner(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
     mapping: Mapping, physPage: int) : smcReturn
     requires validPageDb(pageDbIn)
     requires validPageNr(page)
@@ -198,7 +200,7 @@ function mapSecure(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
                 if(errA != KEV_ERR_SUCCESS()) then Pair(pageDbIn, errA)
                 else
                     var l2pte := SecureMapping(page, mapping.perm.w, mapping.perm.x);
-                    var pageDbOut := updateL2Pte(pageDbIn, addrspacePage, mapping, l2pte);
+                    var pageDbOut := updateL2Pte(pageDbA, addrspacePage, mapping, l2pte);
                     Pair(pageDbOut, KEV_ERR_SUCCESS())
 }
 
@@ -246,6 +248,17 @@ function remove(pageDbIn: PageDb, page: PageNr) : smcReturn
 {
     removePreservesPageDBValidity(pageDbIn, page);
     remove_inner(pageDbIn, page)
+}
+
+function mapSecure(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
+    mapping: Mapping, physPage: int) : smcReturn
+    requires validPageDb(pageDbIn)
+    requires validPageNr(page)
+    requires validPageNr(addrspacePage)
+    ensures  validPageDb(pagedbFrmRet(mapSecure(pageDbIn, page, addrspacePage, mapping, physPage)))
+{
+    mapSecurePreservesPageDBValidity(pageDbIn, page, addrspacePage, mapping, physPage);
+    mapSecure_inner(pageDbIn, page, addrspacePage, mapping, physPage)
 }
 
 //=============================================================================
@@ -422,3 +435,45 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
     }
 }
 
+lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
+    mapping: Mapping, physPage: int)
+    requires validPageDb(pageDbIn)
+    requires validPageNr(page)
+    requires validPageNr(addrspacePage)
+    ensures  validPageDb(pagedbFrmRet(
+        mapSecure_inner(pageDbIn, page, addrspacePage, mapping, physPage)))
+{
+    var pageDbOut := pagedbFrmRet(mapSecure_inner(
+        pageDbIn, page, addrspacePage, mapping, physPage));
+    var err := errFrmRet(mapSecure_inner(
+        pageDbIn, page, addrspacePage, mapping, physPage));
+
+    if( err != KEV_ERR_SUCCESS() ){
+    } else {
+        assert validPageDbEntryTyped(pageDbOut, page);
+        
+        var pageDbA := pagedbFrmRet(allocatePage(pageDbIn, page,
+            addrspacePage, DataPage));
+       
+        forall() ensures validPageDbEntryTyped(pageDbOut, addrspacePage){
+            var a := addrspacePage;
+            assert pageDbOut[a].entry.refcount == pageDbA[a].entry.refcount;
+            assert addrspaceRefs(pageDbOut, a) == addrspaceRefs(pageDbA, a);
+        }
+
+        forall( n | validPageNr(n)
+            && pageDbOut[n].PageDbEntryTyped?
+            && n != page && n != addrspacePage)
+            ensures validPageDbEntryTyped(pageDbOut, n);
+        {
+            if( pageDbOut[n].entry.Addrspace? ){
+                assert pageDbOut[n].entry.refcount == pageDbA[n].entry.refcount;
+                assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbA, n);
+            } else {
+                // trivial
+            }
+        }
+    }
+
+
+}
