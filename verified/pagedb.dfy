@@ -149,7 +149,7 @@ predicate addrspaceL1Unique(d: PageDb, n: PageNr)
 {
     var a := d[n].entry;
     a.l1ptnr in d &&
-    forall p :: p in d && p != a.l1ptnr &&
+    forall p :: validPageNr(p) && p != a.l1ptnr &&
         d[p].PageDbEntryTyped? && d[p].addrspace == n ==>
         !d[p].entry.L1PTable?
 }
