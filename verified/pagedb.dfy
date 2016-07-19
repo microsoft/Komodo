@@ -96,7 +96,10 @@ predicate validPageDbEntryTyped(d: PageDb, n: PageNr)
 }
 
 predicate isAddrspace(d: PageDb, n: PageNr)
-    { n in d && d[n].PageDbEntryTyped? && d[n].entry.Addrspace? }
+    requires wellFormedPageDb(d)
+{
+    validPageNr(n) && d[n].PageDbEntryTyped? && d[n].entry.Addrspace?
+}
 
 // The addrspace of the thing pointed to by n is stopped
 predicate stoppedAddrspace(d: PageDb, n: PageNr)

@@ -19,6 +19,7 @@ function pageIsFree(d:PageDb, pg:PageNr) : bool
 
 // a points to an address space and it is closed
 predicate validAddrspacePage(d: PageDb, a: PageNr)
+    requires wellFormedPageDb(d)
 {
     isAddrspace(d, a) && d[a].entry.l1ptnr in d
 }
@@ -187,7 +188,7 @@ lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
          // count. Their references are not corrupted because the only touched
          // pages only reference the newly created page.
          ghost var otherAddrspaces := set n : PageNr
-            | 0 <= n < KEVLAR_SECURE_NPAGES()
+            | validPageNr(n) && 0 <= n < KEVLAR_SECURE_NPAGES()
               && pageDbOut[n].PageDbEntryTyped?
               && pageDbOut[n].entry.Addrspace?
               && n != addrspacePage && n != l1PTPage;
