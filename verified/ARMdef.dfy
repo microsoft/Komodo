@@ -181,7 +181,7 @@ predicate ValidRegState(s:state)
 
 predicate ValidMemState(s:state)
 {
-    forall m:mem :: m in s.addresses ==> WordAligned(m.addr) && isUInt32(s.addresses[m])
+    forall m:mem :: m in s.addresses ==> WordAligned(m.addr) && isUInt32(m.addr) && isUInt32(s.addresses[m])
 }
 
 predicate ValidGlobalState(s:state)
@@ -208,7 +208,7 @@ predicate ValidOperand(s:state, o:operand)
 
 predicate ValidMem(s:state, m:mem)
 {
-    WordAligned(m.addr) && m in s.addresses
+    isUInt32(m.addr) && WordAligned(m.addr) && m in s.addresses
 }
 
 predicate ValidMemRange(s:state, base:int, limit:int)
