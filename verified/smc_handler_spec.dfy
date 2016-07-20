@@ -2,17 +2,6 @@ include "kev_constants.dfy"
 include "Maybe.dfy"
 include "pagedb.dfy"
 
-//=============================================================================
-// Utilities
-//=============================================================================
-// datatype smcReturn = (pageDbOut: PageDb, err: int)
-// 
-// function pagedbFrmRet(ret:smcReturn): PageDb
-//     { match ret case (p,e) => p }
-// 
-// function errFrmRet(ret:smcReturn): int 
-//     { match ret case (p,e) => e }
-
 function pageIsFree(d:PageDb, pg:PageNr) : bool
     requires pg in d;
     { d[pg].PageDbEntryFree? }
@@ -24,9 +13,6 @@ predicate validAddrspacePage(d: PageDb, a: PageNr)
     isAddrspace(d, a) && d[a].entry.l1ptnr in d
 }
 
-//=============================================================================
-// These go somewhere else??? Or need a better name ??
-//=============================================================================
 function page_paddr(p: PageNr) : int
 {
     G_SECURE_PHYSBASE() + p * KEVLAR_PAGE_SIZE()
@@ -49,6 +35,18 @@ predicate physPageIsSecure( physPage: int )
     G_SECURE_PHYSBASE() <= paddr < G_SECURE_PHYSBASE() +
         page_paddr(KEVLAR_SECURE_NPAGES())
 }
+
+predicate l1indexInUse(d: PageDb, a: PageNr, l1index: int)
+    requires validPageDb(d)
+    requires isAddrspace(d, a)
+    requires d[a].entry.state != StoppedState
+    requires 0 <= l1index < NR_L1PTES()
+{
+    var l1ptnr := d[a].entry.l1ptnr;
+    var l1 := d[l1ptnr].entry.l1pt;
+    l1[l1index].Just?
+}
+
 //=============================================================================
 // Mapping
 //=============================================================================
@@ -130,16 +128,6 @@ function initDispatcher_inner(pageDbIn: PageDb, page:PageNr, addrspacePage:PageN
        allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false))
 }
 
-predicate l1indexInUse(d: PageDb, a: PageNr, l1index: int)
-    requires validPageDb(d)
-    requires isAddrspace(d, a)
-    requires d[a].entry.state != StoppedState
-    requires 0 <= l1index < NR_L1PTES()
-{
-    var l1ptnr := d[a].entry.l1ptnr;
-    var l1 := d[l1ptnr].entry.l1pt;
-    l1[l1index].Just?
-}
 
 function initL2PTable_inner(pageDbIn: PageDb, page: PageNr,
     addrspacePage: PageNr, l1index: int) : (PageDb, int)
@@ -280,6 +268,27 @@ function finalise_inner(pageDbIn: PageDb, addrspacePage: PageNr) : (PageDb, int)
         (pageDbOut, KEV_ERR_SUCCESS())
 }
 
+function enter_inner(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, arg3: int)
+    : (PageDb, int)
+    requires validPageDb(pageDbIn)
+{
+    var d := pageDbIn; var p := dispPage;
+    if(!(validPageNr(p) && d[p].PageDbEntryTyped? && d[p].entry.Dispatcher?)) then
+        (pageDbIn, KEV_ERR_INVALID_PAGENO())
+    else if(var a := d[p].addrspace; d[a].entry.state != FinalState) then
+        (pageDbIn, KEV_ERR_NOT_FINAL())
+    else if(d[p].entry.entered) then
+        (pageDbIn, KEV_ERR_ALREADY_ENTERED())
+    else
+        // A model of registers is needed to model more.
+        // For now all this does is change the dispatcher.
+        var a := d[p].addrspace;
+        var pageDbOut := match d[p].entry 
+                case Dispatcher(entrypoint, entered) => 
+                    d[p := PageDbEntryTyped(a,Dispatcher(entrypoint,true))];
+        (pageDbOut, KEV_ERR_SUCCESS())
+}
+
 //=============================================================================
 // Hoare Specification of Monitor Calls
 //=============================================================================
@@ -364,6 +373,15 @@ function finalise(pageDbIn: PageDb, addrspacePage: PageNr) : (PageDb, int)
     finalise_inner(pageDbIn, addrspacePage)
 }
 
+function enter(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, arg3: int)
+    : (PageDb, int)
+    requires validPageDb(pageDbIn) 
+    ensures validPageDb(enter(pageDbIn, dispPage, arg1, arg2, arg3).0)
+{
+    enterPreservesPageDbValidity(pageDbIn, dispPage, arg1, arg2, arg3);
+    enter_inner(pageDbIn, dispPage, arg1, arg2, arg3)
+}
+
 //=============================================================================
 // Properties of Monitor Calls
 //=============================================================================
@@ -389,15 +407,6 @@ lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
          assert addrspaceRefs(pageDbOut, addrspacePage) == {l1PTPage};
          // only kept for readability
          assert validPageDbEntry(pageDbOut, l1PTPage);
-
-
-         // forall () ensures validPageDbEntry(pageDbOut, addrspacePage)
-         // {
-         //     var addrspace := pageDbOut[addrspacePage].entry;
-         //     assert addrspaceL1Unique(pageDbOut, addrspacePage);
-         //     assert addrspace.refcount == |addrspaceRefs(pageDbOut, addrspacePage)|;
-         //     assert validAddrspace(pageDbOut, addrspacePage);
-         // }
 
          forall ( n | validPageNr(n)
              && pageDbOut[n].PageDbEntryTyped?
@@ -631,6 +640,24 @@ lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr)
 
         forall ( n | validPageNr(n) && n != a )
             ensures validPageDbEntry(pageDbOut, n);
+    }
+}
 
+lemma enterPreservesPageDbValidity(pageDbIn: PageDb, dispPage: PageNr,
+    arg1: int, arg2: int, arg3: int)
+    requires validPageDb(pageDbIn) 
+    ensures validPageDb(enter_inner(pageDbIn, dispPage, arg1, arg2, arg3).0)
+{
+    var pageDbOut := enter_inner(pageDbIn, dispPage, arg1, arg2, arg3).0;
+    var err := enter_inner(pageDbIn, dispPage, arg1, arg2, arg3).1;
+
+    if( err != KEV_ERR_SUCCESS() ){
+    } else {
+        var a := pageDbOut[dispPage].addrspace;
+        assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
+        assert addrspaceRefs(pageDbOut, a) == addrspaceRefs(pageDbIn, a);
+
+        forall ( n | validPageNr(n) && n != a )
+            ensures validPageDbEntry(pageDbOut, n);
     }
 }

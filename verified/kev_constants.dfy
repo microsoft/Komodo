@@ -29,6 +29,7 @@ function method KEV_ERR_NOT_FINAL():int          { 5 }
 function method KEV_ERR_INVALID_MAPPING():int    { 6 }
 function method KEV_ERR_ADDRINUSE():int          { 7 }
 function method KEV_ERR_NOT_STOPPED():int        { 8 }
+function method KEV_ERR_ALREADY_ENTERED():int    { 9 }
 function method KEV_ERR_INVALID():int            { 0x1_0000_0000 }
 
 //-----------------------------------------------------------------------------
