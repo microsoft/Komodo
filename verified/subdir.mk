@@ -1,5 +1,5 @@
 DAFNYFLAGS = /noNLarith /timeLimit:60 /trace
-SPARTANFLAGS = -assumeUpdates 1
+SPARTANFLAGS = #-assumeUpdates 1
 
 # NB: Spartan include paths are relative to the (generated) dfy file, not the CWD
 ARMSPARTAN_NAMES = ARMdef ARMprint ARMspartan
