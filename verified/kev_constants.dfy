@@ -13,6 +13,7 @@ function method KEV_SMC_MAP_INSECURE():int    { 14 }
 function method KEV_SMC_REMOVE():int          { 20 }
 function method KEV_SMC_FINALISE():int        { 21 }
 function method KEV_SMC_ENTER():int           { 22 }
+function method KEV_SMC_RESUME():int          { 23 }
 function method KEV_SMC_STOP():int            { 29 }
 
 //-----------------------------------------------------------------------------

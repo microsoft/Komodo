@@ -53,6 +53,11 @@ predicate l1indexInUse(d: PageDb, a: PageNr, l1index: int)
 datatype Mapping = Mapping(l1index: PageNr, l2index: PageNr, perm: Perm)
 datatype Perm = Perm(r: bool, w: bool, x: bool)
 
+function {:opaque} intToMapping(arg: int) : Mapping
+{
+    Mapping(1,1,Perm(false,false,false))
+}
+
 function updateL2Pte(pageDbIn: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
     : PageDb 
     requires validPageDb(pageDbIn)
@@ -208,8 +213,6 @@ function remove_inner(pageDbIn: PageDb, page: PageNr)
 function mapSecure_inner(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
     mapping: Mapping, physPage: int) : (PageDb, int) // PageDbOut, KEV_ERR
     requires validPageDb(pageDbIn)
-    requires validPageNr(page)
-    requires validPageNr(addrspacePage)
 {
     if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
@@ -237,7 +240,6 @@ function mapSecure_inner(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
 function mapInsecure_inner(pageDbIn: PageDb, addrspacePage: PageNr,
     physPage: int, mapping : Mapping) : (PageDb, int)
     requires validPageDb(pageDbIn)
-    requires validPageNr(addrspacePage)
 {
     if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
@@ -289,7 +291,7 @@ function enter_inner(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, a
         (pageDbOut, KEV_ERR_SUCCESS())
 }
 
-function resume_inner(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, arg3: int)
+function resume_inner(pageDbIn: PageDb, dispPage: PageNr)
     : (PageDb, int)
     requires validPageDb(pageDbIn)
 {
@@ -310,10 +312,72 @@ function resume_inner(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, 
         (pageDbOut, KEV_ERR_SUCCESS())
 }
 
+function stop_inner(pageDbIn: PageDb, addrspacePage: PageNr)
+    : (PageDb, int)
+    requires validPageDb(pageDbIn)
+{
+    if(!isAddrspace(pageDbIn, addrspacePage)) then
+        (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
+    // else if(pageDbIn[addrspacePage].entry.state == InitState) then
+    //     (pageDbIn, KEV_ERR_ALREADY_FINAL())
+    else
+        var addrspace := pageDbIn[addrspacePage].entry;
+        var updatedAddrspace := match addrspace
+            case Addrspace(l1, ref, state) => Addrspace(l1, ref, StoppedState);
+        var pageDbOut := pageDbIn[
+            addrspacePage := PageDbEntryTyped(addrspacePage, updatedAddrspace)];
+        (pageDbOut, KEV_ERR_SUCCESS())
+}
+
+//=============================================================================
+// Behavioral Specification of SMC Handler
+//=============================================================================
+function smchandler_inner(pageDbIn: PageDb, callno: int, arg1: int, arg2: int,
+    arg3: int, arg4: int) : (PageDb, int, int) // pageDbOut, err, val
+    requires validPageDb(pageDbIn)
+{
+    if(callno == KEV_SMC_QUERY()) then (pageDbIn, KEV_MAGIC(), 0)
+    else if(callno == KEV_SMC_GETPHYSPAGES()) then
+        (pageDbIn, KEV_ERR_SUCCESS(), KEVLAR_SECURE_NPAGES())
+    else if(callno == KEV_SMC_INIT_ADDRSPACE()) then
+        var ret := initAddrspace(pageDbIn, arg1, arg2);
+        (ret.0, ret.1, 0)
+    else if(callno == KEV_SMC_INIT_DISPATCHER()) then
+        var ret := initDispatcher(pageDbIn, arg1, arg2, arg3);
+        (ret.0, ret.1, 0)
+    else if(callno == KEV_SMC_INIT_L2PTABLE()) then
+        var ret := initL2PTable(pageDbIn, arg1, arg2, arg3);
+        (ret.0, ret.1, 0)
+    else if(callno == KEV_SMC_MAP_SECURE()) then
+        var ret := mapSecure(pageDbIn, arg1, arg2, intToMapping(arg3), arg4);
+        (ret.0, ret.1, 0)
+    else if(callno == KEV_SMC_MAP_INSECURE()) then
+        var ret := mapInsecure(pageDbIn, arg1, arg2, intToMapping(arg3));
+        (ret.0, ret.1, 0)
+    else if(callno == KEV_SMC_REMOVE()) then
+        var ret := remove(pageDbIn, arg1);
+        (ret.0, ret.1, 0)
+    else if(callno == KEV_SMC_FINALISE()) then
+        var ret := finalise(pageDbIn, arg1);
+        (ret.0, ret.1, 0)
+    else if(callno == KEV_SMC_ENTER()) then
+        var ret := enter(pageDbIn, arg1, arg2, arg3, arg4);
+        (ret.0, ret.1, 0)
+    else if(callno == KEV_SMC_RESUME()) then
+        var ret := resume(pageDbIn, arg1);
+        (ret.0, ret.1, 0)
+    else if(callno == KEV_SMC_STOP()) then
+        var ret := stop(pageDbIn, arg1);
+        (ret.0, ret.1, 0)
+    else (pageDbIn, KEV_ERR_INVALID(), 0)
+}
+
 //=============================================================================
 // Hoare Specification of Monitor Calls
 //=============================================================================
-// (i.e. specs with postconditions)
+function query() : int { KEV_MAGIC() }
+
+function getPhysPages() : int { KEVLAR_SECURE_NPAGES() }
 
 function initAddrspace(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr)
     : (PageDb, int) // PageDbOut, KEV_ERR
@@ -368,8 +432,6 @@ function remove(pageDbIn: PageDb, page: PageNr) : (PageDb, int) // PageDbOut, KE
 function mapSecure(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
     mapping: Mapping, physPage: int) : (PageDb, int) // PageDbOut, KEV_ERR
     requires validPageDb(pageDbIn)
-    requires validPageNr(page)
-    requires validPageNr(addrspacePage)
     ensures  validPageDb(mapSecure(pageDbIn, page, addrspacePage, mapping, physPage).0)
 {
     mapSecurePreservesPageDBValidity(pageDbIn, page, addrspacePage, mapping, physPage);
@@ -379,7 +441,6 @@ function mapSecure(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
 function mapInsecure(pageDbIn: PageDb, addrspacePage: PageNr,
     physPage: int, mapping : Mapping) : (PageDb, int)
     requires validPageDb(pageDbIn)
-    requires validPageNr(addrspacePage)
     ensures  validPageDb(mapInsecure(pageDbIn, addrspacePage, physPage, mapping).0)
 {
     mapInsecurePreservesPageDbValidity(pageDbIn, addrspacePage, physPage, mapping);
@@ -403,13 +464,30 @@ function enter(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, arg3: i
     enter_inner(pageDbIn, dispPage, arg1, arg2, arg3)
 }
 
-function resume(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, arg3: int)
+function resume(pageDbIn: PageDb, dispPage: PageNr)
     : (PageDb, int)
     requires validPageDb(pageDbIn) 
-    ensures validPageDb(resume(pageDbIn, dispPage, arg1, arg2, arg3).0)
+    ensures validPageDb(resume(pageDbIn, dispPage).0)
 {
-    resumePreservesPageDbValidity(pageDbIn, dispPage, arg1, arg2, arg3);
-    resume_inner(pageDbIn, dispPage, arg1, arg2, arg3)
+    resumePreservesPageDbValidity(pageDbIn, dispPage);
+    resume_inner(pageDbIn, dispPage)
+}
+
+function stop(pageDbIn: PageDb, addrspacePage: PageNr)
+    : (PageDb, int)
+    requires validPageDb(pageDbIn)
+    ensures  validPageDb(stop(pageDbIn, addrspacePage).0)
+{
+    stopPreservesPageDbValidity(pageDbIn, addrspacePage);
+    stop_inner(pageDbIn, addrspacePage)
+}
+
+function smchandler(pageDbIn: PageDb, callno: int, arg1: int, arg2: int,
+    arg3: int, arg4: int) : (PageDb, int, int) // pageDbOut, err, val
+    requires validPageDb(pageDbIn)
+    ensures validPageDb(smchandler(pageDbIn, callno, arg1, arg2, arg3, arg4).0)
+{
+    smchandler_inner(pageDbIn, callno, arg1, arg2, arg3, arg4)
 }
 
 //=============================================================================
@@ -581,8 +659,6 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
 lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
     mapping: Mapping, physPage: int)
     requires validPageDb(pageDbIn)
-    requires validPageNr(page)
-    requires validPageNr(addrspacePage)
     ensures  validPageDb(mapSecure_inner(pageDbIn, page, addrspacePage,
         mapping, physPage).0)
 {
@@ -623,7 +699,6 @@ lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr, addrspace
 lemma mapInsecurePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr,
     physPage: int, mapping : Mapping)
     requires validPageDb(pageDbIn)
-    requires validPageNr(addrspacePage)
     ensures  validPageDb(mapInsecure_inner(pageDbIn, addrspacePage, physPage, mapping).0)
 {
     var pageDbOut := mapInsecure_inner(
@@ -691,17 +766,34 @@ lemma enterPreservesPageDbValidity(pageDbIn: PageDb, dispPage: PageNr,
     }
 }
 
-lemma resumePreservesPageDbValidity(pageDbIn: PageDb, dispPage: PageNr,
-    arg1: int, arg2: int, arg3: int)
+lemma resumePreservesPageDbValidity(pageDbIn: PageDb, dispPage: PageNr)
     requires validPageDb(pageDbIn) 
-    ensures validPageDb(resume_inner(pageDbIn, dispPage, arg1, arg2, arg3).0)
+    ensures validPageDb(resume_inner(pageDbIn, dispPage).0)
 {
-    var pageDbOut := resume_inner(pageDbIn, dispPage, arg1, arg2, arg3).0;
-    var err := resume_inner(pageDbIn, dispPage, arg1, arg2, arg3).1;
+    var pageDbOut := resume_inner(pageDbIn, dispPage).0;
+    var err := resume_inner(pageDbIn, dispPage).1;
 
     if( err != KEV_ERR_SUCCESS() ){
     } else {
         var a := pageDbOut[dispPage].addrspace;
+        assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
+        assert addrspaceRefs(pageDbOut, a) == addrspaceRefs(pageDbIn, a);
+
+        forall ( n | validPageNr(n) && n != a )
+            ensures validPageDbEntry(pageDbOut, n);
+    }
+}
+
+lemma stopPreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr)
+    requires validPageDb(pageDbIn)
+    ensures  validPageDb(stop_inner(pageDbIn, addrspacePage).0)
+{
+    var pageDbOut := stop_inner(pageDbIn, addrspacePage).0;
+    var err := stop_inner(pageDbIn, addrspacePage).1;
+
+    if( err != KEV_ERR_SUCCESS() ){
+    } else {
+        var a := addrspacePage;
         assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
         assert addrspaceRefs(pageDbOut, a) == addrspaceRefs(pageDbIn, a);
 
