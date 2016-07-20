@@ -146,9 +146,16 @@ function initL2PTable_inner(pageDbIn: PageDb, page: PageNr,
     requires validPageDb(pageDbIn)
 {
     if(!(0<= l1index < NR_L1PTES())) then (pageDbIn, KEV_ERR_INVALID_MAPPING())
-    else if(!isAddrspace(pageDbIn, addrspacePage)
-        || pageDbIn[addrspacePage].entry.state == StoppedState) then
+    else if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
+
+    // This gets caught later in allocatePage, but putting the check
+    // here means that the addrspace's state will not be stopped for the
+    // l1indexInUse check. The l1indexInUse check assumes that the l1ptnr
+    // is actually an l1pt table, which is true as long as the addrspace
+    // is not stopped.
+    else if(pageDbIn[addrspacePage].entry.state != InitState) then
+        (pageDbIn, KEV_ERR_ALREADY_FINAL())
     else if(l1indexInUse(pageDbIn, addrspacePage, l1index)) then
         (pageDbIn, KEV_ERR_ADDRINUSE())
     else 
@@ -257,6 +264,22 @@ function mapInsecure_inner(pageDbIn: PageDb, addrspacePage: PageNr,
             (pageDbOut, KEV_ERR_SUCCESS())
 }
 
+function finalise_inner(pageDbIn: PageDb, addrspacePage: PageNr) : (PageDb, int)
+    requires validPageDb(pageDbIn)
+{
+    if(!isAddrspace(pageDbIn, addrspacePage)) then
+        (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
+    else if(pageDbIn[addrspacePage].entry.state != InitState) then
+        (pageDbIn, KEV_ERR_ALREADY_FINAL())
+    else
+        var addrspace := pageDbIn[addrspacePage].entry;
+        var updatedAddrspace := match addrspace
+            case Addrspace(l1, ref, state) => Addrspace(l1, ref, FinalState);
+        var pageDbOut := pageDbIn[
+            addrspacePage := PageDbEntryTyped(addrspacePage, updatedAddrspace)];
+        (pageDbOut, KEV_ERR_SUCCESS())
+}
+
 //=============================================================================
 // Hoare Specification of Monitor Calls
 //=============================================================================
@@ -331,6 +354,14 @@ function mapInsecure(pageDbIn: PageDb, addrspacePage: PageNr,
 {
     mapInsecurePreservesPageDbValidity(pageDbIn, addrspacePage, physPage, mapping);
     mapInsecure_inner(pageDbIn, addrspacePage, physPage, mapping)
+}
+
+function finalise(pageDbIn: PageDb, addrspacePage: PageNr) : (PageDb, int)
+    requires validPageDb(pageDbIn)
+    ensures  validPageDb(finalise(pageDbIn, addrspacePage).0)
+{
+    finalisePreservesPageDbValidity(pageDbIn, addrspacePage);
+    finalise_inner(pageDbIn, addrspacePage)
 }
 
 //=============================================================================
@@ -581,5 +612,25 @@ lemma mapInsecurePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr
                 // trivial
             }
         }
+    }
+}
+
+
+lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr)
+    requires validPageDb(pageDbIn)
+    ensures  validPageDb(finalise_inner(pageDbIn, addrspacePage).0)
+{
+    var pageDbOut := finalise_inner(pageDbIn, addrspacePage).0;
+    var err := finalise_inner(pageDbIn, addrspacePage).1;
+
+    if( err != KEV_ERR_SUCCESS() ){
+    } else {
+        var a := addrspacePage;
+        assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
+        assert addrspaceRefs(pageDbOut, a) == addrspaceRefs(pageDbIn, a);
+
+        forall ( n | validPageNr(n) && n != a )
+            ensures validPageDbEntry(pageDbOut, n);
+
     }
 }
