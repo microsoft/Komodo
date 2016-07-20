@@ -289,6 +289,27 @@ function enter_inner(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, a
         (pageDbOut, KEV_ERR_SUCCESS())
 }
 
+function resume_inner(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, arg3: int)
+    : (PageDb, int)
+    requires validPageDb(pageDbIn)
+{
+    var d := pageDbIn; var p := dispPage;
+    if(!(validPageNr(p) && d[p].PageDbEntryTyped? && d[p].entry.Dispatcher?)) then
+        (pageDbIn, KEV_ERR_INVALID_PAGENO())
+    else if(var a := d[p].addrspace; d[a].entry.state != FinalState) then
+        (pageDbIn, KEV_ERR_NOT_FINAL())
+    else if(!d[p].entry.entered) then
+        (pageDbIn, KEV_ERR_ALREADY_ENTERED())
+    else
+        // A model of registers is needed to model more.
+        // For now all this does is change the dispatcher.
+        var a := d[p].addrspace;
+        var pageDbOut := match d[p].entry 
+                case Dispatcher(entrypoint, entered) => 
+                    d[p := PageDbEntryTyped(a,Dispatcher(entrypoint,false))];
+        (pageDbOut, KEV_ERR_SUCCESS())
+}
+
 //=============================================================================
 // Hoare Specification of Monitor Calls
 //=============================================================================
@@ -380,6 +401,15 @@ function enter(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, arg3: i
 {
     enterPreservesPageDbValidity(pageDbIn, dispPage, arg1, arg2, arg3);
     enter_inner(pageDbIn, dispPage, arg1, arg2, arg3)
+}
+
+function resume(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, arg3: int)
+    : (PageDb, int)
+    requires validPageDb(pageDbIn) 
+    ensures validPageDb(resume(pageDbIn, dispPage, arg1, arg2, arg3).0)
+{
+    resumePreservesPageDbValidity(pageDbIn, dispPage, arg1, arg2, arg3);
+    resume_inner(pageDbIn, dispPage, arg1, arg2, arg3)
 }
 
 //=============================================================================
@@ -624,7 +654,6 @@ lemma mapInsecurePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr
     }
 }
 
-
 lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(finalise_inner(pageDbIn, addrspacePage).0)
@@ -650,6 +679,25 @@ lemma enterPreservesPageDbValidity(pageDbIn: PageDb, dispPage: PageNr,
 {
     var pageDbOut := enter_inner(pageDbIn, dispPage, arg1, arg2, arg3).0;
     var err := enter_inner(pageDbIn, dispPage, arg1, arg2, arg3).1;
+
+    if( err != KEV_ERR_SUCCESS() ){
+    } else {
+        var a := pageDbOut[dispPage].addrspace;
+        assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
+        assert addrspaceRefs(pageDbOut, a) == addrspaceRefs(pageDbIn, a);
+
+        forall ( n | validPageNr(n) && n != a )
+            ensures validPageDbEntry(pageDbOut, n);
+    }
+}
+
+lemma resumePreservesPageDbValidity(pageDbIn: PageDb, dispPage: PageNr,
+    arg1: int, arg2: int, arg3: int)
+    requires validPageDb(pageDbIn) 
+    ensures validPageDb(resume_inner(pageDbIn, dispPage, arg1, arg2, arg3).0)
+{
+    var pageDbOut := resume_inner(pageDbIn, dispPage, arg1, arg2, arg3).0;
+    var err := resume_inner(pageDbIn, dispPage, arg1, arg2, arg3).1;
 
     if( err != KEV_ERR_SUCCESS() ){
     } else {
