@@ -130,6 +130,33 @@ function initDispatcher_inner(pageDbIn: PageDb, page:PageNr, addrspacePage:PageN
        allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false))
 }
 
+predicate l1indexInUse(d: PageDb, a: PageNr, l1index: int)
+    requires validPageDb(d)
+    requires isAddrspace(d, a)
+    requires d[a].entry.state != StoppedState
+    requires 0 <= l1index < NR_L1PTES()
+{
+    var l1ptnr := d[a].entry.l1ptnr;
+    var l1 := d[l1ptnr].entry.l1pt;
+    l1[l1index].Just?
+}
+
+function initL2PTable_inner(pageDbIn: PageDb, page: PageNr,
+    addrspacePage: PageNr, l1index: int) : (PageDb, int)
+    requires validPageDb(pageDbIn)
+{
+    if(!(0<= l1index < NR_L1PTES())) then (pageDbIn, KEV_ERR_INVALID_MAPPING())
+    else if(!isAddrspace(pageDbIn, addrspacePage)
+        || pageDbIn[addrspacePage].entry.state == StoppedState) then
+        (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
+    else if(l1indexInUse(pageDbIn, addrspacePage, l1index)) then
+        (pageDbIn, KEV_ERR_ADDRINUSE())
+    else 
+        var l2pt := L2PTable(SeqRepeat(NR_L2PTES(), NoMapping));
+        allocatePage(pageDbIn, page, addrspacePage, l2pt)
+}
+
+// This is not literally an SMC handler. Move elsewhere in file???
 function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
     addrspacePage:PageNr, entry:PageDbEntryTyped)
     : (PageDb, int) // PageDbOut, KEV_ERR
@@ -138,7 +165,8 @@ function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
     requires closedRefsPageDbEntry(entry)
     requires !entry.L1PTable?
     requires !entry.Addrspace?
-    requires entry.L2PTable? ==> entry.l2pt == []
+    requires entry.L2PTable? ==>
+        entry.l2pt == SeqRepeat(NR_L2PTES(), NoMapping)
 {
     var addrspace := pageDbIn[addrspacePage].entry;
     if(!validPageNr(securePage)) then (pageDbIn, KEV_ERR_INVALID_PAGENO())
@@ -155,7 +183,8 @@ function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
         (pageDbOut, KEV_ERR_SUCCESS())
 }
 
-function remove_inner(pageDbIn: PageDb, page: PageNr) : (PageDb, int) // PageDbOut, KEV_ERR
+function remove_inner(pageDbIn: PageDb, page: PageNr)
+    : (PageDb, int) // PageDbOut, KEV_ERR
     requires validPageDb(pageDbIn)
 {
     if(!validPageNr(page)) then
@@ -250,6 +279,14 @@ function initDispatcher(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
     initDispatcher_inner(pageDbIn, page, addrspacePage, entrypoint)
 }
 
+function initL2PTable(pageDbIn: PageDb, page: PageNr,
+    addrspacePage: PageNr, l1index: int) : (PageDb, int)
+    requires validPageDb(pageDbIn)
+    ensures validPageDb(initL2PTable(pageDbIn, page, addrspacePage, l1index).0)
+{
+    initL2PTable_inner(pageDbIn, page, addrspacePage, l1index)
+}
+
 // TODO move this elsewhere since it is not a monitor call
 function allocatePage(pageDbIn: PageDb, securePage: PageNr,
     addrspacePage:PageNr, entry:PageDbEntryTyped )
@@ -259,7 +296,8 @@ function allocatePage(pageDbIn: PageDb, securePage: PageNr,
     requires closedRefsPageDbEntry(entry)
     requires !entry.L1PTable?
     requires !entry.Addrspace?
-    requires entry.L2PTable? ==> entry.l2pt == []
+    requires entry.L2PTable? ==>
+        entry.l2pt == SeqRepeat(NR_L2PTES(), NoMapping)
     ensures  validPageDb(allocatePage(pageDbIn, securePage, addrspacePage, entry).0);
 {
     allocatePagePreservesPageDBValidity(pageDbIn, securePage, addrspacePage, entry);
@@ -352,7 +390,8 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
     requires closedRefsPageDbEntry(entry)
     requires !entry.Addrspace?
     requires !entry.L1PTable?
-    requires entry.L2PTable? ==> entry.l2pt == []
+    requires entry.L2PTable? ==>
+        entry.l2pt == SeqRepeat(NR_L2PTES(), NoMapping)
     ensures  validPageDb(allocatePage_inner(
         pageDbIn, securePage, addrspacePage, entry).0);
 {
