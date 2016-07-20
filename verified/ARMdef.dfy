@@ -93,8 +93,9 @@ function method decode_mode(e:int):mode
 }
 
 function addr_mem(s:state, base:operand, ofs:operand):mem
-    requires ValidOperand(s, base);
-    requires ValidOperand(s, ofs);
+    requires ValidState(s)
+    requires ValidOperand(base)
+    requires ValidOperand(ofs)
 {
     Address( OperandContents(s, base) + OperandContents(s, ofs) )
 }
@@ -154,7 +155,7 @@ function BytesToWords(b:int) : int requires WordAligned(b) { b / 4 }
 //-----------------------------------------------------------------------------
 // Validity
 //-----------------------------------------------------------------------------
-predicate ValidState(s:state)
+predicate {:opaque} ValidState(s:state)
 {
     ValidRegState(s) && ValidMemState(s) && ValidGlobalState(s)
 }
@@ -196,9 +197,9 @@ predicate ValidGlobalState(s:state)
             && forall v :: v in gmap[g] ==> isUInt32(v))
 }
 
-predicate ValidOperand(s:state, o:operand)
+predicate ValidOperand(o:operand)
 {
-    ValidState(s) && match o
+    match o
         case OConst(n) => isUInt32(n)
         case OReg(r) => !(r.SP? || r.LR?) // not used directly
         case OSP => true
@@ -218,16 +219,17 @@ predicate ValidMemRange(s:state, base:int, limit:int)
 }
 
 predicate ValidShiftOperand(s:state, o:operand)
-    { ValidOperand(s, o) && OperandContents(s, o) < 32 }
+    requires ValidState(s)
+    { ValidOperand(o) && OperandContents(s, o) < 32 }
 
-predicate ValidDestinationOperand(s:state, o:operand)
-    { !o.OConst? && ValidOperand(s, o) }
+predicate ValidDestinationOperand(o:operand)
+    { !o.OConst? && ValidOperand(o) }
 
 // MUL only operates on regs
 // Currently the same as ValidDestinationOperand, but in the future globals
 // might be valid destinations but not registers. 
-predicate ValidRegOperand(s:state, o:operand)
-    { !o.OConst? && ValidOperand(s, o) }
+predicate ValidRegOperand(o:operand)
+    { !o.OConst? && ValidOperand(o) }
 
 //-----------------------------------------------------------------------------
 // Globals
@@ -312,8 +314,11 @@ function shr32(x:int, amount:int) : int
 // Evaluation
 //-----------------------------------------------------------------------------
 function OperandContents(s:state, o:operand): int
-    requires ValidOperand(s,o)
+    requires ValidState(s)
+    requires ValidOperand(o)
+    ensures isUInt32(OperandContents(s,o))
 {
+    reveal_ValidState();
     match o
         case OConst(n) => n
         case OReg(r) => s.regs[r]
@@ -326,34 +331,42 @@ function MemContents(s:state, m:mem): int
     requires ValidMem(s,m)
     ensures isUInt32(MemContents(s,m))
 {
+    reveal_ValidState();
     assert m in s.addresses;
     assert isUInt32(s.addresses[m]);
     s.addresses[m]
 }
 
 function GlobalFullContents(s:state, g:operand): seq<int>
-    requires ValidGlobalState(s)
+    requires ValidState(s)
     requires ValidGlobal(g)
     ensures forall w :: w in GlobalFullContents(s, g) ==> isUInt32(w)
 {
+    reveal_ValidState();
     match s.globals case Globals(gmap) => gmap[g]
 }
 
 function GlobalWord(s:state, g:operand, offset:int): int
     requires ValidGlobalOffset(g, offset)
-    requires ValidGlobalState(s)
+    requires ValidState(s)
     ensures isUInt32(GlobalWord(s, g, offset))
 {
+    reveal_ValidState();
     GlobalFullContents(s, g)[BytesToWords(offset)]
 }
 
 function eval_op(s:state, o:operand): int
-    requires ValidOperand(s, o)
+    requires ValidState(s) && ValidOperand(o)
+    ensures isUInt32(eval_op(s,o))
     { OperandContents(s,o) }
 
 predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
-    requires ValidDestinationOperand(s, o);
+    requires ValidState(s)
+    requires ValidDestinationOperand(o)
+    requires isUInt32(v)
+    ensures evalUpdate(s, o, v, r, ok) ==> ValidState(r) && OperandContents(r,o) == v
 {
+    reveal_ValidState();
     ok && match o
         case OReg(reg) => r == s.(regs := s.regs[o.r := v])
         case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := v])
@@ -361,7 +374,7 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
 }
 
 // predicate evalHavocReg(s:state, o:operand, r:state, ok:bool)
-//     requires ValidDestinationOperand(s, o);
+//     requires ValidDestinationOperand(o);
 // {
 //     ok && ValidDestinationOperand(r, o) && match o
 //         case OReg(reg) => r == s.(regs := s.regs[o.r := r.regs[o.r]])
@@ -371,21 +384,21 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
 
 predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
     requires ValidState(s)
-    requires WordAligned(m.addr)
     requires ValidMem(s, m)
     requires isUInt32(v)
-    ensures ValidMem(s, m)
-    ensures ValidState(s)
+    ensures evalMemUpdate(s, m, v, r, ok) ==> ValidState(r) && ValidMem(r, m) && MemContents(r,m) == v
 {
+    reveal_ValidState();
     ok && r == s.(addresses := s.addresses[m := v])
 }
 
 predicate evalGlobalUpdate(s:state, g:operand, offset:nat, v:int, r:state, ok:bool)
+    requires ValidState(s)
     requires ValidGlobalOffset(g, offset)
-    requires ValidGlobalState(s)
     requires isUInt32(v)
-    ensures ValidGlobalState(s)
+    ensures evalGlobalUpdate(s, g, offset, v, r, ok) ==> ValidState(r) && GlobalWord(r,g,offset) == v
 {
+    reveal_ValidState();
     match s.globals case Globals(gmap) =>
         var oldval := gmap[g];
         var newval := oldval[BytesToWords(offset) := v];
@@ -394,8 +407,10 @@ predicate evalGlobalUpdate(s:state, g:operand, offset:nat, v:int, r:state, ok:bo
 }
 
 predicate evalModeUpdate(s:state, newmode:int, r:state, ok:bool)
+    requires ValidState(s)
+    ensures evalModeUpdate(s,newmode,r,ok) ==> ValidState(r)
 {
-    // ok && r == s.(cpsr := s.cpsr.(m := newmode))
+    reveal_ValidState();
     ok && ValidModeEncoding(newmode) && r == s.(mod := decode_mode(newmode))
 }
 
@@ -411,8 +426,9 @@ function evalCmp(c:ocmp, i1:int, i2:int):bool
 }
 
 function evalOBool(s:state, o:obool):bool
-    requires ValidOperand(s, o.o1);
-    requires ValidOperand(s, o.o2);
+    requires ValidState(s)
+    requires ValidOperand(o.o1)
+    requires ValidOperand(o.o2)
 {
     evalCmp(o.cmp, OperandContents(s, o.o1), OperandContents(s, o.o2))
 }
@@ -420,57 +436,57 @@ function evalOBool(s:state, o:obool):bool
 predicate ValidInstruction(s:state, ins:ins)
 {
     ValidState(s) && match ins
-        case ADD(dest, src1, src2) => ValidOperand(s, src1) &&
-            ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+        case ADD(dest, src1, src2) => ValidOperand(src1) &&
+            ValidOperand(src2) && ValidDestinationOperand(dest) &&
             isUInt32(eval_op(s,src1) + eval_op(s,src2))
-        case SUB(dest, src1, src2) => ValidOperand(s, src1) &&
-            ValidOperand(s, src2) && ValidDestinationOperand(s, dest) &&
+        case SUB(dest, src1, src2) => ValidOperand(src1) &&
+            ValidOperand(src2) && ValidDestinationOperand(dest) &&
             isUInt32(eval_op(s,src1) - eval_op(s,src2))
-        case MUL(dest,src1,src2) => ValidRegOperand(s, src1) &&
-            ValidRegOperand(s, src2) && ValidDestinationOperand(s,dest) &&
+        case MUL(dest,src1,src2) => ValidRegOperand(src1) &&
+            ValidRegOperand(src2) && ValidDestinationOperand(dest) &&
             isUInt32(eval_op(s,src1) * eval_op(s,src2))
-        case UDIV(dest,src1,src2) => ValidOperand(s, src1) &&
-            ValidOperand(s, src2) && ValidDestinationOperand(s,dest) &&
+        case UDIV(dest,src1,src2) => ValidOperand(src1) &&
+            ValidOperand(src2) && ValidDestinationOperand(dest) &&
             (eval_op(s,src2) > 0) && isUInt32(eval_op(s,src1) / eval_op(s,src2))
-        case AND(dest, src1, src2) => ValidOperand(s, src1) &&
-            ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
-        case ORR(dest, src1, src2) => ValidOperand(s, src1) &&
-            ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
-        case EOR(dest, src1, src2) => ValidOperand(s, src1) &&
-            ValidOperand(s, src2) && ValidDestinationOperand(s, dest)
-        case ROR(dest, src1, src2) => ValidOperand(s, src1) &&
-            ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest)
-        case LSL(dest, src1, src2) => ValidOperand(s, src1) &&
-            ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest)
-        case LSR(dest, src1, src2) => ValidOperand(s, src1) &&
-            ValidShiftOperand(s, src2) && ValidDestinationOperand(s, dest)
-        case MVN(dest, src) => ValidOperand(s, src) &&
-            ValidDestinationOperand(s, dest)
+        case AND(dest, src1, src2) => ValidOperand(src1) &&
+            ValidOperand(src2) && ValidDestinationOperand(dest)
+        case ORR(dest, src1, src2) => ValidOperand(src1) &&
+            ValidOperand(src2) && ValidDestinationOperand(dest)
+        case EOR(dest, src1, src2) => ValidOperand(src1) &&
+            ValidOperand(src2) && ValidDestinationOperand(dest)
+        case ROR(dest, src1, src2) => ValidOperand(src1) &&
+            ValidShiftOperand(s, src2) && ValidDestinationOperand(dest)
+        case LSL(dest, src1, src2) => ValidOperand(src1) &&
+            ValidShiftOperand(s, src2) && ValidDestinationOperand(dest)
+        case LSR(dest, src1, src2) => ValidOperand(src1) &&
+            ValidShiftOperand(s, src2) && ValidDestinationOperand(dest)
+        case MVN(dest, src) => ValidOperand(src) &&
+            ValidDestinationOperand(dest)
         case LDR(rd, base, ofs) => 
-            ValidDestinationOperand(s, rd) &&
-            ValidOperand(s, base) && ValidOperand(s, ofs) &&
+            ValidDestinationOperand(rd) &&
+            ValidOperand(base) && ValidOperand(ofs) &&
             WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
             ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
         case LDR_global(rd, global, base, ofs) => 
-            ValidDestinationOperand(s, rd) && ValidGlobalState(s) &&
-            ValidOperand(s, base) && ValidOperand(s, ofs) &&
+            ValidDestinationOperand(rd) &&
+            ValidOperand(base) && ValidOperand(ofs) &&
             AddressOfGlobal(global) == OperandContents(s, base) &&
             ValidGlobalOffset(global, OperandContents(s, ofs))
         case LDR_reloc(rd, global) => 
-            ValidDestinationOperand(s, rd) && ValidGlobal(global)
+            ValidDestinationOperand(rd) && ValidGlobal(global)
         case STR(rd, base, ofs) =>
-            ValidRegOperand(s, rd) && isUInt32(OperandContents(s, rd)) &&
-            ValidOperand(s, ofs) && ValidOperand(s, base) &&
+            ValidRegOperand(rd) &&
+            ValidOperand(ofs) && ValidOperand(base) &&
             WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
             ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
         case STR_global(rd, global, base, ofs) => 
-            ValidRegOperand(s, rd) && isUInt32(OperandContents(s, rd)) &&
-            ValidOperand(s, base) && ValidOperand(s, ofs) &&
+            ValidRegOperand(rd) &&
+            ValidOperand(base) && ValidOperand(ofs) &&
             AddressOfGlobal(global) == OperandContents(s, base) &&
-            ValidGlobalState(s) && ValidGlobalOffset(global, OperandContents(s, ofs))
-        case MOV(dst, src) => ValidDestinationOperand(s, dst) &&
-            ValidOperand(s, src)
-        case CPS(mod) => ValidOperand(s, mod) &&
+            ValidGlobalOffset(global, OperandContents(s, ofs))
+        case MOV(dst, src) => ValidDestinationOperand(dst) &&
+            ValidOperand(src)
+        case CPS(mod) => ValidOperand(mod) &&
             ValidModeEncoding(OperandContents(s, mod))
 }
 
@@ -545,7 +561,7 @@ predicate evalBlock(block:codes, s:state, r:state, ok:bool)
 predicate evalWhile(b:obool, c:code, n:nat, s:state, r:state, ok:bool)
     decreases c, n
 {
-    if ValidOperand(s, b.o1) && ValidOperand(s, b.o2) then
+    if ValidState(s) && ValidOperand(b.o1) && ValidOperand(b.o2) then
         if n == 0 then
             !evalOBool(s, b) && ok && r == s
         else
@@ -562,7 +578,7 @@ predicate evalCode(c:code, s:state, r:state, ok:bool)
         case Ins(ins) => evalIns(ins, s, r, ok)
         case Block(block) => evalBlock(block, s, r, ok)
         // TODO: IfElse and While should havoc the flags
-        case IfElse(cond, ifT, ifF) => if ValidOperand(s, cond.o1) && ValidOperand(s, cond.o2) then
+        case IfElse(cond, ifT, ifF) => if ValidState(s) && ValidOperand(cond.o1) && ValidOperand(cond.o2) then
                                            if evalOBool(s, cond) then
                                                evalCode(ifT, s, r, ok)
                                            else

@@ -162,9 +162,9 @@ procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:
     requires/ensures
         SaneState(this);
     requires
-        ValidRegOperand(this, @phys);
-        ValidRegOperand(this, @pagenr);
-        ValidRegOperand(this, @tmp);
+        ValidRegOperand(@phys);
+        ValidRegOperand(@pagenr);
+        ValidRegOperand(@tmp);
         // NB: @phys == @pagenr is supported
         @phys != @tmp;
         @pagenr != @tmp;
@@ -193,9 +193,9 @@ procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out
     requires/ensures
         SaneState(this);
     requires
-        ValidRegOperand(this, @virt);
-        ValidRegOperand(this, @pagenr);
-        ValidRegOperand(this, @tmp);
+        ValidRegOperand(@virt);
+        ValidRegOperand(@pagenr);
+        ValidRegOperand(@tmp);
         // NB: @pagenr == @virt is supported
         @pagenr != @tmp;
         @virt != @tmp;
@@ -217,9 +217,9 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
     requires/ensures
         SaneState(this);
     requires
-        ValidRegOperand(this, @base);
-        ValidRegOperand(this, @size);
-        ValidRegOperand(this, @val);
+        ValidRegOperand(@base);
+        ValidRegOperand(@size);
+        ValidRegOperand(@val);
         @base != @size;
         @base != @val;
         @size != @val;
@@ -533,7 +533,7 @@ function method MyGlobalDecls(): globaldecls
 predicate SaneGlobals(s:state)
 {
     MyGlobalDecls() == TheGlobalDecls()
-        && ValidGlobalState(s)
+        && ValidState(s)
         && GlobalFullContents(s, SecurePhysBase()) == [SecurePhysBaseValue()]
         // XXX: workaround so dafny sees that these are distinct
         && SecurePhysBase() != PageDb()
@@ -541,12 +541,11 @@ predicate SaneGlobals(s:state)
 
 predicate SaneMemRanges(s:state)
 {
-    ValidState(s) && SaneGlobals(s)
     // TODO: our insecure phys mapping must be valid
     //&& ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE(),
     //    (KEVLAR_DIRECTMAP_VBASE() + MonitorPhysBaseValue()))
     // our secure phys mapping must be valid
-    && ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE() + SecurePhysBaseValue(),
+    ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE() + SecurePhysBaseValue(),
         (KEVLAR_DIRECTMAP_VBASE() + SecurePhysBaseValue() + KEVLAR_SECURE_RESERVE()))
     // the stack must be mapped
     && ValidMemRange(s, StackLimit(), StackBase())

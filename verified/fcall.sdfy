@@ -26,23 +26,12 @@ predicate StackBytesRemaining(s:sp_state,bytes:int)
 
 predicate RegPreservingExcept(s:sp_state, r:sp_state, trashed:seq<operand>)
     requires ValidState(s) && ValidState(r);
-    requires forall o :: o in trashed ==> ValidRegOperand(s, o) && ValidRegOperand(r, o);
+    requires forall o :: o in trashed ==> ValidRegOperand(o);
 {
-    (OReg(R0) in trashed || eval_op(s,OReg(R0)) == eval_op(r,OReg(R0)))
-    && (OReg(R1) in trashed || eval_op(s,OReg(R1)) == eval_op(r,OReg(R1)))
-    && (OReg(R2) in trashed || eval_op(s,OReg(R2)) == eval_op(r,OReg(R2)))
-    && (OReg(R3) in trashed || eval_op(s,OReg(R3)) == eval_op(r,OReg(R3)))
-    && (OReg(R4) in trashed || eval_op(s,OReg(R4)) == eval_op(r,OReg(R4)))
-    && (OReg(R5) in trashed || eval_op(s,OReg(R5)) == eval_op(r,OReg(R5)))
-    && (OReg(R6) in trashed || eval_op(s,OReg(R6)) == eval_op(r,OReg(R6)))
-    && (OReg(R7) in trashed || eval_op(s,OReg(R7)) == eval_op(r,OReg(R7)))
-    && (OReg(R8) in trashed || eval_op(s,OReg(R8)) == eval_op(r,OReg(R8)))
-    && (OReg(R9) in trashed || eval_op(s,OReg(R9)) == eval_op(r,OReg(R9)))
-    && (OReg(R10) in trashed || eval_op(s,OReg(R10)) == eval_op(r,OReg(R10)))
-    && (OReg(R11) in trashed || eval_op(s,OReg(R11)) == eval_op(r,OReg(R11)))
-    && (OReg(R12) in trashed || eval_op(s,OReg(R12)) == eval_op(r,OReg(R12)))
-    && (op_sp() in trashed || eval_op(s,op_sp()) == eval_op(r,op_sp()))
-    && (op_lr() in trashed || eval_op(s,op_lr()) == eval_op(r,op_lr()))
+    forall reg {:trigger OReg(reg)} :: OReg(reg) !in trashed && ValidRegOperand(OReg(reg))
+        ==> eval_op(s,OReg(reg)) == eval_op(r,OReg(reg))
+    && (op_sp() !in trashed ==> eval_op(s,op_sp()) == eval_op(r,op_sp()))
+    && (op_lr() !in trashed ==> eval_op(s,op_lr()) == eval_op(r,op_lr()))
 }
 
 predicate NonvolatileRegPreserving(s:sp_state, r:sp_state)
@@ -93,7 +82,6 @@ predicate NonStackMemPreserving(s:sp_state, r:sp_state)
 predicate GlobalValuePreserving(s:sp_state, r:sp_state)
     requires ValidState(s) && ValidState(r);
 {
-    assert ValidGlobalState(s) && ValidGlobalState(r);
     forall g :: ValidGlobal(g) ==> GlobalFullContents(s, g) == GlobalFullContents(r, g)
 }
 
