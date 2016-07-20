@@ -182,8 +182,7 @@ function remove_inner(pageDbIn: PageDb, page: PageNr) : (PageDb, int) // PageDbO
 }
 
 function mapSecure_inner(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
-    mapping: Mapping, physPage: int)
-    : (PageDb, int) // PageDbOut, KEV_ERR
+    mapping: Mapping, physPage: int) : (PageDb, int) // PageDbOut, KEV_ERR
     requires validPageDb(pageDbIn)
     requires validPageNr(page)
     requires validPageNr(addrspacePage)
@@ -194,6 +193,9 @@ function mapSecure_inner(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
         var err := isValidMappingTarget(pageDbIn, addrspacePage, mapping);
         if( err != KEV_ERR_SUCCESS() ) then (pageDbIn, err)
         else 
+            // I'm not actually sure if this makes sense. I don't know
+            // that physPage is actually modeling a physical page here...
+            // address translation isn't modeled here at all.
             if( physPageInvalid(physPage) ) then
                 (pageDbIn, KEV_ERR_INVALID_PAGENO())
             else
@@ -208,11 +210,23 @@ function mapSecure_inner(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
                     (pageDbOut, KEV_ERR_SUCCESS())
 }
 
-// function mapInsecure_inner(pageDbIn: pageDb, addrspacePage: PageNr,
-//     physPage: int, mapping : Mapping)
-// {
-// 
-// }
+function mapInsecure_inner(pageDbIn: PageDb, addrspacePage: PageNr,
+    physPage: int, mapping : Mapping) : (PageDb, int)
+    requires validPageDb(pageDbIn)
+    requires validPageNr(addrspacePage)
+{
+    if(!isAddrspace(pageDbIn, addrspacePage)) then
+        (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
+    else
+        var err := isValidMappingTarget(pageDbIn, addrspacePage, mapping);
+        if( err != KEV_ERR_SUCCESS() ) then (pageDbIn, err)
+        else if( physPageIsSecure(physPage) ) then
+            (pageDbIn, KEV_ERR_INVALID_PAGENO())
+        else
+            var l2pte := InsecureMapping( physPage );
+            var pageDbOut := updateL2Pte(pageDbIn, addrspacePage, mapping, l2pte);
+            (pageDbOut, KEV_ERR_SUCCESS())
+}
 
 //=============================================================================
 // Hoare Specification of Monitor Calls
@@ -269,6 +283,16 @@ function mapSecure(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
 {
     mapSecurePreservesPageDBValidity(pageDbIn, page, addrspacePage, mapping, physPage);
     mapSecure_inner(pageDbIn, page, addrspacePage, mapping, physPage)
+}
+
+function mapInsecure(pageDbIn: PageDb, addrspacePage: PageNr,
+    physPage: int, mapping : Mapping) : (PageDb, int)
+    requires validPageDb(pageDbIn)
+    requires validPageNr(addrspacePage)
+    ensures  validPageDb(mapInsecure(pageDbIn, addrspacePage, physPage, mapping).0)
+{
+    mapInsecurePreservesPageDbValidity(pageDbIn, addrspacePage, physPage, mapping);
+    mapInsecure_inner(pageDbIn, addrspacePage, physPage, mapping)
 }
 
 //=============================================================================
@@ -485,4 +509,38 @@ lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr, addrspace
         }
     }
 
+}
+
+lemma mapInsecurePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr,
+    physPage: int, mapping : Mapping)
+    requires validPageDb(pageDbIn)
+    requires validPageNr(addrspacePage)
+    ensures  validPageDb(mapInsecure_inner(pageDbIn, addrspacePage, physPage, mapping).0)
+{
+    var pageDbOut := mapInsecure_inner(
+        pageDbIn, addrspacePage, physPage, mapping).0;
+    var err := mapInsecure_inner(
+        pageDbIn, addrspacePage, physPage, mapping).1;
+
+    if( err != KEV_ERR_SUCCESS() ){
+    } else {        
+        forall() ensures validPageDbEntryTyped(pageDbOut, addrspacePage){
+            var a := addrspacePage;
+            assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
+            assert addrspaceRefs(pageDbOut, a) == addrspaceRefs(pageDbIn, a);
+        }
+
+        forall( n | validPageNr(n)
+            && pageDbOut[n].PageDbEntryTyped?
+            && n != addrspacePage)
+            ensures validPageDbEntryTyped(pageDbOut, n);
+        {
+            if( pageDbOut[n].entry.Addrspace? ){
+                assert pageDbOut[n].entry.refcount == pageDbIn[n].entry.refcount;
+                assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
+            } else {
+                // trivial
+            }
+        }
+    }
 }
