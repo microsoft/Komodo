@@ -141,6 +141,21 @@ function method{:opaque} sp_code_STRglobal(rd:operand, global:operand, base:oper
 function method{:opaque} sp_code_CPS(mod:operand):code
     { Ins(CPS(mod)) }
 
+function method{:opaque} sp_code_MRS(dst:operand, src:operand):code
+    { Ins(MRS(dst, src)) }
+
+function method{:opaque} sp_code_MSR(dst:operand, src:operand):code
+    { Ins(MSR(dst, src)) }
+
+function method{:opaque} sp_code_MRC(dst:operand):code
+    { Ins(MRC(dst)) }
+
+function method{:opaque} sp_code_MCR(src:operand):code
+    { Ins(MCR(src)) }
+
+function method{:opaque} sp_code_MOVS():code
+    { Ins(MOVS()) }
+
 // Pseudoinstructions  
 function method{:opaque} sp_code_incr(o:operand):code { Ins(ADD(o, o, OConst(1))) }
 function method{:opaque} sp_code_plusEquals(o1:operand, o2:operand):code { Ins(ADD(o1, o1, o2)) }
@@ -421,6 +436,62 @@ lemma sp_lemma_CPS(s:state, r:state, ok:bool, mod:operand)
     reveal_sp_code_CPS();
 }
 
+lemma sp_lemma_MRS(s:state, r:state, ok:bool,
+    dst:operand, src: operand)
+    requires ValidState(s)
+    requires ValidSpecialOperand(s, src)
+    requires ValidRegOperand(s, dst)
+    requires sp_eval(sp_code_MRS(dst, src), s, r, ok)
+    requires evalUpdate(s, dst, OperandContents(s, src), r, ok)
+{
+    reveal_sp_eval();
+    reveal_sp_code_MRS();
+}
+
+lemma sp_lemma_MSR(s:state, r:state, ok:bool,
+    dst:operand, src: operand)
+    requires ValidState(s)
+    requires ValidRegOperand(s, src)
+    requires ValidSpecialOperand(s, dst)
+    requires sp_eval(sp_code_MSR(dst, src), s, r, ok)
+    ensures evalSRegUpdate(s, dst, OperandContents(s, src), r, ok)
+{
+    reveal_sp_eval();
+    reveal_sp_code_MSR();
+}
+
+lemma sp_lemma_MRC(s:state, r:state, ok:bool, dst:operand)
+    requires ValidState(s);
+    requires ValidRegOperand(s, dst);
+    requires ValidSCR(s);
+    requires sp_eval(sp_code_MRC(dst), s, r, ok);
+    ensures  evalUpdate(s, dst, s.sregs[scr], r, ok);
+{
+    reveal_sp_eval();
+    reveal_sp_code_MRC();
+}
+
+lemma sp_lemma_MCR(s:state, r:state, ok:bool, src:operand)
+    requires ValidState(s)
+    requires ValidRegOperand(s, src)
+	requires ValidSCR(s)
+    requires sp_eval(sp_code_MCR(src), s, r, ok)
+    ensures  evalSRegUpdate(s, OSReg(scr), OperandContents(s,src), r, ok)
+{
+    reveal_sp_eval();
+    reveal_sp_code_MCR();
+}
+
+lemma sp_lemma_MOVS(s:state, r:state, ok:bool)
+    requires ValidState(s)
+    requires !(mode_of_state(s) == User)
+    requires sp_eval(sp_code_MOVS(), s, r, ok)
+    ensures evalSRegUpdate(s, OSReg(cpsr), s.sregs[scr], r, ok)
+{
+    reveal_sp_eval();
+    reveal_sp_code_MOVS();
+}
+
 // Lemmas for frontend functions
 lemma sp_lemma_incr(s:sp_state, r:sp_state, ok:bool, o:operand)
     requires ValidState(s);
@@ -497,6 +568,7 @@ lemma sp_lemma_LDRglobaladdr(s:state, r:state, ok:bool, rd:operand, g:operand)
     reveal_sp_eval();
     reveal_sp_code_LDRglobaladdr();
 }
+
 
 //-----------------------------------------------------------------------------
 // Control Flow Lemmas

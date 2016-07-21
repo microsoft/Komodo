@@ -8,11 +8,19 @@ include "Seq.dfy"
 // NB: In FIQ mode, R8 to R12 are also banked, but we don't model this
 datatype ARMReg = R0|R1|R2|R3|R4|R5|R6|R7|R8|R9|R10|R11|R12 | SP(spm:mode) | LR(lrm:mode)
 
+// special registers
+datatype SReg = ttbr0 | ttbcr | scr | cpsr | spsr(m:mode)
+
 datatype mem = Address(addr:int)
-datatype operand = OConst(n:int) | OReg(r:ARMReg) | OSP | OLR | OSymbol(sym:string)
+datatype operand = OConst(n:int) 
+    | OReg(r:ARMReg) 
+    | OSymbol(sym:string)
+    | OSReg(sr:SReg)
+    | OSP | OLR | OSPSR
 
 datatype globals = Globals(map<operand, seq<int>>)
 datatype state = State(regs:map<ARMReg, int>,
+                       sregs:map<SReg, int>,
                        addresses:map<mem, int>,
                        globals:globals,
                        // stack:seq<frame>,
@@ -35,7 +43,7 @@ datatype cpsr_val = CPSR(
 // System mode is not modelled
 datatype mode = User | FIQ | IRQ | Supervisor | Abort | Undefined | Monitor
 datatype priv = PL0 | PL1 // PL2 is only used in Hyp, not modeled
-
+datatype world = Secure | NotSecure
 //-----------------------------------------------------------------------------
 // State-related Utilities
 //-----------------------------------------------------------------------------
@@ -54,19 +62,26 @@ function method op_sym(sym:string):operand
 // function method addr(base:int, ofs:int):mem
 //     { Address(base + ofs) }
 
-function method mode_of_state(s:state):mode
+function world_of_state(s:state):world
+    requires ValidSRegState(s)
 {
-    // match s.cpsr
-    //         case CPSR(m) => m
-    s.mod
+    var nsb := and32(s.sregs[scr],1);
+    if nsb == 1 then NotSecure else Secure
 }
 
-function method priv_of_mode(m:mode):priv
+function mode_of_state(s:state):mode
+    requires ValidSRegState(s)
+{
+    decode_mode(and32(s.sregs[cpsr],0x1f))
+}
+
+function priv_of_mode(m:mode):priv
 {
     if m == User then PL0 else PL1
 }
 
-function method priv_of_state(s:state):priv
+function priv_of_state(s:state):priv
+	requires ValidSRegState(s)
     { priv_of_mode(mode_of_state(s)) }
 
 function method decode_mode'(e:int):Maybe<mode>
@@ -122,7 +137,16 @@ datatype ins =
     | STR(rdSTR:operand,  baseSTR:operand, ofsSTR:operand)
     | STR_global(rdSTRR_global:operand, globalSTR:operand,
                  baseSTR_global:operand, ofsSTR_global:operand)
-    | CPS(mod:operand)
+    | CPS(mod:operand) // TODO deprecate
+    | MRS(dstMRS:operand, srcMRS: operand)
+    | MSR(dstMSR:operand, srcMSR: operand)
+    // Only accesses to SCR are supported
+    // (See armv7a ref manual B4.1.129 "Accessing the SCR")
+    | MRC(dstMCR:operand)
+    | MCR(srcMCR:operand)
+    // Only the special case where rd is pc
+    // (See armv7a ref manual A8.8.105 and B9.3.20)
+    | MOVS
 
 //-----------------------------------------------------------------------------
 // Exception Handlers
@@ -156,7 +180,7 @@ function BytesToWords(b:int) : int requires WordAligned(b) { b / 4 }
 //-----------------------------------------------------------------------------
 predicate ValidState(s:state)
 {
-    ValidRegState(s) && ValidMemState(s) && ValidGlobalState(s)
+    ValidRegState(s) && ValidSRegState(s) && ValidMemState(s) && ValidGlobalState(s)
 }
 
 predicate ValidRegState(s:state)
@@ -177,6 +201,18 @@ predicate ValidRegState(s:state)
     && R10 in s.regs && isUInt32(s.regs[R10])
     && R11 in s.regs && isUInt32(s.regs[R11])
     && R12 in s.regs && isUInt32(s.regs[R12])
+}
+
+predicate ValidSRegState(s:state)
+{
+    (forall m:mode {:trigger spsr(m)} :: m != User ==> 
+        spsr(m) in s.sregs && isUInt32(s.sregs[spsr(m)]))
+    && spsr(User) !in s.sregs
+    && ttbr0 in s.sregs && isUInt32(s.sregs[ttbr0])
+    && ttbcr in s.sregs && isUInt32(s.sregs[ttbcr])
+    && scr   in s.sregs && isUInt32(s.sregs[scr])
+    && cpsr  in s.sregs && isUInt32(s.sregs[cpsr])
+    && ValidModeEncoding(and32(s.sregs[cpsr], 0x1f))
 }
 
 predicate ValidMemState(s:state)
@@ -204,6 +240,30 @@ predicate ValidOperand(s:state, o:operand)
         case OSP => true
         case OLR => true
         case OSymbol(s) => false
+        case OSReg(sr) => false
+        case OSPSR => false
+}
+
+predicate ValidSpecialOperand(s:state, o:operand)
+{
+    // None of the currently implemented special registers can be
+    // accessed from PL0, but this condition should be re-evaluated
+    // if other special registers are added.
+    ValidSRegState(s) && priv_of_state(s) == PL1 &&
+    // The SCR cannot be used as an operand directly and can only
+    // be modified by MCR/MRC instructions.
+    // Only the SPSR of the active mode can be accessed
+    ( (o.OSReg? && !o.sr.spsr? && !o.sr.scr?) 
+        || o.OSPSR? )
+}
+
+// The conditions under which the  SCR may be accessed
+// using MCR/MRC instructions. (It is never a valid operand
+// for any instruction.)
+predicate ValidSCR(s:state)
+{
+    ValidSRegState(s) && priv_of_state(s) == PL1 &&
+        world_of_state(s) == Secure
 }
 
 predicate ValidMem(s:state, m:mem)
@@ -312,13 +372,16 @@ function shr32(x:int, amount:int) : int
 // Evaluation
 //-----------------------------------------------------------------------------
 function OperandContents(s:state, o:operand): int
-    requires ValidOperand(s,o)
+    requires ValidOperand(s, o) || ValidSpecialOperand(s, o) ||
+        (o.OSReg? && o.sr.scr? && ValidSCR(s))
 {
     match o
         case OConst(n) => n
         case OReg(r) => s.regs[r]
         case OSP => s.regs[SP(mode_of_state(s))]
         case OLR => s.regs[LR(mode_of_state(s))]
+        case OSReg(sr) => s.sregs[sr]
+        case OSPSR => s.sregs[spsr(mode_of_state(s))]
 }
 
 function MemContents(s:state, m:mem): int
@@ -351,6 +414,7 @@ function eval_op(s:state, o:operand): int
     requires ValidOperand(s, o)
     { OperandContents(s,o) }
 
+
 predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
     requires ValidDestinationOperand(s, o);
 {
@@ -360,14 +424,17 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
         case OSP => r == s.(regs := s.regs[SP(mode_of_state(s)) := v])
 }
 
-// predicate evalHavocReg(s:state, o:operand, r:state, ok:bool)
-//     requires ValidDestinationOperand(s, o);
-// {
-//     ok && ValidDestinationOperand(r, o) && match o
-//         case OReg(reg) => r == s.(regs := s.regs[o.r := r.regs[o.r]])
-//         case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := r.regs[LR(mode_of_state(r))]])
-//         case OSP => r == s.(regs := s.regs[SP(mode_of_state(s)) := r.regs[SP(mode_of_state(r))]])
-// }
+predicate evalSRegUpdate(s:state, o:operand, v:int, r:state, ok:bool)
+    requires ValidSRegState(s)
+    requires ValidSpecialOperand(s, o) ||
+        // The following is for MRC/MCR instructions that update the SCR
+        // The SCR is not valid because it cannot be used as an operand directly
+        (o.OSReg? && o.sr.scr? && world_of_state(s) == Secure)
+{
+    ok && match o
+        case OSReg(sr) => r == s.(sregs := s.sregs[sr := v])
+        case OSPSR => r == s.(sregs := s.sregs[spsr(mode_of_state(s)) := v])
+}
 
 predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
     requires ValidState(s)
@@ -472,6 +539,23 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidOperand(s, src)
         case CPS(mod) => ValidOperand(s, mod) &&
             ValidModeEncoding(OperandContents(s, mod))
+        case MRS(dst, src) =>
+            ValidSpecialOperand(s, src) && isUInt32(OperandContents(s, src)) &&
+            ValidRegOperand(s, dst) && isUInt32(OperandContents(s, dst))
+        case MSR(dst, src) =>
+            ValidRegOperand(s, src) && isUInt32(OperandContents(s, src)) &&
+            ValidSpecialOperand(s, dst) && isUInt32(OperandContents(s, dst))
+        case MRC(dst) =>
+            ValidSCR(s) && 
+            isUInt32(OperandContents(s, OSReg(scr))) &&
+            ValidRegOperand(s, dst) && isUInt32(OperandContents(s, dst))
+        case MCR(dst) =>
+            ValidSCR(s) && 
+            isUInt32(OperandContents(s, OSReg(scr))) &&
+            ValidRegOperand(s, dst) && isUInt32(OperandContents(s, dst))
+        // According to the ref manual this is actually restricted by mode
+        // rather than privilege level.
+        case MOVS => !(mode_of_state(s) == User)
 }
 
 predicate evalIns(ins:ins, s:state, r:state, ok:bool)
@@ -531,6 +615,14 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
         case CPS(mod) => evalModeUpdate(s,
             OperandContents(s, mod),
             r, ok)
+        case MRS(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r, ok)
+        case MSR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r, ok)
+        case MRC(dst) => evalUpdate(s, dst, s.sregs[scr], r, ok)
+        case MCR(src) => evalSRegUpdate(s, OSReg(scr), OperandContents(s, src), r, ok)
+        // The program counter update in MOVS is not modeled because the PC is
+        // not modeled directly. This models the CPSR update
+        case MOVS => evalSRegUpdate(s, OSReg(cpsr), s.sregs[scr], r, ok)
+            
 }
 
 predicate evalBlock(block:codes, s:state, r:state, ok:bool)

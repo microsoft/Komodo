@@ -202,6 +202,45 @@ procedure CPS({:operand} mod:int)
     ensures
         evalModeUpdate(old(this), old(mod), this, true);
 
+procedure MRS({:operand} dst:int, {:operand} src:int)
+    requires/ensures
+        ValidState(this);
+        ValidSpecialOperand(this, @src);
+        ValidRegOperand(this, @dst);
+    ensures
+        evalUpdate(old(this), @dst, old(src), this, true);
+
+procedure MSR({:operand} dst:int, {:operand} src:int)
+    requires/ensures
+        ValidState(this);
+        ValidRegOperand(this, @src);
+        ValidSpecialOperand(this, @dst);
+    ensures
+        evalSRegUpdate(old(this), @dst, old(src), this, true);
+
+procedure MRC({:operand} dst:int)
+    requires/ensures
+        ValidState(this);
+        ValidRegOperand(this, @dst);
+    ensures
+        evalUpdate(s, @dst, old(scr), this, true);
+
+procedure MCR({:operand} src:int)
+    requires/ensures
+        ValidState(this);
+        ValidRegOperand(this, @src);
+    ensures
+        evalSRegUpdate(s, @scr, old(src), this, true);
+
+procedure MOVS()
+    requires/ensures
+        ValidState(this);
+    requires 
+        mode_of_state(this) != User;
+    ensures
+        evalSRegUpdate(s, cpsr, old(scr), this true);
+
+
 procedure incr(inout{:operand} o:int)
     requires
         ValidState(this);
@@ -281,3 +320,4 @@ procedure STRglobal({:operand} rd:int, {:operand} g:string,
         isUInt32(rd);
     ensures
         evalGlobalUpdate(old(this), @g, old(ofs), old(rd), this, true);
+

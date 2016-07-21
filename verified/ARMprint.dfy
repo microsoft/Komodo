@@ -35,6 +35,17 @@ method printId(id:id)
         case GlobalVar(n) => not_impl();
 }
 */
+method printMode(m:mode)
+{
+    match m
+        case User => print("usr");
+        case FIQ => print("fiq");
+        case IRQ => print("irq");
+        case Supervisor => print("svc");
+        case Abort => print("abt");
+        case Undefined => print("und");
+        case Monitor => print("mon"); //TOOD check this
+}
 
 method printOperand(o:operand)
 {
@@ -56,6 +67,14 @@ method printOperand(o:operand)
             case R12 => print("r12");
             case SP(m) => print("XXX-badreg-bankedSP");
             case LR(m) => print("XXX-badreg-bankedLR");
+        }
+        case OSPSR => print("spsr");
+        case OSReg(r)   => {match r
+           case ttbr0   => print("ttbr0");
+           case ttbcr   => print("ttbcr");
+           case scr     => print("scr");
+           case cpsr    => print("cpsr");
+           case spsr(m) => print("spsr_");print(m);
         }
         case OSP => print("sp");
         case OLR => print("lr");
