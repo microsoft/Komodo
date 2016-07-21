@@ -341,6 +341,7 @@ function GlobalFullContents(s:state, g:operand): seq<int>
     requires ValidState(s)
     requires ValidGlobal(g)
     ensures forall w :: w in GlobalFullContents(s, g) ==> isUInt32(w)
+    ensures WordsToBytes(|GlobalFullContents(s, g)|) == SizeOfGlobal(g)
 {
     reveal_ValidState();
     match s.globals case Globals(gmap) => gmap[g]
