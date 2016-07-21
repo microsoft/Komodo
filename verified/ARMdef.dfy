@@ -395,7 +395,7 @@ predicate evalGlobalUpdate(s:state, g:operand, offset:nat, v:int, r:state, ok:bo
     requires ValidState(s)
     requires ValidGlobalOffset(g, offset)
     requires isUInt32(v)
-    ensures evalGlobalUpdate(s, g, offset, v, r, ok) ==> ValidState(r)
+    ensures evalGlobalUpdate(s, g, offset, v, r, ok) ==> ValidState(r) && GlobalWord(r.m, g, offset) == v
 {
     reveal_ValidMemState();
     var oldval := s.m.globals[g];
