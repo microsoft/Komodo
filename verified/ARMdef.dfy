@@ -11,11 +11,11 @@ datatype ARMReg = R0|R1|R2|R3|R4|R5|R6|R7|R8|R9|R10|R11|R12 | SP(spm:mode) | LR(
 datatype mem = Address(addr:int)
 datatype operand = OConst(n:int) | OReg(r:ARMReg) | OSP | OLR | OSymbol(sym:string)
 
-datatype globals = Globals(map<operand, seq<int>>)
+datatype memstate = MemState(addresses:map<mem, int>,
+                             globals:map<operand, seq<int>>)
+
 datatype state = State(regs:map<ARMReg, int>,
-                       addresses:map<mem, int>,
-                       globals:globals,
-                       // stack:seq<frame>,
+                       m:memstate,
                        // ns:bool,
                        // cpsr:cpsr_val,
                        // spsr:map<mode, cpsr_val>,
@@ -155,46 +155,44 @@ function BytesToWords(b:int) : int requires WordAligned(b) { b / 4 }
 //-----------------------------------------------------------------------------
 // Validity
 //-----------------------------------------------------------------------------
-predicate {:opaque} ValidState(s:state)
+predicate ValidState(s:state)
 {
-    ValidRegState(s) && ValidMemState(s) && ValidGlobalState(s)
+    ValidRegState(s.regs) && ValidMemState(s.m)
 }
 
-predicate ValidRegState(s:state)
+predicate {:opaque} ValidRegState(regs:map<ARMReg, int>)
 {
     (forall m:mode {:trigger SP(m)} {:trigger LR(m)} ::
-        SP(m) in s.regs && isUInt32(s.regs[SP(m)]) &&
-        LR(m) in s.regs && isUInt32(s.regs[LR(m)]))
-    && R0 in s.regs && isUInt32(s.regs[R0])
-    && R1 in s.regs && isUInt32(s.regs[R1])
-    && R2 in s.regs && isUInt32(s.regs[R2])
-    && R3 in s.regs && isUInt32(s.regs[R3])
-    && R4 in s.regs && isUInt32(s.regs[R4])
-    && R5 in s.regs && isUInt32(s.regs[R5])
-    && R6 in s.regs && isUInt32(s.regs[R6])
-    && R7 in s.regs && isUInt32(s.regs[R7])
-    && R8 in s.regs && isUInt32(s.regs[R8])
-    && R9 in s.regs && isUInt32(s.regs[R9])
-    && R10 in s.regs && isUInt32(s.regs[R10])
-    && R11 in s.regs && isUInt32(s.regs[R11])
-    && R12 in s.regs && isUInt32(s.regs[R12])
+        SP(m) in regs && isUInt32(regs[SP(m)]) &&
+        LR(m) in regs && isUInt32(regs[LR(m)]))
+    && R0 in regs && isUInt32(regs[R0])
+    && R1 in regs && isUInt32(regs[R1])
+    && R2 in regs && isUInt32(regs[R2])
+    && R3 in regs && isUInt32(regs[R3])
+    && R4 in regs && isUInt32(regs[R4])
+    && R5 in regs && isUInt32(regs[R5])
+    && R6 in regs && isUInt32(regs[R6])
+    && R7 in regs && isUInt32(regs[R7])
+    && R8 in regs && isUInt32(regs[R8])
+    && R9 in regs && isUInt32(regs[R9])
+    && R10 in regs && isUInt32(regs[R10])
+    && R11 in regs && isUInt32(regs[R11])
+    && R12 in regs && isUInt32(regs[R12])
 }
 
-predicate ValidMemState(s:state)
+predicate {:opaque} ValidMemState(s:memstate)
 {
-    forall m:mem :: m in s.addresses ==> WordAligned(m.addr) && isUInt32(m.addr) && isUInt32(s.addresses[m])
-}
-
-predicate ValidGlobalState(s:state)
-{
-    match TheGlobalDecls() case GlobalDecls(decls) =>
-    match s.globals case Globals(gmap) =>
+    // regular mem
+    (forall m:mem :: m in s.addresses
+        ==> WordAligned(m.addr) && isUInt32(m.addr) && isUInt32(s.addresses[m]))
+    // globals
+    && (match TheGlobalDecls() case GlobalDecls(decls) =>
         // same names as decls
-        forall g :: g in decls ==> g in gmap
+        forall g :: g in decls ==> g in s.globals
         // correct size, all uint32 values
-        && forall g :: g in gmap ==> (g in decls
-            && WordsToBytes(|gmap[g]|) == decls[g]
-            && forall v :: v in gmap[g] ==> isUInt32(v))
+        && forall g :: g in s.globals ==> (g in decls
+            && WordsToBytes(|s.globals[g]|) == decls[g]
+            && forall v :: v in s.globals[g] ==> isUInt32(v)))
 }
 
 predicate ValidOperand(o:operand)
@@ -207,12 +205,12 @@ predicate ValidOperand(o:operand)
         case OSymbol(s) => false
 }
 
-predicate ValidMem(s:state, m:mem)
+predicate ValidMem(s:memstate, m:mem)
 {
     isUInt32(m.addr) && WordAligned(m.addr) && m in s.addresses
 }
 
-predicate ValidMemRange(s:state, base:int, limit:int)
+predicate ValidMemRange(s:memstate, base:int, limit:int)
 {
     forall i:int :: base <= i < limit && WordAligned(i) ==>
         ValidMem(s, Address(i))
@@ -318,7 +316,7 @@ function OperandContents(s:state, o:operand): int
     requires ValidOperand(o)
     ensures isUInt32(OperandContents(s,o))
 {
-    reveal_ValidState();
+    reveal_ValidRegState();
     match o
         case OConst(n) => n
         case OReg(r) => s.regs[r]
@@ -326,33 +324,33 @@ function OperandContents(s:state, o:operand): int
         case OLR => s.regs[LR(mode_of_state(s))]
 }
 
-function MemContents(s:state, m:mem): int
-    requires ValidState(s)
+function MemContents(s:memstate, m:mem): int
+    requires ValidMemState(s)
     requires ValidMem(s,m)
     ensures isUInt32(MemContents(s,m))
 {
-    reveal_ValidState();
+    reveal_ValidMemState();
     assert m in s.addresses;
     assert isUInt32(s.addresses[m]);
     s.addresses[m]
 }
 
-function GlobalFullContents(s:state, g:operand): seq<int>
-    requires ValidState(s)
+function GlobalFullContents(s:memstate, g:operand): seq<int>
+    requires ValidMemState(s)
     requires ValidGlobal(g)
     ensures forall w :: w in GlobalFullContents(s, g) ==> isUInt32(w)
     ensures WordsToBytes(|GlobalFullContents(s, g)|) == SizeOfGlobal(g)
 {
-    reveal_ValidState();
-    match s.globals case Globals(gmap) => gmap[g]
+    reveal_ValidMemState();
+    s.globals[g]
 }
 
-function GlobalWord(s:state, g:operand, offset:int): int
+function GlobalWord(s:memstate, g:operand, offset:int): int
     requires ValidGlobalOffset(g, offset)
-    requires ValidState(s)
+    requires ValidMemState(s)
     ensures isUInt32(GlobalWord(s, g, offset))
 {
-    reveal_ValidState();
+    reveal_ValidMemState();
     GlobalFullContents(s, g)[BytesToWords(offset)]
 }
 
@@ -365,9 +363,9 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
     requires ValidState(s)
     requires ValidDestinationOperand(o)
     requires isUInt32(v)
-    ensures evalUpdate(s, o, v, r, ok) ==> ValidState(r) && OperandContents(r,o) == v
+    ensures evalUpdate(s, o, v, r, ok) ==> ValidState(r)
 {
-    reveal_ValidState();
+    reveal_ValidRegState();
     ok && match o
         case OReg(reg) => r == s.(regs := s.regs[o.r := v])
         case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := v])
@@ -385,33 +383,31 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
 
 predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
     requires ValidState(s)
-    requires ValidMem(s, m)
+    requires ValidMem(s.m, m)
     requires isUInt32(v)
-    ensures evalMemUpdate(s, m, v, r, ok) ==> ValidState(r) && ValidMem(r, m) && MemContents(r,m) == v
+    ensures evalMemUpdate(s, m, v, r, ok) ==> ValidState(r)
 {
-    reveal_ValidState();
-    ok && r == s.(addresses := s.addresses[m := v])
+    reveal_ValidMemState();
+    ok && r == s.(m := s.m.(addresses := s.m.addresses[m := v]))
 }
 
 predicate evalGlobalUpdate(s:state, g:operand, offset:nat, v:int, r:state, ok:bool)
     requires ValidState(s)
     requires ValidGlobalOffset(g, offset)
     requires isUInt32(v)
-    ensures evalGlobalUpdate(s, g, offset, v, r, ok) ==> ValidState(r) && GlobalWord(r,g,offset) == v
+    ensures evalGlobalUpdate(s, g, offset, v, r, ok) ==> ValidState(r)
 {
-    reveal_ValidState();
-    match s.globals case Globals(gmap) =>
-        var oldval := gmap[g];
-        var newval := oldval[BytesToWords(offset) := v];
-        assert |newval| == |oldval|;
-        ok && r == s.(globals := Globals(gmap[g := newval]))
+    reveal_ValidMemState();
+    var oldval := s.m.globals[g];
+    var newval := oldval[BytesToWords(offset) := v];
+    assert |newval| == |oldval|;
+    ok && r == s.(m := s.m.(globals := s.m.globals[g := newval]))
 }
 
 predicate evalModeUpdate(s:state, newmode:int, r:state, ok:bool)
     requires ValidState(s)
     ensures evalModeUpdate(s,newmode,r,ok) ==> ValidState(r)
 {
-    reveal_ValidState();
     ok && ValidModeEncoding(newmode) && r == s.(mod := decode_mode(newmode))
 }
 
@@ -467,7 +463,7 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidDestinationOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
             WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
-            ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
+            ValidMem(s.m, Address(OperandContents(s, base) + OperandContents(s, ofs)))
         case LDR_global(rd, global, base, ofs) => 
             ValidDestinationOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
@@ -479,7 +475,7 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidRegOperand(rd) &&
             ValidOperand(ofs) && ValidOperand(base) &&
             WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
-            ValidMem(s, Address(OperandContents(s, base) + OperandContents(s, ofs)))
+            ValidMem(s.m, Address(OperandContents(s, base) + OperandContents(s, ofs)))
         case STR_global(rd, global, base, ofs) => 
             ValidRegOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
@@ -531,10 +527,10 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
         case MVN(dst, src) => evalUpdate(s, dst,
             not32(eval_op(s, src)), r, ok)
         case LDR(rd, base, ofs) => 
-            evalUpdate(s, rd, MemContents(s, Address(OperandContents(s, base) +
+            evalUpdate(s, rd, MemContents(s.m, Address(OperandContents(s, base) +
                 OperandContents(s, ofs))), r, ok)
         case LDR_global(rd, global, base, ofs) => 
-            evalUpdate(s, rd, GlobalWord(s, global, OperandContents(s, ofs)), r, ok)
+            evalUpdate(s, rd, GlobalWord(s.m, global, OperandContents(s, ofs)), r, ok)
         case LDR_reloc(rd, name) =>
             evalUpdate(s, rd, AddressOfGlobal(name), r, ok)
         case STR(rd, base, ofs) => 

@@ -15,7 +15,6 @@ predicate ValidStack(s:sp_state)
 {
     WordAligned(eval_op(s, op_sp()))
     && StackLimit() < eval_op(s, op_sp()) <= StackBase()
-    && ValidMemRange(s, StackLimit(), StackBase())
 }
 
 predicate StackBytesRemaining(s:sp_state,bytes:int)
@@ -40,49 +39,31 @@ predicate NonvolatileRegPreserving(s:sp_state, r:sp_state)
     RegPreservingExcept(s, r, [OReg(R0), OReg(R1), OReg(R2), OReg(R3)])
 }
 
-// XXX: delete this nonsense, as soon as we can figure out how
-predicate MemValidityPreserving(s:sp_state, r:sp_state)
-    requires ValidState(s) && ValidState(r);
+predicate MemPreservingExcept(s:state, r:state, base:int, limit:int)
+    requires AlwaysInvariant(s,r);
+    requires limit >= base;
 {
-    forall i:int :: ValidMem(s,Address(i)) ==> ValidMem(r,Address(i))
-}
-
-predicate MemPreserving(s:sp_state, r:sp_state)
-    requires ValidState(s) && ValidState(r);
-{
-    forall i:int :: ValidMem(s,Address(i)) ==>
-        ValidMem(r,Address(i)) && addrval(s,i) == addrval(r,i)
+    forall i :: ValidMem(s.m,Address(i)) && (i < base || i >= limit) ==> addrval(s,i) == addrval(r,i)
 }
 
 predicate ParentStackPreserving(s:sp_state, r:sp_state)
-    requires ValidState(s) && ValidState(r);
-    requires ValidStack(s) && ValidStack(r);
+    requires SaneState(s) && SaneState(r)
 {
     var sp := eval_op(s,op_sp());
-    forall i :: ValidMem(s,Address(i)) && (sp <= i < StackBase())
-      ==> ValidMem(r,Address(i)) && addrval(r,i) == addrval(s,i)
+    forall i :: sp <= i < StackBase() && WordAligned(i) ==> addrval(r,i) == addrval(s,i)
 }
 
 predicate StackPreserving(s:sp_state, r:sp_state)
-    requires ValidState(s) && ValidState(r);
-    requires ValidStack(s) && ValidStack(r);
+    requires SaneState(s) && SaneState(r)
 {
     eval_op(s,op_sp()) == eval_op(r,op_sp())
     && ParentStackPreserving(s, r)
 }
 
-predicate NonStackMemPreserving(s:sp_state, r:sp_state)
-    requires ValidState(s) && ValidState(r);
+predicate NonStackMemPreserving(s:state, r:state)
+    requires AlwaysInvariant(s,r);
 {
-    forall i:int {:trigger Address(i)}
-        :: !(StackLimit() <= i < StackBase()) && ValidMem(s,Address(i))
-        ==> ValidMem(r,Address(i)) && addrval(r,i) == addrval(s,i)
-}
-
-predicate GlobalValuePreserving(s:sp_state, r:sp_state)
-    requires ValidState(s) && ValidState(r);
-{
-    forall g :: ValidGlobal(g) ==> GlobalFullContents(s, g) == GlobalFullContents(r, g)
+    MemPreservingExcept(s, r, StackLimit(), StackBase())
 }
 
 #endverbatim
@@ -114,10 +95,10 @@ procedure fcall_prologue(ghost stack_bytes:int)
         addrval(this, sp+32) == old(r4);
         addrval(this, sp+36) == old(lr);
 
+        AlwaysInvariant(old(this),this);
+        GlobalsInvariant(old(this),this);
         NonStackMemPreserving(old(this),this);
         ParentStackPreserving(old(this),this);
-        GlobalValuePreserving(old(this),this);
-        
         StackBytesRemaining(this,stack_bytes-40);
 {
     SUB(sp, sp, 40);
@@ -165,9 +146,8 @@ procedure fcall_epilogue(ghost stack_bytes_left:int)
         r11 == old(addrval(this, sp+4));
         r12 == old(addrval(this, sp));
 
-        MemPreserving(old(this),this);
-        GlobalValuePreserving(old(this),this);
-
+        AlwaysInvariant(old(this),this);
+        AllMemInvariant(old(this),this);
         StackBytesRemaining(this,stack_bytes_left+40);
 {
     //pop r12 down to r4 from stack

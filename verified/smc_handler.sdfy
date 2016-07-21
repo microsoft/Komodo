@@ -1,8 +1,5 @@
-#token ++ precedence !
 #token += precedence :=
-
 procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
-procedure operator(++) (inout{:operand} dst:int) := incr
 procedure operator(+=) (inout{:operand} dst:int, {:operand} src:int) := plusEquals
 
 #verbatim
@@ -198,10 +195,9 @@ procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:
         @tmp != op_sp();
         validPageNr(pagenr);
     ensures
-        GlobalValuePreserving(old(this),this);
+        AlwaysInvariant(old(this),this);
+        AllMemInvariant(old(this),this);
         RegPreservingExcept(old(this), this, [@phys, @tmp]);
-        MemPreserving(old(this),this);
-        WordAligned(phys);
         phys == page_paddr(old(pagenr));
 {
     tmp := sp_op_const(KEVLAR_PAGE_SIZE());
@@ -229,10 +225,9 @@ procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out
         @tmp != op_sp();
         validPageNr(pagenr);
     ensures
-        GlobalValuePreserving(old(this),this);
+        AlwaysInvariant(old(this),this);
+        AllMemInvariant(old(this),this);
         RegPreservingExcept(old(this), this, [@virt, @tmp]);
-        MemPreserving(old(this),this);
-        WordAligned(virt);
         virt == page_monvaddr(old(pagenr));
 {
     page_paddr_impl(virt, pagenr, tmp);
@@ -256,18 +251,16 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
         WordAligned(size);
         isUInt32(val);
         isUInt32(base + size);
-        ValidMemRange(this, base, base + size);
+        ValidMemRange(this.m, base, base + size);
         base >= StackBase() || base + size <= StackLimit();
     ensures
-        // XXX: I shouldn't have to say this! :(
-        MemValidityPreserving(old(this), this);
-        GlobalValuePreserving(old(this),this);
-        forall i :: (old(base) <= i < old(base + size)) && WordAligned(i) ==>
-            addrval(this,i) == old(val);
-        forall i :: !(old(base) <= i < old(base + size)) && ValidMem(old(this),Address(i))
-             ==> addrval(this,i) == addrval(old(this),i);
+        AlwaysInvariant(old(this),this);
+        GlobalsInvariant(old(this),this);
         StackPreserving(old(this),this);
         RegPreservingExcept(old(this), this, [@base,@size]);
+        MemPreservingExcept(old(this), this, old(base), old(base + size));
+        forall i :: old(base) <= i < old(base + size) && WordAligned(i)
+            ==> addrval(this,i) == old(val);
 {
     ghost var lower := base;
     ghost var limit := base + size;
@@ -277,27 +270,23 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
 
     for (; base < size; base += 4)
         invariant
-            ValidState(this);
-            ValidStack(this);
-            sp == old(sp);
+            AlwaysInvariant(old(this),this);
+            GlobalsInvariant(old(this),this);
             SaneState(this);
-            GlobalValuePreserving(old(this),this);
-            ValidMemRange(this,lower,limit);
-            MemValidityPreserving(old(this), this);
-            StackPreserving(old(this),this);
-            RegPreservingExcept(old(this), this, [@base,@size]);
             WordAligned(base);
             size == limit;
             lower <= base <= limit;
             lower >= StackBase() || limit <= StackLimit();
             forall i :: (lower <= i < base) && WordAligned(i)
                 ==> addrval(this,i) == old(val);
-            forall i :: !(lower <= i < limit) && ValidMem(old(this),Address(i))
-                ==> addrval(this,i) == addrval(old(this),i);
+            MemPreservingExcept(old(this), this, lower, limit);
+            RegPreservingExcept(old(this), this, [@base,@size]);
         decreases
             size - base;
     {
+        ghost var prevThis := this;
         STR(val, base, 0);
+        assert forall p :: ValidMem(prevThis.m, Address(p)) && p != base ==> addrval(prevThis, p) == addrval(this, p);
     }
 }
 
@@ -520,16 +509,17 @@ procedure kev_smc_init_addrspace(
 
 #verbatim
 lemma SameMemAndGlobalsImpliesSamePageDb(s:state, s':state, pagedb:PageDb)
-      requires SaneState(s) && SaneState(s')
-      requires pageDbClosedRefs(pagedb)
-      requires pageDbCorresponds(s, pagedb)
-      requires NonStackMemPreserving(s,s')
-      requires GlobalValuePreserving(s,s')
-      ensures pageDbCorresponds(s', pagedb)
+    requires SaneState(s) && SaneState(s')
+    requires AlwaysInvariant(s,s')
+    requires pageDbClosedRefs(pagedb)
+    requires pageDbCorresponds(s.m, pagedb)
+    requires NonStackMemPreserving(s,s')
+    requires GlobalsInvariant(s,s')
+    ensures pageDbCorresponds(s'.m, pagedb)
 {
-    assert GlobalFullContents(s, PageDb()) == GlobalFullContents(s', PageDb());
-    assert forall p :: validPageNr(p) ==> extractPage(s, p) == extractPage(s', p);
-    assert extractPages(s.addresses) == extractPages(s'.addresses);
+    assert GlobalFullContents(s.m, PageDb()) == GlobalFullContents(s'.m, PageDb());
+    assert forall p :: validPageNr(p) ==> extractPage(s.m, p) == extractPage(s'.m, p);
+    assert extractAllPages(s.m) == extractAllPages(s'.m);
 }
 #endverbatim
 
@@ -596,42 +586,28 @@ function method MyGlobalDecls(): globaldecls
                     PageDb() := G_PAGEDB_SIZE()])
 }
 
-predicate SaneGlobals(s:state)
+predicate SaneMem(s:memstate)
 {
-    MyGlobalDecls() == TheGlobalDecls()
-        && ValidState(s)
-        && GlobalFullContents(s, SecurePhysBase()) == [SecurePhysBaseValue()]
-        // XXX: workaround so dafny sees that these are distinct
-        && SecurePhysBase() != PageDb()
-}
-
-predicate ValidMemAddrs(memmap:map<mem, int>, m:mem)
-{
-    isUInt32(m.addr) && WordAligned(m.addr) && m in memmap
-}
-
-predicate ValidMemRangeAddrs(memmap:map<mem, int>, base:int, limit:int)
-{
-    forall i:int :: base <= i < limit && WordAligned(i) ==>
-        ValidMemAddrs(memmap, Address(i))
-}
-
-
-predicate SaneMemRanges(memmap:map<mem, int>)
-{
+    ValidMemState(s)
     // TODO: our insecure phys mapping must be valid
     //&& ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE(),
     //    (KEVLAR_DIRECTMAP_VBASE() + MonitorPhysBaseValue()))
     // our secure phys mapping must be valid
-    ValidMemRangeAddrs(memmap, KEVLAR_DIRECTMAP_VBASE() + SecurePhysBaseValue(),
+    && ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE() + SecurePhysBaseValue(),
         (KEVLAR_DIRECTMAP_VBASE() + SecurePhysBaseValue() + KEVLAR_SECURE_RESERVE()))
     // the stack must be mapped
-    && ValidMemRangeAddrs(memmap, StackLimit(), StackBase())
+    && ValidMemRange(s, StackLimit(), StackBase())
+    // globals are as we expect
+    && MyGlobalDecls() == TheGlobalDecls()
+    && GlobalFullContents(s, SecurePhysBase()) == [SecurePhysBaseValue()]
+    // XXX: workaround so dafny sees that these are distinct
+    && SecurePhysBase() != PageDb()
+
 }
 
 predicate SaneState(s:state)
 {
-    s.mod == Monitor && ValidState(s) && ValidStack(s) && SaneGlobals(s) && SaneMemRanges(s.addresses)
+    ValidState(s) && ValidStack(s) && SaneMem(s.m) && s.mod == Monitor
 }
 
 method Main()

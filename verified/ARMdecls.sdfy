@@ -20,152 +20,197 @@ function{:operand} sp_op_const(n:int):operand
 procedure ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
         ValidState(this);
+    requires
         ValidOperand(@src1);
         ValidOperand(@src2);
         ValidDestinationOperand(@dst);
-    requires
         isUInt32(src1 + src2);
     ensures
         evalUpdate(old(this), @dst, old(src1 + src2), this, true);
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
 
 procedure SUB(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
         ValidState(this);
+    requires
         ValidOperand(@src1);
         ValidOperand(@src2);
         ValidDestinationOperand(@dst);
-    requires
         isUInt32(src1 - src2);
     ensures
         evalUpdate(old(this), @dst, old(src1 - src2), this, true);
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
 
 procedure MUL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
         ValidState(this);
+    requires
         ValidRegOperand(@src1);
         ValidRegOperand(@src2);
         ValidDestinationOperand(@dst);
-    requires
         isUInt32(src1 * src2);
     ensures
         evalUpdate(old(this), @dst, old(src1 * src2), this, true);
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
 
 procedure UDIV(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
         ValidState(this);
+    requires
         ValidOperand(@src1);
         ValidOperand(@src2);
         ValidDestinationOperand(@dst);
-    requires
         src2 > 0;
         isUInt32(src1 / src2);
     ensures
         evalUpdate(old(this), @dst, old(src1 / src2), this, true);
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
 
 procedure AND(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
         ValidState(this);
+    requires
         ValidOperand(@src1);
         ValidOperand(@src2);
         ValidDestinationOperand(@dst);
     ensures
         evalUpdate(old(this), @dst, old(and32(src1, src2)), this, true);
-
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
 
 procedure ORR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
         ValidState(this);
+    requires
         ValidOperand(@src1);
         ValidOperand(@src2);
         ValidDestinationOperand(@dst);
     ensures
         evalUpdate(old(this), @dst, old(or32(src1,src2)), this, true);
-
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
 
 procedure EOR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
         ValidState(this);
+    requires
         ValidOperand(@src1);
         ValidOperand(@src2);
         ValidDestinationOperand(@dst);
     ensures
         evalUpdate(old(this), @dst, old(xor32(src1,src2)), this, true);
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
 
 procedure ROR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
         ValidState(this);
+    requires
         ValidOperand(@src1);
         ValidOperand(@src2);
         ValidDestinationOperand(@dst);
-    requires
         @src2 is OConst;
         0 <= src2 < 32;
     ensures
         evalUpdate(old(this), @dst, old(ror32(src1,src2)), this, true);
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
 
 procedure LSL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
         ValidState(this);
+    requires
         ValidOperand(@src1);
         ValidOperand(@src2);
         ValidDestinationOperand(@dst);
-    requires
         @src2 is OConst;
         0 <= src2 < 32;
     ensures
         evalUpdate(old(this), @dst, old(shl32(src1,src2)), this, true);
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
 
 procedure LSR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
         ValidState(this);
+    requires
         ValidOperand(@src1);
         ValidOperand(@src2);
         ValidDestinationOperand(@dst);
-    requires
         @src2 is OConst;
         0 <= src2 < 32;
     ensures
         evalUpdate(old(this), @dst, old(shr32(src1,src2)), this, true);
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
 
 procedure MVN(out{:operand} dst:int, {:operand} src:int)
     requires/ensures
         ValidState(this);
+    requires
         ValidOperand(@src);
         ValidDestinationOperand(@dst);
     ensures
         evalUpdate(old(this), @dst, old(not32(src)), this, true);
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
 
 procedure MOV(out{:operand} dst:int, {:operand} src:int)
     requires/ensures
         ValidState(this);
+    requires
         ValidOperand(@src);
         ValidDestinationOperand(@dst);
     ensures
         evalUpdate(old(this), @dst, old(src), this, true);
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
 
 procedure LDR(out{:operand} rd:int, {:operand} base:int, {:operand} ofs:int)
     requires/ensures
         ValidState(this);
+    requires
         ValidDestinationOperand(@rd);
         ValidOperand(@base);
         ValidOperand(@ofs);
-    requires
         WordAligned(base + ofs);
-        ValidMem(this, addr_mem(this, @base, @ofs));
+        ValidMem(this.m, addr_mem(this, @base, @ofs));
     ensures
-        evalUpdate(old(this), @rd, MemContents(old(this), addr_mem(old(this), @base, @ofs)), this, true);
+        evalUpdate(old(this), @rd, MemContents(old(this.m), addr_mem(old(this), @base, @ofs)), this, true);
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
 
 procedure STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
     requires/ensures
         ValidState(this);
+    requires
         ValidRegOperand(@rd);
         ValidOperand(@base);
         ValidOperand(@ofs);
-    requires
         WordAligned(base + ofs);
-        ValidMem(this, addr_mem(this, @base, @ofs));
+        ValidMem(this.m, addr_mem(this, @base, @ofs));
     ensures
         evalMemUpdate(old(this), addr_mem(old(this), @base, @ofs), old(rd), this, true);
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        GlobalsInvariant(old(this), this);
 
 procedure CPS({:operand} mod:int)
     requires
@@ -174,14 +219,8 @@ procedure CPS({:operand} mod:int)
         ValidModeEncoding(mod);
     ensures
         evalModeUpdate(old(this), old(mod), this, true);
-
-procedure incr(inout{:operand} o:int)
-    requires
-        ValidState(this);
-        ValidDestinationOperand(@o);
-        isUInt32(o + 1);
-    ensures
-        evalUpdate(old(this), @o, old(o) + 1, this, true);
+        AlwaysInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
 
 // procedure push({:operand} o:int)
 //     requires
@@ -204,22 +243,6 @@ procedure plusEquals(inout{:operand} o1:int, {:operand} o2:int)
     ensures
         evalUpdate(old(this), @o1, old(o1 + o2), this, true);
 
-procedure andEquals(inout{:operand} o1:int, {:operand} o2:int)
-    requires
-        ValidState(this);
-        ValidDestinationOperand(@o1);
-        ValidOperand(@o2);
-    ensures
-        evalUpdate(old(this), @o1, old(and32(o1,o2)), this, true);
-
-procedure xorEquals(inout{:operand} o1:int, {:operand} o2:int)
-    requires
-        ValidState(this);
-        ValidDestinationOperand(@o1);
-        ValidOperand(@o2);
-    ensures
-        evalUpdate(old(this), @o1, old(xor32(o1,o2)), this, true);
-
 procedure LDRglobaladdr(out{:operand} rd:int, {:operand} g:string)
     requires
         ValidState(this);
@@ -227,6 +250,9 @@ procedure LDRglobaladdr(out{:operand} rd:int, {:operand} g:string)
         ValidGlobal(@g);
     ensures
         evalUpdate(old(this), @rd, AddressOfGlobal(@g), this, true);
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
 
 procedure LDRglobal(out{:operand} rd:int, {:operand} g:string,
                     {:operand} base:int, {:operand} ofs:int)
@@ -238,7 +264,10 @@ procedure LDRglobal(out{:operand} rd:int, {:operand} g:string,
         ValidGlobalOffset(@g, ofs);
         AddressOfGlobal(@g) == base;
     ensures
-        evalUpdate(old(this), @rd, old(GlobalWord(this, @g, ofs)), this, true);
+        evalUpdate(old(this), @rd, old(GlobalWord(this.m, @g, ofs)), this, true);
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
 
 procedure STRglobal({:operand} rd:int, {:operand} g:string,
                     {:operand} base:int, {:operand} ofs:int)
@@ -252,3 +281,6 @@ procedure STRglobal({:operand} rd:int, {:operand} g:string,
         isUInt32(rd);
     ensures
         evalGlobalUpdate(old(this), @g, old(ofs), old(rd), this, true);
+        AlwaysInvariant(old(this), this);
+        ModeInvariant(old(this), this);
+        AddrMemInvariant(old(this), this);
