@@ -3,14 +3,6 @@ procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
 procedure operator(+=) (inout{:operand} dst:int, {:operand} src:int) := plusEquals
 
 #verbatim
-/*
-lemma valid_pagenr_ensures_valid_mem(s:state, pagenr: int)
-      requires SaneState(s)
-      requires validPageNr(pagenr)
-      ensures ValidMemRange(s, page_monvaddr(s, pagenr), page_monvaddr(s, pagenr) + KEVLAR_PAGE_SIZE())
-{}
-*/
-
 function page_paddr(pagenr:PageNr):int
     requires validPageNr(pagenr)
     ensures WordAligned(page_paddr(pagenr))
@@ -25,46 +17,16 @@ function page_monvaddr(pagenr:PageNr):int
     page_paddr(pagenr) + KEVLAR_DIRECTMAP_VBASE()
 }
 
-function addrsInPage(p:PageNr): set<mem>
+predicate addrInPage(m:mem, p:PageNr)
     requires validPageNr(p)
 {
-    (set o:int | WordAligned(o) && 0 <= o < KEVLAR_PAGE_SIZE()
-         :: Address(page_monvaddr(p) + o))
-}
-
-function addrsInSecurePages(): set<mem>
-{
-    (set o:int | WordAligned(o) && 0 <= o < KEVLAR_SECURE_RESERVE()
-         :: Address(page_monvaddr(0) + o))
+    WordAligned(m) && page_monvaddr(p) <= m < page_monvaddr(p) + KEVLAR_PAGE_SIZE()
 }
 
 predicate memContainsPage(memmap: map<mem, int>, p:PageNr)
     requires validPageNr(p)
 {
-    // forall m:mem :: m in addrsInPage(p) ==> m in memmap
-    forall o :: WordAligned(o) && 0 <= o < KEVLAR_PAGE_SIZE() ==> Address(page_monvaddr(p) + o) in memmap
-}
-
-function extractPageDbEntry(s:memstate, p:PageNr): seq<int>
-    requires SaneMem(s)
-    requires validPageNr(p)
-    ensures |extractPageDbEntry(s,p)| == PAGEDB_ENTRY_SIZE()/BytesPerWord()
-    ensures forall o :: WordAligned(o) && 0 <= o < PAGEDB_ENTRY_SIZE()
-        ==> GlobalWord(s, PageDb(), G_PAGEDB_ENTRY(p) + o)
-            == extractPageDbEntry(s,p)[o / BytesPerWord()]
-{
-    var dbofstate := GlobalFullContents(s, PageDb());
-    assert |dbofstate| == G_PAGEDB_SIZE() / BytesPerWord();
-    extractPageDbEntryFromValue(dbofstate, p)
-}
-
-function extractPageDbEntryFromValue(dbval: seq<int>, p:PageNr): seq<int>
-    requires validPageNr(p)
-    requires |dbval| == G_PAGEDB_SIZE() / BytesPerWord()
-    ensures |extractPageDbEntryFromValue(dbval,p)| == PAGEDB_ENTRY_SIZE()/BytesPerWord()
-{
-    var entrylen := PAGEDB_ENTRY_SIZE() / BytesPerWord();
-    dbval[p*entrylen..p*entrylen+entrylen]
+    forall m :: addrInPage(m,p) ==> m in memmap
 }
 
 function extractPage(s:memstate, p:PageNr): map<mem, int>
@@ -72,28 +34,37 @@ function extractPage(s:memstate, p:PageNr): map<mem, int>
     requires validPageNr(p)
     ensures memContainsPage(extractPage(s,p), p)
 {
-    (map m:mem | m in addrsInPage(p) :: s.addresses[m])
+    // XXX: expanded addrInPage() to help Dafny see a bounded set
+    (map m | WordAligned(m)
+        && page_monvaddr(p) <= m < page_monvaddr(p) + KEVLAR_PAGE_SIZE()
+        :: s.addresses[m])
 }
 
-function extractAllPages(s:memstate): map<mem, int>
+function extractPageDbEntry(s:memstate, p:PageNr): seq<int>
     requires SaneMem(s)
-    ensures forall p :: validPageNr(p) ==> addrsInPage(p) < addrsInSecurePages()
-    ensures forall p :: validPageNr(p) ==> memContainsPage(extractAllPages(s), p)
+    requires validPageNr(p)
+    ensures |extractPageDbEntry(s,p)| == BytesToWords(PAGEDB_ENTRY_SIZE())
+    ensures forall o :: WordAligned(o) && 0 <= o < PAGEDB_ENTRY_SIZE()
+        ==> GlobalWord(s, PageDb(), G_PAGEDB_ENTRY(p) + o)
+            == extractPageDbEntry(s,p)[BytesToWords(o)]
 {
-    (map m:mem | m in addrsInSecurePages() :: s.addresses[m])
+    var fulldb := GlobalFullContents(s, PageDb());
+    assert |fulldb| == BytesToWords(G_PAGEDB_SIZE());
+    var entrylen := BytesToWords(PAGEDB_ENTRY_SIZE());
+    fulldb[p*entrylen..p*entrylen+entrylen]
 }
 
 predicate pageDbCorresponds(s:memstate, pagedb:PageDb)
     requires SaneMem(s)
     requires pageDbClosedRefs(pagedb)
 {
-    // XXX: unpack the entry and page contents to help dafny see
+    // XXX: unpack the entry and page contents here to help dafny see
     // that we have no other dependencies on the state
-    var fulldb := GlobalFullContents(s, PageDb());
-    var secpages := extractAllPages(s);
+    var db := (map p | 0 <= p < KEVLAR_SECURE_NPAGES() :: extractPageDbEntry(s,p));
+    var secpages := (map p | 0 <= p < KEVLAR_SECURE_NPAGES() :: extractPage(s,p));
     forall p {:trigger validPageNr(p)} :: validPageNr(p)
-        ==> (pageDbEntryCorresponds(p, pagedb[p], extractPageDbEntryFromValue(fulldb, p))
-            && pageContentsCorresponds(p, pagedb[p], secpages))
+        ==> (pageDbEntryCorresponds(p, pagedb[p], db[p])
+            && pageContentsCorresponds(p, pagedb[p], secpages[p]))
 }
 
 predicate pageDbCorrespondsExcluding(s:memstate, pagedb:PageDb, modifiedPage:PageNr)
@@ -116,15 +87,15 @@ predicate pageDbCorrespondsOnly(s:memstate, pagedb:PageDb, p:PageNr)
 
 predicate {:opaque} pageDbEntryCorresponds(p:PageNr, e:PageDbEntry, entryWords:seq<int>)
     requires validPageNr(p)
-    requires |entryWords| == PAGEDB_ENTRY_SIZE()/BytesPerWord()
+    requires |entryWords| == BytesToWords(PAGEDB_ENTRY_SIZE())
     requires e.PageDbEntryTyped?
         ==> validPageNr(e.addrspace) && closedRefsPageDbEntry(e.entry)
 {
-    pageDbEntryTypeVal(e) == entryWords[PAGEDB_ENTRY_TYPE() / BytesPerWord()]
+    pageDbEntryTypeVal(e) == entryWords[BytesToWords(PAGEDB_ENTRY_TYPE())]
     && match e {
         case PageDbEntryFree => true
         case PageDbEntryTyped(addrspace, entry) =>
-            entryWords[PAGEDB_ENTRY_ADDRSPACE()/BytesPerWord()]
+            entryWords[BytesToWords(PAGEDB_ENTRY_ADDRSPACE())]
                 == page_monvaddr(addrspace)
     }
 }
@@ -150,11 +121,11 @@ predicate pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem,
     requires closedRefsPageDbEntry(e)
 {
     var base := page_monvaddr(p);
-    assert Address(base) in page;
-    page[Address(ADDRSPACE_L1PT(base))] == page_monvaddr(e.l1ptnr)
-    && page[Address(ADDRSPACE_L1PT_PHYS(base))] == page_paddr(e.l1ptnr)
-    && page[Address(ADDRSPACE_REF(base))] == e.refcount
-    && page[Address(ADDRSPACE_STATE(base))] == pageDbAddrspaceStateVal(e.state)
+    assert base in page;
+    page[ADDRSPACE_L1PT(base)] == page_monvaddr(e.l1ptnr)
+    && page[ADDRSPACE_L1PT_PHYS(base)] == page_paddr(e.l1ptnr)
+    && page[ADDRSPACE_REF(base)] == e.refcount
+    && page[ADDRSPACE_STATE(base)] == pageDbAddrspaceStateVal(e.state)
 }
 
 function pageDbEntryTypeVal(e: PageDbEntry): int
@@ -287,7 +258,7 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
     {
         ghost var prevThis := this;
         STR(val, base, 0);
-        assert forall p :: ValidMem(prevThis.m, Address(p)) && p != base ==> addrval(prevThis, p) == addrval(this, p);
+        assert forall p :: ValidMem(prevThis.m, p) && p != base ==> addrval(prevThis, p) == addrval(this, p);
     }
 }
 
@@ -315,11 +286,9 @@ function initL1PTEntry(addrspace_page:int): PageDbEntry
 }
 #endverbatim
 
-procedure init_addrspace_pages(
+procedure init_addrspace_mem(
     {:register OReg(R1)} addrspace_page:int,
     {:register OReg(R2)} l1pt_page:int,
-    {:register OReg(R4)} addrspace_entry:int,
-    {:register OReg(R5)} l1pt_entry:int,
     {:register OReg(R6)} addrspace_va:int)
     requires/ensures
         SaneState(this);
@@ -327,14 +296,15 @@ procedure init_addrspace_pages(
         validPageNr(addrspace_page);
         validPageNr(l1pt_page);
         addrspace_page != l1pt_page;
-        addrspace_entry == G_PAGEDB_ENTRY(addrspace_page);
-        l1pt_entry == G_PAGEDB_ENTRY(l1pt_page);
         addrspace_va == page_monvaddr(addrspace_page);
     ensures
         AlwaysInvariant(old(this),this);
         GlobalsInvariant(old(this),this);
-        //forall i :: ValidMem(this.m, Address(i)) && !(i in (addrsInPage(addrspace_page) + addrsInPage(l1pt_page)))
-        //    ==> addrval(this,i) == addrval(old(this),i);
+        StackPreserving(old(this),this);
+        forall i :: ValidMem(this.m, i)
+            && !(page_monvaddr(addrspace_page) <= i < page_monvaddr(addrspace_page) + KEVLAR_PAGE_SIZE())
+            && !(page_monvaddr(l1pt_page) <= i < page_monvaddr(l1pt_page) + KEVLAR_PAGE_SIZE())
+            ==> addrval(this,i) == addrval(old(this),i);
         RegPreservingExcept(old(this),this,[@r0, @r3, @r7]);
         pageContentsCorresponds(old(addrspace_page), initAddrspaceEntry(addrspace_page, l1pt_page), extractPage(this.m, old(addrspace_page)));
         pageContentsCorresponds(old(l1pt_page), initL1PTEntry(addrspace_page), extractPage(this.m, old(l1pt_page)));
@@ -364,7 +334,67 @@ procedure init_addrspace_pages(
     memset(r7,r0,r3);
 }
 
-procedure kev_smc_init_addrspace_success(
+procedure init_addrspace_pagedb(
+    {:register OReg(R1)} addrspace_page:int,
+    {:register OReg(R2)} l1pt_page:int,
+    {:register OReg(R4)} addrspace_entry:int,
+    {:register OReg(R5)} l1pt_entry:int,
+    out {:register OReg(R6)} addrspace_va:int,
+    {:register OReg(R12)} pagedb_base:int)
+    requires/ensures
+        SaneState(this);
+    requires
+        addrspace_page != l1pt_page;
+        validPageNr(addrspace_page);
+        validPageNr(l1pt_page);
+        addrspace_entry == G_PAGEDB_ENTRY(addrspace_page);
+        l1pt_entry == G_PAGEDB_ENTRY(l1pt_page);
+        pagedb_base == AddressOfGlobal(PageDb());
+    ensures
+        AlwaysInvariant(old(this),this);
+        AddrMemInvariant(old(this),this);
+        RegPreservingExcept(old(this),this,[@r0, @r4, @r5, @r6]);
+        addrspace_va == page_monvaddr(old(addrspace_page));
+        forall p :: validPageNr(p) && p != addrspace_page && p != l1pt_page
+            ==> extractPageDbEntry(old(this).m, p) == extractPageDbEntry(this.m, p);
+        pageDbEntryCorresponds(addrspace_page,
+                               initAddrspaceEntry(addrspace_page, l1pt_page),
+                               extractPageDbEntry(this.m, addrspace_page));
+        pageDbEntryCorresponds(l1pt_page, initL1PTEntry(addrspace_page),
+                               extractPageDbEntry(this.m, l1pt_page));
+{
+    reveal_pageDbEntryCorresponds();
+
+    /* update addrspace entry in pagedb */
+    r0 := sp_op_const(KEV_PAGE_ADDRSPACE());
+    STRglobal(r0, PageDb(), r12, r4);
+    assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_TYPE())
+        == KEV_PAGE_ADDRSPACE();
+
+    page_monvaddr_impl(r6,addrspace_page,r0);
+    r4 += sp_op_const(PAGEDB_ENTRY_ADDRSPACE());
+    assert r4 == G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_ADDRSPACE();
+    STRglobal(r6, PageDb(), r12, r4);
+    assert extractPageDbEntry(this.m, addrspace_page)[BytesToWords(PAGEDB_ENTRY_ADDRSPACE())]
+           == page_monvaddr(addrspace_page);
+
+    assert extractPageDbEntry(this.m, addrspace_page) == [KEV_PAGE_ADDRSPACE(), old(page_monvaddr(addrspace_page))];
+
+    /* Update l1pt entry in pagedb */
+    r0 := sp_op_const(KEV_PAGE_L1PTABLE());
+    STRglobal(r0, PageDb(), r12, r5);
+    assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
+                          + PAGEDB_ENTRY_TYPE()) == KEV_PAGE_L1PTABLE();
+    r5 += sp_op_const(PAGEDB_ENTRY_ADDRSPACE());
+    assert r5 == G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_ADDRSPACE();
+    STRglobal(r6, PageDb(), r12, r5);
+    assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
+                          + PAGEDB_ENTRY_ADDRSPACE()) == page_monvaddr(addrspace_page);
+
+    assert extractPageDbEntry(this.m, l1pt_page) == [KEV_PAGE_L1PTABLE(), old(page_monvaddr(addrspace_page))];
+}
+
+procedure init_addrspace(
     {:register OReg(R1)} addrspace_page:int,
     {:register OReg(R2)} l1pt_page:int,
     {:register OReg(R4)} addrspace_entry:int,
@@ -386,58 +416,35 @@ procedure kev_smc_init_addrspace_success(
         pageIsFree(pagedb_in, addrspace_page);
         pageIsFree(pagedb_in, l1pt_page);
     ensures
+        AlwaysInvariant(old(this),this);
         StackPreserving(old(this),this);
+        RegPreservingExcept(old(this),this,[@r0, @r3, @r4, @r5, @r6, @r7]);
         old(initAddrspace(pagedb_in, addrspace_page, l1pt_page)) == Pair(pagedb, KEV_ERR_SUCCESS());
         pageDbCorresponds(this.m, pagedb);
-        validPageDb(pagedb);
 {
-    //reveal_pageDbEntryCorresponds();
-
     ghost var gaddrspace_entry := initAddrspaceEntry(addrspace_page, l1pt_page);
     ghost var gl1pt_entry := initL1PTEntry(addrspace_page);
     pagedb := pagedb_in[addrspace_page := gaddrspace_entry][l1pt_page := gl1pt_entry];
 
-    // compute addrs
-    page_monvaddr_impl(r6,addrspace_page,r0);
-
-    /* Update addrspace page in memory */
-    init_addrspace_pages(addrspace_page, l1pt_page, addrspace_entry, l1pt_entry, r6);
-    ghost var postInitState := this;
-    assert pageContentsCorresponds(addrspace_page, gaddrspace_entry, extractPage(this.m, addrspace_page));
-
-    /* Update addrspace entry in PageDb */
-    r0 := sp_op_const(KEV_PAGE_ADDRSPACE());
-    assert r4 == G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_TYPE();
-    assert r12 == AddressOfGlobal(PageDb());
-    STRglobal(r0, PageDb(), r12, r4);
-    assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_TYPE())
-           == KEV_PAGE_ADDRSPACE();
-
-    r4 += sp_op_const(PAGEDB_ENTRY_ADDRSPACE());
-    assert r4 == G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_ADDRSPACE();
-    assert r6 == page_monvaddr(addrspace_page);
-    STRglobal(r6, PageDb(), r12, r4);
-    assert extractPageDbEntry(this.m, addrspace_page)[PAGEDB_ENTRY_ADDRSPACE()/BytesPerWord()]
-           == page_monvaddr(addrspace_page);
+    /* Update entries in PageDb */
+    init_addrspace_pagedb(addrspace_page, l1pt_page, addrspace_entry, l1pt_entry, r6, pagedb_base);
     assert pageDbEntryCorresponds(addrspace_page, gaddrspace_entry,
                                   extractPageDbEntry(this.m, addrspace_page));
-    assert AddrMemInvariant(postInitState, this);
-    assert pageContentsCorresponds(addrspace_page, gaddrspace_entry, extractPage(this.m, addrspace_page));
-    assert pageDbCorrespondsOnly(this.m, pagedb, addrspace_page);
-
-    /* Update l1pt entry in pagedb */
-    r0 := sp_op_const(KEV_PAGE_L1PTABLE());
-    STRglobal(r0, PageDb(), r12, r5);
-    assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
-                          + PAGEDB_ENTRY_TYPE()) == KEV_PAGE_L1PTABLE();
-    r5 += sp_op_const(PAGEDB_ENTRY_ADDRSPACE());
-    assert r5 == G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_ADDRSPACE();
-    STRglobal(r6, PageDb(), r12, r5);
-    assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
-                          + PAGEDB_ENTRY_ADDRSPACE()) == page_monvaddr(addrspace_page);
     assert pageDbEntryCorresponds(l1pt_page, gl1pt_entry,
                                   extractPageDbEntry(this.m, l1pt_page));
+
+    /* Update pages in memory */
+    init_addrspace_mem(addrspace_page, l1pt_page, r6);
+
+    assert pageDbCorrespondsOnly(this.m, pagedb, addrspace_page);
     assert pageDbCorrespondsOnly(this.m, pagedb, l1pt_page);
+
+    // other pages haven't changed
+    assert forall p :: validPageNr(p) && p != addrspace_page && p != l1pt_page
+        ==> extractPageDbEntry(old(this).m, p) == extractPageDbEntry(this.m, p)
+            && extractPage(old(this).m, p) == extractPage(this.m, p);
+    assert forall p :: validPageNr(p) && p != addrspace_page && p != l1pt_page
+        ==> pageDbCorrespondsOnly(old(this).m, pagedb, p);
 }
 
 procedure kev_smc_init_addrspace(
@@ -479,19 +486,18 @@ procedure kev_smc_init_addrspace(
         assert r4 == G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_TYPE();
         LDRglobal(r3, PageDb(), r12, r4);
         assert pageDbEntryCorresponds(addrspace_page, pagedb[addrspace_page], extractPageDbEntry(this.m, addrspace_page));
-        assert r3 == GlobalWord(this.m, PageDb(), r4);
-        assert r3 == pageDbEntryTypeVal(pagedb[addrspace_page]);
+        assert r3 == GlobalWord(this.m, PageDb(), r4) == pageDbEntryTypeVal(pagedb[addrspace_page]);
         if (r3 == sp_op_const(KEV_PAGE_FREE())) {
             assert pageIsFree(pagedb, addrspace_page);
             assert r0 == PAGEDB_ENTRY_SIZE();
             MUL(r5,l1pt_page,r0);
             assert r5 == G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_TYPE();
             LDRglobal(r0, PageDb(), r12, r5);
-            assert r0 == pageDbEntryTypeVal(pagedb[l1pt_page]);
+            assert pageDbEntryCorresponds(l1pt_page, pagedb[l1pt_page], extractPageDbEntry(this.m, l1pt_page));
+            assert r0 == GlobalWord(this.m, PageDb(), r5) == pageDbEntryTypeVal(pagedb[l1pt_page]);
             if (r0 == sp_op_const(KEV_PAGE_FREE())) {
                 assert pageIsFree(pagedb, l1pt_page);
-                pagedb := kev_smc_init_addrspace_success(addrspace_page, l1pt_page,
-                                                         r4, r5, r12, pagedb);
+                pagedb := init_addrspace(addrspace_page, l1pt_page, r4, r5, r12, pagedb);
                 err := OConst(KEV_ERR_SUCCESS());
             } else {
                 err := sp_op_const(KEV_ERR_PAGEINUSE());
@@ -514,7 +520,6 @@ lemma SameMemAndGlobalsImpliesSamePageDb(s:state, s':state, pagedb:PageDb)
 {
     assert GlobalFullContents(s.m, PageDb()) == GlobalFullContents(s'.m, PageDb());
     assert forall p :: validPageNr(p) ==> extractPage(s.m, p) == extractPage(s'.m, p);
-    assert extractAllPages(s.m) == extractAllPages(s'.m);
 }
 #endverbatim
 
@@ -577,6 +582,7 @@ function {:axiom} SecurePhysBaseValue(): int
 function method MyGlobalDecls(): globaldecls
     ensures ValidGlobalDecls(MyGlobalDecls());
 {
+    reveal_PageDb(); reveal_SecurePhysBase();
     GlobalDecls(map[SecurePhysBase() := 4, //BytesPerWord()
                     PageDb() := G_PAGEDB_SIZE()])
 }

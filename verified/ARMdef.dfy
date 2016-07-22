@@ -8,7 +8,7 @@ include "Seq.dfy"
 // NB: In FIQ mode, R8 to R12 are also banked, but we don't model this
 datatype ARMReg = R0|R1|R2|R3|R4|R5|R6|R7|R8|R9|R10|R11|R12 | SP(spm:mode) | LR(lrm:mode)
 
-datatype mem = Address(addr:int)
+type mem = int
 datatype operand = OConst(n:int) | OReg(r:ARMReg) | OSP | OLR | OSymbol(sym:string)
 
 datatype memstate = MemState(addresses:map<mem, int>,
@@ -50,9 +50,6 @@ function method op_lr():operand
 
 function method op_sym(sym:string):operand
     { OSymbol(sym) }
-
-// function method addr(base:int, ofs:int):mem
-//     { Address(base + ofs) }
 
 function method mode_of_state(s:state):mode
 {
@@ -97,7 +94,7 @@ function addr_mem(s:state, base:operand, ofs:operand):mem
     requires ValidOperand(base)
     requires ValidOperand(ofs)
 {
-    Address( OperandContents(s, base) + OperandContents(s, ofs) )
+    OperandContents(s, base) + OperandContents(s, ofs)
 }
 
 //-----------------------------------------------------------------------------
@@ -184,7 +181,7 @@ predicate {:opaque} ValidMemState(s:memstate)
 {
     // regular mem
     (forall m:mem :: m in s.addresses
-        ==> WordAligned(m.addr) && isUInt32(m.addr) && isUInt32(s.addresses[m]))
+        ==> WordAligned(m) && isUInt32(m) && isUInt32(s.addresses[m]))
     // globals
     && (match TheGlobalDecls() case GlobalDecls(decls) =>
         // same names as decls
@@ -207,13 +204,13 @@ predicate ValidOperand(o:operand)
 
 predicate ValidMem(s:memstate, m:mem)
 {
-    isUInt32(m.addr) && WordAligned(m.addr) && m in s.addresses
+    isUInt32(m) && WordAligned(m) && m in s.addresses
 }
 
 predicate ValidMemRange(s:memstate, base:int, limit:int)
 {
     forall i:int :: base <= i < limit && WordAligned(i) ==>
-        ValidMem(s, Address(i))
+        ValidMem(s, i)
 }
 
 predicate ValidShiftOperand(s:state, o:operand)
@@ -463,7 +460,7 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidDestinationOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
             WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
-            ValidMem(s.m, Address(OperandContents(s, base) + OperandContents(s, ofs)))
+            ValidMem(s.m, OperandContents(s, base) + OperandContents(s, ofs))
         case LDR_global(rd, global, base, ofs) => 
             ValidDestinationOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
@@ -475,7 +472,7 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidRegOperand(rd) &&
             ValidOperand(ofs) && ValidOperand(base) &&
             WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
-            ValidMem(s.m, Address(OperandContents(s, base) + OperandContents(s, ofs)))
+            ValidMem(s.m, OperandContents(s, base) + OperandContents(s, ofs))
         case STR_global(rd, global, base, ofs) => 
             ValidRegOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
@@ -527,15 +524,15 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
         case MVN(dst, src) => evalUpdate(s, dst,
             not32(eval_op(s, src)), r, ok)
         case LDR(rd, base, ofs) => 
-            evalUpdate(s, rd, MemContents(s.m, Address(OperandContents(s, base) +
-                OperandContents(s, ofs))), r, ok)
+            evalUpdate(s, rd, MemContents(s.m, OperandContents(s, base) +
+                OperandContents(s, ofs)), r, ok)
         case LDR_global(rd, global, base, ofs) => 
             evalUpdate(s, rd, GlobalWord(s.m, global, OperandContents(s, ofs)), r, ok)
         case LDR_reloc(rd, name) =>
             evalUpdate(s, rd, AddressOfGlobal(name), r, ok)
         case STR(rd, base, ofs) => 
-            evalMemUpdate(s, Address(OperandContents(s, base) +
-                OperandContents(s, ofs)), OperandContents(s, rd), r, ok)
+            evalMemUpdate(s, OperandContents(s, base) +
+                OperandContents(s, ofs), OperandContents(s, rd), r, ok)
         case STR_global(rd, global, base, ofs) => 
             evalGlobalUpdate(s, global, OperandContents(s, ofs), OperandContents(s, rd), r, ok)
         case MOV(dst, src) => evalUpdate(s, dst,

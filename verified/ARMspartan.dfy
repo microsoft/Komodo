@@ -80,10 +80,10 @@ function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
 //-----------------------------------------------------------------------------
 function addrval(s:state, a:int):int
     requires ValidState(s)
-    requires ValidMem(s.m, Address(a))
+    requires ValidMem(s.m, a)
     ensures isUInt32(addrval(s, a))
 {
-    MemContents(s.m, Address(a))
+    MemContents(s.m, a)
 }
 
 //-----------------------------------------------------------------------------
@@ -416,7 +416,7 @@ lemma sp_lemma_LDR(s:state, r:state, ok:bool,
     requires WordAligned(OperandContents(s, base) + OperandContents(s, ofs));
     requires ValidMem(s.m, addr_mem(s, base, ofs));
     requires sp_eval(sp_code_LDR(rd, base, ofs), s, r, ok);
-    ensures evalUpdate(s, rd, MemContents(s.m, Address(OperandContents(s, base) + OperandContents(s, ofs))), r, ok)
+    ensures evalUpdate(s, rd, MemContents(s.m, OperandContents(s, base) + OperandContents(s, ofs)), r, ok)
     ensures ok;
     ensures AlwaysInvariant(s, r);
     ensures AllMemInvariant(s, r);
@@ -454,7 +454,7 @@ lemma sp_lemma_STR(s:state, r:state, ok:bool,
     requires WordAligned(OperandContents(s, base) + OperandContents(s, ofs));
     requires ValidMem(s.m, addr_mem(s, base, ofs));
     requires sp_eval(sp_code_STR(rd, base, ofs), s, r, ok);
-    ensures evalMemUpdate(s, Address(OperandContents(s, base) + OperandContents(s, ofs)),
+    ensures evalMemUpdate(s, OperandContents(s, base) + OperandContents(s, ofs),
         OperandContents(s, rd), r, ok)
     ensures ok;
     ensures AlwaysInvariant(s, r);
