@@ -241,10 +241,10 @@ predicate closedRefsL2PTable(e: PageDbEntryTyped)
 {
     var l2pt := e.l2pt;
     |l2pt| == NR_L2PTES()
-    && forall pte :: pte in l2pt ==> (match pte
-        case SecureMapping(p, w, e) => validPageNr(p)
-        case InsecureMapping(p) => true
-        case NoMapping => true)
+    // && forall pte :: pte in l2pt ==> (match pte
+    //     case SecureMapping(p, w, e) => validPageNr(p)
+    //     case InsecureMapping(p) => true
+    //     case NoMapping => true)
 }
 
 function initialPageDb(): PageDb

@@ -13,6 +13,7 @@ function method KEV_SMC_MAP_INSECURE():int    { 14 }
 function method KEV_SMC_REMOVE():int          { 20 }
 function method KEV_SMC_FINALISE():int        { 21 }
 function method KEV_SMC_ENTER():int           { 22 }
+function method KEV_SMC_RESUME():int          { 23 }
 function method KEV_SMC_STOP():int            { 29 }
 
 //-----------------------------------------------------------------------------
@@ -29,6 +30,7 @@ function method KEV_ERR_NOT_FINAL():int          { 5 }
 function method KEV_ERR_INVALID_MAPPING():int    { 6 }
 function method KEV_ERR_ADDRINUSE():int          { 7 }
 function method KEV_ERR_NOT_STOPPED():int        { 8 }
+function method KEV_ERR_ALREADY_ENTERED():int    { 9 }
 function method KEV_ERR_INVALID():int            { 0x1_0000_0000 }
 
 //-----------------------------------------------------------------------------
@@ -54,6 +56,11 @@ function method KEVLAR_SECURE_RESERVE():int
 function method KEVLAR_SECURE_NPAGES():int    
     ensures KEVLAR_SECURE_NPAGES() == 256;
     { KEVLAR_SECURE_RESERVE() / KEVLAR_PAGE_SIZE() }
+
+//TODO FIXME 
+// Ensures nothing so this value isn't used in proofs
+function method G_SECURE_PHYSBASE():int {0}
+
 
 // we don't support/consider more than 1GB of physical memory in our maps
 function method KEVLAR_PHYSMEM_LIMIT():int
