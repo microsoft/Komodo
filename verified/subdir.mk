@@ -17,8 +17,9 @@ SDFY_INCLUDES =  $(dir)/ARMdecls.sdfy $(dir)/fcall.sdfy
 # We use .verified files as a timestamp/placeholder to indicate that
 # a given source has been verified. We use Mindy only for verifying
 # Spartan-generated files (it tends to choke on more general .dfy files).
+## FIXME: MINDY doesn't like smc_handler_spec.dfy
 %.verified: %.gen.dfy
-	$(MINDY) $(DAFNYFLAGS) /compile:0 $< && touch $@
+	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< && touch $@
 
 %.verified: %.dfy
 	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< && touch $@
