@@ -246,7 +246,6 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
                 ==> addrval(this,i) == old(val);
             MemPreservingExcept(old(this), this, lower, limit);
             RegPreservingExcept(old(this), this, [@base,@size]);
-            StackPreserving(old(this),this);
         decreases
             size - base;
     {

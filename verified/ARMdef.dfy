@@ -171,16 +171,16 @@ predicate {:opaque} ValidRegState(regs:map<ARMReg, int>)
     (forall m:mode {:trigger SP(m)} {:trigger LR(m)} ::
         SP(m) in regs && isUInt32(regs[SP(m)]) &&
         LR(m) in regs && isUInt32(regs[LR(m)]))
-    && R0 in  regs && isUInt32(regs[R0])
-    && R1 in  regs && isUInt32(regs[R1])
-    && R2 in  regs && isUInt32(regs[R2])
-    && R3 in  regs && isUInt32(regs[R3])
-    && R4 in  regs && isUInt32(regs[R4])
-    && R5 in  regs && isUInt32(regs[R5])
-    && R6 in  regs && isUInt32(regs[R6])
-    && R7 in  regs && isUInt32(regs[R7])
-    && R8 in  regs && isUInt32(regs[R8])
-    && R9 in  regs && isUInt32(regs[R9])
+    && R0 in regs && isUInt32(regs[R0])
+    && R1 in regs && isUInt32(regs[R1])
+    && R2 in regs && isUInt32(regs[R2])
+    && R3 in regs && isUInt32(regs[R3])
+    && R4 in regs && isUInt32(regs[R4])
+    && R5 in regs && isUInt32(regs[R5])
+    && R6 in regs && isUInt32(regs[R6])
+    && R7 in regs && isUInt32(regs[R7])
+    && R8 in regs && isUInt32(regs[R8])
+    && R9 in regs && isUInt32(regs[R9])
     && R10 in regs && isUInt32(regs[R10])
     && R11 in regs && isUInt32(regs[R11])
     && R12 in regs && isUInt32(regs[R12])
@@ -480,13 +480,6 @@ predicate evalGlobalUpdate(s:state, g:operand, offset:nat, v:int, r:state, ok:bo
     assert |newval| == |oldval|;
     ok && r == s.(m := s.m.(globals := s.m.globals[g := newval]))
 }
-
-// predicate evalModeUpdate(s:state, newmode:int, r:state, ok:bool)
-//     requires ValidState(s)
-//     ensures evalModeUpdate(s,newmode,r,ok) ==> ValidState(r)
-// {
-//     ok && ValidModeEncoding(newmode) && r == s.(mod := decode_mode(newmode))
-// }
 
 function evalCmp(c:ocmp, i1:int, i2:int):bool
 {
