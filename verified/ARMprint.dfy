@@ -115,6 +115,15 @@ method printIns1Op(instr:string, op:operand)
     nl();
 }
 
+method printMcrMsr(instr:string,op:operand)
+{
+    print("  ");
+    print(instr);
+    print(" p15, 0, ");
+    printOperand(op);
+    print(", c1, c1, 0");
+}
+
 method printInsLdStr(instr:string, dest:operand, base:operand, offset:operand)
 {
     print("  ");
@@ -152,7 +161,12 @@ method printIns(ins:ins)
         case STR(rd, base, ofs) => printInsLdStr("STR", rd, base, ofs);
         case STR_global(rd, global, base, ofs) => printInsLdStr("STR", rd, base, ofs);
         case MOV(dst, src) => printIns2Op("MOV", dst, src);
-        case CPS(mod) => printIns1Op("CPS", mod);
+        case MRS(dst, src) => printIns2Op("MRS", dst, src);
+        case MSR(dst, src) => printIns2Op("MSR", dst, src);
+        case MRC(dst) => printMcrMsr("MRC",dst);
+        case MCR(src) => printMcrMsr("MCR",src);
+        case MOVS => print("  MOVS, pc, lr");nl();
+        // case CPS(mod) => printIns1Op("CPS", mod);
     }
 }
 

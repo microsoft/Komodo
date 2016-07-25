@@ -57,11 +57,6 @@ function method KEVLAR_SECURE_NPAGES():int
     ensures KEVLAR_SECURE_NPAGES() == 256;
     { KEVLAR_SECURE_RESERVE() / KEVLAR_PAGE_SIZE() }
 
-//TODO FIXME 
-// Ensures nothing so this value isn't used in proofs
-function method G_SECURE_PHYSBASE():int {0}
-
-
 // we don't support/consider more than 1GB of physical memory in our maps
 function method KEVLAR_PHYSMEM_LIMIT():int
     { 0x4000_0000 }
