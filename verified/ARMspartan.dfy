@@ -188,11 +188,11 @@ function method{:opaque} sp_code_MRS(dst:operand, src:operand):code
 function method{:opaque} sp_code_MSR(dst:operand, src:operand):code
     { Ins(MSR(dst, src)) }
 
-function method{:opaque} sp_code_MRC(dst:operand):code
-    { Ins(MRC(dst)) }
+function method{:opaque} sp_code_MRC(dst:operand,src:operand):code
+    { Ins(MRC(dst, src)) }
 
-function method{:opaque} sp_code_MCR(src:operand):code
-    { Ins(MCR(src)) }
+function method{:opaque} sp_code_MCR(dst:operand,src:operand):code
+    { Ins(MCR(dst, src)) }
 
 function method{:opaque} sp_code_MOVS():code
     { Ins(MOVS()) }
@@ -528,9 +528,11 @@ lemma sp_lemma_MRS(s:state, r:state, ok:bool,
     dst:operand, src: operand)
     requires ValidState(s)
     requires ValidSpecialOperand(s, src)
+    requires !ValidMcrMrcOperand(s, src)
     requires ValidRegOperand(dst)
     requires sp_eval(sp_code_MRS(dst, src), s, r, ok)
     ensures evalUpdate(s, dst, OperandContents(s, src), r, ok)
+    ensures ok;
 {
     reveal_sp_eval();
     reveal_sp_code_MRS();
@@ -541,32 +543,36 @@ lemma sp_lemma_MSR(s:state, r:state, ok:bool,
     requires ValidState(s)
     requires ValidRegOperand(src)
     requires ValidSpecialOperand(s, dst)
-    requires dst.OSReg? && dst.sr.cpsr? ==>
-        ValidModeEncoding(and32(OperandContents(s, src), 0x1f))
+    requires !ValidMcrMrcOperand(s, dst)
+    requires dst.sr.cpsr? || dst.sr.spsr? ==>
+        ValidModeChange(s.conf.m, OperandContents(s, src))
     requires sp_eval(sp_code_MSR(dst, src), s, r, ok)
     ensures evalSRegUpdate(s, dst, OperandContents(s, src), r, ok)
+    ensures ok;
 {
     reveal_sp_eval();
     reveal_sp_code_MSR();
 }
 
-lemma sp_lemma_MRC(s:state, r:state, ok:bool, dst:operand)
+lemma sp_lemma_MRC(s:state, r:state, ok:bool, dst:operand, src:operand)
     requires ValidState(s);
     requires ValidRegOperand(dst);
-    requires ValidSCR(s);
-    requires sp_eval(sp_code_MRC(dst), s, r, ok);
-    ensures  evalUpdate(s, dst, SCRContents(s), r, ok);
+    requires ValidMcrMrcOperand(s, src)
+    requires sp_eval(sp_code_MRC(dst,src), s, r, ok);
+    ensures  evalUpdate(s, dst, OperandContents(s, src), r, ok);
+    ensures  ok;
 {
     reveal_sp_eval();
     reveal_sp_code_MRC();
 }
 
-lemma sp_lemma_MCR(s:state, r:state, ok:bool, src:operand)
+lemma sp_lemma_MCR(s:state, r:state, ok:bool, dst:operand, src:operand)
     requires ValidState(s)
     requires ValidRegOperand(src)
-	requires ValidSCR(s)
-    requires sp_eval(sp_code_MCR(src), s, r, ok)
+    requires ValidMcrMrcOperand(s, dst)
+    requires sp_eval(sp_code_MCR(dst,src), s, r, ok)
     ensures  evalSRegUpdate(s, OSReg(scr), OperandContents(s,src), r, ok)
+    ensures  ok;
 {
     reveal_sp_eval();
     reveal_sp_code_MCR();
@@ -574,10 +580,12 @@ lemma sp_lemma_MCR(s:state, r:state, ok:bool, src:operand)
 
 lemma sp_lemma_MOVS(s:state, r:state, ok:bool)
     requires ValidState(s)
+    requires ValidSpecialOperand(s, OSReg(spsr))
     requires !(mode_of_state(s) == User)
     requires sp_eval(sp_code_MOVS(), s, r, ok)
-    requires ValidModeEncoding(and32(OperandContents(s, OSPSR), 0x1f))
-    ensures  evalSRegUpdate(s, OSReg(cpsr), OperandContents(s,OSPSR), r, ok)
+    requires ValidModeChange(s.conf.m, OperandContents(s, OSReg(spsr)))
+    ensures  evalSRegUpdate(s, OSReg(cpsr), OperandContents(s,OSReg(spsr)), r, ok)
+    ensures  ok;
 {
     reveal_sp_eval();
     reveal_sp_code_MOVS();

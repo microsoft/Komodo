@@ -68,13 +68,11 @@ method printOperand(o:operand)
             case SP(m) => print("XXX-badreg-bankedSP");
             case LR(m) => print("XXX-badreg-bankedLR");
         }
-        case OSPSR => print("spsr");
         case OSReg(r)   => {match r
            case ttbr0   => print("ttbr0");
-           case ttbcr   => print("ttbcr");
            case scr     => print("scr");
            case cpsr    => print("cpsr");
-           case spsr(m) => print("spsr_");print(m);
+           case spsr    => print("spsr");
         }
         case OSP => print("sp");
         case OLR => print("lr");
@@ -163,8 +161,10 @@ method printIns(ins:ins)
         case MOV(dst, src) => printIns2Op("MOV", dst, src);
         case MRS(dst, src) => printIns2Op("MRS", dst, src);
         case MSR(dst, src) => printIns2Op("MSR", dst, src);
-        case MRC(dst) => printMcrMsr("MRC",dst);
-        case MCR(src) => printMcrMsr("MCR",src);
+        case MRC(dst, src) => if(src.OSReg? && src.sr.scr?) { printMcrMsr("MRC",dst); }
+            else { print("MRC for non SCR not impl.");nl(); }
+        case MCR(dst,src) => if(dst.OSReg? && dst.sr.scr?) { printMcrMsr("MCR",src); }
+            else { print("MCR for non SCR not impl.");nl(); }
         case MOVS => print("  MOVS, pc, lr");nl();
         // case CPS(mod) => printIns1Op("CPS", mod);
     }

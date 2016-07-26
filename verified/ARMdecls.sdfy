@@ -230,6 +230,7 @@ procedure MRS({:operand} dst:int, {:operand} src:int)
     requires/ensures
         ValidState(this);
         ValidSpecialOperand(this, @src);
+        !ValidMcrMrcOperand(this, @src);
         ValidRegOperand(@dst);
     ensures
         evalUpdate(old(this), @dst, old(src), this, true);
@@ -239,8 +240,9 @@ procedure MRS({:operand} dst:int, {:operand} src:int)
         AllMemInvariant(old(this), this);
 
 #verbatim
-predicate is_cpsr(o:sp_operand){
-    o.OSReg? && o.sr.cpsr?
+// Spartan does not have type tests
+predicate is_cpsr(o:sp_operand){ // true if cpsr or spsr
+    o.OSReg? && (o.sr.cpsr? || o.sr.spsr?)
 }
 #endverbatim
 
@@ -249,32 +251,32 @@ procedure MSR({:operand} dst:int, {:operand} src:int)
         ValidState(this);
         ValidRegOperand(@src);
     requires
-        is_cpsr(@dst) ==> ValidModeEncoding(and32(src, 0x1f));
         ValidSpecialOperand(this, @dst);
+        !ValidMcrMrcOperand(this, @dst);
+        is_cpsr(@dst) ==> ValidModeChange(this.conf.m, src);
     ensures
         evalSRegUpdate(old(this), @dst, old(src), this, true);
         AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 
-procedure MRC({:operand} dst:int)
+procedure MRC({:operand} dst:int, {:operand} src:int)
     requires/ensures
         ValidState(this);
         ValidRegOperand(@dst);
-        ValidSCR(this);
+        ValidMcrMrcOperand(this, @src);
     ensures
-        evalUpdate(old(this), @dst, SCRContents(this), this, true);
+        evalUpdate(old(this), @dst, src, this, true);
         AlwaysInvariant(old(this), this);
         WorldInvariant(old(this), this);
         ModeInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 
-procedure MCR({:operand} src:int)
+procedure MCR({:operand} dst:int, {:operand} src:int)
     requires/ensures
         ValidState(this);
         ValidRegOperand(@src);
     requires
-        ValidSCR(this);
+        ValidMcrMrcOperand(this, @dst);
     ensures
         evalSRegUpdate(old(this), OSReg(scr), src, this, true);
         AlwaysInvariant(old(this), this);
@@ -285,13 +287,12 @@ procedure MOVS()
     requires/ensures
         ValidState(this);
     requires 
-        ValidSpecialOperand(this, OSPSR);
-        ValidModeEncoding(and32(eval_op(this, OSPSR), 0x1f));
+        ValidSpecialOperand(this, OSReg(spsr));
+        ValidModeChange(this.conf.m, OperandContents(this,OSReg(spsr)));
         mode_of_state(this) != User;
     ensures
-        evalSRegUpdate(old(this), OSReg(cpsr), OperandContents(old(this), OSPSR), this, true);
+        evalSRegUpdate(old(this), OSReg(cpsr), OperandContents(old(this), OSReg(spsr)), this, true);
         AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 
 //procedure incr(inout{:operand} o:int)
