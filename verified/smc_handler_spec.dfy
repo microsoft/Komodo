@@ -749,8 +749,18 @@ lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr)
         assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
         assert addrspaceRefs(pageDbOut, a) == addrspaceRefs(pageDbIn, a);
 
-        forall ( n | validPageNr(n) && n != a )
-            ensures validPageDbEntry(pageDbOut, n);
+        forall ( n | validPageNr(n) 
+            && pageDbOut[n].PageDbEntryTyped?
+            && n != a )
+            ensures validPageDbEntry(pageDbOut, n)
+        {
+            if( pageDbOut[n].entry.Addrspace? ){
+                assert pageDbOut[n].entry.refcount == pageDbIn[n].entry.refcount;
+                assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
+            } else {
+            }
+
+        }
     }
 }
 
@@ -768,8 +778,18 @@ lemma enterPreservesPageDbValidity(pageDbIn: PageDb, dispPage: PageNr,
         assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
         assert addrspaceRefs(pageDbOut, a) == addrspaceRefs(pageDbIn, a);
 
-        forall ( n | validPageNr(n) && n != a )
-            ensures validPageDbEntry(pageDbOut, n);
+        forall ( n | validPageNr(n) 
+            && pageDbOut[n].PageDbEntryTyped?
+            && n != a )
+            ensures validPageDbEntry(pageDbOut, n)
+        {
+            if( pageDbOut[n].entry.Addrspace? ){
+                assert pageDbOut[n].entry.refcount == pageDbIn[n].entry.refcount;
+                assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
+            } else {
+            }
+
+        }
     }
 }
 
@@ -786,8 +806,19 @@ lemma resumePreservesPageDbValidity(pageDbIn: PageDb, dispPage: PageNr)
         assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
         assert addrspaceRefs(pageDbOut, a) == addrspaceRefs(pageDbIn, a);
 
-        forall ( n | validPageNr(n) && n != a )
-            ensures validPageDbEntry(pageDbOut, n);
+        forall ( n | validPageNr(n) 
+            && pageDbOut[n].PageDbEntryTyped?
+            && n != a )
+            ensures validPageDbEntry(pageDbOut, n)
+        {
+            if( pageDbOut[n].entry.Addrspace? ){
+                assert pageDbOut[n].entry.refcount == pageDbIn[n].entry.refcount;
+                assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
+            } else {
+            }
+
+        }
+
     }
 }
 
@@ -804,7 +835,18 @@ lemma stopPreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr)
         assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
         assert addrspaceRefs(pageDbOut, a) == addrspaceRefs(pageDbIn, a);
 
-        forall ( n | validPageNr(n) && n != a )
-            ensures validPageDbEntry(pageDbOut, n);
+        forall ( n | validPageNr(n) 
+            && pageDbOut[n].PageDbEntryTyped?
+            && n != a )
+            ensures validPageDbEntry(pageDbOut, n)
+        {
+            if( pageDbOut[n].entry.Addrspace? ){
+                assert pageDbOut[n].entry.refcount == pageDbIn[n].entry.refcount;
+                assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
+            } else {
+            }
+
+        }
+
     }
 }
