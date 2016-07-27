@@ -107,14 +107,23 @@ procedure fcall_prologue(ghost stack_bytes:int)
     STR(lr, sp, 36);
 
     //push r4-r11 onto stack
+    assert WordAligned(sp + 32);
     STR(r4,  sp, 32);
+    assert WordAligned(sp + 28);
     STR(r5,  sp, 28);
+    assert WordAligned(sp + 24);
     STR(r6,  sp, 24);
+    assert WordAligned(sp + 20);
     STR(r7,  sp, 20);
+    assert WordAligned(sp + 16);
     STR(r8,  sp, 16);
+    assert WordAligned(sp + 12);
     STR(r9,  sp, 12);
+    assert WordAligned(sp + 8);
     STR(r10, sp, 8);
+    assert WordAligned(sp + 4);
     STR(r11, sp, 4);
+    assert WordAligned(sp + 0);
     STR(r12, sp, 0);
 }
 
