@@ -20,9 +20,8 @@ predicate validAddrspacePage(d: PageDb, a: PageNr)
 
 function page_paddr(p: PageNr) : int
     requires validPageNr(p)
-    ensures WordAligned(page_paddr(p))
+    //ensures WordAligned(page_paddr(p))
 {
-	assert WordAligned(KEVLAR_PAGE_SIZE());
     SecurePhysBaseValue() + p * KEVLAR_PAGE_SIZE()
 }
 
