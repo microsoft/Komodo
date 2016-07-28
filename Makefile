@@ -4,10 +4,10 @@ PREFIX ?= arm-eabi-
 INSTALLDIR ?= .
 GUEST_KERNEL ?= kernel7.img
 GUEST_DISKIMG ?= raspbian.img
-IRON_IMPSEC_PATH ?= $(HOME)/src/iron/impsec
-SPARTAN ?= $(IRON_IMPSEC_PATH)/tools/Spartan/bin/spartan.exe
-DAFNY ?= $(IRON_IMPSEC_PATH)/tools/Dafny/Dafny.exe
-MINDY ?= $(IRON_IMPSEC_PATH)/tools/Mindy/Binaries/Mindy.exe
+IRON_TOOLS_PATH ?= $(HOME)/src/spartan/tools
+SPARTAN ?= $(IRON_TOOLS_PATH)/Spartan/bin/spartan.exe
+DAFNY ?= $(IRON_TOOLS_PATH)/Mindy/Dafny/Dafny.exe
+MINDY ?= $(IRON_TOOLS_PATH)/Mindy/Binaries/Mindy.exe
 
 AS = $(PREFIX)as
 CC = $(PREFIX)gcc
