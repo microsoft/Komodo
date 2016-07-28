@@ -39,6 +39,7 @@ datatype state = State(regs:map<ARMReg, int>,
 datatype mode = User | FIQ | IRQ | Supervisor | Abort | Undefined | Monitor
 datatype priv = PL0 | PL1 // PL2 is only used in Hyp, not modeled
 datatype world = Secure | NotSecure
+
 //-----------------------------------------------------------------------------
 // State-related Utilities
 //-----------------------------------------------------------------------------
@@ -134,6 +135,11 @@ function method decode_mode'(e:int):Maybe<mode>
     else Nothing
 }
 
+// sanity-check the above
+lemma mode_encodings_are_sane()
+    ensures forall m :: decode_mode'(encode_mode(m)) == Just(m)
+{}
+
 predicate ValidModeEncoding(e:int)
 {
     decode_mode'(e).Just?
@@ -143,14 +149,6 @@ function method decode_mode(e:int):mode
     requires ValidModeEncoding(e)
 {
     fromJust(decode_mode'(e))
-}
-
-function addr_mem(s:state, base:operand, ofs:operand):mem
-    requires ValidState(s)
-    requires ValidOperand(base)
-    requires ValidOperand(ofs)
-{
-    OperandContents(s, base) + OperandContents(s, ofs)
 }
 
 //-----------------------------------------------------------------------------
@@ -292,12 +290,6 @@ predicate ValidMem(s:memstate, m:mem)
     isUInt32(m) && WordAligned(m) && m in s.addresses
 }
 
-predicate ValidMemRange(s:memstate, base:int, limit:int)
-{
-    forall i:int :: base <= i < limit && WordAligned(i) ==>
-        ValidMem(s, i)
-}
-
 predicate ValidShiftOperand(s:state, o:operand)
     requires ValidState(s)
     { ValidOperand(o) && OperandContents(s, o) < 32 }
@@ -315,12 +307,6 @@ predicate ValidRegOperand(o:operand)
 // Globals
 //-----------------------------------------------------------------------------
 datatype globaldecls = GlobalDecls(map<operand, int>)
-
-function method SymbolName(o:operand): string
-    requires o.OSymbol?
-{
-    match o case OSymbol(name) => name
-}
 
 predicate ValidGlobal(o:operand)
 {
@@ -654,7 +640,6 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
         // The program counter update in MOVS is not modeled because the PC is
         // not modeled directly. This models the CPSR update
         case MOVS => evalSRegUpdate(s, OSReg(cpsr), OperandContents(s,OSReg(spsr)), r, ok)
-            
 }
 
 predicate evalBlock(block:codes, s:state, r:state, ok:bool)
@@ -685,7 +670,6 @@ predicate evalCode(c:code, s:state, r:state, ok:bool)
     match c
         case Ins(ins) => evalIns(ins, s, r, ok)
         case Block(block) => evalBlock(block, s, r, ok)
-        // TODO: IfElse and While should havoc the flags
         case IfElse(cond, ifT, ifF) => if ValidState(s) && ValidOperand(cond.o1) && ValidOperand(cond.o2) then
                                            if evalOBool(s, cond) then
                                                evalCode(ifT, s, r, ok)

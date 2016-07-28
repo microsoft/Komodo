@@ -247,6 +247,12 @@ method printGlobal(symname: string, bytes: int)
     nl();
 }
 
+function method SymbolName(o:operand): string
+    requires o.OSymbol?
+{
+    match o case OSymbol(name) => name
+}
+
 method printBss(gdecls: globaldecls)
     requires ValidGlobalDecls(gdecls)
 {

@@ -58,25 +58,6 @@ function method sp_get_whileCond(c:code):obool requires c.While? { c.whileCond }
 function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
 
 //-----------------------------------------------------------------------------
-// Stack
-//-----------------------------------------------------------------------------
-// This code is pretty much only used for stack-test
-// function method stack(slot:int):operand { OMem(LocalVar(slot)) }
-// function stackval(s:sp_state, o:operand):int requires ValidOperand(o); { sp_eval_op(s, o) }
-// predicate NonEmptyStack(s:sp_state) { s.stack != [] }
-// predicate StackContains(s:sp_state, slot:int) 
-//     requires NonEmptyStack(s);
-//     { stack(slot).x in s.stack[0].locals }
-// 
-// predicate StackContainsRange(s:sp_state, start_slot:int, end_slot:int) 
-// { 
-//     NonEmptyStack(s)
-//  && forall slot {:trigger stack(slot).x in s.stack[0].locals} :: //{:trigger sp_eval_op(s, stack(slot))} :: 
-//         start_slot <= slot < end_slot ==> stack(slot).x in s.stack[0].locals 
-//                                        //&& 0 <= sp_eval_op(s, stack(slot)) < 0x1_0000_0000
-// }
-
-//-----------------------------------------------------------------------------
 // Address Helper Functions
 //-----------------------------------------------------------------------------
 function addrval(s:state, a:int):int
@@ -85,6 +66,20 @@ function addrval(s:state, a:int):int
     ensures isUInt32(addrval(s, a))
 {
     MemContents(s.m, a)
+}
+
+function addr_mem(s:state, base:operand, ofs:operand):mem
+    requires ValidState(s)
+    requires ValidOperand(base)
+    requires ValidOperand(ofs)
+{
+    OperandContents(s, base) + OperandContents(s, ofs)
+}
+
+predicate ValidMemRange(s:memstate, base:int, limit:int)
+{
+    forall i:int :: base <= i < limit && WordAligned(i) ==>
+        ValidMem(s, i)
 }
 
 //-----------------------------------------------------------------------------
