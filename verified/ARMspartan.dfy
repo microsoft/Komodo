@@ -679,16 +679,18 @@ lemma sp_lemma_block(b:codes, s0:state, r:state, ok:bool) returns(r1:state, ok1:
   b1 := b.tl;
 }
 
-lemma sp_lemma_ifElse(ifb:obool, ct:code, cf:code, s:state, r:state, ok:bool) returns(cond:bool)
+lemma sp_lemma_ifElse(ifb:obool, ct:code, cf:code, s:state, r:state, ok:bool) returns(cond:bool, s':sp_state)
   requires ValidState(s);
   requires ValidOperand(ifb.o1);
   requires ValidOperand(ifb.o2);
   requires sp_eval(IfElse(ifb, ct, cf), s, r, ok)
+  ensures s' == s; // evalGuard
   ensures  cond == evalOBool(s, ifb)
   ensures  (if cond then sp_eval(ct, s, r, ok) else sp_eval(cf, s, r, ok))
 {
   reveal_sp_eval();
   cond := evalOBool(s, ifb);
+  s' := s;
 }
 
 // HACK
@@ -721,18 +723,20 @@ lemma sp_lemma_while(b:obool, c:code, s:state, r:state, ok:bool) returns(n:nat, 
   r' := s;
 }
 
-lemma sp_lemma_whileTrue(b:obool, c:code, n:nat, s:state, r:state, ok:bool) returns(r':state, ok':bool)
+lemma sp_lemma_whileTrue(b:obool, c:code, n:nat, s:state, r:state, ok:bool) returns(s':state, r':state, ok':bool)
   requires ValidState(s)
   requires ValidOperand(b.o1)
   requires ValidOperand(b.o2)
   requires n > 0
   requires evalWhileOpaque(b, c, n, s, r, ok)
   ensures  evalOBool(s, b)
+  ensures  s' == s; // evalGuard
   ensures  sp_eval(c, s, r', ok')
   ensures  (if !ok' then !ok else evalWhileOpaque(b, c, n - 1, r', r, ok))
 {
   reveal_sp_eval();
   reveal_evalWhileOpaque();
+  s' := s;
   r', ok' :| evalOBool(s, b) && evalCode(c, s, r', ok') && (if !ok' then !ok else evalWhile(b, c, n - 1, r', r, ok));
 }
 
