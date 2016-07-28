@@ -301,13 +301,13 @@ function initAddrspaceSpecResult(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPa
     requires validPageDb(pageDbIn);
     ensures  validPageDb(initAddrspaceSpecResult(pageDbIn, addrspacePage, l1PTPage));
 {
-    initAddrspace(pageDbIn, addrspacePage, l1PTPage).0
+    smc_initAddrspace_premium(pageDbIn, addrspacePage, l1PTPage).0
 }
 
 function initAddrspaceSpecErr(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr): int
     requires validPageDb(pageDbIn);
 {
-    initAddrspace(pageDbIn, addrspacePage, l1PTPage).1
+    smc_initAddrspace_premium(pageDbIn, addrspacePage, l1PTPage).1
 }
 #endverbatim
 

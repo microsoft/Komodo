@@ -43,17 +43,17 @@ function method KEVLAR_PAGE_SHIFT():int
     ensures KEVLAR_PAGE_SHIFT() == 12
     //ensures shl32(1, KEVLAR_PAGE_SHIFT()) == KEVLAR_PAGE_SIZE()
     { 12 }
-function method KEVLAR_MON_VBASE():int        
+function method KEVLAR_MON_VBASE():int
     ensures KEVLAR_MON_VBASE() == 0x4000_0000;
-    { 0x4000_0000 }  
+    { 0x4000_0000 }
 function method KEVLAR_DIRECTMAP_VBASE():int
     ensures KEVLAR_DIRECTMAP_VBASE() == 0x8000_0000;
     { 0x8000_0000 }
 function method KEVLAR_DIRECTMAP_SIZE():int   { 0x8000_0000 }
-function method KEVLAR_SECURE_RESERVE():int   
+function method KEVLAR_SECURE_RESERVE():int
     ensures KEVLAR_SECURE_RESERVE() == 1 * 1024 * 1024;
     { 1 * 1024 * 1024 }
-function method KEVLAR_SECURE_NPAGES():int    
+function method KEVLAR_SECURE_NPAGES():int
     ensures KEVLAR_SECURE_NPAGES() == 256;
     { KEVLAR_SECURE_RESERVE() / KEVLAR_PAGE_SIZE() }
 
@@ -63,6 +63,32 @@ function method KEVLAR_PHYSMEM_LIMIT():int
 
 function KEVLAR_STACK_SIZE():int
     { 0x4000 }
+
+// we don't know where the stack is exactly, but we know how big it is
+function {:axiom} StackLimit():int
+    ensures WordAligned(StackLimit())
+    ensures KEVLAR_MON_VBASE() <= StackLimit()
+    ensures StackLimit() <= KEVLAR_DIRECTMAP_VBASE() - KEVLAR_STACK_SIZE()
+
+//-----------------------------------------------------------------------------
+// Globals
+//-----------------------------------------------------------------------------
+
+function method {:opaque} PageDb(): operand { op_sym("g_pagedb") }
+function method {:opaque} SecurePhysBaseOp(): operand { op_sym("g_secure_physbase") }
+
+// the phys base is unknown, but never changes
+function {:axiom} SecurePhysBase(): int
+    ensures 0 < SecurePhysBase() <= KEVLAR_PHYSMEM_LIMIT() - KEVLAR_SECURE_RESERVE();
+    ensures WordAligned(SecurePhysBase());
+
+function method KevGlobalDecls(): globaldecls
+    ensures ValidGlobalDecls(KevGlobalDecls());
+{
+    reveal_PageDb(); reveal_SecurePhysBaseOp();
+    GlobalDecls(map[SecurePhysBaseOp() := 4, //BytesPerWord()
+                    PageDb() := G_PAGEDB_SIZE()])
+}
 
 //-----------------------------------------------------------------------------
 // Data Structures

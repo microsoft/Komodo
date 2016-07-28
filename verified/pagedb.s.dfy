@@ -1,4 +1,4 @@
-include "kev_constants.dfy"
+include "kev_constants.s.dfy"
 include "Maybe.dfy"
 
 type PageNr = int
@@ -247,8 +247,10 @@ predicate closedRefsL2PTable(e: PageDbEntryTyped)
     //     case NoMapping => true)
 }
 
+/*
 function initialPageDb(): PageDb
   ensures validPageDb(initialPageDb())
 {
   imap n: PageNr | validPageNr(n) :: PageDbEntryFree
 }
+*/

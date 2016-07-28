@@ -1,4 +1,4 @@
-include "pagedb.dfy"
+include "pagedb.s.dfy"
 include "kev_common.dfy"
 
 predicate addrInPage(m:mem, p:PageNr)

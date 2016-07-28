@@ -1,37 +1,10 @@
 include "ARMspartan.dfy"
-include "kev_constants.dfy"
-include "pagedb.dfy"
-
-//-----------------------------------------------------------------------------
-// Globals
-//-----------------------------------------------------------------------------
-
-function method {:opaque} PageDb(): operand { op_sym("g_pagedb") }
-function method {:opaque} SecurePhysBaseOp(): operand { op_sym("g_secure_physbase") }
-
-// the phys base is unknown, but never changes
-function {:axiom} SecurePhysBase(): int
-    ensures 0 < SecurePhysBase() <= KEVLAR_PHYSMEM_LIMIT() - KEVLAR_SECURE_RESERVE();
-    ensures WordAligned(SecurePhysBase());
-
-function method KevGlobalDecls(): globaldecls
-    ensures ValidGlobalDecls(KevGlobalDecls());
-{
-    reveal_PageDb(); reveal_SecurePhysBaseOp();
-    GlobalDecls(map[SecurePhysBaseOp() := 4, //BytesPerWord()
-                    PageDb() := G_PAGEDB_SIZE()])
-}
-
+include "kev_constants.s.dfy"
+include "pagedb.s.dfy"
 
 //-----------------------------------------------------------------------------
 // Stack
 //-----------------------------------------------------------------------------
-
-// we don't know where the stack is exactly, but we know how big it is
-function {:axiom} StackLimit():int
-    ensures WordAligned(StackLimit())
-    ensures KEVLAR_MON_VBASE() <= StackLimit()
-    ensures StackLimit() <= KEVLAR_DIRECTMAP_VBASE() - KEVLAR_STACK_SIZE()
 
 function StackBase():int
 {
