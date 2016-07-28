@@ -1,11 +1,7 @@
 include "kev_constants.dfy"
+include "kev_common.dfy"
 include "Maybe.dfy"
 include "pagedb.dfy"
-
-// the phys base is unknown, but never changes
-function {:axiom} SecurePhysBaseValue(): int
-    ensures 0 < SecurePhysBaseValue() <= KEVLAR_PHYSMEM_LIMIT() - KEVLAR_SECURE_RESERVE();
-    ensures WordAligned(SecurePhysBaseValue());
 
 function pageIsFree(d:PageDb, pg:PageNr) : bool
     requires pg in d;
@@ -18,13 +14,6 @@ predicate validAddrspacePage(d: PageDb, a: PageNr)
     isAddrspace(d, a) && d[a].entry.l1ptnr in d
 }
 
-function page_paddr(p: PageNr) : int
-    requires validPageNr(p)
-    //ensures WordAligned(page_paddr(p))
-{
-    SecurePhysBaseValue() + p * KEVLAR_PAGE_SIZE()
-}
-
 predicate physPageInvalid( physPage: int )
 {
     physPage != 0 && !(physPageIsRam(physPage)
@@ -33,13 +22,13 @@ predicate physPageInvalid( physPage: int )
 
 predicate physPageIsRam( physPage: int )
 {
-   physPage * KEVLAR_PAGE_SIZE() < SecurePhysBaseValue()
+   physPage * KEVLAR_PAGE_SIZE() < SecurePhysBase()
 }
 
 predicate physPageIsSecure( physPage: int )
 {
     var paddr := physPage * KEVLAR_PAGE_SIZE();
-    SecurePhysBaseValue() <= paddr < SecurePhysBaseValue() +
+    SecurePhysBase() <= paddr < SecurePhysBase() +
         KEVLAR_SECURE_NPAGES() * KEVLAR_PAGE_SIZE()
 }
 
