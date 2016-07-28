@@ -7,7 +7,6 @@ function page_monvaddr(pagenr:PageNr):int
     requires validPageNr(pagenr)
     ensures WordAligned(page_monvaddr(pagenr))
 {
-    assert WordAligned(page_paddr(pagenr));
     page_paddr(pagenr) + KEVLAR_DIRECTMAP_VBASE()
 }
 
