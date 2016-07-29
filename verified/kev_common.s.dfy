@@ -1,5 +1,7 @@
 include "ARMdef.dfy"
+
 function method KEV_MAGIC():int { 0x4b766c72 }
+
 //-----------------------------------------------------------------------------
 // SMC Call Numbers
 //-----------------------------------------------------------------------------
@@ -70,9 +72,19 @@ function {:axiom} StackLimit():int
     ensures KEVLAR_MON_VBASE() <= StackLimit()
     ensures StackLimit() <= KEVLAR_DIRECTMAP_VBASE() - KEVLAR_STACK_SIZE()
 
+function StackBase():int
+{
+    StackLimit() + KEVLAR_STACK_SIZE()
+}
+
 //-----------------------------------------------------------------------------
 // Globals
 //-----------------------------------------------------------------------------
+
+function method PAGEDB_ENTRY_SIZE():int { 8 }
+function method G_PAGEDB_SIZE():int
+    ensures G_PAGEDB_SIZE() == KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE();
+    { KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE() }
 
 function method {:opaque} PageDb(): operand { op_sym("g_pagedb") }
 function method {:opaque} SecurePhysBaseOp(): operand { op_sym("g_secure_physbase") }
@@ -91,64 +103,38 @@ function method KevGlobalDecls(): globaldecls
 }
 
 //-----------------------------------------------------------------------------
-// Data Structures
+// Application-level state invariants
+//
+// These are part of the spec, since we rely on the bootloader setting
+// up our execution environment so they are ensured on SMC handler entry.
 //-----------------------------------------------------------------------------
-function method G_PAGEDB_SIZE():int
-    ensures G_PAGEDB_SIZE() == KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE();
-    { KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE() }
 
-// computes byte offset of a specific pagedb entry
-function method G_PAGEDB_ENTRY(pageno:int):int 
-    requires 0 <= pageno < KEVLAR_SECURE_NPAGES();
-    ensures G_PAGEDB_ENTRY(pageno) == pageno * PAGEDB_ENTRY_SIZE();
-    ensures WordAligned(G_PAGEDB_ENTRY(pageno))
+predicate ValidStack(s:state)
+    requires ValidState(s)
 {
-    assert WordAligned(PAGEDB_ENTRY_SIZE());
-    pageno * PAGEDB_ENTRY_SIZE()
+    WordAligned(eval_op(s, op_sp()))
+    && StackLimit() < eval_op(s, op_sp()) <= StackBase()
 }
 
-// entry = start offset of pagedb entry
-function method PAGEDB_ENTRY_TYPE():int { 0 }
-function method PAGEDB_ENTRY_ADDRSPACE():int { 4 }
-function method PAGEDB_ENTRY_SIZE():int { 8 }
+predicate SaneMem(s:memstate)
+{
+    ValidMemState(s)
+    // TODO: our insecure phys mapping must be valid
+    //&& ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE(),
+    //    (KEVLAR_DIRECTMAP_VBASE() + MonitorPhysBaseValue()))
+    // our secure phys mapping must be valid
+    && ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE() + SecurePhysBase(),
+        (KEVLAR_DIRECTMAP_VBASE() + SecurePhysBase() + KEVLAR_SECURE_RESERVE()))
+    // the stack must be mapped
+    && ValidMemRange(s, StackLimit(), StackBase())
+    // globals are as we expect
+    && KevGlobalDecls() == TheGlobalDecls()
+    && GlobalFullContents(s, SecurePhysBaseOp()) == [SecurePhysBase()]
+    // XXX: workaround so dafny sees that these are distinct
+    && SecurePhysBaseOp() != PageDb()
+}
 
-// addrspc = start address of address space metadata
-function method ADDRSPACE_L1PT(addrspace:int):int
-    ensures ADDRSPACE_L1PT(addrspace) == addrspace;
-    { addrspace }
-function method ADDRSPACE_L1PT_PHYS(addrspace:int):int
-    ensures ADDRSPACE_L1PT_PHYS(addrspace) == addrspace + 4;
-    { addrspace + 4 }
-function method ADDRSPACE_REF(addrspace:int):int
-    ensures ADDRSPACE_REF(addrspace) == addrspace + 8;
-    { addrspace + 8 }
-function method ADDRSPACE_STATE(addrspace:int):int
-    ensures ADDRSPACE_STATE(addrspace) == addrspace + 12;
-    { addrspace + 12 }
-function method ADDRSPACE_SIZE():int
-    ensures ADDRSPACE_SIZE() == 16
-    { 16 }
-
-//-----------------------------------------------------------------------------
-// Page Types
-//-----------------------------------------------------------------------------
-function method KEV_PAGE_FREE():int
-    ensures KEV_PAGE_FREE() == 0; { 0 }
-function method KEV_PAGE_ADDRSPACE():int
-    ensures KEV_PAGE_ADDRSPACE() == 1; { 1 }
-function method KEV_PAGE_DISPATCHER():int
-    ensures KEV_PAGE_DISPATCHER() == 2; { 2 }
-function method KEV_PAGE_L1PTABLE():int
-    ensures KEV_PAGE_L1PTABLE() == 3; { 3 }
-function method KEV_PAGE_L2PTABLE():int
-    ensures KEV_PAGE_L2PTABLE() == 4; { 4 }
-function method KEV_PAGE_DATA():int
-    ensures KEV_PAGE_DATA() == 5; { 5 }
-
-//-----------------------------------------------------------------------------
-// Address Space States
-//-----------------------------------------------------------------------------
-function method KEV_ADDRSPACE_INIT():int
-    ensures KEV_ADDRSPACE_INIT() == 0; { 0 }
-function method KEV_ADDRSPACE_FINAL():int              { 1 }
-function method KEV_ADDRSPACE_STOPPED():int            { 2 }
+predicate SaneState(s:state)
+{
+    ValidState(s) && ValidStack(s) && SaneMem(s.m) && mode_of_state(s) == Monitor
+}

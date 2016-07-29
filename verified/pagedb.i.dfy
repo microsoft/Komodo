@@ -1,5 +1,67 @@
 include "pagedb.s.dfy"
-include "kev_common.dfy"
+include "kev_common.i.dfy"
+
+//-----------------------------------------------------------------------------
+// Data Structures
+//-----------------------------------------------------------------------------
+// computes byte offset of a specific pagedb entry
+function method G_PAGEDB_ENTRY(pageno:int):int 
+    requires 0 <= pageno < KEVLAR_SECURE_NPAGES();
+    ensures G_PAGEDB_ENTRY(pageno) == pageno * PAGEDB_ENTRY_SIZE();
+    ensures WordAligned(G_PAGEDB_ENTRY(pageno))
+{
+    assert WordAligned(PAGEDB_ENTRY_SIZE());
+    pageno * PAGEDB_ENTRY_SIZE()
+}
+
+// entry = start offset of pagedb entry
+function method PAGEDB_ENTRY_TYPE():int { 0 }
+function method PAGEDB_ENTRY_ADDRSPACE():int { 4 }
+
+// addrspc = start address of address space metadata
+function method ADDRSPACE_L1PT(addrspace:int):int
+    ensures ADDRSPACE_L1PT(addrspace) == addrspace;
+    { addrspace }
+function method ADDRSPACE_L1PT_PHYS(addrspace:int):int
+    ensures ADDRSPACE_L1PT_PHYS(addrspace) == addrspace + 4;
+    { addrspace + 4 }
+function method ADDRSPACE_REF(addrspace:int):int
+    ensures ADDRSPACE_REF(addrspace) == addrspace + 8;
+    { addrspace + 8 }
+function method ADDRSPACE_STATE(addrspace:int):int
+    ensures ADDRSPACE_STATE(addrspace) == addrspace + 12;
+    { addrspace + 12 }
+function method ADDRSPACE_SIZE():int
+    ensures ADDRSPACE_SIZE() == 16
+    { 16 }
+
+//-----------------------------------------------------------------------------
+// Page Types
+//-----------------------------------------------------------------------------
+function method KEV_PAGE_FREE():int
+    ensures KEV_PAGE_FREE() == 0; { 0 }
+function method KEV_PAGE_ADDRSPACE():int
+    ensures KEV_PAGE_ADDRSPACE() == 1; { 1 }
+function method KEV_PAGE_DISPATCHER():int
+    ensures KEV_PAGE_DISPATCHER() == 2; { 2 }
+function method KEV_PAGE_L1PTABLE():int
+    ensures KEV_PAGE_L1PTABLE() == 3; { 3 }
+function method KEV_PAGE_L2PTABLE():int
+    ensures KEV_PAGE_L2PTABLE() == 4; { 4 }
+function method KEV_PAGE_DATA():int
+    ensures KEV_PAGE_DATA() == 5; { 5 }
+
+//-----------------------------------------------------------------------------
+// Address Space States
+//-----------------------------------------------------------------------------
+function method KEV_ADDRSPACE_INIT():int
+    ensures KEV_ADDRSPACE_INIT() == 0; { 0 }
+function method KEV_ADDRSPACE_FINAL():int              { 1 }
+function method KEV_ADDRSPACE_STOPPED():int            { 2 }
+
+//-----------------------------------------------------------------------------
+//
+//-----------------------------------------------------------------------------
 
 predicate addrInPage(m:mem, p:PageNr)
     requires validPageNr(p)

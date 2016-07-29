@@ -1,4 +1,4 @@
-include "kev_constants.s.dfy"
+include "kev_common.s.dfy"
 include "pagedb.s.dfy"
 
 predicate pageIsFree(d:PageDb, pg:PageNr)

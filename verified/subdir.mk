@@ -5,10 +5,10 @@ SPARTANFLAGS = #-assumeUpdates 1
 ARMSPARTAN_NAMES = ARMdef ARMprint ARMspartan
 ARMSPARTAN_DEPS = $(foreach n,$(ARMSPARTAN_NAMES),$(dir)/$(n).verified)
 ARMSPARTAN_INCLUDES = $(foreach n,$(ARMSPARTAN_NAMES),-i $(n).dfy)
-KEVLAR_NAMES = kev_constants.s kev_common pagedb.s pagedb_impl smcapi.i
+KEVLAR_NAMES = kev_common.i pagedb.i smcapi.i
 KEVLAR_DEPS = $(foreach n,$(KEVLAR_NAMES),$(dir)/$(n).verified)
 KEVLAR_INCLUDES = $(foreach n,$(KEVLAR_NAMES),-i $(n).dfy)
-SDFY_INCLUDES =  $(dir)/ARMdecls.sdfy $(dir)/fcall.sdfy
+SDFY_INCLUDES =  $(dir)/ARMdecls.sdfy $(dir)/kev_utils.sdfy
 
 %.gen.dfy: %.sdfy $(SDFY_INCLUDES) $(ARMSPARTAN_DEPS) $(KEVLAR_DEPS)
 	$(SPARTAN) $(SPARTANFLAGS) $(SDFY_INCLUDES) $< -out $@ $(ARMSPARTAN_INCLUDES) $(KEVLAR_INCLUDES)
@@ -47,8 +47,9 @@ CLEAN := $(CLEAN) $(dir)/*.exe $(dir)/*.dll $(dir)/*.pdb $(dir)/*.S $(dir)/*.o $
 $(dir)/ARMdef.verified: $(dir)/assembly.s.verified $(dir)/Maybe.verified $(dir)/Seq.verified
 $(dir)/ARMprint.verified: $(dir)/ARMdef.verified
 $(dir)/ARMspartan.verified: $(dir)/ARMdef.verified
-$(dir)/pagedb.s.verified: $(dir)/kev_constants.s.verified $(dir)/Maybe.verified
-$(dir)/smcapi.s.verified: $(dir)/kev_constants.s.verified $(dir)/pagedb.s.verified
+$(dir)/kev_common.s.verified: $(dir)/ARMdef.verified
+$(dir)/pagedb.s.verified: $(dir)/kev_common.s.verified $(dir)/Maybe.verified
+$(dir)/kev_common.i.verified: $(dir)/ARMspartan.verified $(dir)/kev_common.s.verified $(dir)/pagedb.s.verified
+$(dir)/smcapi.s.verified: $(dir)/kev_common.s.verified $(dir)/pagedb.s.verified
 $(dir)/smcapi.i.verified: $(dir)/smcapi.s.verified
-$(dir)/kev_common.verified: $(dir)/kev_constants.s.verified $(dir)/pagedb.s.verified $(dir)/ARMspartan.verified
-$(dir)/pagedb_impl.verified: $(dir)/kev_common.verified $(dir)/pagedb.s.verified
+$(dir)/pagedb.i.verified: $(dir)/pagedb.s.verified $(dir)/kev_common.i.verified

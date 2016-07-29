@@ -76,12 +76,6 @@ function addr_mem(s:state, base:operand, ofs:operand):mem
     OperandContents(s, base) + OperandContents(s, ofs)
 }
 
-predicate ValidMemRange(s:memstate, base:int, limit:int)
-{
-    forall i:int :: base <= i < limit && WordAligned(i) ==>
-        ValidMem(s, i)
-}
-
 //-----------------------------------------------------------------------------
 // Useful invariants preserved by instructions
 //-----------------------------------------------------------------------------

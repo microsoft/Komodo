@@ -290,6 +290,12 @@ predicate ValidMem(s:memstate, m:mem)
     isUInt32(m) && WordAligned(m) && m in s.addresses
 }
 
+predicate ValidMemRange(s:memstate, base:int, limit:int)
+{
+    forall i:int :: base <= i < limit && WordAligned(i) ==>
+        ValidMem(s, i)
+}
+
 predicate ValidShiftOperand(s:state, o:operand)
     requires ValidState(s)
     { ValidOperand(o) && OperandContents(s, o) < 32 }

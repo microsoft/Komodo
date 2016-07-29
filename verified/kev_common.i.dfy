@@ -1,22 +1,10 @@
 include "ARMspartan.dfy"
-include "kev_constants.s.dfy"
+include "kev_common.s.dfy"
 include "pagedb.s.dfy"
 
 //-----------------------------------------------------------------------------
-// Stack
+// Stack/procedure invariants
 //-----------------------------------------------------------------------------
-
-function StackBase():int
-{
-    StackLimit() + KEVLAR_STACK_SIZE()
-}
-
-predicate ValidStack(s:state)
-    requires ValidState(s)
-{
-    WordAligned(eval_op(s, op_sp()))
-    && StackLimit() < eval_op(s, op_sp()) <= StackBase()
-}
 
 predicate StackBytesRemaining(s:state,bytes:int)
 {
@@ -37,11 +25,6 @@ predicate StackPreserving(s:state, r:state)
     eval_op(s,op_sp()) == eval_op(r,op_sp())
     && ParentStackPreserving(s, r)
 }
-
-
-//-----------------------------------------------------------------------------
-// Procedure invariants
-//-----------------------------------------------------------------------------
 
 predicate RegPreservingExcept(s:state, r:state, trashed:seq<operand>)
     requires ValidState(s) && ValidState(r);
@@ -70,34 +53,6 @@ predicate NonStackMemPreserving(s:state, r:state)
     requires AlwaysInvariant(s,r);
 {
     MemPreservingExcept(s, r, StackLimit(), StackBase())
-}
-
-
-//-----------------------------------------------------------------------------
-// Application-level state invariants
-//-----------------------------------------------------------------------------
-
-predicate SaneMem(s:memstate)
-{
-    ValidMemState(s)
-    // TODO: our insecure phys mapping must be valid
-    //&& ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE(),
-    //    (KEVLAR_DIRECTMAP_VBASE() + MonitorPhysBaseValue()))
-    // our secure phys mapping must be valid
-    && ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE() + SecurePhysBase(),
-        (KEVLAR_DIRECTMAP_VBASE() + SecurePhysBase() + KEVLAR_SECURE_RESERVE()))
-    // the stack must be mapped
-    && ValidMemRange(s, StackLimit(), StackBase())
-    // globals are as we expect
-    && KevGlobalDecls() == TheGlobalDecls()
-    && GlobalFullContents(s, SecurePhysBaseOp()) == [SecurePhysBase()]
-    // XXX: workaround so dafny sees that these are distinct
-    && SecurePhysBaseOp() != PageDb()
-}
-
-predicate SaneState(s:state)
-{
-    ValidState(s) && ValidStack(s) && SaneMem(s.m) && mode_of_state(s) == Monitor
 }
 
 

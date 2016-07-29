@@ -1,0 +1,210 @@
+#token += precedence :=
+procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
+procedure operator(+=) (inout{:operand} dst:int, {:operand} src:int) := plusEquals
+
+procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:operand} tmp:int)
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidRegOperand(@phys);
+        ValidRegOperand(@pagenr);
+        ValidRegOperand(@tmp);
+        // NB: @phys == @pagenr is supported
+        @phys != @tmp;
+        @pagenr != @tmp;
+        @phys != op_sp();
+        @tmp != op_sp();
+        validPageNr(pagenr);
+    ensures
+        AlwaysInvariant(old(this),this);
+        AllMemInvariant(old(this),this);
+        RegPreservingExcept(old(this), this, [@phys, @tmp]);
+        phys == page_paddr(old(pagenr));
+{
+    tmp := sp_op_const(KEVLAR_PAGE_SIZE());
+    MUL(phys,pagenr,tmp);
+    // LSL(phys, pagenr, sp_op_const(KEVLAR_PAGE_SHIFT()));
+    assert phys == old(pagenr) * KEVLAR_PAGE_SIZE();
+
+    LDRglobaladdr(tmp, SecurePhysBaseOp());
+    LDRglobal(tmp, SecurePhysBaseOp(), tmp, 0);
+    assert WordAligned(tmp);
+    phys += tmp;
+}
+
+procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out {:operand} tmp:int)
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidRegOperand(@virt);
+        ValidRegOperand(@pagenr);
+        ValidRegOperand(@tmp);
+        // NB: @pagenr == @virt is supported
+        @pagenr != @tmp;
+        @virt != @tmp;
+        @virt != op_sp();
+        @tmp != op_sp();
+        validPageNr(pagenr);
+    ensures
+        AlwaysInvariant(old(this),this);
+        AllMemInvariant(old(this),this);
+        RegPreservingExcept(old(this), this, [@virt, @tmp]);
+        virt == page_monvaddr(old(pagenr));
+{
+    page_paddr_impl(virt, pagenr, tmp);
+    virt += sp_op_const(KEVLAR_DIRECTMAP_VBASE());
+}
+
+procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand} size:int)
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidRegOperand(@base);
+        ValidRegOperand(@size);
+        ValidRegOperand(@val);
+        @base != @size;
+        @base != @val;
+        @size != @val;
+        @base != @sp;
+        @val != @sp;
+        @size != @sp;
+        WordAligned(base);
+        WordAligned(size);
+        isUInt32(val);
+        isUInt32(base + size);
+        ValidMemRange(this.m, base, base + size);
+        base >= StackBase() || base + size <= StackLimit();
+    ensures
+        AlwaysInvariant(old(this),this);
+        GlobalsInvariant(old(this),this);
+        StackPreserving(old(this),this);
+        RegPreservingExcept(old(this), this, [@base,@size]);
+        MemPreservingExcept(old(this), this, old(base), old(base + size));
+        forall i :: old(base) <= i < old(base + size) && WordAligned(i)
+            ==> addrval(this,i) == old(val);
+{
+    ghost var lower := base;
+    ghost var limit := base + size;
+
+    // beyond this point, "base" is where we're up to, and "size" is the limit
+    size += base;
+
+    for (; base < size; base += 4)
+        invariant
+            AlwaysInvariant(old(this),this);
+            GlobalsInvariant(old(this),this);
+            SaneState(this);
+            WordAligned(base);
+            size == limit;
+            lower <= base <= limit;
+            lower >= StackBase() || limit <= StackLimit();
+            forall i :: (lower <= i < base) && WordAligned(i)
+                ==> addrval(this,i) == old(val);
+            MemPreservingExcept(old(this), this, lower, limit);
+            RegPreservingExcept(old(this), this, [@base,@size]);
+        decreases
+            size - base;
+    {
+        ghost var prevThis := this;
+        STR(val, base, 0);
+        assert forall p :: ValidMem(prevThis.m, p) && p != base ==> addrval(prevThis, p) == addrval(this, p);
+    }
+}
+
+procedure fcall_prologue(ghost stack_bytes:int)
+    requires/ensures
+        SaneState(this);
+    requires
+        stack_bytes >= 40; 
+        StackBytesRemaining(this,stack_bytes);
+    ensures
+        sp == old(sp-40);
+        
+        //preserves function call argument registers 
+        r0 == old(r0);
+        r1 == old(r1);
+        r2 == old(r2);
+        r3 == old(r3);
+
+        // pushes r4-r11, sp, lr
+        addrval(this, sp)    == old(r12);
+        addrval(this, sp+4)  == old(r11);
+        addrval(this, sp+8)  == old(r10);
+        addrval(this, sp+12) == old(r9);
+        addrval(this, sp+16) == old(r8);
+        addrval(this, sp+20) == old(r7);
+        addrval(this, sp+24) == old(r6);
+        addrval(this, sp+28) == old(r5);
+        addrval(this, sp+32) == old(r4);
+        addrval(this, sp+36) == old(lr);
+
+        AlwaysInvariant(old(this),this);
+        GlobalsInvariant(old(this),this);
+        NonStackMemPreserving(old(this),this);
+        ParentStackPreserving(old(this),this);
+        StackBytesRemaining(this,stack_bytes-40);
+{
+    SUB(sp, sp, 40);
+
+    //push link register onto stack
+    STR(lr, sp, 36);
+
+    //push r4-r11 onto stack
+    STR(r4,  sp, 32);
+    STR(r5,  sp, 28);
+    STR(r6,  sp, 24);
+    STR(r7,  sp, 20);
+    STR(r8,  sp, 16);
+    STR(r9,  sp, 12);
+    STR(r10, sp, 8);
+    STR(r11, sp, 4);
+    STR(r12, sp, 0);
+}
+
+procedure fcall_epilogue(ghost stack_bytes_left:int)
+    requires/ensures
+        SaneState(this);
+    requires
+        isUInt32(sp + 40);
+        sp + 40 <= StackBase();
+        StackBytesRemaining(this,stack_bytes_left);
+    ensures
+        sp == old(sp+40);
+       
+        // fcall argument regs preserved. 
+        r0 == old(r0);
+        r1 == old(r1);
+        r2 == old(r2);
+        r3 == old(r3);
+
+        // pop lr, r4-r11 from stack.
+        lr  == old(addrval(this, sp+36));
+        r4  == old(addrval(this, sp+32));
+        r5  == old(addrval(this, sp+28));
+        r6  == old(addrval(this, sp+24));
+        r7  == old(addrval(this, sp+20));
+        r8  == old(addrval(this, sp+16));
+        r9  == old(addrval(this, sp+12));
+        r10 == old(addrval(this, sp+8));
+        r11 == old(addrval(this, sp+4));
+        r12 == old(addrval(this, sp));
+
+        AlwaysInvariant(old(this),this);
+        AllMemInvariant(old(this),this);
+        StackBytesRemaining(this,stack_bytes_left+40);
+{
+    //pop r12 down to r4 from stack
+    LDR(r12, sp, 0);
+    LDR(r11, sp, 4);
+    LDR(r10, sp, 8);
+    LDR(r9,  sp, 12);
+    LDR(r8,  sp, 16);
+    LDR(r7,  sp, 20);
+    LDR(r6,  sp, 24);
+    LDR(r5,  sp, 28);
+    LDR(r4,  sp, 32);
+
+    //pop link register from stack
+    LDR(lr, sp, 36);
+    ADD(sp, sp, 40);
+}
