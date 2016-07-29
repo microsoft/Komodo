@@ -3,7 +3,7 @@ include "smcapi.s.dfy"
 //=============================================================================
 // Hoare Specification of Monitor Calls
 //=============================================================================
-function smc_initAddrspace_premium(pageDbIn: PageDb, addrspacePage: PageNr,
+function {:opaque} smc_initAddrspace_premium(pageDbIn: PageDb, addrspacePage: PageNr,
     l1PTPage: PageNr) : (PageDb, int) // PageDbOut, KEV_ERR
     requires validPageDb(pageDbIn);
     ensures  validPageDb(smc_initAddrspace_premium(pageDbIn, addrspacePage, l1PTPage).0);
@@ -12,7 +12,7 @@ function smc_initAddrspace_premium(pageDbIn: PageDb, addrspacePage: PageNr,
     smc_initAddrspace(pageDbIn, addrspacePage, l1PTPage)
 }
 
-function smc_initDispatcher_premium(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
+function {:opaque} smc_initDispatcher_premium(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
     entrypoint:int) : (PageDb, int) // PageDbOut, KEV_ERR
     requires validPageDb(pageDbIn);
     ensures  validPageDb(smc_initDispatcher_premium(pageDbIn, page, addrspacePage, entrypoint).0);
@@ -20,7 +20,7 @@ function smc_initDispatcher_premium(pageDbIn: PageDb, page:PageNr, addrspacePage
     smc_initDispatcher(pageDbIn, page, addrspacePage, entrypoint)
 }
 
-function smc_initL2PTable_premium(pageDbIn: PageDb, page: PageNr,
+function {:opaque} smc_initL2PTable_premium(pageDbIn: PageDb, page: PageNr,
     addrspacePage: PageNr, l1index: int) : (PageDb, int)
     requires validPageDb(pageDbIn)
     ensures validPageDb(smc_initL2PTable_premium(pageDbIn, page, addrspacePage, l1index).0)
@@ -28,7 +28,7 @@ function smc_initL2PTable_premium(pageDbIn: PageDb, page: PageNr,
     smc_initL2PTable(pageDbIn, page, addrspacePage, l1index)
 }
 
-function smc_remove_premium(pageDbIn: PageDb, page: PageNr) : (PageDb, int) // PageDbOut, KEV_ERR
+function {:opaque} smc_remove_premium(pageDbIn: PageDb, page: PageNr) : (PageDb, int) // PageDbOut, KEV_ERR
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_remove_premium(pageDbIn, page).0)
 {
@@ -36,7 +36,7 @@ function smc_remove_premium(pageDbIn: PageDb, page: PageNr) : (PageDb, int) // P
     smc_remove(pageDbIn, page)
 }
 
-function smc_mapSecure_premium(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
+function {:opaque} smc_mapSecure_premium(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
     mapping: Mapping, physPage: int) : (PageDb, int) // PageDbOut, KEV_ERR
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_mapSecure_premium(pageDbIn, page, addrspacePage, mapping, physPage).0)
@@ -45,7 +45,7 @@ function smc_mapSecure_premium(pageDbIn: PageDb, page: PageNr, addrspacePage: Pa
     smc_mapSecure(pageDbIn, page, addrspacePage, mapping, physPage)
 }
 
-function smc_mapInsecure_premium(pageDbIn: PageDb, addrspacePage: PageNr,
+function {:opaque} smc_mapInsecure_premium(pageDbIn: PageDb, addrspacePage: PageNr,
     physPage: int, mapping : Mapping) : (PageDb, int)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_mapInsecure_premium(pageDbIn, addrspacePage, physPage, mapping).0)
@@ -54,7 +54,7 @@ function smc_mapInsecure_premium(pageDbIn: PageDb, addrspacePage: PageNr,
     smc_mapInsecure(pageDbIn, addrspacePage, physPage, mapping)
 }
 
-function smc_finalise_premium(pageDbIn: PageDb, addrspacePage: PageNr) : (PageDb, int)
+function {:opaque} smc_finalise_premium(pageDbIn: PageDb, addrspacePage: PageNr) : (PageDb, int)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_finalise_premium(pageDbIn, addrspacePage).0)
 {
@@ -62,7 +62,7 @@ function smc_finalise_premium(pageDbIn: PageDb, addrspacePage: PageNr) : (PageDb
     smc_finalise(pageDbIn, addrspacePage)
 }
 
-function smc_enter_premium(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, arg3: int)
+function {:opaque} smc_enter_premium(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, arg3: int)
     : (PageDb, int)
     requires validPageDb(pageDbIn) 
     ensures validPageDb(smc_enter_premium(pageDbIn, dispPage, arg1, arg2, arg3).0)
@@ -71,7 +71,7 @@ function smc_enter_premium(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: 
     smc_enter(pageDbIn, dispPage, arg1, arg2, arg3)
 }
 
-function smc_resume_premium(pageDbIn: PageDb, dispPage: PageNr)
+function {:opaque} smc_resume_premium(pageDbIn: PageDb, dispPage: PageNr)
     : (PageDb, int)
     requires validPageDb(pageDbIn) 
     ensures validPageDb(smc_resume_premium(pageDbIn, dispPage).0)
@@ -80,7 +80,7 @@ function smc_resume_premium(pageDbIn: PageDb, dispPage: PageNr)
     smc_resume(pageDbIn, dispPage)
 }
 
-function smc_stop_premium(pageDbIn: PageDb, addrspacePage: PageNr)
+function {:opaque} smc_stop_premium(pageDbIn: PageDb, addrspacePage: PageNr)
     : (PageDb, int)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_stop_premium(pageDbIn, addrspacePage).0)
@@ -89,7 +89,7 @@ function smc_stop_premium(pageDbIn: PageDb, addrspacePage: PageNr)
     smc_stop(pageDbIn, addrspacePage)
 }
 
-function smchandler_premium(pageDbIn: PageDb, callno: int, arg1: int, arg2: int,
+function {:opaque} smchandler_premium(pageDbIn: PageDb, callno: int, arg1: int, arg2: int,
     arg3: int, arg4: int) : (PageDb, int, int) // pageDbOut, err, val
     requires validPageDb(pageDbIn)
     ensures validPageDb(smchandler_premium(pageDbIn, callno, arg1, arg2, arg3, arg4).0)

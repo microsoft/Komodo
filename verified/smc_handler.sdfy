@@ -302,6 +302,13 @@ procedure init_addrspace(
             && extractPage(old(this).m, p) == extractPage(this.m, p);
     assert forall p :: validPageNr(p) && p != addrspace_page && p != l1pt_page
         ==> pageDbCorrespondsOnly(old(this).m, pagedb, p);
+
+    forall ::
+        old(initAddrspaceSpecResult(pagedb_in, addrspace_page, l1pt_page)) == pagedb &&
+        pageDbCorresponds(this.m, pagedb)
+    {
+        reveal_smc_initAddrspace_premium();
+    }
 }
 
 #verbatim // XXX: FIXME: kludges for Spartan's lack of tuples
@@ -382,8 +389,12 @@ procedure kev_smc_init_addrspace(
             err := sp_op_const(KEV_ERR_PAGEINUSE());
         }
     }
-    forall :: pageDbClosedRefs(pagedb) && pageDbCorresponds(this.m, pagedb)
+    forall :: 
+        old(initAddrspaceSpecResult(pagedb_in, addrspace_page, l1pt_page)) == pagedb &&
+        old(initAddrspaceSpecErr(pagedb_in, addrspace_page, l1pt_page)) == err &&
+        pageDbClosedRefs(pagedb) && pageDbCorresponds(this.m, pagedb)
     {
+        reveal_smc_initAddrspace_premium();
         reveal_validPageDb();
         validPageDbImpliesClosedRefs(pagedb);
     }
