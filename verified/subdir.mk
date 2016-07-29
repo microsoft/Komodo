@@ -50,5 +50,5 @@ $(dir)/ARMspartan.verified: $(dir)/ARMdef.verified
 $(dir)/pagedb.s.verified: $(dir)/kev_constants.s.verified $(dir)/Maybe.verified
 $(dir)/smcapi.s.verified: $(dir)/kev_constants.s.verified $(dir)/pagedb.s.verified
 $(dir)/smcapi.i.verified: $(dir)/smcapi.s.verified
-$(dir)/kev_common.verified: $(dir)/kev_constants.verified $(dir)/pagedb.s.verified $(dir)/ARMspartan.verified
+$(dir)/kev_common.verified: $(dir)/kev_constants.s.verified $(dir)/pagedb.s.verified $(dir)/ARMspartan.verified
 $(dir)/pagedb_impl.verified: $(dir)/kev_common.verified $(dir)/pagedb.s.verified
