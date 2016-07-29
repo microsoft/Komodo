@@ -261,6 +261,8 @@ procedure init_addrspace(
         l1pt_entry == G_PAGEDB_ENTRY(l1pt_page);
         pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb_in);
+        pageDbClosedRefs(pagedb_in);
+        wellFormedPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         pageIsFree(pagedb_in, addrspace_page);
         pageIsFree(pagedb_in, l1pt_page);
@@ -269,6 +271,7 @@ procedure init_addrspace(
         StackPreserving(old(this),this);
         RegPreservingExcept(old(this),this,[@r0, @r3, @r4, @r5, @r6, @r7]);
         old(initAddrspaceSpecResult(pagedb_in, addrspace_page, l1pt_page)) == pagedb;
+        pageDbClosedRefs(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
     ghost var gaddrspace_entry := initAddrspaceEntry(addrspace_page, l1pt_page);
@@ -284,6 +287,11 @@ procedure init_addrspace(
 
     /* Update pages in memory */
     init_addrspace_mem(addrspace_page, l1pt_page, r6);
+
+    // It should be okay that this isn't wrapped in a forall ::.
+    // The rest of this code is about pagedb anyway.
+    reveal_validPageDb();
+    reveal_pageDbClosedRefs();
 
     assert pageDbCorrespondsOnly(this.m, pagedb, addrspace_page);
     assert pageDbCorrespondsOnly(this.m, pagedb, l1pt_page);
@@ -320,16 +328,19 @@ procedure kev_smc_init_addrspace(
         SaneState(this);
     requires
         validPageDb(pagedb_in);
+        pageDbClosedRefs(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
     ensures
         StackPreserving(old(this),this);
         old(initAddrspaceSpecResult(pagedb_in, addrspace_page, l1pt_page)) == pagedb;
         old(initAddrspaceSpecErr(pagedb_in, addrspace_page, l1pt_page)) == err;
+        pageDbClosedRefs(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validPageDb(pagedb);
 {
     reveal_pageDbEntryCorresponds();
     pagedb := pagedb_in;
+    reveal_pageDbClosedRefs();
 
     // check alignment of l1pt page
     AND(r0,l1pt_page,3);
@@ -371,6 +382,11 @@ procedure kev_smc_init_addrspace(
             err := sp_op_const(KEV_ERR_PAGEINUSE());
         }
     }
+    forall :: pageDbClosedRefs(pagedb) && pageDbCorresponds(this.m, pagedb)
+    {
+        reveal_validPageDb();
+        validPageDbImpliesClosedRefs(pagedb);
+    }
 }
 
 #verbatim
@@ -402,11 +418,13 @@ procedure smc_handler(
         StackBytesRemaining(this,120);
     requires
         validPageDb(pagedb_in);
+        pageDbClosedRefs(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
     ensures
         NonvolatileRegPreserving(old(this),this);
-        validPageDb(pagedb);
+        pageDbClosedRefs(pagedb);
         pageDbCorresponds(this.m, pagedb);
+        validPageDb(pagedb);
 {
     ghost var stack_bytes := 120;
     pagedb := pagedb_in;
@@ -431,6 +449,8 @@ procedure smc_handler(
     // zero other volatiles to prevent information leakage
     r2 := 0;
     r3 := 0;
+
+    validPageDbImpliesClosedRefs(pagedb);
 
     // TODO: return path (movs pc, lr etc.)
 }

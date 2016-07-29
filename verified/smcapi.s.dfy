@@ -2,13 +2,12 @@ include "kev_constants.s.dfy"
 include "pagedb.s.dfy"
 
 predicate pageIsFree(d:PageDb, pg:PageNr)
-    requires pg in d;
-    { d[pg].PageDbEntryFree? }
+    { pg in d && d[pg].PageDbEntryFree? }
 
 // a points to an address space and it is closed
 predicate validAddrspacePage(d: PageDb, a: PageNr)
-    requires wellFormedPageDb(d)
 {
+    wellFormedPageDb(d) &&
     isAddrspace(d, a) && d[a].entry.l1ptnr in d
 }
 
@@ -36,6 +35,7 @@ predicate l1indexInUse(d: PageDb, a: PageNr, l1index: int)
     requires d[a].entry.state != StoppedState
     requires 0 <= l1index < NR_L1PTES()
 {
+	reveal_validPageDb();
     var l1ptnr := d[a].entry.l1ptnr;
     var l1 := d[l1ptnr].entry.l1pt;
     l1[l1index].Just?
@@ -61,11 +61,13 @@ function updateL2Pte(pageDbIn: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
     requires pageDbIn[a].PageDbEntryTyped? && pageDbIn[a].entry.Addrspace?
     requires pageDbIn[a].entry.state.InitState?
 {
+	reveal_validPageDb();
     var addrspace := pageDbIn[a].entry;
     var l1 := pageDbIn[addrspace.l1ptnr].entry;
     var l1pte := fromJust(l1.l1pt[mapping.l1index]);
     var l2pt := pageDbIn[l1pte].entry.l2pt;
     validPageDbImpliesClosedRefs(pageDbIn);
+	reveal_pageDbClosedRefs();
     pageDbIn[ l1pte := PageDbEntryTyped(a, L2PTable(l2pt[mapping.l2index := l2e])) ]
 
 }
@@ -76,6 +78,7 @@ function isValidMappingTarget(d: PageDb, a: PageNr, mapping: Mapping)
     requires validPageNr(a)
     requires isAddrspace(d, a)
 {
+    reveal_validPageDb();
     var addrspace := d[a].entry;
     if(!addrspace.state.InitState?) then
         KEV_ERR_ALREADY_FINAL()
@@ -101,6 +104,7 @@ function smc_initAddrspace(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: Pa
     : (PageDb, int) // PageDbOut, KEV_ERR
     requires validPageDb(pageDbIn);
 {
+    reveal_validPageDb();
     var g := pageDbIn;
     if(!validPageNr(addrspacePage) || !validPageNr(l1PTPage) ||
         addrspacePage == l1PTPage) then
@@ -123,6 +127,7 @@ function smc_initDispatcher(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
     : (PageDb, int) // PageDbOut, KEV_ERR
     requires validPageDb(pageDbIn);
 {
+    reveal_validPageDb();
    var n := page;
    var d := pageDbIn;
    if(!isAddrspace(pageDbIn, addrspacePage)) then
@@ -136,6 +141,7 @@ function smc_initL2PTable(pageDbIn: PageDb, page: PageNr,
     addrspacePage: PageNr, l1index: int) : (PageDb, int)
     requires validPageDb(pageDbIn)
 {
+    reveal_validPageDb();
     if(!(0<= l1index < NR_L1PTES())) then (pageDbIn, KEV_ERR_INVALID_MAPPING())
     else if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
@@ -166,6 +172,7 @@ function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
     requires entry.L2PTable? ==>
         entry.l2pt == SeqRepeat(NR_L2PTES(), NoMapping)
 {
+    reveal_validPageDb();
     var addrspace := pageDbIn[addrspacePage].entry;
     if(!validPageNr(securePage)) then (pageDbIn, KEV_ERR_INVALID_PAGENO())
     else if(!pageIsFree(pageDbIn, securePage)) then (pageDbIn, KEV_ERR_PAGEINUSE())
@@ -194,6 +201,7 @@ function allocatePage(pageDbIn: PageDb, securePage: PageNr,
         entry.l2pt == SeqRepeat(NR_L2PTES(), NoMapping)
     ensures  validPageDb(allocatePage(pageDbIn, securePage, addrspacePage, entry).0);
 {
+    reveal_validPageDb();
     allocatePagePreservesPageDBValidity(pageDbIn, securePage, addrspacePage, entry);
     allocatePage_inner(pageDbIn, securePage, addrspacePage, entry)
 }
@@ -202,6 +210,7 @@ function smc_remove(pageDbIn: PageDb, page: PageNr)
     : (PageDb, int) // PageDbOut, KEV_ERR
     requires validPageDb(pageDbIn)
 {
+    reveal_validPageDb();
     if(!validPageNr(page)) then
         (pageDbIn, KEV_ERR_INVALID_PAGENO())
     else if(pageDbIn[page].PageDbEntryFree?) then
@@ -229,6 +238,7 @@ function smc_mapSecure(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
     mapping: Mapping, physPage: int) : (PageDb, int) // PageDbOut, KEV_ERR
     requires validPageDb(pageDbIn)
 {
+    reveal_validPageDb();
     if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
     else 
@@ -256,6 +266,7 @@ function smc_mapInsecure(pageDbIn: PageDb, addrspacePage: PageNr,
     physPage: int, mapping : Mapping) : (PageDb, int)
     requires validPageDb(pageDbIn)
 {
+    reveal_validPageDb();
     if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
     else
@@ -272,6 +283,7 @@ function smc_mapInsecure(pageDbIn: PageDb, addrspacePage: PageNr,
 function smc_finalise(pageDbIn: PageDb, addrspacePage: PageNr) : (PageDb, int)
     requires validPageDb(pageDbIn)
 {
+    reveal_validPageDb();
     if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
     else if(pageDbIn[addrspacePage].entry.state != InitState) then
@@ -289,6 +301,7 @@ function smc_enter(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, arg
     : (PageDb, int)
     requires validPageDb(pageDbIn)
 {
+    reveal_validPageDb();
     var d := pageDbIn; var p := dispPage;
     if(!(validPageNr(p) && d[p].PageDbEntryTyped? && d[p].entry.Dispatcher?)) then
         (pageDbIn, KEV_ERR_INVALID_PAGENO())
@@ -310,6 +323,7 @@ function smc_resume(pageDbIn: PageDb, dispPage: PageNr)
     : (PageDb, int)
     requires validPageDb(pageDbIn)
 {
+    reveal_validPageDb();
     var d := pageDbIn; var p := dispPage;
     if(!(validPageNr(p) && d[p].PageDbEntryTyped? && d[p].entry.Dispatcher?)) then
         (pageDbIn, KEV_ERR_INVALID_PAGENO())
@@ -331,6 +345,7 @@ function smc_stop(pageDbIn: PageDb, addrspacePage: PageNr)
     : (PageDb, int)
     requires validPageDb(pageDbIn)
 {
+    reveal_validPageDb();
     if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
     // else if(pageDbIn[addrspacePage].entry.state == InitState) then
@@ -351,6 +366,7 @@ function smchandler(pageDbIn: PageDb, callno: int, arg1: int, arg2: int,
     arg3: int, arg4: int) : (PageDb, int, int) // pageDbOut, err, val
     requires validPageDb(pageDbIn)
 {
+    reveal_validPageDb();
     if(callno == KEV_SMC_QUERY()) then (pageDbIn, KEV_MAGIC(), 0)
     else if(callno == KEV_SMC_GETPHYSPAGES()) then
         (pageDbIn, KEV_ERR_SUCCESS(), KEVLAR_SECURE_NPAGES())
@@ -401,6 +417,7 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
     ensures  validPageDb(allocatePage_inner(
         pageDbIn, securePage, addrspacePage, entry).0);
 {
+    reveal_validPageDb();
     var pageDbOut := allocatePage_inner(pageDbIn, securePage,
         addrspacePage, entry).0;
     var errOut := allocatePage_inner(pageDbIn, securePage,

@@ -110,6 +110,7 @@ lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
     requires validPageDb(pageDbIn)
     ensures validPageDb(smc_initAddrspace(pageDbIn, addrspacePage, l1PTPage).0)
 {
+    reveal_validPageDb();
      var pageDbOut := smc_initAddrspace(pageDbIn, addrspacePage, l1PTPage).0;
      var errOut := smc_initAddrspace(pageDbIn, addrspacePage, l1PTPage).1;
 
@@ -144,6 +145,7 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
     ensures  validPageDb(smc_remove(pageDbIn, page).0)
 {
 
+    reveal_validPageDb();
     var pageDbOut := smc_remove(pageDbIn, page).0;
     var errOut := smc_remove(pageDbIn, page).1;
 
@@ -227,6 +229,7 @@ lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr, addrspace
     ensures  validPageDb(smc_mapSecure(pageDbIn, page, addrspacePage,
         mapping, physPage).0)
 {
+    reveal_validPageDb();
     var pageDbOut := smc_mapSecure(
         pageDbIn, page, addrspacePage, mapping, physPage).0;
     var err := smc_mapSecure(
@@ -266,6 +269,7 @@ lemma mapInsecurePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_mapInsecure(pageDbIn, addrspacePage, physPage, mapping).0)
 {
+    reveal_validPageDb();
     var pageDbOut := smc_mapInsecure(
         pageDbIn, addrspacePage, physPage, mapping).0;
     var err := smc_mapInsecure(
@@ -298,6 +302,7 @@ lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_finalise(pageDbIn, addrspacePage).0)
 {
+    reveal_validPageDb();
     var pageDbOut := smc_finalise(pageDbIn, addrspacePage).0;
     var err := smc_finalise(pageDbIn, addrspacePage).1;
 
@@ -327,6 +332,7 @@ lemma enterPreservesPageDbValidity(pageDbIn: PageDb, dispPage: PageNr,
     requires validPageDb(pageDbIn) 
     ensures validPageDb(smc_enter(pageDbIn, dispPage, arg1, arg2, arg3).0)
 {
+    reveal_validPageDb();
     var pageDbOut := smc_enter(pageDbIn, dispPage, arg1, arg2, arg3).0;
     var err := smc_enter(pageDbIn, dispPage, arg1, arg2, arg3).1;
 
@@ -355,6 +361,7 @@ lemma resumePreservesPageDbValidity(pageDbIn: PageDb, dispPage: PageNr)
     requires validPageDb(pageDbIn) 
     ensures validPageDb(smc_resume(pageDbIn, dispPage).0)
 {
+    reveal_validPageDb();
     var pageDbOut := smc_resume(pageDbIn, dispPage).0;
     var err := smc_resume(pageDbIn, dispPage).1;
 
@@ -384,6 +391,7 @@ lemma stopPreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_stop(pageDbIn, addrspacePage).0)
 {
+    reveal_validPageDb();
     var pageDbOut := smc_stop(pageDbIn, addrspacePage).0;
     var err := smc_stop(pageDbIn, addrspacePage).1;
 
@@ -414,6 +422,7 @@ lemma smchandlerPreservesPageDbValidity(pageDbIn: PageDb, callno: int, arg1: int
     requires validPageDb(pageDbIn)
     ensures validPageDb(smchandler(pageDbIn, callno, arg1, arg2, arg3, arg4).0)
 {
+    reveal_validPageDb();
     if (callno == KEV_SMC_INIT_ADDRSPACE()) {
         initAddrspacePreservesPageDBValidity(pageDbIn, arg1, arg2);
     } else if(callno == KEV_SMC_INIT_DISPATCHER()) {

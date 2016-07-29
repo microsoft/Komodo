@@ -37,7 +37,7 @@ predicate wellFormedPageDb(d: PageDb)
     forall n {:trigger validPageNr(n)} :: validPageNr(n) <==> n in d
 }
 
-predicate validPageDb(d: PageDb)
+predicate {:opaque} validPageDb(d: PageDb)
 {
     wellFormedPageDb(d)
     && pageDbEntriesValidRefs(d)
@@ -45,7 +45,7 @@ predicate validPageDb(d: PageDb)
 }
 
 // this is a weak predicate that simply says the page number refs are valid
-predicate pageDbClosedRefs(d: PageDb)
+predicate {:opaque} pageDbClosedRefs(d: PageDb)
 {
     wellFormedPageDb(d) && (forall n {:trigger validPageNr(n)} :: (validPageNr(n) && d[n].PageDbEntryTyped?)
         ==> (validPageNr(d[n].addrspace) && closedRefsPageDbEntry(d[n].entry)))
@@ -54,7 +54,7 @@ predicate pageDbClosedRefs(d: PageDb)
 lemma validPageDbImpliesClosedRefs(d: PageDb)
     requires validPageDb(d)
     ensures pageDbClosedRefs(d)
-{}
+    {reveal_validPageDb(); reveal_pageDbClosedRefs();}
 
 predicate pageDbEntriesValid(d:PageDb)
     requires wellFormedPageDb(d)
@@ -96,9 +96,8 @@ predicate validPageDbEntryTyped(d: PageDb, n: PageNr)
 }
 
 predicate isAddrspace(d: PageDb, n: PageNr)
-    requires wellFormedPageDb(d)
 {
-    validPageNr(n) && d[n].PageDbEntryTyped? && d[n].entry.Addrspace?
+    wellFormedPageDb(d) && validPageNr(n) && d[n].PageDbEntryTyped? && d[n].entry.Addrspace?
 }
 
 // The addrspace of the thing pointed to by n is stopped

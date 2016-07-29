@@ -42,6 +42,7 @@ predicate pageDbCorresponds(s:memstate, pagedb:PageDb)
     requires SaneMem(s)
     requires pageDbClosedRefs(pagedb)
 {
+    reveal_pageDbClosedRefs();
     // XXX: unpack the entry and page contents here to help dafny see
     // that we have no other dependencies on the state
     var db := (map p | 0 <= p < KEVLAR_SECURE_NPAGES() :: extractPageDbEntry(s,p));
@@ -55,6 +56,7 @@ predicate pageDbCorrespondsExcluding(s:memstate, pagedb:PageDb, modifiedPage:Pag
     requires SaneMem(s)
     requires pageDbClosedRefs(pagedb)
 {
+    reveal_pageDbClosedRefs();
     forall p {:trigger validPageNr(p)} :: validPageNr(p) && p != modifiedPage
         ==> (pageDbEntryCorresponds(p, pagedb[p], extractPageDbEntry(s, p))
             && pageContentsCorresponds(p, pagedb[p], extractPage(s, p)))
@@ -65,6 +67,7 @@ predicate pageDbCorrespondsOnly(s:memstate, pagedb:PageDb, p:PageNr)
     requires pageDbClosedRefs(pagedb)
     requires validPageNr(p)
 {
+	reveal_pageDbClosedRefs();
     pageDbEntryCorresponds(p, pagedb[p], extractPageDbEntry(s, p))
     && pageContentsCorresponds(p, pagedb[p], extractPage(s, p))
 }
