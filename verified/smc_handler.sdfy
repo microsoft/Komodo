@@ -311,7 +311,7 @@ procedure init_addrspace(
         AlwaysInvariant(old(this),this);
         StackPreserving(old(this),this);
         RegPreservingExcept(old(this),this,[@r0, @r3, @r4, @r5, @r6, @r7]);
-        old(initAddrspaceSpecResult(pagedb_in, addrspace_page, l1pt_page)) == pagedb;
+        old(specPageDb(smc_initAddrspace_premium(pagedb_in, addrspace_page, l1pt_page))) == pagedb;
         pageDbClosedRefs(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
@@ -345,27 +345,12 @@ procedure init_addrspace(
         ==> pageDbCorrespondsOnly(old(this).m, pagedb, p);
 
     forall ::
-        old(initAddrspaceSpecResult(pagedb_in, addrspace_page, l1pt_page)) == pagedb &&
+        old(specPageDb(smc_initAddrspace_premium(pagedb_in, addrspace_page, l1pt_page))) == pagedb &&
         pageDbCorresponds(this.m, pagedb)
     {
         reveal_smc_initAddrspace_premium();
     }
 }
-
-#verbatim // XXX: FIXME: kludges for Spartan's lack of tuples
-function initAddrspaceSpecResult(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr): PageDb
-    requires validPageDb(pageDbIn);
-    ensures  validPageDb(initAddrspaceSpecResult(pageDbIn, addrspacePage, l1PTPage));
-{
-    smc_initAddrspace_premium(pageDbIn, addrspacePage, l1PTPage).0
-}
-
-function initAddrspaceSpecErr(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr): int
-    requires validPageDb(pageDbIn);
-{
-    smc_initAddrspace_premium(pageDbIn, addrspacePage, l1PTPage).1
-}
-#endverbatim
 
 procedure kev_smc_init_addrspace(
     {:register OReg(R1)} addrspace_page:int,
@@ -380,8 +365,8 @@ procedure kev_smc_init_addrspace(
         pageDbCorresponds(this.m, pagedb_in);
     ensures
         StackPreserving(old(this),this);
-        old(initAddrspaceSpecResult(pagedb_in, addrspace_page, l1pt_page)) == pagedb;
-        old(initAddrspaceSpecErr(pagedb_in, addrspace_page, l1pt_page)) == err;
+        tuple(pagedb, err)
+            == old(smc_initAddrspace_premium(pagedb_in, addrspace_page, l1pt_page));
         pageDbClosedRefs(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validPageDb(pagedb);
@@ -431,9 +416,8 @@ procedure kev_smc_init_addrspace(
         }
     }
     forall :: 
-        old(initAddrspaceSpecResult(pagedb_in, addrspace_page, l1pt_page)) == pagedb &&
-        old(initAddrspaceSpecErr(pagedb_in, addrspace_page, l1pt_page)) == err &&
-        pageDbClosedRefs(pagedb) && pageDbCorresponds(this.m, pagedb)
+        tuple(pagedb, err) == old(smc_initAddrspace_premium(pagedb_in, addrspace_page, l1pt_page))
+        && pageDbClosedRefs(pagedb) && pageDbCorresponds(this.m, pagedb)
     {
         reveal_smc_initAddrspace_premium();
         reveal_validPageDb();
@@ -474,6 +458,7 @@ procedure smc_handler(
         pageDbCorresponds(this.m, pagedb_in);
     ensures
         NonvolatileRegPreserving(old(this),this);
+        //tuple(pagedb, err, retval) == old(smchandler_premium(pagedb_in, callno, arg1, arg2, arg3, arg4));
         pageDbClosedRefs(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validPageDb(pagedb);
