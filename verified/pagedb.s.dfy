@@ -51,6 +51,11 @@ predicate {:opaque} pageDbClosedRefs(d: PageDb)
         ==> (validPageNr(d[n].addrspace) && closedRefsPageDbEntry(d[n].entry)))
 }
 
+lemma validPageDbImpliesWellFormed(d: PageDb)
+    requires validPageDb(d)
+    ensures wellFormedPageDb(d)
+    {reveal_validPageDb();}
+
 lemma validPageDbImpliesClosedRefs(d: PageDb)
     requires validPageDb(d)
     ensures pageDbClosedRefs(d)
@@ -246,6 +251,7 @@ predicate closedRefsL2PTable(e: PageDbEntryTyped)
     //     case NoMapping => true)
 }
 
+
 /*
 function initialPageDb(): PageDb
   ensures validPageDb(initialPageDb())
@@ -253,3 +259,27 @@ function initialPageDb(): PageDb
   imap n: PageNr | validPageNr(n) :: PageDbEntryFree
 }
 */
+
+//-----------------------------------------------------------------------------
+// Utilities 
+//-----------------------------------------------------------------------------
+predicate validL1PTPage(d:PageDb, p:PageNr)
+{
+    reveal_validPageDb();
+    validPageDb(d) && validPageNr(p) &&
+        d[p].PageDbEntryTyped? && d[p].entry.L1PTable?
+}
+
+predicate validDispatcherPage(d:PageDb, p:PageNr)
+{
+    reveal_validPageDb();
+    validPageDb(d) && validPageNr(p) &&
+        d[p].PageDbEntryTyped? && d[p].entry.Dispatcher?
+}
+
+// a points to an address space and it is closed
+predicate validAddrspacePage(d: PageDb, a: PageNr)
+{
+    wellFormedPageDb(d) &&
+    isAddrspace(d, a) && d[a].entry.l1ptnr in d
+}

@@ -1,21 +1,15 @@
 include "kev_common.s.dfy"
 include "pagedb.s.dfy"
 
-predicate pageIsFree(d:PageDb, pg:PageNr)
-    { pg in d && d[pg].PageDbEntryFree? }
-
-// a points to an address space and it is closed
-predicate validAddrspacePage(d: PageDb, a: PageNr)
-{
-    wellFormedPageDb(d) &&
-    isAddrspace(d, a) && d[a].entry.l1ptnr in d
-}
 
 predicate physPageInvalid( physPage: int )
 {
     physPage != 0 && !(physPageIsRam(physPage)
         && !physPageIsSecure(physPage))
 }
+
+predicate pageIsFree(d:PageDb, pg:PageNr)
+    { pg in d && d[pg].PageDbEntryFree? }
 
 predicate physPageIsRam( physPage: int )
 {
