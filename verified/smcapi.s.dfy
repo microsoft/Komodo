@@ -35,7 +35,7 @@ predicate l1indexInUse(d: PageDb, a: PageNr, l1index: int)
     requires d[a].entry.state != StoppedState
     requires 0 <= l1index < NR_L1PTES()
 {
-	reveal_validPageDb();
+    reveal_validPageDb();
     var l1ptnr := d[a].entry.l1ptnr;
     var l1 := d[l1ptnr].entry.l1pt;
     l1[l1index].Just?
@@ -61,13 +61,13 @@ function updateL2Pte(pageDbIn: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
     requires pageDbIn[a].PageDbEntryTyped? && pageDbIn[a].entry.Addrspace?
     requires pageDbIn[a].entry.state.InitState?
 {
-	reveal_validPageDb();
+    reveal_validPageDb();
     var addrspace := pageDbIn[a].entry;
     var l1 := pageDbIn[addrspace.l1ptnr].entry;
     var l1pte := fromJust(l1.l1pt[mapping.l1index]);
     var l2pt := pageDbIn[l1pte].entry.l2pt;
     validPageDbImpliesClosedRefs(pageDbIn);
-	reveal_pageDbClosedRefs();
+    reveal_pageDbClosedRefs();
     pageDbIn[ l1pte := PageDbEntryTyped(a, L2PTable(l2pt[mapping.l2index := l2e])) ]
 
 }
