@@ -129,7 +129,7 @@ predicate pageDbCorrespondsOnly(s:memstate, pagedb:PageDb, p:PageNr)
     requires pageDbClosedRefs(pagedb)
     requires validPageNr(p)
 {
-	reveal_pageDbClosedRefs();
+    reveal_pageDbClosedRefs();
     pageDbEntryCorresponds(p, pagedb[p], extractPageDbEntry(s, p))
     && pageContentsCorresponds(p, pagedb[p], extractPage(s, p))
 }
