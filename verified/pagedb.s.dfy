@@ -126,15 +126,12 @@ predicate pageDbEntryOk(d: PageDb, n: PageNr)
 }
 
 predicate validAddrspace(d: PageDb, n: PageNr)
-    requires wellFormedPageDb(d) && validPageNr(n)
-    requires d[n].PageDbEntryTyped? && d[n].entry.Addrspace?
-    requires var a:= d[n].addrspace; isAddrspace(d, a)
+    requires isAddrspace(d, n)
 {
-        var a := d[n].addrspace;
-        var addrspace := d[a].entry;
-        n == a
-        && addrspaceL1Unique(d, a)
-        && addrspace.refcount == |addrspaceRefs(d, a)|
+        var addrspace := d[n].entry;
+        n == d[n].addrspace
+        && addrspaceL1Unique(d, n)
+        && addrspace.refcount == |addrspaceRefs(d, n)|
         && (stoppedAddrspace(d, n) ||  (
             d[addrspace.l1ptnr].PageDbEntryTyped? &&
             d[addrspace.l1ptnr].entry.L1PTable? &&
