@@ -127,7 +127,8 @@ function smc_initDispatcher(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
    if(!isAddrspace(pageDbIn, addrspacePage)) then
        (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
    else
-       allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false))
+       var ctxt : map<ARMReg,int> := map[];
+       allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false, ctxt))
 }
 
 
@@ -165,6 +166,7 @@ function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
     requires !entry.Addrspace?
     requires entry.L2PTable? ==>
         entry.l2pt == SeqRepeat(NR_L2PTES(), NoMapping)
+    requires entry.Dispatcher? ==> !entry.entered
 {
     reveal_validPageDb();
     var addrspace := pageDbIn[addrspacePage].entry;
@@ -193,6 +195,7 @@ function allocatePage(pageDbIn: PageDb, securePage: PageNr,
     requires !entry.Addrspace?
     requires entry.L2PTable? ==>
         entry.l2pt == SeqRepeat(NR_L2PTES(), NoMapping)
+    requires entry.Dispatcher? ==> !entry.entered
     ensures  validPageDb(allocatePage(pageDbIn, securePage, addrspacePage, entry).0);
 {
     reveal_validPageDb();
@@ -304,13 +307,7 @@ function smc_enter(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, arg
     else if(d[p].entry.entered) then
         (pageDbIn, KEV_ERR_ALREADY_ENTERED())
     else
-        // A model of registers is needed to model more.
-        // For now all this does is change the dispatcher.
-        var a := d[p].addrspace;
-        var pageDbOut := match d[p].entry 
-                case Dispatcher(entrypoint, entered) => 
-                    d[p := PageDbEntryTyped(a,Dispatcher(entrypoint,true))];
-        (pageDbOut, KEV_ERR_SUCCESS())
+        (pageDbIn, KEV_ERR_SUCCESS())
 }
 
 function smc_resume(pageDbIn: PageDb, dispPage: PageNr)
@@ -324,15 +321,9 @@ function smc_resume(pageDbIn: PageDb, dispPage: PageNr)
     else if(var a := d[p].addrspace; d[a].entry.state != FinalState) then
         (pageDbIn, KEV_ERR_NOT_FINAL())
     else if(!d[p].entry.entered) then
-        (pageDbIn, KEV_ERR_ALREADY_ENTERED())
+        (pageDbIn, KEV_ERR_NOT_ENTERED())
     else
-        // A model of registers is needed to model more.
-        // For now all this does is change the dispatcher.
-        var a := d[p].addrspace;
-        var pageDbOut := match d[p].entry 
-                case Dispatcher(entrypoint, entered) => 
-                    d[p := PageDbEntryTyped(a,Dispatcher(entrypoint,false))];
-        (pageDbOut, KEV_ERR_SUCCESS())
+        (pageDbIn, KEV_ERR_SUCCESS())
 }
 
 function smc_stop(pageDbIn: PageDb, addrspacePage: PageNr)
@@ -408,6 +399,7 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
     requires !entry.L1PTable?
     requires entry.L2PTable? ==>
         entry.l2pt == SeqRepeat(NR_L2PTES(), NoMapping)
+    requires entry.Dispatcher? ==> !entry.entered
     ensures  validPageDb(allocatePage_inner(
         pageDbIn, securePage, addrspacePage, entry).0);
 {

@@ -12,14 +12,16 @@ predicate validPageNr(p: PageNr)
     0 <= p < KEVLAR_SECURE_NPAGES()
 }
 
-datatype AddrspaceState = InitState | FinalState | StoppedState
-
 datatype PageDbEntryTyped
     = Addrspace(l1ptnr: PageNr, refcount: nat, state: AddrspaceState)
-    | Dispatcher(entrypoint:int, entered: bool)
+    | Dispatcher(entrypoint:int, entered:bool, ctxt:DispatcherContext)
     | L1PTable(l1pt: seq<Maybe<PageNr>>)
     | L2PTable(l2pt: seq<L2PTE>)
     | DataPage
+
+datatype AddrspaceState = InitState | FinalState | StoppedState
+
+type DispatcherContext = map<ARMReg,int>
 
 datatype L2PTE
     = SecureMapping(page: PageNr, write: bool, exec: bool)
@@ -49,6 +51,23 @@ predicate {:opaque} pageDbClosedRefs(d: PageDb)
 {
     wellFormedPageDb(d) && (forall n {:trigger validPageNr(n)} :: (validPageNr(n) && d[n].PageDbEntryTyped?)
         ==> (validPageNr(d[n].addrspace) && closedRefsPageDbEntry(d[n].entry)))
+}
+
+predicate validDispatcherContext(dc:DispatcherContext)
+{
+       R0  in dc && isUInt32(dc[R0])
+    && R1  in dc && isUInt32(dc[R1])
+    && R2  in dc && isUInt32(dc[R2])
+    && R3  in dc && isUInt32(dc[R3])
+    && R4  in dc && isUInt32(dc[R4])
+    && R5  in dc && isUInt32(dc[R5])
+    && R6  in dc && isUInt32(dc[R6])
+    && R7  in dc && isUInt32(dc[R7])
+    && R8  in dc && isUInt32(dc[R8])
+    && R9  in dc && isUInt32(dc[R9])
+    && R10 in dc && isUInt32(dc[R10])
+    && R11 in dc && isUInt32(dc[R11])
+    && R12 in dc && isUInt32(dc[R12])
 }
 
 lemma validPageDbImpliesWellFormed(d: PageDb)
@@ -125,7 +144,8 @@ predicate pageDbEntryOk(d: PageDb, n: PageNr)
     && ( (entry.Addrspace? && validAddrspace(d, n))
        || (entry.L1PTable? && validL1PTable(d, n))
        || (entry.L2PTable? && validL2PTable(d, n))
-       || (entry.Dispatcher?)
+       || (entry.Dispatcher? && (entry.entered ==>
+            validDispatcherContext(entry.ctxt)))
        || (entry.DataPage?) )
     
 }

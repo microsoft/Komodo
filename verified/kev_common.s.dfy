@@ -24,15 +24,18 @@ function method KEV_SMC_STOP():int            { 29 }
 function method KEV_ERR_SUCCESS():int
     ensures KEV_ERR_SUCCESS() == 0;
     { 0 }
-function method KEV_ERR_INVALID_PAGENO():int     { 1 }
-function method KEV_ERR_PAGEINUSE():int          { 2 }
-function method KEV_ERR_INVALID_ADDRSPACE():int  { 3 }
-function method KEV_ERR_ALREADY_FINAL():int      { 4 }
-function method KEV_ERR_NOT_FINAL():int          { 5 }
-function method KEV_ERR_INVALID_MAPPING():int    { 6 }
-function method KEV_ERR_ADDRINUSE():int          { 7 }
-function method KEV_ERR_NOT_STOPPED():int        { 8 }
-function method KEV_ERR_ALREADY_ENTERED():int    { 9 }
+function method KEV_ERR_INVALID_PAGENO():int     { 1  }
+function method KEV_ERR_PAGEINUSE():int          { 2  }
+function method KEV_ERR_INVALID_ADDRSPACE():int  { 3  }
+function method KEV_ERR_ALREADY_FINAL():int      { 4  }
+function method KEV_ERR_NOT_FINAL():int          { 5  }
+function method KEV_ERR_INVALID_MAPPING():int    { 6  }
+function method KEV_ERR_ADDRINUSE():int          { 7  }
+function method KEV_ERR_NOT_STOPPED():int        { 8  }
+function method KEV_ERR_INTERRUPTED():int        { 9  }
+function method KEV_ERR_FAULT():int              { 10 }
+function method KEV_ERR_ALREADY_ENTERED():int    { 11 }
+function method KEV_ERR_NOT_ENTERED():int        { 12 }
 function method KEV_ERR_INVALID():int            { 0x1_0000_0000 }
 
 //-----------------------------------------------------------------------------
@@ -76,6 +79,12 @@ function StackBase():int
 {
     StackLimit() + KEVLAR_STACK_SIZE()
 }
+
+predicate address_is_secure(m:mem)
+{
+    (KEVLAR_DIRECTMAP_VBASE() + SecurePhysBase()) <= m <
+        (KEVLAR_DIRECTMAP_VBASE() + SecurePhysBase() + KEVLAR_SECURE_RESERVE())
+}        
 
 //-----------------------------------------------------------------------------
 // Globals

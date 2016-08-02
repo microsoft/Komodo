@@ -35,18 +35,8 @@ function enterDispatchFunctional(stateIn:state, dispPage: PageNr, arg1: int, arg
 
 		var confOut := stateIn.conf.(m := User, ns := Secure, l1p := addrspace.l1ptnr);
 		var regsOut := stateIn.regs[R0 := arg1][R1 := arg2][R2 := arg3];
-	
-        // This won't be necessary to prove the safety property.
-		var sp_usr := stateIn.regs[SP(User)];
-		var lr_usr := stateIn.regs[LR(User)];
-		var lr_svc := stateIn.regs[LR(Supervisor)];
-		var lr_abt := stateIn.regs[LR(Abort)];
-		var lr_und := stateIn.regs[LR(Undefined)];
-		var globsOut := stateIn.m.globals[OSymbol("sp_usr") := [sp_usr]]
-			    [OSymbol("lr_usr") := [lr_usr]][OSymbol("lr_svc") := [lr_svc]]
-			    [OSymbol("lr_abt") := [lr_abt]][OSymbol("lr_und") := [lr_und]];		
 		
-        var mOut := stateIn.m.(globals := globsOut);
+        var mOut := stateIn.m;
         
         // TODO? set FIQ, IRQ bits so interrupts are taken to monitor mode
             // Only needed with more detailed interrupt model in ARMdef

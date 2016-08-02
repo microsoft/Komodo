@@ -1,9 +1,11 @@
 include "kev_common.s.dfy"
 include "ARMdef.dfy"
 include "pagedb.s.dfy"
-include "pagedb.i.dfy"
 include "smcapi.s.dfy"
-include "smcfunctional.i.dfy"
+
+//TODO refactor this since trusted files should not include untrusted files
+include "pagedb.i.dfy"
+include "entry.i.dfy"
 
 predicate entryState(s:state, d:PageDb)
 {
@@ -13,17 +15,20 @@ predicate entryState(s:state, d:PageDb)
     validL1PTPage(d, s.conf.l1p) && !stoppedAddrspace(d, s.conf.l1p)
 }
 
-// All memory addresses except the ones in the active l1 page table
-// have their contents preserved
-predicate MemInvariantExceptAddrspace(s:state, s':state, d:PageDb)
+// All writeable and secure memory addresses except the ones in the active l1
+// page table have their contents preserved
+predicate WSMemInvariantExceptAddrspace(s:state, s':state, d:PageDb)
     requires entryState(s, d)
 {
     ValidState(s') && AlwaysInvariant(s, s') &&
-    forall i :: i in s.m.addresses && !memInAddrspace(d, s.conf.l1p, i) ==>
-        s.m.addresses[i] == s'.m.addresses[i]
+    s.m.globals == s'.m.globals &&
+    forall i :: i in s.m.addresses && address_is_secure(i) &&
+        !memSWrInAddrspace(d, s.conf.l1p, i) ==>
+            s.m.addresses[i] == s'.m.addresses[i]
 }
 
-predicate pageInAddrspace(d:PageDb, l1p:PageNr, p:PageNr)
+// Is the page secure, writeable, and in the L1PT
+predicate pageSWrInAddrspace(d:PageDb, l1p:PageNr, p:PageNr)
 	requires validPageNr(p) && validL1PTPage(d, l1p)
     requires (validPageDbImpliesWellFormed(d); !stoppedAddrspace(d, l1p))
 {
@@ -31,22 +36,23 @@ predicate pageInAddrspace(d:PageDb, l1p:PageNr, p:PageNr)
     !stoppedAddrspace(d, l1p) && 
     var l1pt := d[l1p].entry.l1pt;
     l1p == p || Just(p) in l1pt ||
-    exists p' :: Just(p') in l1pt && pageInL2PT(d[p'].entry.l2pt,p)
+    exists p' :: Just(p') in l1pt && pageSWrInL2PT(d[p'].entry.l2pt,p)
 }
 
-predicate memInAddrspace(d:PageDb, l1p:PageNr, m: mem)
+predicate memSWrInAddrspace(d:PageDb, l1p:PageNr, m: mem)
     requires validL1PTPage(d, l1p)
     requires (validPageDbImpliesWellFormed(d); !stoppedAddrspace(d, l1p))
 {
-    exists p :: validPageNr(p) && pageInAddrspace(d, l1p, p) && addrInPage(m, p)
+    exists p :: validPageNr(p) && pageSWrInAddrspace(d, l1p, p) && addrInPage(m, p)
 }
 
-predicate pageInL2PT(l2pt:seq<L2PTE>, p:PageNr)
+// is the page secure, writeable, and in the L2PT
+predicate pageSWrInL2PT(l2pt:seq<L2PTE>, p:PageNr)
 {
     exists l2pte :: l2pte in l2pt && (match l2pte
         case NoMapping => false
         case SecureMapping(p', w, e) => w && p' == p
-        case InsecureMapping(p') => p' == p)
+        case InsecureMapping(p') => false)
 }
 
 //-----------------------------------------------------------------------------
@@ -55,7 +61,7 @@ predicate pageInL2PT(l2pt:seq<L2PTE>, p:PageNr)
 function {:axiom} addrspaceHavoc(s:state, d:PageDb) : state
     requires entryState(s, d)
     ensures var s' := addrspaceHavoc(s, d);
-        MemInvariantExceptAddrspace(s, s', d) && SaneMem(s'.m) &&
+        WSMemInvariantExceptAddrspace(s, s', d) && SaneMem(s'.m) &&
         s'.conf == s.conf
 
 function {:axiom} addrspaceReturn(s:state, d:PageDb) : state
@@ -96,7 +102,7 @@ predicate {:opaque} addrspaceContentsPreservedExcept(s:state, s':state, disp:Pag
     ValidState(s') && AlwaysInvariant(s, s') &&
     forall a' :: validAddrspacePage(d, a') && a' != a && !stoppedAddrspace(d, a') ==>
         (var l1' := d[a'].entry.l1ptnr;
-        forall m :: memInAddrspace(d, l1', m) ==>
+        forall m :: memSWrInAddrspace(d, l1', m) ==>
             s.m.addresses[m] == s'.m.addresses[m])
 }
 
@@ -134,8 +140,6 @@ lemma entryPreservesOtherAddrspaces(s:state, disp:PageNr, a1:int, a2:int, a3:int
 //-----------------------------------------------------------------------------
 // Liveness Properties of the monitor/addrspace bondary
 //-----------------------------------------------------------------------------
-
-// args of smc_enter reach r0-r3 ?
 
 // The sequence enter -> execute -> return -> enter -> execute restores the
     // context from the first execute?

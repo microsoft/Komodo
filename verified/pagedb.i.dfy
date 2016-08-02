@@ -182,11 +182,11 @@ function pageDbEntryTypeVal(e: PageDbEntry): int
 {
     if e.PageDbEntryFree? then KEV_PAGE_FREE()
     else match e.entry {
-    case Addrspace(l1pt, ref, state) => KEV_PAGE_ADDRSPACE()
-    case Dispatcher(ep, entered) => KEV_PAGE_DISPATCHER()
-    case L1PTable(pt) => KEV_PAGE_L1PTABLE()
-    case L2PTable(pt) => KEV_PAGE_L2PTABLE()
-    case DataPage => KEV_PAGE_DATA()
+        case Addrspace(l1pt, ref, state) => KEV_PAGE_ADDRSPACE()
+        case Dispatcher(ep, entered, ctxt) => KEV_PAGE_DISPATCHER()
+        case L1PTable(pt) => KEV_PAGE_L1PTABLE()
+        case L2PTable(pt) => KEV_PAGE_L2PTABLE()
+        case DataPage => KEV_PAGE_DATA()
     }
 }
 
