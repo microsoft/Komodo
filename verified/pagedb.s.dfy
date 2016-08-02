@@ -150,12 +150,28 @@ predicate addrspaceL1Unique(d: PageDb, n: PageNr)
         !d[p].entry.L1PTable?
 }
 
+// taken from ironclad set libraries
+function SetOfNumbersInRightExclusiveRange(a:int, b:int):set<int>
+    requires a <= b;
+    ensures forall opn :: a <= opn < b ==> opn in SetOfNumbersInRightExclusiveRange(a, b);
+    ensures forall opn :: opn in SetOfNumbersInRightExclusiveRange(a, b) ==> a <= opn < b;
+    ensures |SetOfNumbersInRightExclusiveRange(a, b)| == b-a;
+    decreases b-a;
+{
+    if a == b then {} else {a} + SetOfNumbersInRightExclusiveRange(a+1, b)
+}
+
+function {:opaque} validPageNrs(): set<PageNr>
+    ensures forall n :: n in validPageNrs() <==> validPageNr(n)
+{
+    SetOfNumbersInRightExclusiveRange(0, KEVLAR_SECURE_NPAGES())
+}
+
 // returns the set of references to an addrspace page with the given index
 function addrspaceRefs(d: PageDb, addrspacePageNr: PageNr): set<PageNr>
     requires wellFormedPageDb(d) && validPageNr(addrspacePageNr)
 {
-    // XXX: inlined validPageNr(n) to help dafny see that this set is bounded
-    (set n | validPageNr(n) && 0 <= n < KEVLAR_SECURE_NPAGES()
+    (set n | n in validPageNrs()
         && d[n].PageDbEntryTyped?
         && n != addrspacePageNr
         && d[n].addrspace == addrspacePageNr)
