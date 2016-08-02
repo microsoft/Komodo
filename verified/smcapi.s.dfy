@@ -128,12 +128,10 @@ function smc_initDispatcher(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
     requires validPageDb(pageDbIn);
 {
     reveal_validPageDb();
-   var n := page;
-   var d := pageDbIn;
-   if(!isAddrspace(pageDbIn, addrspacePage)) then
-       (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
-   else
-       allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false))
+    if(!isAddrspace(pageDbIn, addrspacePage)) then
+        (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
+    else
+        allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false))
 }
 
 
