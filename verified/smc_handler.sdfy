@@ -425,6 +425,65 @@ procedure kev_smc_init_addrspace(
     }
 }
 
+
+//=============================================================================
+// Init dispatcher
+//=============================================================================
+
+procedure kev_smc_init_dispatcher(
+    {:register OReg(R1)} disp_page:int,
+    {:register OReg(R2)} as_page:int,
+    {:register OReg(R3)} entrypoint:int,
+    out {:register OReg(R0)} err:int,
+    ghost pagedb_in: PageDb) returns (ghost pagedb: PageDb)
+    requires/ensures
+        SaneState(this);
+    requires
+        validPageDb(pagedb_in);
+        pageDbClosedRefs(pagedb_in);
+        pageDbCorresponds(this.m, pagedb_in);
+    ensures
+        StackPreserving(old(this),this);
+        tuple(pagedb, err)
+            == old(smc_initDispatcher_premium(pagedb_in, disp_page, as_page, entrypoint));
+        pageDbClosedRefs(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+        validPageDb(pagedb);
+{
+    pagedb := pagedb_in;
+    reveal_pageDbEntryCorresponds();
+    reveal_pageDbClosedRefs();
+    reveal_smc_initDispatcher_premium();
+
+    if (as_page >= sp_op_const(KEVLAR_SECURE_NPAGES())) {
+        err := sp_op_const(KEV_ERR_INVALID_ADDRSPACE());
+    } else {
+        LDRglobaladdr(r12, PageDb());
+        assert validPageNr(as_page);
+        r0 := sp_op_const(PAGEDB_ENTRY_SIZE());
+        MUL(r4,as_page,r0);
+        assert r4 == G_PAGEDB_ENTRY(as_page) + PAGEDB_ENTRY_TYPE();
+        LDRglobal(r0, PageDb(), r12, r4);
+        assert r0 == pageDbEntryTypeVal(pagedb[as_page]);
+        if (r0 != sp_op_const(KEV_PAGE_ADDRSPACE())) {
+            err := sp_op_const(KEV_ERR_INVALID_ADDRSPACE());
+        } else {
+            assert isAddrspace(pagedb, as_page);
+
+            page_monvaddr_impl(r4, as_page, r5);
+
+            ghost var entry := PageDbEntryTyped(as_page, Dispatcher(entrypoint, false));
+            pagedb := allocate_page(disp_page, r4,
+                                    sp_op_const(KEV_PAGE_DISPATCHER()),
+                                    r12, r5 /* tmp */, err, pagedb, entry);
+        }
+    }
+}
+
+//=============================================================================
+// Top-level SMC handler
+//=============================================================================
+
 #verbatim
 lemma SameMemAndGlobalsImpliesSamePageDb(s:state, s':state, pagedb:PageDb)
     requires SaneState(s) && SaneState(s')
@@ -477,6 +536,8 @@ procedure smc_handler(
         err := sp_op_const(KEV_ERR_SUCCESS());
     } else if(callno == sp_op_const(KEV_SMC_INIT_ADDRSPACE())) {
         pagedb := kev_smc_init_addrspace(arg1, arg2, err, pagedb);
+    } else if(callno == sp_op_const(KEV_SMC_INIT_DISPATCHER())) {
+        pagedb := kev_smc_init_dispatcher(arg1, arg2, arg3, err, pagedb);
     }
 
     ghost var prePopThis := this;
