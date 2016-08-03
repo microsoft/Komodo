@@ -17,7 +17,7 @@ SDFY_INCLUDES =  $(dir)/ARMdecls.sdfy $(dir)/kev_utils.sdfy
 # We use .verified files as a timestamp/placeholder to indicate that
 # a given source has been verified. We use Mindy only for verifying
 # Spartan-generated files (it tends to choke on more general .dfy files).
-%.verified: %.gen.dfy
+%.verified: %.gen.dfy $(ARMSPARTAN_DEPS) $(KEVLAR_DEPS)
 	$(MINDY) $(DAFNYFLAGS) /compile:0 $< && touch $@
 
 %.verified: %.dfy
