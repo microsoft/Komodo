@@ -18,6 +18,18 @@ lemma ValidPageDbImpliesValidAddrspace(d:PageDb, n:PageNr)
     reveal_pageDbClosedRefs();
 }
 
+lemma PageDbCorrespondsImpliesEntryCorresponds(s:memstate, d:PageDb, n:PageNr)
+    requires SaneMem(s)
+    requires wellFormedPageDb(d) && pageDbClosedRefs(d)
+    requires pageDbCorresponds(s, d)
+    requires validPageNr(n)
+    ensures var e := d[n]; e.PageDbEntryTyped?
+        ==> validPageNr(e.addrspace) && closedRefsPageDbEntry(e.entry)
+    ensures pageDbEntryCorresponds(n, d[n], extractPageDbEntry(s, n))
+{
+    reveal_pageDbClosedRefs();
+}
+
 // XXX: lifted from ironfleet/src/Dafny/Distributed/Common/Collections/Sets.i.dfy
 lemma ThingsIKnowAboutSubset<T>(x:set<T>, y:set<T>)
     requires x<y;
@@ -97,7 +109,6 @@ procedure allocate_page(
 
     reveal_pageContentsCorresponds();
     reveal_pageDbEntryCorresponds();
-    reveal_validPageDb();
     ValidPageDbImpliesValidAddrspace(pagedb, entry.addrspace);
 
     if (pagenr >= sp_op_const(KEVLAR_SECURE_NPAGES())) {
@@ -110,13 +121,10 @@ procedure allocate_page(
         assert err == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_TYPE();
         LDRglobal(tmp, PageDb(), pagedb_base, err);
 
-        // XXX: why do we need this reveal here? maybe because dafny
-        // can't see wellformedness of the pageDbEntryCorresponds
-        // precondition?
-        reveal_pageDbClosedRefs();
-        assert pageDbEntryCorresponds(pagenr, pagedb[pagenr],
-                                      extractPageDbEntry(this.m, pagenr));
-        assert tmp == pageDbEntryTypeVal(pagedb[pagenr]);
+        forall :: tmp == pageDbEntryTypeVal(pagedb[pagenr])
+        {
+            PageDbCorrespondsImpliesEntryCorresponds(this.m, pagedb, pagenr);
+        }
 
         if (tmp != sp_op_const(KEV_PAGE_FREE())) {
             err := sp_op_const(KEV_ERR_PAGEINUSE());
@@ -146,6 +154,7 @@ procedure allocate_page(
     }
 
     pagedb := specPageDb(allocatePage(pagedb, pagenr, entry.addrspace, entry.entry));
+    validPageDbImpliesClosedRefs(pagedb);
 }
 
 //=============================================================================

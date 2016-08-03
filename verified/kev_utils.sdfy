@@ -91,9 +91,10 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
 
     for (; base < size; base += 4)
         invariant
+            SaneState(this);
             AlwaysInvariant(old(this),this);
             GlobalsInvariant(old(this),this);
-            SaneState(this);
+            StackPreserving(old(this),this);
             WordAligned(base);
             size == limit;
             lower <= base <= limit;
@@ -102,12 +103,14 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
                 ==> addrval(this,i) == old(val);
             MemPreservingExcept(old(this), this, lower, limit);
             RegPreservingExcept(old(this), this, [@base,@size]);
+            val == old(val);
         decreases
             size - base;
     {
         ghost var prevThis := this;
         STR(val, base, 0);
-        assert forall p :: ValidMem(prevThis.m, p) && p != base ==> addrval(prevThis, p) == addrval(this, p);
+        assert forall p :: ValidMem(prevThis.m, p) && p != base
+            ==> addrval(prevThis, p) == addrval(this, p);
     }
 }
 
