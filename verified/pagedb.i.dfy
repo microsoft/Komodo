@@ -19,21 +19,11 @@ function method PAGEDB_ENTRY_TYPE():int { 0 }
 function method PAGEDB_ENTRY_ADDRSPACE():int { 4 }
 
 // addrspc = start address of address space metadata
-function method ADDRSPACE_L1PT(addrspace:int):int
-    ensures ADDRSPACE_L1PT(addrspace) == addrspace;
-    { addrspace }
-function method ADDRSPACE_L1PT_PHYS(addrspace:int):int
-    ensures ADDRSPACE_L1PT_PHYS(addrspace) == addrspace + 4;
-    { addrspace + 4 }
-function method ADDRSPACE_REF(addrspace:int):int
-    ensures ADDRSPACE_REF(addrspace) == addrspace + 8;
-    { addrspace + 8 }
-function method ADDRSPACE_STATE(addrspace:int):int
-    ensures ADDRSPACE_STATE(addrspace) == addrspace + 12;
-    { addrspace + 12 }
-function method ADDRSPACE_SIZE():int
-    ensures ADDRSPACE_SIZE() == 16
-    { 16 }
+function method ADDRSPACE_L1PT():int    { 0 }
+function method ADDRSPACE_L1PT_PHYS():int { 4 }
+function method ADDRSPACE_REF():int     { 8 }
+function method ADDRSPACE_STATE():int   { 12 }
+function method ADDRSPACE_SIZE():int    { 16 }
 
 //-----------------------------------------------------------------------------
 // Page Types
@@ -157,7 +147,7 @@ predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:map<me
     e.PageDbEntryFree? || (e.PageDbEntryTyped? && (
         var et := e.entry;
         (et.Addrspace? && pageDbAddrspaceCorresponds(p, et, page))
-        || (et.Dispatcher? /* && pageDbDispatcherCorresponds(p, et, page) */)
+        || (et.Dispatcher? && pageDbDispatcherCorresponds(p, et, page))
         || (et.L1PTable? /* && pageDbL1PTableCorresponds(p, et, page) */)
         || (et.L2PTable? /* && pageDbL2PTableCorresponds(p, et, page) */)
         || et.DataPage?))
@@ -171,10 +161,21 @@ predicate pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem,
 {
     var base := page_monvaddr(p);
     assert base in page;
-    page[ADDRSPACE_L1PT(base)] == page_monvaddr(e.l1ptnr)
-    && page[ADDRSPACE_L1PT_PHYS(base)] == page_paddr(e.l1ptnr)
-    && page[ADDRSPACE_REF(base)] == e.refcount
-    && page[ADDRSPACE_STATE(base)] == pageDbAddrspaceStateVal(e.state)
+    page[base + ADDRSPACE_L1PT()] == page_monvaddr(e.l1ptnr)
+    && page[base + ADDRSPACE_L1PT_PHYS()] == page_paddr(e.l1ptnr)
+    && page[base + ADDRSPACE_REF()] == e.refcount
+    && page[base + ADDRSPACE_STATE()] == pageDbAddrspaceStateVal(e.state)
+}
+
+predicate pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
+    requires validPageNr(p)
+    requires memContainsPage(page, p)
+    requires e.Dispatcher?
+    requires closedRefsPageDbEntry(e)
+{
+    var base := page_monvaddr(p);
+    // TODO: concrete representation of dispatcher fields
+    true
 }
 
 function pageDbEntryTypeVal(e: PageDbEntry): int

@@ -129,18 +129,18 @@ procedure allocate_page(
         if (tmp != sp_op_const(KEV_PAGE_FREE())) {
             err := sp_op_const(KEV_ERR_PAGEINUSE());
         } else {
-            LDR(tmp, as_va, sp_op_const(ADDRSPACE_STATE(0)));
+            LDR(tmp, as_va, sp_op_const(ADDRSPACE_STATE()));
             if (tmp != sp_op_const(KEV_ADDRSPACE_INIT())) {
                 err := sp_op_const(KEV_ERR_ALREADY_FINAL());
             } else {
                 // increment AS refcount
-                LDR(tmp, as_va, sp_op_const(ADDRSPACE_REF(0)));
+                LDR(tmp, as_va, sp_op_const(ADDRSPACE_REF()));
                 // help dafny see that refcount++ won't overflow
                 assert tmp == pagedb[entry.addrspace].entry.refcount;
                 assert tmp == setcardinality(addrspaceRefs(pagedb, entry.addrspace));
                 BoundedAddrspaceRefs(pagedb, entry.addrspace);
                 ADD(tmp, tmp, 1);
-                STR(tmp, as_va, sp_op_const(ADDRSPACE_REF(0)));
+                STR(tmp, as_va, sp_op_const(ADDRSPACE_REF()));
 
                 // update pagedb
                 tmp := typeval;
@@ -212,21 +212,21 @@ procedure init_addrspace_mem(
 
     page_paddr_impl(r7,l1pt_page,r0);
 
-    STR(r7,r6,4);
-    assert addrval(this,ADDRSPACE_L1PT_PHYS(addrspace_va)) == page_paddr(l1pt_page);
+    STR(r7,r6,sp_op_const(ADDRSPACE_L1PT_PHYS()));
+    assert addrval(this,addrspace_va + ADDRSPACE_L1PT_PHYS()) == page_paddr(l1pt_page);
 
     r7 += sp_op_const(KEVLAR_DIRECTMAP_VBASE());
     assert r7 == page_monvaddr(l1pt_page);
-    STR(r7,r6,0);
-    assert addrval(this,ADDRSPACE_L1PT(addrspace_va)) == page_monvaddr(l1pt_page);
+    STR(r7,r6,sp_op_const(ADDRSPACE_L1PT()));
+    assert addrval(this,addrspace_va + ADDRSPACE_L1PT()) == page_monvaddr(l1pt_page);
 
     r0 := 1;
-    STR(r0,r6,8);
-    assert addrval(this,ADDRSPACE_REF(addrspace_va)) == 1;
+    STR(r0,r6,sp_op_const(ADDRSPACE_REF()));
+    assert addrval(this,addrspace_va + ADDRSPACE_REF()) == 1;
 
     r0 := sp_op_const(KEV_ADDRSPACE_INIT());
-    STR(r0,r6,12);
-    assert addrval(this,ADDRSPACE_STATE(addrspace_va)) == KEV_ADDRSPACE_INIT();
+    STR(r0,r6,sp_op_const(ADDRSPACE_STATE()));
+    assert addrval(this,addrspace_va + ADDRSPACE_STATE()) == KEV_ADDRSPACE_INIT();
 
     r3 := sp_op_const(KEVLAR_PAGE_SIZE());
     r0 := 0;
