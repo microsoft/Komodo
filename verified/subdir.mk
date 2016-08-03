@@ -23,6 +23,11 @@ SDFY_INCLUDES =  $(dir)/ARMdecls.sdfy $(dir)/kev_utils.sdfy
 %.verified: %.dfy
 	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< && touch $@
 
+#%.verified: %.sdfy $(SDFY_INCLUDES) $(ARMSPARTAN_DEPS) $(KEVLAR_DEPS)
+#	$(SPARTAN_MINDY) $(SPARTANFLAGS) $(DAFNYFLAGS) /compile:0 -dafnyDirect \
+#	$(ARMSPARTAN_DEPS:%.verified=-i %.dfy) $(KEVLAR_DEPS:%.verified=-i %.dfy) \
+#	$(SDFY_INCLUDES) $< && touch $@
+
 # Mindy can't compile, but since we rely on .verified, we can just use
 # Dafny to compile without verifying
 %.exe: %.gen.dfy %.verified

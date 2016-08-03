@@ -8,6 +8,7 @@ IRON_TOOLS_PATH ?= $(HOME)/src/spartan/tools
 SPARTAN ?= $(IRON_TOOLS_PATH)/Spartan/bin/spartan.exe
 DAFNY ?= $(IRON_TOOLS_PATH)/Mindy/Dafny/Dafny.exe
 MINDY ?= $(IRON_TOOLS_PATH)/Mindy/Binaries/Mindy.exe
+SPARTAN_MINDY ?= $(IRON_TOOLS_PATH)/Spartan/bin/mindy/spartan.exe
 
 AS = $(PREFIX)as
 CC = $(PREFIX)gcc
