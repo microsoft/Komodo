@@ -31,37 +31,48 @@ predicate validEntryTransition(s:state,s':state,d:PageDb,d':PageDb,
     d' == d && pageDbCorresponds(s'.m, d')
 }
 
-predicate validReturnTransition(s:state,s':state,d:PageDb,d':PageDb)
+predicate validReturnTransition(s:state,s':state,d:PageDb,d':PageDb, isResume:bool)
 {
     // The following specifies that this is the return path after execution
         // q is the state immediately upon entry.
         // r is the state just before calling the exception handler.
     (exists q, r :: entryState(q, d) && userspaceExecution(q, r, d) &&
-        exception(r, s, d, d')) &&
+        exception(r, s, d, d', isResume)) &&
 
     // leave secure world
-    s'.conf.ns == NotSecure
+    s'.conf.ns == NotSecure &&
+
+    entryState(s', d')
 }
 
-predicate svc(s:state,s':state,d:PageDb,d':PageDb) 
+predicate svc(s:state,s':state,d:PageDb,d':PageDb, isResume:bool) 
 {
     // TODO disable interrupts (cpsid is called in impl)
     entryState(s, d) && entryState(s', d') && s'.conf.m == Monitor &&
-    d' == d &&
-    s'.regs[R0] == KEV_ERR_SUCCESS()
+    s'.regs[R0] == KEV_ERR_SUCCESS() &&
+
+    // Set entered to false if this is a resume
+    (var dispPage := s.m.globals[OSymbol("g_cur_dispatcher")][0];
+    var a := d[ dispPage ].addrspace;
+    validDispatcherPage(d', dispPage) &&
+    d'[dispPage].addrspace == d[dispPage].addrspace &&
+    d'[dispPage].entry.entered == !isResume)
 }
 
-predicate irqfiq(s:state,s':state,d:PageDb,d':PageDb)
+predicate irqfiq(s:state,s':state,d:PageDb,d':PageDb, isResume:bool)
 {
     
     entryState(s, d) && entryState(s', d') && s'.conf.m == Monitor &&
     s'.regs[R0] == KEV_ERR_INTERRUPTED() &&
     
+    // Set entered to true and save context if this is not a resume 
     (var dispPage := s.m.globals[OSymbol("g_cur_dispatcher")][0];
     var a := d[ dispPage ].addrspace;
     var disp := d[dispPage].entry;
-    d'[dispPage] == PageDbEntryTyped(a,
-        Dispatcher(disp.entrypoint, true, s.regs))) &&
+    validDispatcherPage(d', dispPage) &&
+    d'[dispPage].addrspace == d[dispPage].addrspace &&
+    d'[dispPage].entry.entered == !isResume &&
+    d'[dispPage].entry.ctxt == s.regs) &&
 
     // Interrupts can be taken from other modes, but the interrupt should
     // only re-enter monitor mode when taken from user mode.
@@ -72,17 +83,19 @@ predicate irqfiq(s:state,s':state,d:PageDb,d':PageDb)
     
 }
 
-predicate abort(s:state,s':state,d:PageDb,d':PageDb)
+predicate abort(s:state,s':state,d:PageDb,d':PageDb, isResume:bool)
 {
     // TODO disable interrupts (cpsid is called in impl)
     entryState(s, d) && entryState(s', d') && s'.conf.m == Monitor &&
+    s'.regs[R0] == KEV_ERR_FAULT() &&
 
+    // Set entered to true if this is not a resume 
     (var dispPage := s.m.globals[OSymbol("g_cur_dispatcher")][0];
     var a := d[ dispPage ].addrspace;
     var disp := d[dispPage].entry;
-    d'[dispPage] == PageDbEntryTyped(a, Dispatcher(disp.entrypoint, true, s.regs))) &&
-
-    s'.regs[R0] == KEV_ERR_FAULT()
+    validDispatcherPage(d', dispPage) &&
+    d'[dispPage].addrspace == d[dispPage].addrspace &&
+    d'[dispPage].entry.entered == !isResume)
 }
 
 //-----------------------------------------------------------------------------
@@ -96,9 +109,9 @@ predicate userspaceExecution(s:state, s':state, d:PageDb)
     entryState(s', d)
 }
 
-predicate exception(s:state, s':state, d:PageDb, d':PageDb)
+predicate exception(s:state, s':state, d:PageDb, d':PageDb, isResume:bool)
 {
-    svc(s,s',d,d') || irqfiq(s,s',d,d') || abort(s,s',d,d')
+    svc(s,s',d,d',isResume) || irqfiq(s,s',d,d',isResume) || abort(s,s',d,d',isResume)
 }
 
 // All writeable and secure memory addresses except the ones in the active l1
