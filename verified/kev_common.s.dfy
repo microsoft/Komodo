@@ -41,6 +41,15 @@ function method KEV_ERR_INVALID():int            { 0x1_0000_0000 }
 function method KEVLAR_PAGE_SIZE():int
     ensures KEVLAR_PAGE_SIZE() == 0x1000
     { 0x1000 }
+
+predicate PageAligned(addr:int)
+    ensures PageAligned(addr) ==> WordAligned(addr)
+{
+    // XXX: help out poor dafny
+    assert addr % 0x1000 == 0 ==> addr % 4 == 0;
+    addr % 0x1000 == 0
+}
+
 function method KEVLAR_PAGE_SHIFT():int
     ensures KEVLAR_PAGE_SHIFT() == 12
     //ensures shl32(1, KEVLAR_PAGE_SHIFT()) == KEVLAR_PAGE_SIZE()
@@ -92,7 +101,7 @@ function method {:opaque} SecurePhysBaseOp(): operand { op_sym("g_secure_physbas
 // the phys base is unknown, but never changes
 function {:axiom} SecurePhysBase(): int
     ensures 0 < SecurePhysBase() <= KEVLAR_PHYSMEM_LIMIT() - KEVLAR_SECURE_RESERVE();
-    ensures WordAligned(SecurePhysBase());
+    ensures PageAligned(SecurePhysBase());
 
 function method KevGlobalDecls(): globaldecls
     ensures ValidGlobalDecls(KevGlobalDecls());

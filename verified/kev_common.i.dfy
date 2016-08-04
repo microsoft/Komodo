@@ -62,15 +62,18 @@ predicate NonStackMemPreserving(s:state, r:state)
 
 function page_paddr(p: PageNr) : int
     requires validPageNr(p)
-    ensures WordAligned(page_paddr(p))
+    ensures isUInt32(page_paddr(p)) && PageAligned(page_paddr(p))
 {
-    assert WordAligned(KEVLAR_PAGE_SIZE());
+    assert PageAligned(KEVLAR_PAGE_SIZE());
     SecurePhysBase() + p * KEVLAR_PAGE_SIZE()
 }
 
 function page_monvaddr(pagenr:PageNr):int
     requires validPageNr(pagenr)
-    ensures WordAligned(page_monvaddr(pagenr))
+    ensures isUInt32(page_monvaddr(pagenr)) && PageAligned(page_monvaddr(pagenr))
 {
+    assert pagenr < KEVLAR_SECURE_NPAGES();
+    var pa := page_paddr(pagenr);
+    assert pa < SecurePhysBase() + KEVLAR_SECURE_RESERVE();
     page_paddr(pagenr) + KEVLAR_DIRECTMAP_VBASE()
 }
