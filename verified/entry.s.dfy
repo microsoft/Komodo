@@ -9,8 +9,8 @@ predicate userEnteredState(s:state, d:PageDb)
     reveal_validPageDb();
     ValidState(s) && SaneMem(s.m) && validPageDb(d) &&
     (validPageDbImpliesClosedRefs(d); pageDbCorresponds(s.m, d)) &&
-    validL1PTPage(d, s.conf.l1p) && !stoppedAddrspace(d, s.conf.l1p) &&
-    s.conf.m == User && s.conf.ns == Secure
+    validL1PTPage(d, s.conf.ttbr0) && !stoppedAddrspace(d, s.conf.ttbr0) &&
+    s.conf.cpsr.m == User && s.conf.scr.ns == Secure
 }
 
 predicate validEnterTransition(s:state,s':state,d:PageDb,d':PageDb,
@@ -25,7 +25,7 @@ predicate validEnterTransition(s:state,s':state,d:PageDb,d':PageDb,
 	var addrspace := d[d[dispPage].addrspace].entry;
     
     userEnteredState(s', d') && d' == d && pageDbCorresponds(s'.m, d') &&
-    s'.conf.m  == User && s'.conf.ns == Secure && s'.conf.l1p == addrspace.l1ptnr &&
+    s'.conf.cpsr.m  == User && s'.conf.scr.ns == Secure && s'.conf.ttbr0 == addrspace.l1ptnr &&
     
     (reveal_ValidRegState();
     s'.regs[R0] == a1 && s'.regs[R1] == a2 && s'.regs[R2] == a3) &&
@@ -35,7 +35,7 @@ predicate validEnterTransition(s:state,s':state,d:PageDb,d':PageDb,
     s'.m.globals[OSymbol("g_cur_dispatcher")] == [dispPage] &&
 
     // TODO RENAME MOVS
-    sp_eval(Ins(MOVS), s, s', true) &&
+    sp_eval(Ins(MOVS_PCLR), s, s', true) &&
     OperandContents(s, OLR) == d[dispPage].entry.entrypoint
 }
 
@@ -54,7 +54,7 @@ predicate validResumeTransition(s:state,s':state,d:PageDb,d':PageDb,
     var disp := d[dispPage].entry;
     
     userEnteredState(s', d') && d' == d && pageDbCorresponds(s'.m, d') &&
-    s'.conf.m  == User && s'.conf.ns == Secure && s'.conf.l1p == addrspace.l1ptnr &&
+    s'.conf.cpsr.m  == User && s'.conf.scr.ns == Secure && s'.conf.ttbr0 == addrspace.l1ptnr &&
 
     // todo get rid of me
     OSymbol("g_cur_dispatcher") in s'.m.globals &&
@@ -76,10 +76,11 @@ predicate validResumeTransition(s:state,s':state,d:PageDb,d':PageDb,
         [SP(Monitor)    := s.regs[SP(Monitor)]]) &&
     
     (reveal_ValidSRegState();
-    s'.sregs == disp.ctxt.cpsr) &&
+    s'.sregs[cpsr] == disp.ctxt.cpsr &&
+    s'.conf.cpsr == decode_psr(disp.ctxt.cpsr)) &&
     
     // TODO RENAME MOVS
-    sp_eval(Ins(MOVS), s, s', true) &&
+    sp_eval(Ins(MOVS_PCLR), s, s', true) &&
     OperandContents(s, OLR) == disp.ctxt.pc
 
 
@@ -94,7 +95,7 @@ predicate validReturnTransition(s:state,s':state,d:PageDb,d':PageDb)
         exception(r, s, d, d')) &&
 
     // leave secure world
-    s'.conf.ns == NotSecure &&
+    s'.conf.scr.ns == NotSecure &&
     
     ValidState(s') && SaneMem(s'.m) && validPageDb(d') &&
     (validPageDbImpliesClosedRefs(d); pageDbCorresponds(s'.m, d'))
@@ -103,7 +104,7 @@ predicate validReturnTransition(s:state,s':state,d:PageDb,d':PageDb)
 predicate svc(s:state,s':state,d:PageDb,d':PageDb) 
 {
     // TODO disable interrupts (cpsid is called in impl)
-    userEnteredState(s, d) && userEnteredState(s', d') && s'.conf.m == Monitor &&
+    userEnteredState(s, d) && userEnteredState(s', d') && s'.conf.cpsr.m == Monitor &&
     s'.regs[R0] == KEV_ERR_SUCCESS() &&
 
     // Set entered to false if this is a resume
@@ -117,7 +118,7 @@ predicate svc(s:state,s':state,d:PageDb,d':PageDb)
 predicate irqfiq(s:state,s':state,d:PageDb,d':PageDb)
 {
     
-    userEnteredState(s, d) && userEnteredState(s', d') && s'.conf.m == Monitor &&
+    userEnteredState(s, d) && userEnteredState(s', d') && s'.conf.cpsr.m == Monitor &&
     s'.regs[R0] == KEV_ERR_INTERRUPTED() &&
     
     // Set entered to true and save context if this is not a resume 
@@ -132,21 +133,21 @@ predicate irqfiq(s:state,s':state,d:PageDb,d':PageDb)
     d'[dispPage].entry.entered == true &&
     d'[dispPage].entry.ctxt.regs == s.regs &&
     d'[dispPage].entry.ctxt.pc == OperandContents(s, OLR) &&
-    d'[dispPage].entry.ctxt.cpsr == s.sregs.cpsr) &&
+    d'[dispPage].entry.ctxt.cpsr == s.sregs[cpsr]) &&
 
     // Interrupts can be taken from other modes, but the interrupt should
     // only re-enter monitor mode when taken from user mode.
     // This spec is intended to be used with an irq/fiq handler that
     // calls separate procedures for the from-user and not-from-user case.
     // Only the from-user case satisfies this predicate.
-    s.conf.spsr[s.conf.m] == User
+    s.conf.spsr[mode_of_state(s)].m == User
     
 }
 
 predicate abort(s:state,s':state,d:PageDb,d':PageDb)
 {
     // TODO disable interrupts (cpsid is called in impl)
-    userEnteredState(s, d) && userEnteredState(s', d') && s'.conf.m == Monitor &&
+    userEnteredState(s, d) && userEnteredState(s', d') && s'.conf.cpsr.m == Monitor &&
     s'.regs[R0] == KEV_ERR_FAULT() &&
 
     // Set entered to true if this is not a resume 
@@ -182,7 +183,7 @@ predicate WSMemInvariantExceptAddrspace(s:state, s':state, d:PageDb)
     ValidState(s') && AlwaysInvariant(s, s') &&
     s.m.globals == s'.m.globals &&
     forall i :: i in s.m.addresses && address_is_secure(i) &&
-        !memSWrInAddrspace(d, s.conf.l1p, i) ==>
+        !memSWrInAddrspace(d, s.conf.ttbr0, i) ==>
             s.m.addresses[i] == s'.m.addresses[i]
 }
 
