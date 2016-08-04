@@ -127,7 +127,7 @@ function smc_initDispatcher(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
    if(!isAddrspace(pageDbIn, addrspacePage)) then
        (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
    else
-       var ctxt : map<ARMReg,int> := map[];
+       var ctxt := DispatcherContext(map[], entrypoint,encode_mode(User));
        allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false, ctxt))
 }
 

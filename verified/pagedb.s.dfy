@@ -1,5 +1,6 @@
 include "kev_common.s.dfy"
 include "Maybe.dfy"
+include "ARMdef.dfy"
 
 type PageNr = int
 type InsecurePageNr = int
@@ -21,7 +22,7 @@ datatype PageDbEntryTyped
 
 datatype AddrspaceState = InitState | FinalState | StoppedState
 
-type DispatcherContext = map<ARMReg,int>
+datatype DispatcherContext = DispatcherContext(regs:map<ARMReg,int>, pc:int, cpsr:int)
 
 datatype L2PTE
     = SecureMapping(page: PageNr, write: bool, exec: bool)
@@ -55,19 +56,23 @@ predicate {:opaque} pageDbClosedRefs(d: PageDb)
 
 predicate validDispatcherContext(dc:DispatcherContext)
 {
-       R0  in dc && isUInt32(dc[R0])
-    && R1  in dc && isUInt32(dc[R1])
-    && R2  in dc && isUInt32(dc[R2])
-    && R3  in dc && isUInt32(dc[R3])
-    && R4  in dc && isUInt32(dc[R4])
-    && R5  in dc && isUInt32(dc[R5])
-    && R6  in dc && isUInt32(dc[R6])
-    && R7  in dc && isUInt32(dc[R7])
-    && R8  in dc && isUInt32(dc[R8])
-    && R9  in dc && isUInt32(dc[R9])
-    && R10 in dc && isUInt32(dc[R10])
-    && R11 in dc && isUInt32(dc[R11])
-    && R12 in dc && isUInt32(dc[R12])
+       R0  in dc.regs && isUInt32(dc.regs[R0])
+    && R1  in dc.regs && isUInt32(dc.regs[R1])
+    && R2  in dc.regs && isUInt32(dc.regs[R2])
+    && R3  in dc.regs && isUInt32(dc.regs[R3])
+    && R4  in dc.regs && isUInt32(dc.regs[R4])
+    && R5  in dc.regs && isUInt32(dc.regs[R5])
+    && R6  in dc.regs && isUInt32(dc.regs[R6])
+    && R7  in dc.regs && isUInt32(dc.regs[R7])
+    && R8  in dc.regs && isUInt32(dc.regs[R8])
+    && R9  in dc.regs && isUInt32(dc.regs[R9])
+    && R10 in dc.regs && isUInt32(dc.regs[R10])
+    && R11 in dc.regs && isUInt32(dc.regs[R11])
+    && R12 in dc.regs && isUInt32(dc.regs[R12])
+    && LR(User)  in dc.regs && isUInt32(dc.regs[LR(User)])
+    && SP(User)  in dc.regs && isUInt32(dc.regs[SP(User)])
+    && isUInt32(dc.pc)
+    && isUInt32(dc.cpsr)
 }
 
 lemma validPageDbImpliesWellFormed(d: PageDb)

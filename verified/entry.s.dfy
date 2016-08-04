@@ -4,7 +4,7 @@ include "pagedb.s.dfy"
 include "smcapi.s.dfy"
 include "pagedb.i.dfy"
 
-predicate entryState(s:state, d:PageDb)
+predicate userEnteredState(s:state, d:PageDb)
 {
     reveal_validPageDb();
     ValidState(s) && SaneMem(s.m) && validPageDb(d) &&
@@ -13,31 +13,85 @@ predicate entryState(s:state, d:PageDb)
     s.conf.m == User && s.conf.ns == Secure
 }
 
-predicate validEntryTransition(s:state,s':state,d:PageDb,d':PageDb,
+predicate validEnterTransition(s:state,s':state,d:PageDb,d':PageDb,
     dispPage:PageNr,a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) 
     requires ValidState(s) && SaneMem(s.m) && validPageDb(d)
     requires (validPageDbImpliesClosedRefs(d); pageDbCorresponds(s.m, d))
     requires smc_enter(d, dispPage, a1, a2, a3).1 == KEV_ERR_SUCCESS()
 {
+    reveal_validPageDb();
+    reveal_ValidConfig();
+	var addrspace := d[d[dispPage].addrspace].entry;
+    
+    userEnteredState(s', d') && d' == d && pageDbCorresponds(s'.m, d') &&
+    s'.conf.m  == User && s'.conf.ns == Secure && s'.conf.l1p == addrspace.l1ptnr &&
+    
+    (reveal_ValidRegState();
+    s'.regs[R0] == a1 && s'.regs[R1] == a2 && s'.regs[R2] == a3) &&
+
+    // todo: get rid of me
+    OSymbol("g_cur_dispatcher") in s'.m.globals &&
+    s'.m.globals[OSymbol("g_cur_dispatcher")] == [dispPage] &&
+
+    // TODO RENAME MOVS
+    sp_eval(Ins(MOVS), s, s', true) &&
+    OperandContents(s, OLR) == d[dispPage].entry.entrypoint
+}
+
+
+predicate validResumeTransition(s:state,s':state,d:PageDb,d':PageDb,
+    dispPage:PageNr,a1:int,a2:int,a3:int)
+    requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) 
+    requires ValidState(s) && SaneMem(s.m) && validPageDb(d)
+    requires (validPageDbImpliesClosedRefs(d); pageDbCorresponds(s.m, d))
+    requires smc_resume(d, dispPage).1 == KEV_ERR_SUCCESS()
+{
     //reveal_validConfig();
     reveal_validPageDb();
     reveal_ValidConfig();
 	var addrspace := d[d[dispPage].addrspace].entry;
+    var disp := d[dispPage].entry;
+    
+    userEnteredState(s', d') && d' == d && pageDbCorresponds(s'.m, d') &&
     s'.conf.m  == User && s'.conf.ns == Secure && s'.conf.l1p == addrspace.l1ptnr &&
+
+    // todo get rid of me
     OSymbol("g_cur_dispatcher") in s'.m.globals &&
     s'.m.globals[OSymbol("g_cur_dispatcher")] == [dispPage] &&
-    entryState(s', d') &&
-    d' == d && pageDbCorresponds(s'.m, d')
+   
+    (reveal_ValidRegState(); 
+    s'.regs == disp.ctxt.regs
+        [LR(FIQ)        := s.regs[LR(FIQ)]]
+        [LR(IRQ)        := s.regs[LR(IRQ)]]
+        [LR(Supervisor) := s.regs[LR(Supervisor)]]
+        [LR(Abort)      := s.regs[LR(Abort)]]
+        [LR(Undefined)  := s.regs[LR(Undefined)]]
+        [LR(Monitor)    := s.regs[LR(Monitor)]]
+        [SP(FIQ)        := s.regs[SP(FIQ)]]
+        [SP(IRQ)        := s.regs[SP(IRQ)]]
+        [SP(Supervisor) := s.regs[SP(Supervisor)]]
+        [SP(Abort)      := s.regs[SP(Abort)]]
+        [SP(Undefined)  := s.regs[SP(Undefined)]]
+        [SP(Monitor)    := s.regs[SP(Monitor)]]) &&
+    
+    (reveal_ValidSRegState();
+    s'.sregs == disp.ctxt.cpsr) &&
+    
+    // TODO RENAME MOVS
+    sp_eval(Ins(MOVS), s, s', true) &&
+    OperandContents(s, OLR) == disp.ctxt.pc
+
+
 }
 
-predicate validReturnTransition(s:state,s':state,d:PageDb,d':PageDb, isResume:bool)
+predicate validReturnTransition(s:state,s':state,d:PageDb,d':PageDb)
 {
     // The following specifies that this is the return path after execution
         // q is the state immediately upon entry.
         // r is the state just before calling the exception handler.
-    (exists q, r :: entryState(q, d) && userspaceExecution(q, r, d) &&
-        exception(r, s, d, d', isResume)) &&
+    (exists q, r :: userEnteredState(q, d) && userspaceExecution(q, r, d) &&
+        exception(r, s, d, d')) &&
 
     // leave secure world
     s'.conf.ns == NotSecure &&
@@ -46,10 +100,10 @@ predicate validReturnTransition(s:state,s':state,d:PageDb,d':PageDb, isResume:bo
     (validPageDbImpliesClosedRefs(d); pageDbCorresponds(s'.m, d'))
 }
 
-predicate svc(s:state,s':state,d:PageDb,d':PageDb, isResume:bool) 
+predicate svc(s:state,s':state,d:PageDb,d':PageDb) 
 {
     // TODO disable interrupts (cpsid is called in impl)
-    entryState(s, d) && entryState(s', d') && s'.conf.m == Monitor &&
+    userEnteredState(s, d) && userEnteredState(s', d') && s'.conf.m == Monitor &&
     s'.regs[R0] == KEV_ERR_SUCCESS() &&
 
     // Set entered to false if this is a resume
@@ -57,23 +111,28 @@ predicate svc(s:state,s':state,d:PageDb,d':PageDb, isResume:bool)
     var a := d[ dispPage ].addrspace;
     validDispatcherPage(d', dispPage) &&
     d'[dispPage].addrspace == d[dispPage].addrspace &&
-    d'[dispPage].entry.entered == !isResume)
+    d'[dispPage].entry.entered == false)
 }
 
-predicate irqfiq(s:state,s':state,d:PageDb,d':PageDb, isResume:bool)
+predicate irqfiq(s:state,s':state,d:PageDb,d':PageDb)
 {
     
-    entryState(s, d) && entryState(s', d') && s'.conf.m == Monitor &&
+    userEnteredState(s, d) && userEnteredState(s', d') && s'.conf.m == Monitor &&
     s'.regs[R0] == KEV_ERR_INTERRUPTED() &&
     
     // Set entered to true and save context if this is not a resume 
     (var dispPage := s.m.globals[OSymbol("g_cur_dispatcher")][0];
+    // TOOD dont talk about this global
+
+
     var a := d[ dispPage ].addrspace;
     var disp := d[dispPage].entry;
     validDispatcherPage(d', dispPage) &&
     d'[dispPage].addrspace == d[dispPage].addrspace &&
-    d'[dispPage].entry.entered == !isResume &&
-    d'[dispPage].entry.ctxt == s.regs) &&
+    d'[dispPage].entry.entered == true &&
+    d'[dispPage].entry.ctxt.regs == s.regs &&
+    d'[dispPage].entry.ctxt.pc == OperandContents(s, OLR) &&
+    d'[dispPage].entry.ctxt.cpsr == s.sregs.cpsr) &&
 
     // Interrupts can be taken from other modes, but the interrupt should
     // only re-enter monitor mode when taken from user mode.
@@ -84,10 +143,10 @@ predicate irqfiq(s:state,s':state,d:PageDb,d':PageDb, isResume:bool)
     
 }
 
-predicate abort(s:state,s':state,d:PageDb,d':PageDb, isResume:bool)
+predicate abort(s:state,s':state,d:PageDb,d':PageDb)
 {
     // TODO disable interrupts (cpsid is called in impl)
-    entryState(s, d) && entryState(s', d') && s'.conf.m == Monitor &&
+    userEnteredState(s, d) && userEnteredState(s', d') && s'.conf.m == Monitor &&
     s'.regs[R0] == KEV_ERR_FAULT() &&
 
     // Set entered to true if this is not a resume 
@@ -96,7 +155,7 @@ predicate abort(s:state,s':state,d:PageDb,d':PageDb, isResume:bool)
     var disp := d[dispPage].entry;
     validDispatcherPage(d', dispPage) &&
     d'[dispPage].addrspace == d[dispPage].addrspace &&
-    d'[dispPage].entry.entered == !isResume)
+    d'[dispPage].entry.entered == true)
 }
 
 //-----------------------------------------------------------------------------
@@ -106,19 +165,19 @@ predicate abort(s:state,s':state,d:PageDb,d':PageDb, isResume:bool)
 //The code executing in userspace is possibly malicious. This models its limitations.
 predicate userspaceExecution(s:state, s':state, d:PageDb)
 {
-    entryState(s, d) && WSMemInvariantExceptAddrspace(s, s', d) &&
-    entryState(s', d)
+    userEnteredState(s, d) && WSMemInvariantExceptAddrspace(s, s', d) &&
+    userEnteredState(s', d)
 }
 
-predicate exception(s:state, s':state, d:PageDb, d':PageDb, isResume:bool)
+predicate exception(s:state, s':state, d:PageDb, d':PageDb)
 {
-    svc(s,s',d,d',isResume) || irqfiq(s,s',d,d',isResume) || abort(s,s',d,d',isResume)
+    svc(s,s',d,d') || irqfiq(s,s',d,d') || abort(s,s',d,d')
 }
 
 // All writeable and secure memory addresses except the ones in the active l1
 // page table have their contents preserved
 predicate WSMemInvariantExceptAddrspace(s:state, s':state, d:PageDb)
-    requires entryState(s, d)
+    requires userEnteredState(s, d)
 {
     ValidState(s') && AlwaysInvariant(s, s') &&
     s.m.globals == s'.m.globals &&
@@ -162,7 +221,7 @@ predicate pageSWrInL2PT(l2pt:seq<L2PTE>, p:PageNr)
 // //-----------------------------------------------------------------------------
 // 
 // predicate addrspaceOwnershipOfPagesPreserved(d:PageDb, d':PageDb)
-//     // requires entryState(s, d) && entryState(s', d')
+//     // requires userEnteredState(s, d) && userEnteredState(s', d')
 //     requires validPageDb(d) && validPageDb(d')
 // {
 //     reveal_validPageDb();
@@ -175,7 +234,7 @@ predicate pageSWrInL2PT(l2pt:seq<L2PTE>, p:PageNr)
 // 
 // // The pages owned by other addrspaces are preserved
 // predicate addrspaceContentsPreservedExcept(s:state, s':state, d: PageDb, d':PageDb, disp:PageNr)
-//     requires entryState(s, d) && entryState(s', d')
+//     requires userEnteredState(s, d) && userEnteredState(s', d')
 //     requires addrspaceOwnershipOfPagesPreserved(d, d')
 //     requires valid
 // {
