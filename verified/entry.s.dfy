@@ -41,8 +41,9 @@ predicate validReturnTransition(s:state,s':state,d:PageDb,d':PageDb, isResume:bo
 
     // leave secure world
     s'.conf.ns == NotSecure &&
-
-    entryState(s', d')
+    
+    ValidState(s') && SaneMem(s'.m) && validPageDb(d') &&
+    (validPageDbImpliesClosedRefs(d); pageDbCorresponds(s'.m, d'))
 }
 
 predicate svc(s:state,s':state,d:PageDb,d':PageDb, isResume:bool) 
