@@ -10,7 +10,8 @@ function SeqAppendElt<T>(s:seq<T>, elt:T) : seq<T> { s + [elt] }
 function SeqBuild<T>(elt:T) : seq<T> { [elt] }
 function {:opaque} SeqRepeat<T>(count:nat, elt:T) : seq<T>
     ensures |SeqRepeat<T>(count, elt)| == count
-    ensures forall e :: e in SeqRepeat<T>(count, elt) ==> e == elt
+    //ensures forall e :: e in SeqRepeat<T>(count, elt) ==> e == elt
+    ensures forall i :: 0 <= i < count ==> SeqRepeat<T>(count, elt)[i] == elt
 {
     if count == 0 then [] else [elt] + SeqRepeat<T>(count - 1, elt)
 }
