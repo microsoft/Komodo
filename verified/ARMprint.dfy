@@ -72,7 +72,7 @@ method printOperand(o:operand)
            case ttbr0   => print("ttbr0");
            case scr     => print("scr");
            case cpsr    => print("cpsr");
-           case spsr    => print("spsr");
+           case spsr(m)    => print("spsr");
         }
         case OSP => print("sp");
         case OLR => print("lr");
@@ -165,7 +165,7 @@ method printIns(ins:ins)
             else { print("MRC for non SCR not impl.");nl(); }
         case MCR(dst,src) => if(dst.OSReg? && dst.sr.scr?) { printMcrMsr("MCR",src); }
             else { print("MCR for non SCR not impl.");nl(); }
-        case MOVS => print("  MOVS, pc, lr");nl();
+        case MOVS_PCLR => print("  MOVS, pc, lr");nl();
         // case CPS(mod) => printIns1Op("CPS", mod);
     }
 }

@@ -9,17 +9,18 @@ include "Seq.dfy"
 datatype ARMReg = R0|R1|R2|R3|R4|R5|R6|R7|R8|R9|R10|R11|R12 | SP(spm:mode) | LR(lrm:mode)
 
 // Special register instruction operands
-datatype SReg = ttbr0 | cpsr | spsr | scr // Not a valid operand ever. // MRC/MCR are used instead. 
-    // | ttbcr // Used in C implementation of monitor, but not strictly necessary
+datatype SReg = cpsr | spsr(m:mode) | scr | ttbr0
 
-// A model of the relevant configuration register state
-// References refer to armv7a spec
-datatype config = Config(m:mode, ns:world, spsr:map<mode,mode>, l1p:int)
-// m:    stored in the 5 LSBs of the CPSR. See B1.3.3
-// ns:   current world. Stored in lsb of SCR. See B4.1.129
-// spsr: saved cpsr for when current mode returns from handling an exception
-    // should be mapping from mode -> cpsr. See B1.3.3
-// l1pt: Base of addr of translation table 0. Stored in TTBR0. See B4.1.154
+// A model of the relevant configuration register state. References refer to armv7a spec
+// **NOTE** The configuration registers are stored in the state in two places:
+// 1) abstractly in state.config and 2) as concrete integers in state.sregs.
+// The abstract representation should be used for reasoning about the status of
+// the processor and the concrete representation should be used only for
+// ensuring that the correct values are stored/returned by instructions
+datatype config = Config(cpsr:PSR, spsr:map<mode,PSR>, scr:SCR, ttbr0:int)
+datatype PSR  = PSR(m:mode)           // See B1.3.3
+datatype SCR  = SCR(ns:world)         // See B4.1.129
+//       TTBR0                           See B4.1.154
 
 type mem = int
 datatype operand = OConst(n:int) 
@@ -32,16 +33,17 @@ datatype memstate = MemState(addresses:map<mem, int>,
                              globals:map<operand, seq<int>>)
 
 datatype state = State(regs:map<ARMReg, int>,
+                       sregs:map<SReg, int>,
                        m:memstate,
                        conf:config)
 
-// System mode is not modelled
+// System mode is not modeled
 datatype mode = User | FIQ | IRQ | Supervisor | Abort | Undefined | Monitor
 datatype priv = PL0 | PL1 // PL2 is only used in Hyp, not modeled
 datatype world = Secure | NotSecure
 
 //-----------------------------------------------------------------------------
-// State-related Utilities
+// TODO: get rid of these.
 //-----------------------------------------------------------------------------
 function method op_r(r:ARMReg):operand
     { OReg(r) }
@@ -55,16 +57,20 @@ function method op_lr():operand
 function method op_sym(sym:string):operand
     { OSymbol(sym) }
 
+//-----------------------------------------------------------------------------
+// Configuration State
+//-----------------------------------------------------------------------------
+
 // See B1.5.1
 function world_of_state(s:state):world
 {
     if mode_of_state(s) == Monitor then Secure 
-    else s.conf.ns 
+    else s.conf.scr.ns 
 }
 
 function mode_of_state(s:state):mode
 {
-    s.conf.m
+    s.conf.cpsr.m
 }
 
 function priv_of_mode(m:mode):priv
@@ -75,18 +81,22 @@ function priv_of_mode(m:mode):priv
 function priv_of_state(s:state):priv
     { priv_of_mode(mode_of_state(s)) }
 
-function encode_sreg(s:state, sr:SReg):int
-    requires ValidConfig(s.conf)
-    requires ValidSpecialOperand(s, OSReg(sr))
-    ensures  isUInt32(encode_sreg(s,sr))
-{
-    reveal_ValidConfig();
-    match sr
-        case ttbr0 => s.conf.l1p
-        case cpsr  => encode_mode(s.conf.m)
-        case spsr  => encode_mode(s.conf.spsr[s.conf.m])
-        case scr   => encode_ns(s.conf.ns)
-}
+//-----------------------------------------------------------------------------
+// Configuration Register Decoding
+//-----------------------------------------------------------------------------
+
+// In real life these are more complicated. Add more as needed!
+
+// See B1.3.3
+function decode_psr(v:int) : PSR
+    requires isUInt32(v)
+    requires ValidModeEncoding(and32(v,0x1f))
+    { PSR(decode_mode(and32(v, 0x1f))) }
+
+// See B4.1.129
+function decode_scr(v:int) : SCR
+    requires isUInt32(v)
+    { SCR(if(and32(v, 1) == 1) then NotSecure else Secure) }
 
 function decode_sreg(s:state, sr:SReg, v:int) : config
     requires ValidConfig(s.conf)
@@ -97,17 +107,18 @@ function decode_sreg(s:state, sr:SReg, v:int) : config
 {
     reveal_ValidConfig();
     match sr
-        case ttbr0 => s.conf.(l1p := v)
-        case cpsr  => s.conf.(m := decode_mode(and32(v,0x1f)))
-        case spsr  => 
-            var m := s.conf.m;
-            var spsr' := s.conf.spsr[ m := decode_mode(and32(v,0x1f))];
+        case ttbr0 => s.conf.(ttbr0 := v)
+        case cpsr  => s.conf.(cpsr := decode_psr(v))
+        case spsr(m)  => 
+            assert m != User;
+            var spsr' := s.conf.spsr[ m := decode_psr(v) ];
             s.conf.(spsr := spsr') 
-        case scr =>
-            var ns' := if(and32(v,1) == 1) then NotSecure else Secure;
-            s.conf.(ns := ns')
+        case scr => s.conf.(scr := decode_scr(v))
 }
 
+//-----------------------------------------------------------------------------
+// Mode / Security State Decoding / Encoding
+//-----------------------------------------------------------------------------
 function method encode_ns(ns:world):int
     { if ns == NotSecure then 1 else 0 }
 
@@ -183,7 +194,7 @@ datatype ins =
     | MCR(dstMCR:operand,srcMCR:operand)
     // Only the special case where rd is pc
     // (See armv7a ref manual A8.8.105 and B9.3.20)
-    | MOVS
+    | MOVS_PCLR
 
 //-----------------------------------------------------------------------------
 // Exception Handlers
@@ -217,7 +228,8 @@ function BytesToWords(b:int) : int requires WordAligned(b) { b / 4 }
 //-----------------------------------------------------------------------------
 predicate ValidState(s:state)
 {
-    ValidRegState(s.regs) && ValidMemState(s.m) && ValidConfig(s.conf)
+    ValidRegState(s.regs) && ValidMemState(s.m) &&
+    ValidConfig(s.conf) && ValidSRegState(s.sregs)
 }
 
 predicate {:opaque} ValidRegState(regs:map<ARMReg, int>)
@@ -242,9 +254,20 @@ predicate {:opaque} ValidRegState(regs:map<ARMReg, int>)
 
 predicate {:opaque} ValidConfig(c:config)
 {
-    isUInt32(c.l1p) &&
+    isUInt32(c.ttbr0) &&
     User !in c.spsr &&
     (forall m:mode :: m != User ==> m in c.spsr )
+}
+
+predicate {:opaque} ValidSRegState(sregs:map<SReg, int>)
+{
+    (forall m:mode {:trigger spsr(m)} :: m != User ==> 
+        spsr(m) in sregs && isUInt32(sregs[spsr(m)]))
+    && spsr(User) !in sregs
+    && ttbr0 in sregs && isUInt32(sregs[ttbr0])
+    && scr   in sregs && isUInt32(sregs[scr])
+    && cpsr  in sregs && isUInt32(sregs[cpsr])
+    && ValidModeEncoding(and32(sregs[cpsr], 0x1f))
 }
 
 predicate {:opaque} ValidMemState(s:memstate)
@@ -275,9 +298,11 @@ predicate ValidOperand(o:operand)
 
 predicate ValidSpecialOperand(s:state, o:operand)
 {
-    o.OSReg? && ValidConfig(s.conf) && mode_of_state(s) != User && (
-        (o.sr.scr? && world_of_state(s) == Secure) 
-    ||  (!o.sr.scr?))
+    o.OSReg? && ValidConfig(s.conf) && mode_of_state(s) != User
+    &&(
+        (o.sr.spsr? && mode_of_state(s) == o.sr.m)
+     || (o.sr.scr?  && world_of_state(s) == Secure)
+     || (!o.sr.spsr? && !o.sr.scr?))
 }
 
 predicate ValidMcrMrcOperand(s:state,o:operand)
@@ -385,17 +410,19 @@ function shr32(x:int, amount:int) : int
 // Evaluation
 //-----------------------------------------------------------------------------
 function OperandContents(s:state, o:operand): int
-    requires ValidOperand(o) || ValidSpecialOperand(s, o)
+    requires (!o.OSReg? && ValidOperand(o)) 
+        || (o.OSReg? && ValidSpecialOperand(s, o))
     requires ValidState(s)
     ensures  isUInt32(OperandContents(s,o))
 {
     reveal_ValidRegState();
+    reveal_ValidSRegState();
     match o
         case OConst(n) => n
         case OReg(r) => s.regs[r]
         case OSP => s.regs[SP(mode_of_state(s))]
         case OLR => s.regs[LR(mode_of_state(s))]
-        case OSReg(sr) => encode_sreg(s, sr)
+        case OSReg(sr) => s.sregs[sr] 
 }
 
 function MemContents(s:memstate, m:mem): int
@@ -456,7 +483,9 @@ predicate evalSRegUpdate(s:state, o:operand, v:int, r:state, ok:bool)
     requires o.sr.cpsr? || o.sr.spsr? ==> ValidModeEncoding(and32(v,0x1f))
     ensures  evalSRegUpdate(s, o, v, r, ok) ==> ValidState(r)
 {
-    ok && r == s.( conf := decode_sreg(s, o.sr, v) )
+	reveal_ValidSRegState();
+    ok && r == s.( conf := decode_sreg(s, o.sr, v),
+        sregs := s.sregs[ o.sr := v] )
 }
 
 predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
@@ -572,16 +601,17 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidSpecialOperand(s, dst) && 
             !ValidMcrMrcOperand(s, dst) &&
             (dst.sr.cpsr? || dst.sr.spsr? ==>
-                ValidModeChange(s.conf.m, OperandContents(s, src)))
+                ValidModeChange(s.conf.cpsr.m, OperandContents(s, src)))
         case MRC(dst, src) =>
             ValidMcrMrcOperand(s, src) &&
             ValidRegOperand(dst) 
         case MCR(dst, src) =>
             ValidMcrMrcOperand(s, dst) &&
             ValidRegOperand(src)
-        case MOVS => 
-            ValidSpecialOperand(s, OSReg(spsr)) &&
-            ValidModeChange(s.conf.m, OperandContents(s, OSReg(spsr))) &&
+        case MOVS_PCLR => 
+            var spsr := OSReg(spsr(mode_of_state(s)));
+            ValidSpecialOperand(s, spsr) &&
+            ValidModeChange(s.conf.cpsr.m, OperandContents(s, spsr)) &&
             !(mode_of_state(s) == User)
 }
 
@@ -643,9 +673,9 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
         case MSR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r, ok)
         case MRC(dst, src) => evalUpdate(s, dst, OperandContents(s, OSReg(scr)), r, ok)
         case MCR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r, ok)
-        // The program counter update in MOVS is not modeled because the PC is
-        // not modeled directly. This models the CPSR update
-        case MOVS => evalSRegUpdate(s, OSReg(cpsr), OperandContents(s,OSReg(spsr)), r, ok)
+        case MOVS_PCLR => 
+            var spsr := OSReg(spsr(mode_of_state(s)));
+            evalSRegUpdate(s, OSReg(cpsr), OperandContents(s,spsr), r, ok)
 }
 
 predicate evalBlock(block:codes, s:state, r:state, ok:bool)
