@@ -94,6 +94,7 @@ procedure allocate_page(
         !(entry.entry is L1PTable) && !(entry.entry is Addrspace);
         entry.entry is L2PTable
             ==> entry.entry.l2pt == SeqRepeat(NR_L2PTES(), NoMapping);
+        (entry.entry is Dispatcher) ==> !entry.entry.entered;
         as_va == page_monvaddr(entry.addrspace);
         pageDbCorresponds(this.m, pagedb_in);
     ensures
