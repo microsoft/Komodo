@@ -127,8 +127,7 @@ predicate pageDbCorrespondsOnly(s:memstate, pagedb:PageDb, p:PageNr)
 predicate {:opaque} pageDbEntryCorresponds(p:PageNr, e:PageDbEntry, entryWords:seq<int>)
     requires validPageNr(p)
     requires |entryWords| == BytesToWords(PAGEDB_ENTRY_SIZE())
-    requires e.PageDbEntryTyped?
-        ==> validPageNr(e.addrspace) && closedRefsPageDbEntry(e.entry)
+    requires closedRefsPageDbEntry(e)
 {
     pageDbEntryTypeVal(e) == entryWords[BytesToWords(PAGEDB_ENTRY_TYPE())]
     && match e {
@@ -142,22 +141,21 @@ predicate {:opaque} pageDbEntryCorresponds(p:PageNr, e:PageDbEntry, entryWords:s
 predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:map<mem, int>)
     requires validPageNr(p)
     requires memContainsPage(page, p)
-    requires e.PageDbEntryFree? || closedRefsPageDbEntry(e.entry)
+    requires closedRefsPageDbEntry(e)
 {
     e.PageDbEntryFree? || (e.PageDbEntryTyped? && (
         var et := e.entry;
         (et.Addrspace? && pageDbAddrspaceCorresponds(p, et, page))
         || (et.Dispatcher? && pageDbDispatcherCorresponds(p, et, page))
-        || (et.L1PTable? /* && pageDbL1PTableCorresponds(p, et, page) */)
-        || (et.L2PTable? /* && pageDbL2PTableCorresponds(p, et, page) */)
+        || (et.L1PTable? && pageDbL1PTableCorresponds(p, et, page))
+        || (et.L2PTable? && pageDbL2PTableCorresponds(p, et, page))
         || et.DataPage?))
 }
 
 predicate pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
     requires validPageNr(p)
     requires memContainsPage(page, p)
-    requires e.Addrspace?
-    requires closedRefsPageDbEntry(e)
+    requires e.Addrspace? && closedRefsPageDbEntryTyped(e)
 {
     var base := page_monvaddr(p);
     assert base in page;
@@ -170,12 +168,99 @@ predicate pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem,
 predicate pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
     requires validPageNr(p)
     requires memContainsPage(page, p)
-    requires e.Dispatcher?
-    requires closedRefsPageDbEntry(e)
+    requires e.Dispatcher? && closedRefsPageDbEntryTyped(e)
 {
     var base := page_monvaddr(p);
     // TODO: concrete representation of dispatcher fields
     true
+}
+
+// TODO: refactor; some of this is a trusted spec for ARM's PTE format!
+function ARM_L2PT_BYTES(): int { 0x400 }
+function ARM_L1PTE(paddr: int): int
+    requires isUInt32(paddr) && (paddr % ARM_L2PT_BYTES() == 0)
+    ensures isUInt32(ARM_L1PTE(paddr))
+{
+    //or32(paddr, 1) // type = 1, pxn = 0, ns = 0, domain = 0
+        paddr + 1
+}
+
+
+function ARM_L2PTE_CONST_BITS(): int
+{
+    0x2 /* type */
+        + 0x4 /* B */
+        + 0x30 /* AP0, AP1 */
+        + 0x140 /* TEX */
+        + 0x400 /* S */
+        + 0x800 /* NG */
+}
+
+function ARM_L2PTE_NX_BITS(): int
+{
+    0x1 // XN
+}
+
+function ARM_L2PTE_RO_BITS(): int
+{
+    0x200 // AP2
+}
+
+function ARM_L2PTE(paddr: int, write: bool, exec: bool): int
+    requires isUInt32(paddr) && PageAligned(paddr)
+    ensures isUInt32(ARM_L2PTE(paddr, write, exec))
+{
+    var nxbits := if exec then 0 else ARM_L2PTE_NX_BITS();
+    var robits := if write then 0 else ARM_L2PTE_RO_BITS();
+    var ptebits := ARM_L2PTE_CONST_BITS() + nxbits + robits;
+    //or32(ARM_L2PTE_CONST_BITS(), or32(nxbits, robits))
+    paddr + ptebits //or32(paddr, ptebits)
+}
+
+function mkL1Pte(e: Maybe<PageNr>, subpage:int): int
+    requires e.Just? ==> validPageNr(fromJust(e))
+    requires 0 <= subpage < 4
+{
+    match e
+        case Nothing => 0
+        case Just(pgNr) =>
+            assert ARM_L2PT_BYTES() == 0x400; // grumble
+            ARM_L1PTE(page_paddr(pgNr) + subpage * ARM_L2PT_BYTES())
+}
+
+predicate pageDbL1PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
+    requires validPageNr(p)
+    requires memContainsPage(page, p)
+    requires e.L1PTable? && closedRefsL1PTable(e)
+{
+    var base := page_monvaddr(p);
+    forall i, j :: 0 <= i < NR_L1PTES() && 0 <= j < 4
+        ==> page[base + 4 * (i * 4 + j)] == mkL1Pte(e.l1pt[i], j)
+}
+
+function mkL2Pte(pte: L2PTE): int
+    requires closedRefsL2PTE(pte)
+{
+    match pte
+        case SecureMapping(pg, w, x) => ARM_L2PTE(page_paddr(pg), w, x)
+        case InsecureMapping(ipg, w) => (
+            assert KEVLAR_PAGE_SIZE() == 0x1000; // sigh
+            var pa := ipg * KEVLAR_PAGE_SIZE();
+            assert PageAligned(pa); // double sigh
+            ARM_L2PTE(pa, w, false))
+        case NoMapping => 0
+}
+
+predicate pageDbL2PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
+    requires validPageNr(p)
+    requires memContainsPage(page, p)
+    requires e.L2PTable? && closedRefsL2PTable(e)
+{
+    var base := page_monvaddr(p);
+    forall i :: 0 <= i < NR_L2PTES() ==>
+        var a := base + WordsToBytes(i);
+        assert a in page;
+        page[a] == mkL2Pte(e.l2pt[i])
 }
 
 function pageDbEntryTypeVal(e: PageDbEntry): int

@@ -7,8 +7,7 @@ predicate pageIsFree(d:PageDb, pg:PageNr)
 // a points to an address space and it is closed
 predicate validAddrspacePage(d: PageDb, a: PageNr)
 {
-    wellFormedPageDb(d) &&
-    isAddrspace(d, a) && d[a].entry.l1ptnr in d
+    wellFormedPageDb(d) && isAddrspace(d, a) && closedRefsPageDbEntry(d[a])
 }
 
 predicate physPageInvalid( physPage: int )
@@ -36,6 +35,7 @@ predicate l1indexInUse(d: PageDb, a: PageNr, l1index: int)
     requires 0 <= l1index < NR_L1PTES()
 {
     reveal_validPageDb();
+    assert validAddrspace(d, a);
     var l1ptnr := d[a].entry.l1ptnr;
     var l1 := d[l1ptnr].entry.l1pt;
     l1[l1index].Just?
@@ -55,19 +55,17 @@ function {:opaque} intToMapping(arg: int) : Mapping
 function updateL2Pte(pageDbIn: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
     : PageDb 
     requires validPageDb(pageDbIn)
-    requires validPageNr(a)
     requires isAddrspace(pageDbIn, a)
     requires isValidMappingTarget(pageDbIn, a, mapping) == KEV_ERR_SUCCESS()
-    requires pageDbIn[a].PageDbEntryTyped? && pageDbIn[a].entry.Addrspace?
     requires pageDbIn[a].entry.state.InitState?
 {
     reveal_validPageDb();
+    reveal_pageDbClosedRefs();
     var addrspace := pageDbIn[a].entry;
+    assert validAddrspace(pageDbIn, a);
     var l1 := pageDbIn[addrspace.l1ptnr].entry;
     var l1pte := fromJust(l1.l1pt[mapping.l1index]);
     var l2pt := pageDbIn[l1pte].entry.l2pt;
-    validPageDbImpliesClosedRefs(pageDbIn);
-    reveal_pageDbClosedRefs();
     pageDbIn[ l1pte := PageDbEntryTyped(a, L2PTable(l2pt[mapping.l2index := l2e])) ]
 
 }
@@ -75,7 +73,6 @@ function updateL2Pte(pageDbIn: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
 function isValidMappingTarget(d: PageDb, a: PageNr, mapping: Mapping)
     : int // KEV_ERROR
     requires validPageDb(d)
-    requires validPageNr(a)
     requires isAddrspace(d, a)
 {
     reveal_validPageDb();
@@ -87,6 +84,7 @@ function isValidMappingTarget(d: PageDb, a: PageNr, mapping: Mapping)
         || !(0 <= mapping.l2index < NR_L2PTES()) ) then
         KEV_ERR_INVALID_MAPPING()
     else
+        assert validAddrspace(d, a);
         var l1 := d[addrspace.l1ptnr].entry;
         var l1pte := l1.l1pt[mapping.l1index];
         if(l1pte.Nothing?) then KEV_ERR_INVALID_MAPPING()
@@ -164,7 +162,7 @@ function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
     : (PageDb, int) // PageDbOut, KEV_ERR
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires closedRefsPageDbEntry(entry)
+    requires closedRefsPageDbEntryTyped(entry)
     requires !entry.L1PTable?
     requires !entry.Addrspace?
     requires entry.L2PTable? ==>
@@ -192,7 +190,7 @@ function allocatePage(pageDbIn: PageDb, securePage: PageNr,
     : (PageDb, int) // PageDbOut, KEV_ERR
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires closedRefsPageDbEntry(entry)
+    requires closedRefsPageDbEntryTyped(entry)
     requires !entry.L1PTable?
     requires !entry.Addrspace?
     requires entry.L2PTable? ==>
@@ -270,10 +268,12 @@ function smc_mapInsecure(pageDbIn: PageDb, addrspacePage: PageNr,
     else
         var err := isValidMappingTarget(pageDbIn, addrspacePage, mapping);
         if( err != KEV_ERR_SUCCESS() ) then (pageDbIn, err)
-        else if( physPageIsSecure(physPage) ) then
+        else if( physPage < 0
+            || physPage >= KEVLAR_PHYSMEM_LIMIT() / KEVLAR_PAGE_SIZE()
+            || physPageIsSecure(physPage) ) then
             (pageDbIn, KEV_ERR_INVALID_PAGENO())
         else
-            var l2pte := InsecureMapping( physPage );
+            var l2pte := InsecureMapping( physPage,  mapping.perm.w);
             var pageDbOut := updateL2Pte(pageDbIn, addrspacePage, mapping, l2pte);
             (pageDbOut, KEV_ERR_SUCCESS())
 }
@@ -407,7 +407,7 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
     securePage: PageNr, addrspacePage: PageNr, entry: PageDbEntryTyped)
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires closedRefsPageDbEntry(entry)
+    requires closedRefsPageDbEntryTyped(entry)
     requires !entry.Addrspace?
     requires !entry.L1PTable?
     requires entry.L2PTable? ==>
@@ -416,15 +416,15 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
         pageDbIn, securePage, addrspacePage, entry).0);
 {
     reveal_validPageDb();
-    var pageDbOut := allocatePage_inner(pageDbIn, securePage,
-        addrspacePage, entry).0;
-    var errOut := allocatePage_inner(pageDbIn, securePage,
-        addrspacePage, entry).1;
+    reveal_pageDbClosedRefs();
+    assert validAddrspace(pageDbIn, addrspacePage);
+    var result := allocatePage_inner(pageDbIn, securePage, addrspacePage, entry);
+    var pageDbOut := result.0;
+    var errOut := result.1;
 
     if ( errOut != KEV_ERR_SUCCESS() ){
         // The error case is trivial because PageDbOut == PageDbIn
     } else {
-      
         forall () ensures validPageDbEntry(pageDbOut, addrspacePage);
         {
             var oldRefs := addrspaceRefs(pageDbIn, addrspacePage);
@@ -439,6 +439,7 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
             ensures validPageDbEntry(pageDbOut, n)
         {
             assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
+            assert validPageDbEntry(pageDbIn, n) && validPageDbEntry(pageDbOut, n);
         }
 
         assert pageDbEntriesValid(pageDbOut);

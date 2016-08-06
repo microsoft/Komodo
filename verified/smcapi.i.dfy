@@ -17,6 +17,7 @@ function {:opaque} smc_initDispatcher_premium(pageDbIn: PageDb, page:PageNr, add
     requires validPageDb(pageDbIn);
     ensures  validPageDb(smc_initDispatcher_premium(pageDbIn, page, addrspacePage, entrypoint).0);
 {
+    reveal_validPageDb();
     smc_initDispatcher(pageDbIn, page, addrspacePage, entrypoint)
 }
 
@@ -25,6 +26,7 @@ function {:opaque} smc_initL2PTable_premium(pageDbIn: PageDb, page: PageNr,
     requires validPageDb(pageDbIn)
     ensures validPageDb(smc_initL2PTable_premium(pageDbIn, page, addrspacePage, l1index).0)
 {
+    reveal_validPageDb();
     smc_initL2PTable(pageDbIn, page, addrspacePage, l1index)
 }
 
@@ -111,31 +113,32 @@ lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
     ensures validPageDb(smc_initAddrspace(pageDbIn, addrspacePage, l1PTPage).0)
 {
     reveal_validPageDb();
-     var pageDbOut := smc_initAddrspace(pageDbIn, addrspacePage, l1PTPage).0;
-     var errOut := smc_initAddrspace(pageDbIn, addrspacePage, l1PTPage).1;
+    var result := smc_initAddrspace(pageDbIn, addrspacePage, l1PTPage);
+    var pageDbOut := result.0;
+    var errOut := result.1;
 
-     if( errOut != KEV_ERR_SUCCESS() ) {
+    if( errOut != KEV_ERR_SUCCESS() ) {
         // The error case is trivial because PageDbOut == PageDbIn
-     } else {
-         // Necessary semi-manual proof of validPageDbEntry(pageDbOut, l1PTPage)
-         // The interesting part of the proof deals with the contents of addrspaceRefs
-         assert forall p :: p != l1PTPage ==> !(p in addrspaceRefs(pageDbOut, addrspacePage));
-	     assert l1PTPage in addrspaceRefs(pageDbOut, addrspacePage);
-         assert addrspaceRefs(pageDbOut, addrspacePage) == {l1PTPage};
-         // only kept for readability
-         assert validPageDbEntry(pageDbOut, l1PTPage);
+    } else {
+        // Necessary semi-manual proof of validPageDbEntry(pageDbOut, l1PTPage)
+        // The interesting part of the proof deals with the contents of addrspaceRefs
+        assert forall p :: p != l1PTPage ==> !(p in addrspaceRefs(pageDbOut, addrspacePage));
+	      assert l1PTPage in addrspaceRefs(pageDbOut, addrspacePage);
+        assert addrspaceRefs(pageDbOut, addrspacePage) == {l1PTPage};
+        // only kept for readability
+        assert validPageDbEntry(pageDbOut, l1PTPage);
 
-         forall ( n | validPageNr(n)
-             && pageDbOut[n].PageDbEntryTyped?
-             && n != addrspacePage && n != l1PTPage)
-             ensures validPageDbEntryTyped(pageDbOut, n)
-         {
-             assert pageDbOut[n] == pageDbIn[n];
-             assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
-         }
+        forall ( n | validPageNr(n)
+            && n != addrspacePage && n != l1PTPage)
+            ensures validPageDbEntry(pageDbOut, n)
+        {
+            assert pageDbOut[n] == pageDbIn[n];
+            assert validPageDbEntry(pageDbIn, n);
+            assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
+        }
               
-         assert pageDbEntriesValid(pageDbOut);
-         assert validPageDb(pageDbOut);
+        assert pageDbEntriesValid(pageDbOut);
+        assert validPageDb(pageDbOut);
     }
 }
 
@@ -144,10 +147,10 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_remove(pageDbIn, page).0)
 {
-
     reveal_validPageDb();
-    var pageDbOut := smc_remove(pageDbIn, page).0;
-    var errOut := smc_remove(pageDbIn, page).1;
+    var result := smc_remove(pageDbIn, page);
+    var pageDbOut := result.0;
+    var errOut := result.1;
 
     if ( errOut != KEV_ERR_SUCCESS() ){
        // trivial
@@ -157,6 +160,7 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
 
         var entry := pageDbIn[page].entry;
         var addrspacePage := pageDbIn[page].addrspace;
+        assert validAddrspace(pageDbIn, addrspacePage);
 
         forall () ensures validPageDbEntry(pageDbOut, addrspacePage);
         {
@@ -188,7 +192,7 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
                 assert pageDbOut[n] == pageDbIn[n];
 
                 
-                forall () ensures pageDbEntryOk(d, n){
+                forall () ensures validPageDbEntryTyped(d, n){
                   
                     // This is a proof that the addrspace of n is still an addrspace
                     //
@@ -283,12 +287,10 @@ lemma mapInsecurePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr
             assert addrspaceRefs(pageDbOut, a) == addrspaceRefs(pageDbIn, a);
         }
 
-        forall( n | validPageNr(n)
-            && pageDbOut[n].PageDbEntryTyped?
-            && n != addrspacePage)
-            ensures validPageDbEntryTyped(pageDbOut, n);
+        forall( n | validPageNr(n) && n != addrspacePage)
+            ensures validPageDbEntry(pageDbOut, n);
         {
-            if( pageDbOut[n].entry.Addrspace? ){
+            if( pageDbOut[n].PageDbEntryTyped? && pageDbOut[n].entry.Addrspace? ){
                 assert pageDbOut[n].entry.refcount == pageDbIn[n].entry.refcount;
                 assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
             } else {
