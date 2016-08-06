@@ -18,7 +18,7 @@ procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:
     ensures
         AlwaysInvariant(old(this),this);
         AllMemInvariant(old(this),this);
-        RegPreservingExcept(old(this), this, [@phys, @tmp]);
+        RegPreservingExcept(old(this), this, set(@phys, @tmp));
         phys == page_paddr(old(pagenr));
 {
     tmp := sp_op_const(KEVLAR_PAGE_SIZE());
@@ -48,7 +48,7 @@ procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out
     ensures
         AlwaysInvariant(old(this),this);
         AllMemInvariant(old(this),this);
-        RegPreservingExcept(old(this), this, [@virt, @tmp]);
+        RegPreservingExcept(old(this), this, set(@virt, @tmp));
         virt == page_monvaddr(old(pagenr));
 {
     page_paddr_impl(virt, pagenr, tmp);
@@ -78,7 +78,7 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
         AlwaysInvariant(old(this),this);
         GlobalsInvariant(old(this),this);
         StackPreserving(old(this),this);
-        RegPreservingExcept(old(this), this, [@base,@size]);
+        RegPreservingExcept(old(this), this, set(@base,@size));
         MemPreservingExcept(old(this), this, old(base), old(base + size));
         forall i :: old(base) <= i < old(base + size) && WordAligned(i)
             ==> addrval(this,i) == old(val);
@@ -102,7 +102,7 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
             forall i :: (lower <= i < base) && WordAligned(i)
                 ==> addrval(this,i) == old(val);
             MemPreservingExcept(old(this), this, lower, limit);
-            RegPreservingExcept(old(this), this, [@base,@size]);
+            RegPreservingExcept(old(this), this, set(@base, @size));
             val == old(val);
         decreases
             size - base;

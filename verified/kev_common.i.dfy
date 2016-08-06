@@ -26,7 +26,7 @@ predicate StackPreserving(s:state, r:state)
     && ParentStackPreserving(s, r)
 }
 
-predicate RegPreservingExcept(s:state, r:state, trashed:seq<operand>)
+predicate RegPreservingExcept(s:state, r:state, trashed:set<operand>)
     requires ValidState(s) && ValidState(r);
     requires forall o :: o in trashed ==> ValidRegOperand(o);
 {
@@ -39,7 +39,7 @@ predicate RegPreservingExcept(s:state, r:state, trashed:seq<operand>)
 predicate NonvolatileRegPreserving(s:state, r:state)
     requires ValidState(s) && ValidState(r);
 {
-    RegPreservingExcept(s, r, [OReg(R0), OReg(R1), OReg(R2), OReg(R3)])
+    RegPreservingExcept(s, r, {OReg(R0), OReg(R1), OReg(R2), OReg(R3)})
 }
 
 predicate MemPreservingExcept(s:state, r:state, base:int, limit:int)

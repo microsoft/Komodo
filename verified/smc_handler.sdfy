@@ -64,11 +64,11 @@ lemma BoundedAddrspaceRefs(d:PageDb, n:PageNr)
 
 procedure allocate_page(
     {:operand} pagenr:PageNr,
-    {:operand} page_va:mem,
     {:operand} as_va:mem,
     {:operand} typeval:int,
     {:operand} pagedb_base:mem,
     out {:operand} tmp:int,
+    out {:operand} tmp2:int,
     out {:operand} err:int,
     ghost pagedb_in:PageDb,
     ghost entry:PageDbEntry)
@@ -77,16 +77,16 @@ procedure allocate_page(
         SaneState(this);
     requires
         ValidRegOperand(@pagenr);
-        ValidRegOperand(@page_va);
         ValidRegOperand(@as_va);
         ValidOperand(@typeval) && @typeval is OConst;
         ValidRegOperand(@pagedb_base);
         pagedb_base == AddressOfGlobal(PageDb());
         ValidRegOperand(@tmp);
+        ValidRegOperand(@tmp2);
         ValidRegOperand(@err);
-        @tmp != @pagedb_base; @tmp != @pagenr; @tmp != @page_va; @tmp != @as_va; @tmp != @err;
-        @err != @pagedb_base; @err != @pagenr; @err != @page_va; @err != @as_va;
-        @err != op_sp() && @tmp != op_sp();
+        @tmp != @pagedb_base; @tmp != @pagenr; @tmp != @tmp2; @tmp != @as_va; @tmp != @err;
+        @err != @pagedb_base; @err != @pagenr; @err != @tmp2; @err != @as_va;
+        @err != op_sp() && @tmp != op_sp() && @tmp2 != op_sp();
         validPageDb(pagedb_in);
         closedRefsPageDbEntry(entry);
         entry is PageDbEntryTyped && validAddrspacePage(pagedb_in, entry.addrspace);
@@ -96,12 +96,11 @@ procedure allocate_page(
             ==> entry.entry.l2pt == SeqRepeat(NR_L2PTES(), NoMapping);
         entry.entry is Dispatcher; // FIXME: temp shortcut!
         as_va == page_monvaddr(entry.addrspace);
-        page_va == page_monvaddr(pagenr);
         pageDbCorresponds(this.m, pagedb_in);
     ensures
         AlwaysInvariant(old(this),this);
         StackPreserving(old(this),this);
-        RegPreservingExcept(old(this),this,[@page_va, @tmp, @err]);
+        RegPreservingExcept(old(this),this, set(@tmp, @tmp2, @err));
         tuple(pagedb, err)
             == allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry);
         validPageDb(pagedb);
@@ -228,7 +227,7 @@ procedure init_addrspace_mem(
             && !(page_monvaddr(addrspace_page) <= i < page_monvaddr(addrspace_page) + KEVLAR_PAGE_SIZE())
             && !(page_monvaddr(l1pt_page) <= i < page_monvaddr(l1pt_page) + KEVLAR_PAGE_SIZE())
             ==> addrval(this,i) == addrval(old(this),i);
-        RegPreservingExcept(old(this),this,[@r0, @r3, @r7]);
+        RegPreservingExcept(old(this),this, set(@r0, @r3, @r7));
         pageContentsCorresponds(old(addrspace_page), initAddrspaceEntry(addrspace_page, l1pt_page), extractPage(this.m, old(addrspace_page)));
         pageContentsCorresponds(old(l1pt_page), initL1PTEntry(addrspace_page), extractPage(this.m, old(l1pt_page)));
 {
@@ -283,7 +282,7 @@ procedure init_addrspace_pagedb(
     ensures
         AlwaysInvariant(old(this),this);
         AddrMemInvariant(old(this),this);
-        RegPreservingExcept(old(this),this,[@r0, @r4, @r5, @r6]);
+        RegPreservingExcept(old(this),this, set(@r0, @r4, @r5, @r6));
         addrspace_va == page_monvaddr(old(addrspace_page));
         forall p :: validPageNr(p) && p != addrspace_page && p != l1pt_page
             ==> extractPageDbEntry(old(this).m, p) == extractPageDbEntry(this.m, p);
@@ -308,7 +307,8 @@ procedure init_addrspace_pagedb(
     assert extractPageDbEntry(this.m, addrspace_page)[BytesToWords(PAGEDB_ENTRY_ADDRSPACE())]
            == page_monvaddr(addrspace_page);
 
-    assert extractPageDbEntry(this.m, addrspace_page) == [KEV_PAGE_ADDRSPACE(), old(page_monvaddr(addrspace_page))];
+    assert extractPageDbEntry(this.m, addrspace_page)
+        == seq(KEV_PAGE_ADDRSPACE(), old(page_monvaddr(addrspace_page)));
 
     /* Update l1pt entry in pagedb */
     r0 := sp_op_const(KEV_PAGE_L1PTABLE());
@@ -321,7 +321,8 @@ procedure init_addrspace_pagedb(
     assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
                           + PAGEDB_ENTRY_ADDRSPACE()) == page_monvaddr(addrspace_page);
 
-    assert extractPageDbEntry(this.m, l1pt_page) == [KEV_PAGE_L1PTABLE(), old(page_monvaddr(addrspace_page))];
+    assert extractPageDbEntry(this.m, l1pt_page)
+        == seq(KEV_PAGE_L1PTABLE(), old(page_monvaddr(addrspace_page)));
 }
 
 procedure init_addrspace(
@@ -350,7 +351,7 @@ procedure init_addrspace(
     ensures
         AlwaysInvariant(old(this),this);
         StackPreserving(old(this),this);
-        RegPreservingExcept(old(this),this,[@r0, @r3, @r4, @r5, @r6, @r7]);
+        RegPreservingExcept(old(this),this, set(@r0, @r3, @r4, @r5, @r6, @r7));
         old(specPageDb(smc_initAddrspace_premium(pagedb_in, addrspace_page, l1pt_page))) == pagedb;
         pageDbClosedRefs(pagedb);
         pageDbCorresponds(this.m, pagedb);
@@ -507,13 +508,12 @@ procedure kev_smc_init_dispatcher(
         } else {
             assert isAddrspace(pagedb, as_page);
 
-            page_monvaddr_impl(r4, disp_page, r6);
-            page_monvaddr_impl(r5, as_page, r6);
+            page_monvaddr_impl(r4, as_page, r6);
 
             ghost var entry := PageDbEntryTyped(as_page, Dispatcher(entrypoint, false));
-            pagedb := allocate_page(disp_page, r4, r5,
+            pagedb := allocate_page(disp_page, r4,
                                     sp_op_const(KEV_PAGE_DISPATCHER()),
-                                    r12, r6 /* tmp */, err, pagedb, entry);
+                                    r12, r5, r6 /* tmps */, err, pagedb, entry);
         }
     }
 }
