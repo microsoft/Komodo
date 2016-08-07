@@ -15,5 +15,14 @@ predicate validSysState(s:SysState)
 {
     ValidState(s.hw) && SaneMem(s.hw.m) && validPageDb(s.d) &&
     (validPageDbImpliesClosedRefs(s.d); pageDbCorresponds(s.hw.m, s.d)) &&
-    validGlobs(s.d, s.g)
+    validGlobs(s.d, s.g) && globalsCorrespond(s)
 }
+
+predicate globalsCorrespond(s:SysState)
+    requires ValidState(s.hw) && SaneMem(s.hw.m)
+{
+	OSymbol("g_cur_dispatcher") in s.hw.m.globals &&
+	|s.hw.m.globals[OSymbol("g_cur_dispatcher")]| == 1 &&
+    s.hw.m.globals[OSymbol("g_cur_dispatcher")][0] == s.g.g_cur_dispatcher
+}
+

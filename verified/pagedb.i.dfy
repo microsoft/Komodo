@@ -18,12 +18,26 @@ function method G_PAGEDB_ENTRY(pageno:int):int
 function method PAGEDB_ENTRY_TYPE():int { 0 }
 function method PAGEDB_ENTRY_ADDRSPACE():int { 4 }
 
+//-----------------------------------------------------------------------------
+// Addrspace Fields
+//-----------------------------------------------------------------------------
 // addrspc = start address of address space metadata
-function method ADDRSPACE_L1PT():int    { 0 }
-function method ADDRSPACE_L1PT_PHYS():int { 4 }
-function method ADDRSPACE_REF():int     { 8 }
-function method ADDRSPACE_STATE():int   { 12 }
-function method ADDRSPACE_SIZE():int    { 16 }
+// TODO requires that this thing is an addrspce?
+function method ADDRSPACE_L1PT():int      { 0  }
+function method ADDRSPACE_L1PT_PHYS():int { 4  }
+function method ADDRSPACE_REF():int       { 8  }
+function method ADDRSPACE_STATE():int
+    ensures ADDRSPACE_STATE() == 12       { 12 }
+function method ADDRSPACE_SIZE():int      { 16 }
+
+//-----------------------------------------------------------------------------
+// Dispatcher Fields
+//-----------------------------------------------------------------------------
+function method DISPATCHER_ENTERED():int { 0 }
+function method DISPATCHER_ENTRYPOINT():int { 4 }
+// TODO context
+// psr
+// 16 regs
 
 //-----------------------------------------------------------------------------
 // Page Types
@@ -46,7 +60,8 @@ function method KEV_PAGE_DATA():int
 //-----------------------------------------------------------------------------
 function method KEV_ADDRSPACE_INIT():int
     ensures KEV_ADDRSPACE_INIT() == 0; { 0 }
-function method KEV_ADDRSPACE_FINAL():int              { 1 }
+function method KEV_ADDRSPACE_FINAL():int
+    ensures KEV_ADDRSPACE_FINAL() == 1; { 1 }
 function method KEV_ADDRSPACE_STOPPED():int            { 2 }
 
 //-----------------------------------------------------------------------------
@@ -165,14 +180,17 @@ predicate pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem,
     && page[base + ADDRSPACE_STATE()] == pageDbAddrspaceStateVal(e.state)
 }
 
+function  to_i(b:bool):int { if(b) then 1 else 0 }
 predicate pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
     requires validPageNr(p)
     requires memContainsPage(page, p)
     requires e.Dispatcher? && closedRefsPageDbEntryTyped(e)
 {
     var base := page_monvaddr(p);
-    // TODO: concrete representation of dispatcher fields
-    true
+    assert base in page;
+    page[base + DISPATCHER_ENTERED()] == to_i(e.entered)
+    && page[base + DISPATCHER_ENTRYPOINT()] == e.entrypoint
+    // TODO: finish concrete representation of dispatcher fields
 }
 
 // TODO: refactor; some of this is a trusted spec for ARM's PTE format!

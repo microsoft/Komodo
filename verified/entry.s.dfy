@@ -13,7 +13,7 @@ predicate userEnteredState(s:SysState)
     s.hw.conf.cpsr.m == User && s.hw.conf.scr.ns == Secure
 }
 
-predicate validEnterTransition(s:SysState,s':SysState,
+predicate validEntryTransitionEnter(s:SysState,s':SysState,
     dispPage:PageNr,a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
     requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KEV_ERR_SUCCESS()
@@ -36,9 +36,8 @@ predicate validEnterTransition(s:SysState,s':SysState,
 }
 
 
-predicate validResumeTransition(s:SysState, s':SysState,
-    dispPage:PageNr,a1:int,a2:int,a3:int)
-    requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
+predicate validEntryTransitionResume(s:SysState, s':SysState, dispPage:PageNr)
+    requires validSysState(s)
     requires smc_resume(s.d, dispPage).1 == KEV_ERR_SUCCESS()
 {
     //reveal_validConfig();
@@ -78,15 +77,21 @@ predicate validResumeTransition(s:SysState, s':SysState,
 
 predicate eqDisp(s:SysState, s':SysState) { s.g.g_cur_dispatcher == s'.g.g_cur_dispatcher }
 
-predicate validReturnTransition(s:SysState,s':SysState)
+predicate {:opaque} validEnter(s:SysState,s':SysState,
+    dispPage:PageNr,a1:int,a2:int,a3:int)
+    requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
 {
-    // The following specifies that this is the return path after execution
-        // q is the state immediately upon entry.
-        // r is the state just before calling the exception handler.
-    (exists q, r :: userEnteredState(q) && userspaceExecution(q, r) &&
-        exception(r, s) && eqDisp(q,r) && eqDisp(r,s) && eqDisp(s,s')) &&
-    
-    validSysState(s')
+    smc_enter(s.d, dispPage, a1, a2, a3).1 != KEV_ERR_SUCCESS() ||
+    (exists q, r :: validEntryTransitionEnter(s,q,dispPage,a1,a2,a3) && userspaceExecution(q, r) &&
+        exception(r, s'))
+}
+
+predicate {:opaque} validResume(s:SysState,s':SysState,dispPage:PageNr)
+    requires validSysState(s)
+{
+    smc_resume(s.d, dispPage).1 != KEV_ERR_SUCCESS() ||
+    (exists q, r :: validEntryTransitionResume(s,q,dispPage) && userspaceExecution(q, r) &&
+        exception(r, s'))
 }
 
 predicate svc(s:SysState,s':SysState) 
