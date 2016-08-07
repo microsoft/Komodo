@@ -20,6 +20,7 @@ procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:
         AllMemInvariant(old(this),this);
         RegPreservingExcept(old(this), this, [@phys, @tmp]);
         phys == page_paddr(old(pagenr));
+        isUInt32(phys);
 {
     tmp := sp_op_const(KEVLAR_PAGE_SIZE());
     MUL(phys,pagenr,tmp);
@@ -50,6 +51,7 @@ procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out
         AllMemInvariant(old(this),this);
         RegPreservingExcept(old(this), this, [@virt, @tmp]);
         virt == page_monvaddr(old(pagenr));
+        isUInt32(virt);
 {
     page_paddr_impl(virt, pagenr, tmp);
     virt += sp_op_const(KEVLAR_DIRECTMAP_VBASE());
