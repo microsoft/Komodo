@@ -10,23 +10,30 @@ KEVLAR_DEPS = $(foreach n,$(KEVLAR_NAMES),$(dir)/$(n).verified)
 KEVLAR_INCLUDES = $(foreach n,$(KEVLAR_NAMES),-i $(n).dfy)
 SDFY_INCLUDES =  $(dir)/ARMdecls.sdfy $(dir)/kev_utils.sdfy
 
+# We use .verified files as a timestamp/placeholder to indicate that
+# a given source has been verified.
+
+# Spartan-to-Dafny
 %.gen.dfy: %.sdfy $(SDFY_INCLUDES)
 	$(SPARTAN) $(SPARTANFLAGS) $(SDFY_INCLUDES) $< -out $@ $(ARMSPARTAN_INCLUDES) $(KEVLAR_INCLUDES)
 	which dos2unix >/dev/null && dos2unix $@ || true
 
-# We use .verified files as a timestamp/placeholder to indicate that
-# a given source has been verified. We use Mindy only for verifying
-# Spartan-generated files (it tends to choke on more general .dfy files).
-%.verified: %.gen.dfy $(ARMSPARTAN_DEPS) $(KEVLAR_DEPS)
-	$(MINDY) $(DAFNYFLAGS) /compile:0 $< && touch $@
-
-%.verified: %.dfy
-	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< && touch $@
-
+# Spartan direct verification
 #%.verified: %.sdfy $(SDFY_INCLUDES) $(ARMSPARTAN_DEPS) $(KEVLAR_DEPS)
 #	$(SPARTAN_MINDY) $(SPARTANFLAGS) $(DAFNYFLAGS) /compile:0 -dafnyDirect \
 #	$(ARMSPARTAN_DEPS:%.verified=-i %.dfy) $(KEVLAR_DEPS:%.verified=-i %.dfy) \
 #	$(SDFY_INCLUDES) $< && touch $@
+
+# Mindy can't handle these files, so we must use vanilla Dafny
+DAFNY_ONLY = ARMspartan Seq kev_common.s pagedb.s
+$(foreach n,$(DAFNY_ONLY),$(dir)/$(n).verified): %.verified: %.dfy
+	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< && touch $@
+
+%.verified: %.gen.dfy $(ARMSPARTAN_DEPS) $(KEVLAR_DEPS)
+	$(MINDY) $(DAFNYFLAGS) /compile:0 $< && touch $@
+
+%.verified: %.dfy
+	$(MINDY) $(DAFNYFLAGS) /compile:0 $< && touch $@
 
 # Mindy can't compile, but since we rely on .verified, we can just use
 # Dafny to compile without verifying
