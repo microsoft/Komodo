@@ -67,7 +67,9 @@ function {:opaque} smc_finalise_premium(pageDbIn: PageDb, addrspacePage: PageNr)
 function {:opaque} smc_enter_premium(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, arg3: int)
     : (PageDb, int)
     requires validPageDb(pageDbIn) 
-    ensures validPageDb(smc_enter_premium(pageDbIn, dispPage, arg1, arg2, arg3).0)
+    ensures  var db:= smc_enter_premium(pageDbIn, dispPage, arg1, arg2, arg3).0;
+        var err := smc_enter_premium(pageDbIn, dispPage, arg1, arg2, arg3).1;
+        validPageDb(db) && (err == KEV_ERR_SUCCESS() ==> validDispatcherPage(pageDbIn, dispPage))
 {
     enterPreservesPageDbValidity(pageDbIn, dispPage, arg1, arg2, arg3);
     smc_enter(pageDbIn, dispPage, arg1, arg2, arg3)

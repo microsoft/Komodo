@@ -1,5 +1,6 @@
 include "kev_common.s.dfy"
 include "Maybe.dfy"
+include "ARMdef.dfy"
 
 type PageNr = int
 type InsecurePageNr = int
@@ -12,14 +13,16 @@ predicate validPageNr(p: PageNr)
     0 <= p < KEVLAR_SECURE_NPAGES()
 }
 
-datatype AddrspaceState = InitState | FinalState | StoppedState
-
 datatype PageDbEntryTyped
     = Addrspace(l1ptnr: PageNr, refcount: nat, state: AddrspaceState)
-    | Dispatcher(entrypoint:int, entered: bool)
+    | Dispatcher(entrypoint:int, entered:bool, ctxt:DispatcherContext)
     | L1PTable(l1pt: seq<Maybe<PageNr>>)
     | L2PTable(l2pt: seq<L2PTE>)
     | DataPage
+
+datatype AddrspaceState = InitState | FinalState | StoppedState
+
+datatype DispatcherContext = DispatcherContext(regs:map<ARMReg,int>, pc:int, cpsr:int)
 
 datatype L2PTE
     = SecureMapping(page: PageNr, write: bool, exec: bool)
@@ -48,6 +51,27 @@ predicate {:opaque} validPageDb(d: PageDb)
     ensures validPageDb(d) ==> pageDbClosedRefs(d)
 {
     wellFormedPageDb(d) && pageDbEntriesValid(d) && pageDbEntriesValidRefs(d)
+}
+
+predicate validDispatcherContext(dc:DispatcherContext)
+{
+       R0  in dc.regs && isUInt32(dc.regs[R0])
+    && R1  in dc.regs && isUInt32(dc.regs[R1])
+    && R2  in dc.regs && isUInt32(dc.regs[R2])
+    && R3  in dc.regs && isUInt32(dc.regs[R3])
+    && R4  in dc.regs && isUInt32(dc.regs[R4])
+    && R5  in dc.regs && isUInt32(dc.regs[R5])
+    && R6  in dc.regs && isUInt32(dc.regs[R6])
+    && R7  in dc.regs && isUInt32(dc.regs[R7])
+    && R8  in dc.regs && isUInt32(dc.regs[R8])
+    && R9  in dc.regs && isUInt32(dc.regs[R9])
+    && R10 in dc.regs && isUInt32(dc.regs[R10])
+    && R11 in dc.regs && isUInt32(dc.regs[R11])
+    && R12 in dc.regs && isUInt32(dc.regs[R12])
+    && LR(User)  in dc.regs && isUInt32(dc.regs[LR(User)])
+    && SP(User)  in dc.regs && isUInt32(dc.regs[SP(User)])
+    && isUInt32(dc.pc)
+    && isUInt32(dc.cpsr)
 }
 
 predicate pageDbEntriesValid(d:PageDb)
@@ -92,7 +116,8 @@ predicate validPageDbEntryTyped(d: PageDb, n: PageNr)
          (entry.Addrspace? && validAddrspace(d, n))
        || (entry.L1PTable? && validL1PTable(d, n))
        || (entry.L2PTable? && validL2PTable(d, n))
-       || (entry.Dispatcher?)
+       || (entry.Dispatcher? && (entry.entered ==>
+            validDispatcherContext(entry.ctxt)))
        || (entry.DataPage?) )
 }
 
@@ -255,3 +280,27 @@ function initialPageDb(): PageDb
   imap n: PageNr | validPageNr(n) :: PageDbEntryFree
 }
 */
+
+//-----------------------------------------------------------------------------
+// Utilities 
+//-----------------------------------------------------------------------------
+predicate validL1PTPage(d:PageDb, p:PageNr)
+{
+    reveal_validPageDb();
+    validPageDb(d) && validPageNr(p) &&
+        d[p].PageDbEntryTyped? && d[p].entry.L1PTable?
+}
+
+predicate validDispatcherPage(d:PageDb, p:PageNr)
+{
+    reveal_validPageDb();
+    validPageDb(d) && validPageNr(p) &&
+        d[p].PageDbEntryTyped? && d[p].entry.Dispatcher?
+}
+
+// a points to an address space and it is closed
+predicate validAddrspacePage(d: PageDb, a: PageNr)
+{
+    wellFormedPageDb(d) &&
+    isAddrspace(d, a) && validPageNr(d[a].entry.l1ptnr)
+}

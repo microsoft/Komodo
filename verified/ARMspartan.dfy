@@ -183,8 +183,8 @@ function method{:opaque} sp_code_MRC(dst:operand,src:operand):code
 function method{:opaque} sp_code_MCR(dst:operand,src:operand):code
     { Ins(MCR(dst, src)) }
 
-function method{:opaque} sp_code_MOVS():code
-    { Ins(MOVS()) }
+function method{:opaque} sp_code_MOVS_PCLR():code
+    { Ins(MOVS_PCLR()) }
 
 // Pseudoinstructions  
 function method{:opaque} sp_code_plusEquals(o1:operand, o2:operand):code { Ins(ADD(o1, o1, o2)) }
@@ -534,7 +534,7 @@ lemma sp_lemma_MSR(s:state, r:state, ok:bool,
     requires ValidSpecialOperand(s, dst)
     requires !ValidMcrMrcOperand(s, dst)
     requires dst.sr.cpsr? || dst.sr.spsr? ==>
-        ValidModeChange(s.conf.m, OperandContents(s, src))
+        ValidModeChange(mode_of_state(s), OperandContents(s, src))
     requires sp_eval(sp_code_MSR(dst, src), s, r, ok)
     ensures evalSRegUpdate(s, dst, OperandContents(s, src), r, ok)
     ensures ok;
@@ -567,17 +567,19 @@ lemma sp_lemma_MCR(s:state, r:state, ok:bool, dst:operand, src:operand)
     reveal_sp_code_MCR();
 }
 
-lemma sp_lemma_MOVS(s:state, r:state, ok:bool)
+lemma sp_lemma_MOVS_PCLR(s:state, r:state, ok:bool)
     requires ValidState(s)
-    requires ValidSpecialOperand(s, OSReg(spsr))
-    requires !(mode_of_state(s) == User)
-    requires sp_eval(sp_code_MOVS(), s, r, ok)
-    requires ValidModeChange(s.conf.m, OperandContents(s, OSReg(spsr)))
-    ensures  evalSRegUpdate(s, OSReg(cpsr), OperandContents(s,OSReg(spsr)), r, ok)
+    requires var m := mode_of_state(s); var spsr := OSReg(spsr(m));
+        ValidSpecialOperand(s, spsr) &&
+        !(mode_of_state(s) == User) &&
+        ValidModeChange(m, OperandContents(s, spsr))
+    requires sp_eval(sp_code_MOVS_PCLR(), s, r, ok)
+    ensures var spsr := OSReg(spsr(mode_of_state(s)));
+        evalSRegUpdate(s, OSReg(cpsr), OperandContents(s,spsr), r, ok)
     ensures  ok;
 {
     reveal_sp_eval();
-    reveal_sp_code_MOVS();
+    reveal_sp_code_MOVS_PCLR();
 }
 
 // Lemmas for frontend functions

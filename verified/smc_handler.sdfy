@@ -86,6 +86,7 @@ procedure allocate_page(
         !(entry.entry is L1PTable) && !(entry.entry is Addrspace);
         entry.entry is L2PTable
             ==> entry.entry.l2pt == SeqRepeat(NR_L2PTES(), NoMapping);
+        (entry.entry is Dispatcher) ==> !entry.entry.entered;
         entry.entry is Dispatcher; // FIXME: temp shortcut!
         as_va == page_monvaddr(entry.addrspace);
         pageDbCorresponds(this.m, pagedb_in);
@@ -502,13 +503,20 @@ procedure kev_smc_init_dispatcher(
 
             page_monvaddr_impl(r4, as_page, r6);
 
-            ghost var entry := PageDbEntryTyped(as_page, Dispatcher(entrypoint, false));
+            ghost var entry := PageDbEntryTyped(as_page, Dispatcher(entrypoint, false, dispctxt(entrypoint)));
             pagedb := allocate_page(disp_page, r4,
                                     sp_op_const(KEV_PAGE_DISPATCHER()),
                                     r12, r5, r6 /* tmps */, err, pagedb, entry);
         }
     }
 }
+
+#verbatim
+function dispctxt(entrypoint:int) : DispatcherContext
+{
+    DispatcherContext(map[], entrypoint, encode_mode(User))
+}
+#endverbatim
 
 //=============================================================================
 // Top-level SMC handler

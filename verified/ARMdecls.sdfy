@@ -253,7 +253,7 @@ procedure MSR({:operand} dst:int, {:operand} src:int)
     requires
         ValidSpecialOperand(this, @dst);
         !ValidMcrMrcOperand(this, @dst);
-        is_cpsr(@dst) ==> ValidModeChange(this.conf.m, src);
+        is_cpsr(@dst) ==> ValidModeChange(mode_of_state(this), src);
     ensures
         evalSRegUpdate(old(this), @dst, old(src), this, true);
         AlwaysInvariant(old(this), this);
@@ -283,15 +283,17 @@ procedure MCR({:operand} dst:int, {:operand} src:int)
         ModeInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 
-procedure MOVS()
+procedure MOVS_PCLR()
     requires/ensures
         ValidState(this);
     requires 
-        ValidSpecialOperand(this, OSReg(spsr));
-        ValidModeChange(this.conf.m, OperandContents(this,OSReg(spsr)));
+        ValidSpecialOperand(this, OSReg(spsr( mode_of_state(this) )));
+        ValidModeChange(mode_of_state(this),
+            OperandContents(this ,OSReg(spsr(this.conf.cpsr.m))));
         mode_of_state(this) != User;
     ensures
-        evalSRegUpdate(old(this), OSReg(cpsr), OperandContents(old(this), OSReg(spsr)), this, true);
+        evalSRegUpdate(old(this), OSReg(cpsr), OperandContents(old(this),
+            OSReg( old(spsr(this.conf.cpsr.m) ))), this, true);
         AlwaysInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 
