@@ -14,8 +14,7 @@ predicate validGlobs(d:PageDb, g:Globs)
 predicate validSysState(s:SysState)
 {
     ValidState(s.hw) && SaneMem(s.hw.m) && validPageDb(s.d) &&
-    (validPageDbImpliesClosedRefs(s.d); pageDbCorresponds(s.hw.m, s.d)) &&
-    validGlobs(s.d, s.g) && globalsCorrespond(s)
+    pageDbCorresponds(s.hw.m, s.d) && validGlobs(s.d, s.g) && globalsCorrespond(s)
 }
 
 predicate globalsCorrespond(s:SysState)

@@ -9,7 +9,7 @@ predicate userEnteredState(s:SysState)
 {
     reveal_validPageDb();
     validSysState(s) &&
-    validL1PTPage(s.d, s.hw.conf.ttbr0) && !stoppedAddrspace(s.d, s.hw.conf.ttbr0) &&
+    validL1PTPage(s.d, s.hw.conf.ttbr0) && !hasStoppedAddrspace(s.d, s.hw.conf.ttbr0) &&
     s.hw.conf.cpsr.m == User && s.hw.conf.scr.ns == Secure
 }
 
@@ -175,10 +175,10 @@ predicate WSMemInvariantExceptAddrspace(s:SysState, s':SysState)
 // Is the page secure, writeable, and in the L1PT
 predicate pageSWrInAddrspace(d:PageDb, l1p:PageNr, p:PageNr)
 	requires validPageNr(p) && validL1PTPage(d, l1p)
-    requires (validPageDbImpliesWellFormed(d); !stoppedAddrspace(d, l1p))
+    requires (validPageDbImpliesWellFormed(d); !hasStoppedAddrspace(d, l1p))
 {
     reveal_validPageDb();
-    !stoppedAddrspace(d, l1p) && 
+    !hasStoppedAddrspace(d, l1p) && 
     var l1pt := d[l1p].entry.l1pt;
     l1p == p || Just(p) in l1pt ||
     exists p' :: Just(p') in l1pt && pageSWrInL2PT(d[p'].entry.l2pt,p)
@@ -186,7 +186,7 @@ predicate pageSWrInAddrspace(d:PageDb, l1p:PageNr, p:PageNr)
 
 predicate memSWrInAddrspace(d:PageDb, l1p:PageNr, m: mem)
     requires validL1PTPage(d, l1p)
-    requires (validPageDbImpliesWellFormed(d); !stoppedAddrspace(d, l1p))
+    requires (validPageDbImpliesWellFormed(d); !hasStoppedAddrspace(d, l1p))
 {
     exists p :: validPageNr(p) && pageSWrInAddrspace(d, l1p, p) && addrInPage(m, p)
 }
@@ -197,7 +197,7 @@ predicate pageSWrInL2PT(l2pt:seq<L2PTE>, p:PageNr)
     exists l2pte :: l2pte in l2pt && (match l2pte
         case NoMapping => false
         case SecureMapping(p', w, e) => w && p' == p
-        case InsecureMapping(p') => false)
+        case InsecureMapping(p',w) => false)
 }
 
 
@@ -214,8 +214,8 @@ predicate pageSWrInL2PT(l2pt:seq<L2PTE>, p:PageNr)
 //     forall a :: validAddrspacePage(d, a) ==>
 //         validAddrspacePage(d', a) && 
 //         (var l1 := d[a].entry.l1ptnr;
-//         forall m :: !stoppedAddrspace(d,a) && memSWrInAddrspace(d, l1, m) ==> 
-//             d'[a] == d[a] && !stoppedAddrspace(d', a) && memSWrInAddrspace(d', l1, m))
+//         forall m :: !hasStoppedAddrspace(d,a) && memSWrInAddrspace(d, l1, m) ==> 
+//             d'[a] == d[a] && !hasStoppedAddrspace(d', a) && memSWrInAddrspace(d', l1, m))
 // }
 // 
 // // The pages owned by other addrspaces are preserved
@@ -227,7 +227,8 @@ predicate pageSWrInL2PT(l2pt:seq<L2PTE>, p:PageNr)
 //     reveal_validPageDb();
 //     var a := d[disp].addrspace;
 //     ValidState(s') && AlwaysInvariant(s, s') &&
-//     forall a' :: validAddrspacePage(d, a') && a' != a && !stoppedAddrspace(d, a') ==>
+//     forall a' :: validAddrspacePage(d, a') && a' != a && 
+//       !hasStoppedAddrspace(d, a') ==>
 //         (var l1' := d[a'].entry.l1ptnr;
 //         forall m :: memSWrInAddrspace(d, l1', m) ==>
 //             s.m.addresses[m] == s'.m.addresses[m])
