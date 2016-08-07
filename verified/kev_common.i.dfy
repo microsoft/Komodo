@@ -26,6 +26,11 @@ predicate StackPreserving(s:state, r:state)
     && ParentStackPreserving(s, r)
 }
 
+predicate DistinctRegOperands(operands:set<operand>, count:nat)
+{
+    |operands| == count && forall o :: o in operands ==> ValidRegOperand(o) && o != op_sp()
+}
+
 predicate RegPreservingExcept(s:state, r:state, trashed:set<operand>)
     requires ValidState(s) && ValidState(r);
     requires forall o :: o in trashed ==> ValidRegOperand(o);

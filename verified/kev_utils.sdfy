@@ -59,15 +59,7 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
     requires/ensures
         SaneState(this);
     requires
-        ValidRegOperand(@base);
-        ValidRegOperand(@size);
-        ValidRegOperand(@val);
-        @base != @size;
-        @base != @val;
-        @size != @val;
-        @base != @sp;
-        @val != @sp;
-        @size != @sp;
+        DistinctRegOperands(set(@base, @val, @size), 3);
         WordAligned(base);
         WordAligned(size);
         isUInt32(val);

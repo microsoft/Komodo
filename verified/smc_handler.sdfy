@@ -76,17 +76,9 @@ procedure allocate_page(
     requires/ensures
         SaneState(this);
     requires
-        ValidRegOperand(@pagenr);
-        ValidRegOperand(@as_va);
+        DistinctRegOperands(set(@pagenr, @as_va, @pagedb_base, @tmp, @tmp2, @err), 6);
         ValidOperand(@typeval) && @typeval is OConst;
-        ValidRegOperand(@pagedb_base);
         pagedb_base == AddressOfGlobal(PageDb());
-        ValidRegOperand(@tmp);
-        ValidRegOperand(@tmp2);
-        ValidRegOperand(@err);
-        @tmp != @pagedb_base; @tmp != @pagenr; @tmp != @tmp2; @tmp != @as_va; @tmp != @err;
-        @err != @pagedb_base; @err != @pagenr; @err != @tmp2; @err != @as_va;
-        @err != op_sp() && @tmp != op_sp() && @tmp2 != op_sp();
         validPageDb(pagedb_in);
         closedRefsPageDbEntry(entry);
         entry is PageDbEntryTyped && validAddrspacePage(pagedb_in, entry.addrspace);
