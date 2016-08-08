@@ -541,7 +541,7 @@ procedure smc_enter_err(
     ensures
         this == s'.hw; 
         validSysState(s');
-        // RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
+        RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
     ensures
         tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
 {
@@ -554,6 +554,7 @@ procedure smc_enter_err(
         
         err := sp_op_const(KEV_ERR_INVALID_PAGENO());
         s' := s.(hw := this);
+        assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
     } else {
         assert validPageNr(pagenr);
 
@@ -565,31 +566,24 @@ procedure smc_enter_err(
         assert pageDbEntryCorresponds(pagenr, s.d[pagenr], extractPageDbEntry(this.m, pagenr));
         assert r9 == GlobalWord(s.hw.m, PageDb(), r10);
         assert r9 == pageDbEntryTypeVal(s.d[pagenr]);
+        assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
         if( r9 != sp_op_const(KEV_PAGE_DISPATCHER()) ) {
             assert !(s.d[pagenr] is PageDbEntryTyped && s.d[pagenr].entry is Dispatcher);
 
             err := sp_op_const(KEV_ERR_INVALID_PAGENO());
             s' := s.(hw := this);
+            assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
         } else {
             assert s.d[pagenr] is PageDbEntryTyped && s.d[pagenr].entry is Dispatcher;
 
-            assert WordAligned(G_PAGEDB_ENTRY(pagenr)) && WordAligned(PAGEDB_ENTRY_ADDRSPACE());
             r10 += sp_op_const(PAGEDB_ENTRY_ADDRSPACE());
             assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE();
             WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE(), r10);
            
-            // validglobaloffset 
-            assert WordAligned(r10);
-            assert ValidGlobal(PageDb());
-            assert 0<= r10 < SizeOfGlobal(PageDb());
-           
             LDRglobal(r8, PageDb(), r12, r10);
             ghost var addrspace := s.d[pagenr].addrspace;
             assert r8 == page_monvaddr(addrspace);
-            assert WordAligned(r8);
-            assert WordAligned(ADDRSPACE_STATE());
-            assert WordAlignedAdd(r8,ADDRSPACE_STATE(),r8+ADDRSPACE_STATE());
-            assert WordAligned(r8+ADDRSPACE_STATE());
+            WordAlignedAdd_(r8,ADDRSPACE_STATE(),r8+ADDRSPACE_STATE());
             
             LDR(r8, r8, sp_op_const(ADDRSPACE_STATE()));
             assert r8 == KEV_ADDRSPACE_FINAL() ==>
@@ -597,10 +591,13 @@ procedure smc_enter_err(
             assert r8 != KEV_ADDRSPACE_FINAL() ==>
                 s.d[addrspace].entry.state != FinalState;
 
+            // this particular RegPreserving assert saved 30s.
+            assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
             if( r8 != sp_op_const(KEV_ADDRSPACE_FINAL()) ) {
                 assert s.d[addrspace].entry.state != FinalState;
                 err := sp_op_const(KEV_ERR_NOT_FINAL());
                 s' := s.(hw := this);
+                assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
             } else {
                 assert s.d[addrspace].entry.state == FinalState;
                 
@@ -614,12 +611,15 @@ procedure smc_enter_err(
                 
                 assert r9 == 1 ==> s.d[pagenr].entry.entered;
                 assert r9 != 1 ==> !(s.d[pagenr].entry.entered);
+                assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
                 if( r9 == 1 ) {
                     err := sp_op_const(KEV_ERR_ALREADY_ENTERED());
                     s' := s.(hw := this);
+                    assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
                 } else {
                     err := sp_op_const(KEV_ERR_SUCCESS());
                     s' := s.(hw := this);
+                    assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
                 }
             }
 
