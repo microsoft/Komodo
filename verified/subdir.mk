@@ -1,4 +1,4 @@
-DAFNYFLAGS = /noNLarith /timeLimit:60 /trace
+DAFNYFLAGS = /noNLarith /timeLimit:20 /trace
 SPARTANFLAGS = #-assumeUpdates 1
 
 # NB: Spartan include paths are relative to the (generated) dfy file, not the CWD
@@ -19,10 +19,10 @@ SDFY_INCLUDES =  $(dir)/ARMdecls.sdfy $(dir)/kev_utils.sdfy
 	which dos2unix >/dev/null && dos2unix $@ || true
 
 # Spartan direct verification
-#%.verified: %.sdfy $(SDFY_INCLUDES) $(ARMSPARTAN_DEPS) $(KEVLAR_DEPS)
-#	$(SPARTAN_MINDY) $(SPARTANFLAGS) $(DAFNYFLAGS) /compile:0 -dafnyDirect \
-#	$(ARMSPARTAN_DEPS:%.verified=-i %.dfy) $(KEVLAR_DEPS:%.verified=-i %.dfy) \
-#	$(SDFY_INCLUDES) $< && touch $@
+%.verified: %.sdfy $(SDFY_INCLUDES) $(ARMSPARTAN_DEPS) $(KEVLAR_DEPS)
+	$(SPARTAN_MINDY) $(SPARTANFLAGS) $(DAFNYFLAGS) /compile:0 -dafnyDirect \
+	$(ARMSPARTAN_DEPS:%.verified=-i %.dfy) $(KEVLAR_DEPS:%.verified=-i %.dfy) \
+	$(SDFY_INCLUDES) $< && touch $@
 
 # Mindy can't handle these files, so we must use vanilla Dafny
 DAFNY_ONLY = ARMspartan Seq kev_common.s pagedb.s

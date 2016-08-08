@@ -223,6 +223,16 @@ predicate WordAligned(addr:int) { addr % 4 == 0}
 function WordsToBytes(w:int) : int { 4 * w }
 function BytesToWords(b:int) : int requires WordAligned(b) { b / 4 }
 
+lemma WordAlignedAdd(x1:int,x2:int)
+    requires WordAligned(x1) && WordAligned(x2)
+    ensures  WordAligned(x1+x2)
+    {}
+
+lemma WordAlignedAdd_(x1:int,x2:int,y:int)
+    requires WordAligned(x1) && WordAligned(x2) && y == x1+x2
+    ensures WordAligned(y)
+    {}
+
 //-----------------------------------------------------------------------------
 // Validity
 //-----------------------------------------------------------------------------

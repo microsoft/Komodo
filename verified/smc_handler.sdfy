@@ -100,6 +100,7 @@ procedure allocate_page(
         pageDbCorresponds(this.m, pagedb);
 {
     pagedb := pagedb_in;
+    assume false;
 
     reveal_pageContentsCorresponds();
     ValidPageDbImpliesValidAddrspace(pagedb, entry.addrspace);
@@ -540,7 +541,7 @@ procedure smc_enter_err(
     ensures
         this == s'.hw; 
         validSysState(s');
-        RegPreservingExcept(old(this),this,[@r12,@r11,@r10,@r9,@r8,@r0]);
+        // RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
     ensures
         tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
 {
@@ -571,13 +572,24 @@ procedure smc_enter_err(
             s' := s.(hw := this);
         } else {
             assert s.d[pagenr] is PageDbEntryTyped && s.d[pagenr].entry is Dispatcher;
-            // else if(var a := d[p].addrspace; d[a].entry.state != FinalState) then NOT_FINAL
 
-            ADD(r8,r10,4);
-            assert r8 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE();
-            LDRglobal(r8, PageDb(), r12, r8);
+            assert WordAligned(G_PAGEDB_ENTRY(pagenr)) && WordAligned(PAGEDB_ENTRY_ADDRSPACE());
+            r10 += sp_op_const(PAGEDB_ENTRY_ADDRSPACE());
+            assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE();
+            WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE(), r10);
+           
+            // validglobaloffset 
+            assert WordAligned(r10);
+            assert ValidGlobal(PageDb());
+            assert 0<= r10 < SizeOfGlobal(PageDb());
+           
+            LDRglobal(r8, PageDb(), r12, r10);
             ghost var addrspace := s.d[pagenr].addrspace;
             assert r8 == page_monvaddr(addrspace);
+            assert WordAligned(r8);
+            assert WordAligned(ADDRSPACE_STATE());
+            assert WordAlignedAdd(r8,ADDRSPACE_STATE(),r8+ADDRSPACE_STATE());
+            assert WordAligned(r8+ADDRSPACE_STATE());
             
             LDR(r8, r8, sp_op_const(ADDRSPACE_STATE()));
             assert r8 == KEV_ADDRSPACE_FINAL() ==>
@@ -597,7 +609,7 @@ procedure smc_enter_err(
                 page_monvaddr_impl(r9,pagenr,r10);
                 assert r9 == page_monvaddr(pagenr);
                 assert addrval(this, page_monvaddr(pagenr) + 
-                DISPATCHER_ENTERED()) == to_i(s.d[pagenr].entry.entered);
+                    DISPATCHER_ENTERED()) == to_i(s.d[pagenr].entry.entered);
                 LDR(r9,r9,sp_op_const(DISPATCHER_ENTERED()));
                 
                 assert r9 == 1 ==> s.d[pagenr].entry.entered;
@@ -629,16 +641,13 @@ procedure kev_smc_enter(
     requires 
         this == s.hw; 
         validSysState(s);
+        SaneState(s.hw);
     ensures
         this == s'.hw;
+        SaneState(s'.hw);
         validSysState(s');
         tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
         validEnter(s,s',pagenr,arg1,arg2,arg3);
-
-        // err == KEV_ERR_SUCCESS() ==>
-        //     validEnterTransition(s,s',pagenr,arg1,arg2,arg3);
-    // ensures
-    //     StackPreserving(old(this),this);
 {
     reveal_validEnter();
     reveal_smc_enter_premium();
@@ -650,10 +659,11 @@ procedure kev_smc_enter(
         assert validSysState(s');
         assert tuple(s'.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
     } else {
+        
+       
         //TODO
         val := sp_op_const(0);
         s' := s'.(hw := this);
-
     }
     
 }

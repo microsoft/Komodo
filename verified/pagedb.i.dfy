@@ -16,7 +16,10 @@ function method G_PAGEDB_ENTRY(pageno:int):int
 
 // entry = start offset of pagedb entry
 function method PAGEDB_ENTRY_TYPE():int { 0 }
-function method PAGEDB_ENTRY_ADDRSPACE():int { 4 }
+function method PAGEDB_ENTRY_ADDRSPACE():int
+    ensures PAGEDB_ENTRY_ADDRSPACE() == 4 
+    ensures WordAligned(PAGEDB_ENTRY_ADDRSPACE())
+    {4}
 
 //-----------------------------------------------------------------------------
 // Addrspace Fields
