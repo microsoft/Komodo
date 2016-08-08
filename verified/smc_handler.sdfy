@@ -637,6 +637,20 @@ procedure smc_enter_err(
     }
 }
 
+procedure exceptionProc(ghost s:SysState)
+    returns (ghost s':SysState)
+    requires
+        this == s.hw;
+        validSysState(s);
+        userEnteredState(s);
+    ensures 
+        this == s'.hw;
+        validSysState(s');
+        exception(s, s');
+{
+    assume false;
+}
+
 procedure kev_smc_enter(
     {:register OReg(R0)} pagenr:int,
     {:register OReg(R1)} arg1:int,
@@ -671,16 +685,17 @@ procedure kev_smc_enter(
     } else {
         // ghost var s_test:SysState;
         // ghost var err_test :int;
-        ghost var r; // TODO q := s.(hw := this)
+        ghost var r:SysState; 
         // assume validPageDb(s_test.d);
         // assume validSysState(s_test);
         assert specErr(smc_enter(s.d, pagenr, arg1, arg2, arg3)) == KEV_ERR_SUCCESS();
+        assume r.hw == this;
         assume validEntryTransitionEnter(s,r,pagenr,arg1,arg2,arg3);
 
         // ghost var r := userspaceExecutionF(q); 
         
-        s' := exceptionF(r);
-        assume s'.hw == this;
+        s' := exceptionProc(r);
+        // assume this == s';
         assert validEntryTransitionEnter(s,r,pagenr,arg1,arg2,arg3) && exception(r, s');
 
         // assert (validEntryTransitionEnter(s_test,q,pagenr,arg1,arg2,arg3)
