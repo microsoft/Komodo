@@ -1,4 +1,4 @@
-DAFNYFLAGS = /noNLarith /timeLimit:20 /trace
+DAFNYFLAGS = /noNLarith /timeLimit:60 /trace
 SPARTANFLAGS = #-assumeUpdates 1
 
 # NB: Spartan include paths are relative to the (generated) dfy file, not the CWD
@@ -20,7 +20,7 @@ SDFY_INCLUDES =  $(dir)/ARMdecls.sdfy $(dir)/kev_utils.sdfy
 
 # Spartan direct verification
 %.verified: %.sdfy $(SDFY_INCLUDES) $(ARMSPARTAN_DEPS) $(KEVLAR_DEPS)
-	$(SPARTAN_MINDY) $(SPARTANFLAGS) $(DAFNYFLAGS) /compile:0 -dafnyDirect \
+	$(SPARTAN_MINDY) $(SPARTANFLAGS) $(DAFNYFLAGS) /compile:0 -dafnyDirect /proc:*enter* \
 	$(ARMSPARTAN_DEPS:%.verified=-i %.dfy) $(KEVLAR_DEPS:%.verified=-i %.dfy) \
 	$(SDFY_INCLUDES) $< && touch $@
 
