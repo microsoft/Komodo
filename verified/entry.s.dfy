@@ -17,6 +17,7 @@ predicate validEntryTransitionEnter(s:SysState,s':SysState,
     dispPage:PageNr,a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
     requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KEV_ERR_SUCCESS()
+    // ensures validEntryTransitionEnter(s,s',dispPage,a1,a2,a3) ==> false
 {
     reveal_validPageDb();
     reveal_ValidConfig();
@@ -31,6 +32,8 @@ predicate validEntryTransitionEnter(s:SysState,s':SysState,
 
     s'.g.g_cur_dispatcher == dispPage &&
 
+    s'.hw.conf.cpsr.m == User &&
+
     sp_eval(Ins(MOVS_PCLR), s.hw, s'.hw, true) &&
     OperandContents(s.hw, OLR) == s.d[dispPage].entry.entrypoint
 }
@@ -39,6 +42,7 @@ predicate validEntryTransitionEnter(s:SysState,s':SysState,
 predicate validEntryTransitionResume(s:SysState, s':SysState, dispPage:PageNr)
     requires validSysState(s)
     requires smc_resume(s.d, dispPage).1 == KEV_ERR_SUCCESS()
+    // ensures validEntryTransitionResume(s,s',dispPage) ==> false
 {
     //reveal_validConfig();
     reveal_validPageDb();
@@ -80,10 +84,10 @@ predicate eqDisp(s:SysState, s':SysState) { s.g.g_cur_dispatcher == s'.g.g_cur_d
 predicate {:opaque} validEnter(s:SysState,s':SysState,
     dispPage:PageNr,a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
+    // ensures validEnter(s,s',dispPage,a1,a2,a3) ==> false
 {
     smc_enter(s.d, dispPage, a1, a2, a3).1 != KEV_ERR_SUCCESS() ||
-    (exists q, r :: validEntryTransitionEnter(s,q,dispPage,a1,a2,a3) && userspaceExecution(q, r) &&
-        exception(r, s'))
+    (exists r :: validEntryTransitionEnter(s,r,dispPage,a1,a2,a3) && exception(r, s'))
 }
 
 predicate {:opaque} validResume(s:SysState,s':SysState,dispPage:PageNr)
@@ -95,10 +99,12 @@ predicate {:opaque} validResume(s:SysState,s':SysState,dispPage:PageNr)
 }
 
 predicate svc(s:SysState,s':SysState) 
+    // ensures svc(s,s') ==> false
 {
+    reveal_ValidRegState();
     // TODO disable interrupts (cpsid is called in impl)
     userEnteredState(s) && userEnteredState(s') &&
-    s'.hw.conf.cpsr.m == Monitor && s'.hw.regs[R0] == KEV_ERR_SUCCESS() &&
+    s'.hw.regs[R0] == KEV_ERR_SUCCESS()  &&
 
     // Set entered to false if this is a resume
 
@@ -109,8 +115,11 @@ predicate svc(s:SysState,s':SysState)
 }
 
 predicate irqfiq(s:SysState,s':SysState)
+    // ensures irqfiq(s,s') ==> false
 {
-    userEnteredState(s) && userEnteredState(s') && s'.hw.conf.cpsr.m == Monitor &&
+    reveal_ValidRegState();
+    reveal_ValidSRegState();
+    userEnteredState(s) && userEnteredState(s') && 
     s'.hw.regs[R0] == KEV_ERR_INTERRUPTED() &&
     
     // Set entered to true and save context if this is not a resume 
@@ -122,19 +131,21 @@ predicate irqfiq(s:SysState,s':SysState)
     s'.d[dispPage].entry.entered == true &&
     s'.d[dispPage].entry.ctxt.regs == s.hw.regs &&
     s'.d[dispPage].entry.ctxt.pc == OperandContents(s.hw, OLR) &&
-    s'.d[dispPage].entry.ctxt.cpsr == s.hw.sregs[cpsr]) &&
+    s'.d[dispPage].entry.ctxt.cpsr == s.hw.sregs[cpsr])
 
     // Interrupts can be taken from other modes, but the interrupt should
     // only re-enter monitor mode when taken from user mode.
     // This spec is intended to be used with an irq/fiq handler that
     // calls separate procedures for the from-user and not-from-user case.
-    // Only the from-user case satisfies this predicate.
-    s.hw.conf.spsr[mode_of_state(s.hw)].m == User
+    // Only the from-user case satisfies this predicate because s is required
+    // to be in user mode by userEnteredState(s)
 }
 
 predicate abort(s:SysState,s':SysState)
+    // ensures abort(s,s') ==> false
 {
-    userEnteredState(s) && userEnteredState(s') && s'.hw.conf.cpsr.m == Monitor &&
+    reveal_ValidRegState();
+    userEnteredState(s) && userEnteredState(s') &&
     s'.hw.regs[R0] == KEV_ERR_FAULT() &&
 
     // Set entered to true if this is not a resume 
@@ -152,13 +163,26 @@ predicate abort(s:SysState,s':SysState)
 predicate userspaceExecution(s:SysState, s':SysState)
 {
     userEnteredState(s) && WSMemInvariantExceptAddrspace(s, s') &&
-    userEnteredState(s')
+    userEnteredState(s') && s'.d == s.d
 }
+
+function {:axiom} userspaceExecutionF(s:SysState) : SysState
+    //requires userEnteredState(s)
+    ensures userspaceExecution(s,userspaceExecutionF(s))
 
 predicate exception(s:SysState, s':SysState)
 {
-    svc(s,s') || irqfiq(s,s') || abort(s,s')
+    userspaceExecution(s, s') &&
+    (svc(s,s') || irqfiq(s,s') || abort(s,s'))
 }
+
+function {:axiom} exceptionF(s:SysState) : SysState
+    ensures exception(s,exceptionF(s))
+
+// lemma exceptionBorked(s:SysState,s':SysState)
+//     ensures exception(s,s') ==> false;
+//     {
+//     }
 
 // All writeable and secure memory addresses except the ones in the active l1
 // page table have their contents preserved
