@@ -152,18 +152,21 @@ function smc_initL2PTable(pageDbIn: PageDb, page: PageNr,
         allocatePage(pageDbIn, page, addrspacePage, l2pt)
 }
 
+predicate allocatePageEntryValid(entry: PageDbEntryTyped)
+{
+    closedRefsPageDbEntryTyped(entry)
+    && ((entry.Dispatcher? && !entry.entered)
+        || (entry.L2PTable? && entry.l2pt == SeqRepeat(NR_L2PTES(), NoMapping))
+        || entry.DataPage?)
+}
+
 // This is not literally an SMC handler. Move elsewhere in file???
 function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
     addrspacePage:PageNr, entry:PageDbEntryTyped)
     : (PageDb, int) // PageDbOut, KEV_ERR
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires closedRefsPageDbEntryTyped(entry)
-    requires !entry.L1PTable?
-    requires !entry.Addrspace?
-    requires entry.L2PTable? ==>
-        entry.l2pt == SeqRepeat(NR_L2PTES(), NoMapping)
-    requires entry.Dispatcher? ==> !entry.entered
+    requires allocatePageEntryValid(entry)
 {
     reveal_validPageDb();
     var addrspace := pageDbIn[addrspacePage].entry;
@@ -173,11 +176,10 @@ function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
         (pageDbIn,KEV_ERR_ALREADY_FINAL())
     // TODO ?? Model page clearing for non-data pages?
     else
-        var updatedAddrspace := match addrspace
-            case Addrspace(l1, ref, state) => Addrspace(l1, ref + 1, state);
+        var updatedAddrspace := addrspace.(refcount := addrspace.refcount + 1);
         var pageDbOut := (pageDbIn[
             securePage := PageDbEntryTyped(addrspacePage, entry)])[
-            addrspacePage := PageDbEntryTyped(addrspacePage, updatedAddrspace)];
+            addrspacePage := pageDbIn[addrspacePage].(entry := updatedAddrspace)];
         (pageDbOut, KEV_ERR_SUCCESS())
 }
 
@@ -187,12 +189,7 @@ function allocatePage(pageDbIn: PageDb, securePage: PageNr,
     : (PageDb, int) // PageDbOut, KEV_ERR
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires closedRefsPageDbEntryTyped(entry)
-    requires !entry.L1PTable?
-    requires !entry.Addrspace?
-    requires entry.L2PTable? ==>
-        entry.l2pt == SeqRepeat(NR_L2PTES(), NoMapping)
-    requires entry.Dispatcher? ==> !entry.entered
+    requires allocatePageEntryValid(entry)
     ensures  validPageDb(allocatePage(pageDbIn, securePage, addrspacePage, entry).0);
 {
     reveal_validPageDb();
@@ -393,12 +390,7 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
     securePage: PageNr, addrspacePage: PageNr, entry: PageDbEntryTyped)
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires closedRefsPageDbEntryTyped(entry)
-    requires !entry.Addrspace?
-    requires !entry.L1PTable?
-    requires entry.L2PTable? ==>
-        entry.l2pt == SeqRepeat(NR_L2PTES(), NoMapping)
-    requires entry.Dispatcher? ==> !entry.entered
+    requires allocatePageEntryValid(entry)
     ensures  validPageDb(allocatePage_inner(
         pageDbIn, securePage, addrspacePage, entry).0);
 {

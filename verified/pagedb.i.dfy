@@ -100,7 +100,7 @@ predicate pageDbCorresponds(s:memstate, pagedb:PageDb)
     var db := (map p | 0 <= p < KEVLAR_SECURE_NPAGES() :: extractPageDbEntry(s,p));
     var secpages := (map p | 0 <= p < KEVLAR_SECURE_NPAGES() :: extractPage(s,p));
     forall p {:trigger validPageNr(p)} :: validPageNr(p)
-        ==> (pageDbEntryCorresponds(p, pagedb[p], db[p])
+        ==> (pageDbEntryCorresponds(pagedb[p], db[p])
             && pageContentsCorresponds(p, pagedb[p], secpages[p]))
 }
 
@@ -110,7 +110,7 @@ predicate pageDbCorrespondsExcluding(s:memstate, pagedb:PageDb, modifiedPage:Pag
 {
     reveal_pageDbClosedRefs();
     forall p {:trigger validPageNr(p)} :: validPageNr(p) && p != modifiedPage
-        ==> (pageDbEntryCorresponds(p, pagedb[p], extractPageDbEntry(s, p))
+        ==> (pageDbEntryCorresponds(pagedb[p], extractPageDbEntry(s, p))
             && pageContentsCorresponds(p, pagedb[p], extractPage(s, p)))
 }
 
@@ -120,12 +120,11 @@ predicate pageDbCorrespondsOnly(s:memstate, pagedb:PageDb, p:PageNr)
     requires validPageNr(p)
 {
     reveal_pageDbClosedRefs();
-    pageDbEntryCorresponds(p, pagedb[p], extractPageDbEntry(s, p))
+    pageDbEntryCorresponds(pagedb[p], extractPageDbEntry(s, p))
     && pageContentsCorresponds(p, pagedb[p], extractPage(s, p))
 }
 
-predicate {:opaque} pageDbEntryCorresponds(p:PageNr, e:PageDbEntry, entryWords:seq<int>)
-    requires validPageNr(p)
+predicate {:opaque} pageDbEntryCorresponds(e:PageDbEntry, entryWords:seq<int>)
     requires |entryWords| == BytesToWords(PAGEDB_ENTRY_SIZE())
     requires closedRefsPageDbEntry(e)
 {
@@ -152,7 +151,7 @@ predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:map<me
         || et.DataPage?))
 }
 
-predicate pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
+predicate {:opaque} pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
     requires validPageNr(p)
     requires memContainsPage(page, p)
     requires e.Addrspace? && closedRefsPageDbEntryTyped(e)
@@ -165,7 +164,7 @@ predicate pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem,
     && page[base + ADDRSPACE_STATE()] == pageDbAddrspaceStateVal(e.state)
 }
 
-predicate pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
+predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
     requires validPageNr(p)
     requires memContainsPage(page, p)
     requires e.Dispatcher? && closedRefsPageDbEntryTyped(e)
@@ -228,7 +227,7 @@ function mkL1Pte(e: Maybe<PageNr>, subpage:int): int
             ARM_L1PTE(page_paddr(pgNr) + subpage * ARM_L2PT_BYTES())
 }
 
-predicate pageDbL1PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
+predicate {:opaque} pageDbL1PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
     requires validPageNr(p)
     requires memContainsPage(page, p)
     requires e.L1PTable? && closedRefsL1PTable(e)
@@ -251,7 +250,7 @@ function mkL2Pte(pte: L2PTE): int
         case NoMapping => 0
 }
 
-predicate pageDbL2PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
+predicate {:opaque} pageDbL2PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
     requires validPageNr(p)
     requires memContainsPage(page, p)
     requires e.L2PTable? && closedRefsL2PTable(e)

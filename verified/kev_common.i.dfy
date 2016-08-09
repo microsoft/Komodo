@@ -51,7 +51,7 @@ predicate MemPreservingExcept(s:state, r:state, base:int, limit:int)
     requires AlwaysInvariant(s,r);
     requires limit >= base;
 {
-    forall i :: ValidMem(s.m,i) && (i < base || i >= limit) ==> addrval(s,i) == addrval(r,i)
+    forall i :: ValidMem(s.m,i) && !(base <= i < limit) ==> addrval(s,i) == addrval(r,i)
 }
 
 predicate NonStackMemPreserving(s:state, r:state)
