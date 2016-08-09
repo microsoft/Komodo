@@ -260,7 +260,7 @@ procedure allocate_page_success(
 
 procedure allocate_page(
     {:operand} pagenr:PageNr,
-    {:operand} as_va:mem,
+    {:operand} as_pagenr:PageNr,
     {:operand} typeval:int,
     {:operand} pagedb_base:mem,
     out {:operand} tmp:int,
@@ -271,7 +271,7 @@ procedure allocate_page(
     requires/ensures
         SaneState(this);
     requires
-        DistinctRegOperands(set(@pagenr, @as_va, @pagedb_base, @tmp, @err), 5);
+        DistinctRegOperands(set(@pagenr, @as_pagenr, @pagedb_base, @tmp, @err), 5);
         ValidOperand(@typeval) && @typeval is OConst;
         pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb_in);
@@ -279,12 +279,12 @@ procedure allocate_page(
         entry is PageDbEntryTyped && validAddrspacePage(pagedb_in, entry.addrspace);
         allocatePageEntryValid(entry.entry);
         typeval == pageDbEntryTypeVal(entry);
-        as_va == page_monvaddr(entry.addrspace);
+        as_pagenr == entry.addrspace;
         pageDbCorresponds(this.m, pagedb_in);
     ensures
         AlwaysInvariant(old(this),this);
         StackPreserving(old(this),this);
-        RegPreservingExcept(old(this),this, set(@tmp, @err));
+        RegPreservingExcept(old(this),this, set(@as_pagenr, @tmp, @err));
         tuple(pagedb, err)
             == allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry);
         // we update all of the pagedb except the target page itself,
@@ -317,7 +317,10 @@ procedure allocate_page(
         if (tmp != sp_op_const(KEV_PAGE_FREE())) {
             err := sp_op_const(KEV_ERR_PAGEINUSE());
         } else {
-            LDR(tmp, as_va, sp_op_const(ADDRSPACE_STATE()));
+            page_monvaddr_impl(as_pagenr, as_pagenr, err);
+            // as_pagenr is now really as_va
+
+            LDR(tmp, as_pagenr, sp_op_const(ADDRSPACE_STATE()));
             forall :: tmp == pageDbAddrspaceStateVal(pagedb[entry.addrspace].entry.state)
             {
                 reveal_pageContentsCorresponds();
@@ -327,7 +330,7 @@ procedure allocate_page(
             if (tmp != sp_op_const(KEV_ADDRSPACE_INIT())) {
                 err := sp_op_const(KEV_ERR_ALREADY_FINAL());
             } else {
-                pagedb := allocate_page_success(pagenr, as_va, typeval,
+                pagedb := allocate_page_success(pagenr, as_pagenr, typeval,
                                 pagedb_base, tmp, err, pagedb_in, entry);
                 err := sp_op_const(KEV_ERR_SUCCESS());
             }
@@ -666,12 +669,9 @@ procedure kev_smc_init_dispatcher(
             err := sp_op_const(KEV_ERR_INVALID_ADDRSPACE());
         } else {
             assert isAddrspace(pagedb, as_page);
-
-            page_monvaddr_impl(r4, as_page, r5);
-
             ghost var entry := PageDbEntryTyped(as_page,
                             Dispatcher(entrypoint, false, dispctxt(entrypoint)));
-            pagedb := allocate_page(disp_page, r4,
+            pagedb := allocate_page(disp_page, as_page,
                                     sp_op_const(KEV_PAGE_DISPATCHER()),
                                     r12, r5 /* tmp */, err, pagedb, entry);
 
