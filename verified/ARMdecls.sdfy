@@ -27,6 +27,7 @@ procedure ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         isUInt32(src1 + src2);
     ensures
         evalUpdate(old(this), @dst, old(src1 + src2), this, true);
+        WordAligned(src1) && WordAligned(src2) ==> WordAligned(dst);
         AlwaysInvariant(old(this), this);
         WorldInvariant(old(this), this);
         ModeInvariant(old(this), this);

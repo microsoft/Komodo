@@ -53,6 +53,13 @@ predicate {:opaque} validPageDb(d: PageDb)
     wellFormedPageDb(d) && pageDbEntriesValid(d) && pageDbEntriesValidRefs(d)
 }
 
+// Keep this so that we can leave validPageDb opaque
+// and not reveal all of it if we just need WellFormed
+lemma validPageDbImpliesWellFormed(d:PageDb)
+    requires validPageDb(d)
+    ensures wellFormedPageDb(d)
+    { reveal_validPageDb(); }
+
 predicate validDispatcherContext(dc:DispatcherContext)
 {
        R0  in dc.regs && isUInt32(dc.regs[R0])
@@ -132,6 +139,16 @@ predicate stoppedAddrspace(e: PageDbEntry)
 {
     e.PageDbEntryTyped? && e.entry.Addrspace? && e.entry.state == StoppedState
 }
+
+// The addrspace of the thing pointed to by n is stopped
+predicate hasStoppedAddrspace(d: PageDb, n: PageNr)
+    requires wellFormedPageDb(d) && validPageNr(n)
+    requires d[n].PageDbEntryTyped?
+{
+    var a := d[n].addrspace;
+    isAddrspace(d, a) && d[a].entry.state == StoppedState
+}
+
 
 predicate validAddrspace(d: PageDb, n: PageNr)
     requires isAddrspace(d, n)
