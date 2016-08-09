@@ -180,20 +180,18 @@ procedure allocate_page_success(
     {:operand} pagedb_base:mem,
     out {:operand} tmp:int,
     out {:operand} tmp2:int,
-    out {:operand} page_va:int,
     ghost pagedb_in:PageDb,
     ghost entry:PageDbEntry)
     returns (ghost pagedb: PageDb)
     requires/ensures
         SaneState(this);
     requires
-        DistinctRegOperands(set(@pagenr, @as_va, @pagedb_base, @tmp, @tmp2, @page_va), 6);
+        DistinctRegOperands(set(@pagenr, @as_va, @pagedb_base, @tmp, @tmp2), 5);
         ValidOperand(@typeval) && @typeval is OConst;
         pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb_in);
         closedRefsPageDbEntry(entry);
         entry is PageDbEntryTyped && validAddrspacePage(pagedb_in, entry.addrspace);
-        entry.entry is Dispatcher; // FIXME: temp shortcut!
         allocatePageEntryValid(entry.entry);
         typeval == pageDbEntryTypeVal(entry);
         as_va == page_monvaddr(entry.addrspace);
@@ -203,18 +201,15 @@ procedure allocate_page_success(
     ensures
         AlwaysInvariant(old(this),this);
         StackPreserving(old(this),this);
-        RegPreservingExcept(old(this),this, set(@tmp, @tmp2, @page_va));
+        RegPreservingExcept(old(this),this, set(@tmp, @tmp2));
         pagedb == specPageDb(allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry));
-        //page_va == page_monvaddr(old(pagenr));
-        validPageDb(pagedb);
-        pageDbCorresponds(this.m, pagedb);
+        pageDbCorrespondsExcluding(this.m, pagedb, pagenr);
+        pageDbEntryCorresponds(pagedb[pagenr], extractPageDbEntry(this.m, pagenr));
 {
     ValidPageDbImpliesValidAddrspace(pagedb_in, entry.addrspace);
     assert specErr(allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry))
         == KEV_ERR_SUCCESS();
     pagedb := specPageDb(allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry));
-    //assert forall i :: validPageNr(i) && i != entry.addrspace && i != pagenr
-    //    ==> pagedb[i] == pagedb_in[i];
 
     // increment AS refcount
     ghost var pagedb_incref;
@@ -223,8 +218,10 @@ procedure allocate_page_success(
     assert pagedb_incref[entry.addrspace] == pagedb[entry.addrspace];
     assert pageDbCorrespondsOnly(this.m, pagedb, entry.addrspace);
     assert pageDbCorrespondsExcluding(this.m, pagedb_in, entry.addrspace);
+
+    // remember that no other pages changed
     ghost var midway := this;
-    AllButOnePagePreserving(entry.addrspace, old(this), this);
+    AllButOnePagePreserving(entry.addrspace, old(this), midway);
 
     // update pagedb
     tmp := typeval;
@@ -236,44 +233,28 @@ procedure allocate_page_success(
     assert tmp2 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE();
     STRglobal(as_va, PageDb(), pagedb_base, tmp2);
 
-    forall :: pageDbEntryCorresponds(pagedb[pagenr],
-                               extractPageDbEntry(this.m, pagenr))
+    // no pages changed across pagedb update
+    assert this.m.addresses == midway.m.addresses;
+
+    forall :: pageDbEntryCorresponds(pagedb[pagenr], extractPageDbEntry(this.m, pagenr))
     {
         assert extractPageDbEntry(this.m, pagenr)
             == seq(pageDbEntryTypeVal(entry), as_va);
         reveal_pageDbEntryCorresponds();
     }
 
-    // memset
-    page_monvaddr_impl(page_va, pagenr, tmp);
-    tmp2 := sp_op_const(KEVLAR_PAGE_SIZE());
-    tmp := 0;
-    memset(page_va,tmp,tmp2);
-
-    // memset didn't touch any other pages
-    AllButOnePagePreserving(pagenr, midway, this);
-
-    // pagedb now corresponds for this new entry
-    forall :: pageDbCorrespondsOnly(this.m, pagedb, pagenr)
-    {
-        assert pageDbEntryCorresponds(pagedb[pagenr],
-                                      extractPageDbEntry(this.m, pagenr));
-        reveal_pageContentsCorresponds();
-        reveal_pageDbDispatcherCorresponds();
-        //ghost var pg := extractPage(this.m, pagenr);
-        //assert forall m :: addrInPage(m, pagenr) ==> pg[m] == 0;
-
-       // TODO: FIXME: we haven't set the dispatcher entrypoint!
-       // this will be fixed up shortly...
-        assume false;
+    forall :: pageDbCorrespondsOnly(this.m, pagedb, entry.addrspace) {
+        assert pageDbCorrespondsOnly(midway.m, pagedb, entry.addrspace);
+        assert extractPageDbEntry(this.m, entry.addrspace)
+            == extractPageDbEntry(midway.m, entry.addrspace);
+        assert extractPage(this.m, entry.addrspace)
+            == extractPage(midway.m, entry.addrspace);
     }
 
-    // the rest of the pagedb wasn't messed with
-    forall :: pageDbCorresponds(this.m, pagedb)
+    forall :: pageDbCorrespondsExcluding(this.m, pagedb, pagenr)
     {
-        assert forall i :: validPageNr(i) && i != entry.addrspace && i != pagenr
+        assert forall i :: validPageNr(i) && i != entry.addrspace
         ==> extractPage(this.m, i) == extractPage(old(this.m), i);
-        assert pageDbCorrespondsOnly(this.m, pagedb, entry.addrspace);
     }
 }
 
@@ -283,7 +264,6 @@ procedure allocate_page(
     {:operand} typeval:int,
     {:operand} pagedb_base:mem,
     out {:operand} tmp:int,
-    out {:operand} page_va:int,
     out {:operand} err:int,
     ghost pagedb_in:PageDb,
     ghost entry:PageDbEntry)
@@ -291,7 +271,7 @@ procedure allocate_page(
     requires/ensures
         SaneState(this);
     requires
-        DistinctRegOperands(set(@pagenr, @as_va, @pagedb_base, @tmp, @page_va, @err), 6);
+        DistinctRegOperands(set(@pagenr, @as_va, @pagedb_base, @tmp, @err), 5);
         ValidOperand(@typeval) && @typeval is OConst;
         pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb_in);
@@ -299,18 +279,21 @@ procedure allocate_page(
         entry is PageDbEntryTyped && validAddrspacePage(pagedb_in, entry.addrspace);
         allocatePageEntryValid(entry.entry);
         typeval == pageDbEntryTypeVal(entry);
-        entry.entry is Dispatcher; // FIXME: temp shortcut!
         as_va == page_monvaddr(entry.addrspace);
         pageDbCorresponds(this.m, pagedb_in);
     ensures
         AlwaysInvariant(old(this),this);
         StackPreserving(old(this),this);
-        RegPreservingExcept(old(this),this, set(@tmp, @page_va, @err));
+        RegPreservingExcept(old(this),this, set(@tmp, @err));
         tuple(pagedb, err)
             == allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry);
-        //err == KEV_ERR_SUCCESS() ==> page_va == page_monvaddr(old(pagenr));
-        validPageDb(pagedb);
-        pageDbCorresponds(this.m, pagedb);
+        // we update all of the pagedb except the target page itself,
+        // which is the responsibility of the caller
+        if err == KEV_ERR_SUCCESS()
+        then pageDbCorrespondsExcluding(this.m, pagedb, pagenr)
+            && pageDbEntryCorresponds(pagedb[pagenr],
+                                     extractPageDbEntry(this.m, pagenr))
+        else pageDbCorresponds(this.m, pagedb);
 {
     ValidPageDbImpliesValidAddrspace(pagedb_in, entry.addrspace);
     pagedb := pagedb_in;
@@ -345,7 +328,7 @@ procedure allocate_page(
                 err := sp_op_const(KEV_ERR_ALREADY_FINAL());
             } else {
                 pagedb := allocate_page_success(pagenr, as_va, typeval,
-                                pagedb_base, tmp, err, page_va, pagedb_in, entry);
+                                pagedb_base, tmp, err, pagedb_in, entry);
                 err := sp_op_const(KEV_ERR_SUCCESS());
             }
         }
@@ -662,7 +645,6 @@ procedure kev_smc_init_dispatcher(
         pageDbCorresponds(this.m, pagedb);
 {
     pagedb := pagedb_in;
-    reveal_pageDbEntryCorresponds();
     reveal_pageDbClosedRefs();
     reveal_smc_initDispatcher_premium();
 
@@ -675,18 +657,46 @@ procedure kev_smc_init_dispatcher(
         MUL(r4,as_page,r0);
         assert r4 == G_PAGEDB_ENTRY(as_page) + PAGEDB_ENTRY_TYPE();
         LDRglobal(r0, PageDb(), r12, r4);
-        assert r0 == pageDbEntryTypeVal(pagedb[as_page]);
+
+        forall :: r0 == pageDbEntryTypeVal(pagedb[as_page]) {
+            reveal_pageDbEntryCorresponds();
+        }
+
         if (r0 != sp_op_const(KEV_PAGE_ADDRSPACE())) {
             err := sp_op_const(KEV_ERR_INVALID_ADDRSPACE());
         } else {
             assert isAddrspace(pagedb, as_page);
 
-            page_monvaddr_impl(r4, as_page, r6);
+            page_monvaddr_impl(r4, as_page, r5);
 
-            ghost var entry := PageDbEntryTyped(as_page, Dispatcher(entrypoint, false, dispctxt(entrypoint)));
+            ghost var entry := PageDbEntryTyped(as_page,
+                            Dispatcher(entrypoint, false, dispctxt(entrypoint)));
             pagedb := allocate_page(disp_page, r4,
                                     sp_op_const(KEV_PAGE_DISPATCHER()),
-                                    r12, r5, r6 /* tmps */, err, pagedb, entry);
+                                    r12, r5 /* tmp */, err, pagedb, entry);
+
+            if (err == sp_op_const(KEV_ERR_SUCCESS())) {
+                assert pageDbCorrespondsExcluding(this.m, pagedb, disp_page);
+                assert pageDbEntryCorresponds(pagedb[disp_page],
+                                         extractPageDbEntry(this.m, disp_page));
+                ghost var tmpstate := this;
+
+                // update dispatcher page
+                page_monvaddr_impl(r4, disp_page, r5);
+                r5 := 0;
+                STR(r5, r4, sp_op_const(DISPATCHER_ENTERED())); // entered = 0
+                STR(r3, r4, sp_op_const(DISPATCHER_ENTRYPOINT())); // entrypoint
+
+                forall :: pageDbCorrespondsOnly(this.m, pagedb, disp_page) {
+                    reveal_pageDbDispatcherCorresponds();
+                    reveal_pageContentsCorresponds();
+                }
+                AllButOnePagePreserving(disp_page, tmpstate, this);
+                assert pageDbCorresponds(this.m, pagedb);
+            } else {
+                assert pagedb == pagedb_in;
+                assert pageDbCorresponds(this.m, pagedb);
+            }
         }
     }
 }
