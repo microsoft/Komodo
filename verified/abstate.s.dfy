@@ -8,7 +8,7 @@ datatype Globs = Globs(g_cur_dispatcher:PageNr)
 
 predicate validGlobs(d:PageDb, g:Globs)
 {
-    validL1PTPage(d, g.g_cur_dispatcher)
+    validDispatcherPage(d, g.g_cur_dispatcher)
 }
 
 predicate validSysState(s:SysState)
