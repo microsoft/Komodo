@@ -683,32 +683,32 @@ procedure kev_smc_enter(
         assert validSysState(s');
         assert tuple(s'.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
     } else {
-        // ghost var s_test:SysState;
-        // ghost var err_test :int;
-        ghost var r:SysState; 
-        // assume validPageDb(s_test.d);
-        // assume validSysState(s_test);
-        assert specErr(smc_enter(s.d, pagenr, arg1, arg2, arg3)) == KEV_ERR_SUCCESS();
-        assume r.hw == this;
-        assume validEntryTransitionEnter(s,r,pagenr,arg1,arg2,arg3);
+        ///  // ghost var s_test:SysState;
+        ///  // ghost var err_test :int;
+        ///  ghost var r:SysState; 
+        ///  // assume validPageDb(s_test.d);
+        ///  // assume validSysState(s_test);
+        ///  assert specErr(smc_enter(s.d, pagenr, arg1, arg2, arg3)) == KEV_ERR_SUCCESS();
+        ///  assume r.hw == this;
+        ///  assume validEntryTransitionEnter(s,r,pagenr,arg1,arg2,arg3);
 
-        // ghost var r := userspaceExecutionF(q); 
-        
-        s' := exceptionProc(r);
-        // assume this == s';
-        assert validEntryTransitionEnter(s,r,pagenr,arg1,arg2,arg3) && exception(r, s');
+        ///  // ghost var r := userspaceExecutionF(q); 
+        ///  
+        ///  s' := exceptionProc(r);
+        ///  // assume this == s';
+        ///  assert validEntryTransitionEnter(s,r,pagenr,arg1,arg2,arg3) && exception(r, s');
 
-        // assert (validEntryTransitionEnter(s_test,q,pagenr,arg1,arg2,arg3)
-        //     && userspaceExecution(q, r) && exception(r, s'));
+        ///  // assert (validEntryTransitionEnter(s_test,q,pagenr,arg1,arg2,arg3)
+        ///  //     && userspaceExecution(q, r) && exception(r, s'));
 
-        assert SaneMem(s'.hw.m);
+        ///  assert SaneMem(s'.hw.m);
 
-        //assert SaneState(s'.hw); 
+        ///  //assert SaneState(s'.hw); 
 
-        // assert false;
+        ///  // assert false;
 
-        // val := sp_op_const(0);
-        // s' := s'.(hw := this);
+        ///  // val := sp_op_const(0);
+        ///  // s' := s'.(hw := this);
     }
     
 }
