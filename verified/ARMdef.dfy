@@ -410,18 +410,25 @@ function shr32(x:int, amount:int) : int
 // Evaluation
 //-----------------------------------------------------------------------------
 function OperandContents(s:state, o:operand): int
-    requires (!o.OSReg? && ValidOperand(o)) 
-        || (o.OSReg? && ValidSpecialOperand(s, o))
+    requires ValidOperand(o)
     requires ValidState(s)
     ensures  isUInt32(OperandContents(s,o))
 {
     reveal_ValidRegState();
-    reveal_ValidSRegState();
     match o
         case OConst(n) => n
         case OReg(r) => s.regs[r]
         case OSP => s.regs[SP(mode_of_state(s))]
         case OLR => s.regs[LR(mode_of_state(s))]
+}
+
+function SpecialOperandContents(s:state, o:operand): int
+    requires ValidSpecialOperand(s, o)
+    requires ValidState(s)
+    ensures  isUInt32(SpecialOperandContents(s,o))
+{
+    reveal_ValidSRegState();
+    match o
         case OSReg(sr) => s.sregs[sr] 
 }
 
@@ -457,7 +464,7 @@ function GlobalWord(s:memstate, g:operand, offset:int): int
 
 function eval_op(s:state, o:operand): int
     requires ValidState(s)
-    requires ValidOperand(o) || ValidSpecialOperand(s,o)
+    requires ValidOperand(o) /* || ValidSpecialOperand(s,o) */
     ensures isUInt32(eval_op(s,o))
     { OperandContents(s,o) }
 
@@ -611,7 +618,7 @@ predicate ValidInstruction(s:state, ins:ins)
         case MOVS_PCLR => 
             var spsr := OSReg(spsr(mode_of_state(s)));
             ValidSpecialOperand(s, spsr) &&
-            ValidModeChange(s.conf.cpsr.m, OperandContents(s, spsr)) &&
+            ValidModeChange(s.conf.cpsr.m, SpecialOperandContents(s, spsr)) &&
             !(mode_of_state(s) == User)
 }
 
@@ -669,13 +676,13 @@ predicate evalIns(ins:ins, s:state, r:state, ok:bool)
         case MOV(dst, src) => evalUpdate(s, dst,
             OperandContents(s, src),
             r, ok)
-        case MRS(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r, ok)
+        case MRS(dst, src) => evalUpdate(s, dst, SpecialOperandContents(s, src), r, ok)
         case MSR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r, ok)
-        case MRC(dst, src) => evalUpdate(s, dst, OperandContents(s, OSReg(scr)), r, ok)
+        case MRC(dst, src) => evalUpdate(s, dst, SpecialOperandContents(s, OSReg(scr)), r, ok)
         case MCR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r, ok)
         case MOVS_PCLR => 
             var spsr := OSReg(spsr(mode_of_state(s)));
-            evalSRegUpdate(s, OSReg(cpsr), OperandContents(s,spsr), r, ok)
+            evalSRegUpdate(s, OSReg(cpsr), SpecialOperandContents(s,spsr), r, ok)
 }
 
 predicate evalBlock(block:codes, s:state, r:state, ok:bool)

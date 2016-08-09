@@ -233,7 +233,7 @@ procedure MRS({:operand} dst:int, {:operand} src:int)
         !ValidMcrMrcOperand(this, @src);
         ValidRegOperand(@dst);
     ensures
-        evalUpdate(old(this), @dst, old(src), this, true);
+        evalUpdate(old(this), @dst, SpecialOperandContents(old(this), @src), this, true);
         AlwaysInvariant(old(this), this);
         WorldInvariant(old(this), this);
         ModeInvariant(old(this), this);
@@ -265,7 +265,7 @@ procedure MRC({:operand} dst:int, {:operand} src:int)
         ValidRegOperand(@dst);
         ValidMcrMrcOperand(this, @src);
     ensures
-        evalUpdate(old(this), @dst, src, this, true);
+        evalUpdate(old(this), @dst, SpecialOperandContents(old(this), @src), this, true);
         AlwaysInvariant(old(this), this);
         WorldInvariant(old(this), this);
         ModeInvariant(old(this), this);
@@ -289,10 +289,10 @@ procedure MOVS_PCLR()
     requires 
         ValidSpecialOperand(this, OSReg(spsr( mode_of_state(this) )));
         ValidModeChange(mode_of_state(this),
-            OperandContents(this ,OSReg(spsr(this.conf.cpsr.m))));
+            SpecialOperandContents(this ,OSReg(spsr(this.conf.cpsr.m))));
         mode_of_state(this) != User;
     ensures
-        evalSRegUpdate(old(this), OSReg(cpsr), OperandContents(old(this),
+        evalSRegUpdate(old(this), OSReg(cpsr), SpecialOperandContents(old(this),
             OSReg( old(spsr(this.conf.cpsr.m) ))), this, true);
         AlwaysInvariant(old(this), this);
         AllMemInvariant(old(this), this);

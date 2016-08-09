@@ -16,7 +16,7 @@ type sp_state = state
 //-----------------------------------------------------------------------------
 function sp_eval_op(s:state, o:operand):int
     requires ValidState(s)
-    requires ValidOperand(o) || ValidSpecialOperand(s, o)
+    requires ValidOperand(o)
     { OperandContents(s, o) }
 
 predicate sp_eq_ops(s1:sp_state, s2:sp_state, o:operand)
@@ -520,7 +520,7 @@ lemma sp_lemma_MRS(s:state, r:state, ok:bool,
     requires !ValidMcrMrcOperand(s, src)
     requires ValidRegOperand(dst)
     requires sp_eval(sp_code_MRS(dst, src), s, r, ok)
-    ensures evalUpdate(s, dst, OperandContents(s, src), r, ok)
+    ensures evalUpdate(s, dst, SpecialOperandContents(s, src), r, ok)
     ensures ok;
 {
     reveal_sp_eval();
@@ -548,7 +548,7 @@ lemma sp_lemma_MRC(s:state, r:state, ok:bool, dst:operand, src:operand)
     requires ValidRegOperand(dst);
     requires ValidMcrMrcOperand(s, src)
     requires sp_eval(sp_code_MRC(dst,src), s, r, ok);
-    ensures  evalUpdate(s, dst, OperandContents(s, src), r, ok);
+    ensures  evalUpdate(s, dst, SpecialOperandContents(s, src), r, ok);
     ensures  ok;
 {
     reveal_sp_eval();
@@ -572,10 +572,10 @@ lemma sp_lemma_MOVS_PCLR(s:state, r:state, ok:bool)
     requires var m := mode_of_state(s); var spsr := OSReg(spsr(m));
         ValidSpecialOperand(s, spsr) &&
         !(mode_of_state(s) == User) &&
-        ValidModeChange(m, OperandContents(s, spsr))
+        ValidModeChange(m, SpecialOperandContents(s, spsr))
     requires sp_eval(sp_code_MOVS_PCLR(), s, r, ok)
     ensures var spsr := OSReg(spsr(mode_of_state(s)));
-        evalSRegUpdate(s, OSReg(cpsr), OperandContents(s,spsr), r, ok)
+        evalSRegUpdate(s, OSReg(cpsr), SpecialOperandContents(s,spsr), r, ok)
     ensures  ok;
 {
     reveal_sp_eval();
