@@ -107,8 +107,8 @@ predicate {:opaque} validResume(s:SysState,s':SysState,dispPage:PageNr)
     // s4 : State between the exception handler and re-entry to the monitor
     // s' : State at the end of the monitor call
     
-    smc_enter(s.d, dispPage, a1, a2, a3).1 != KEV_ERR_SUCCESS() ||
-    ((exists s2, s3, s4 :: validEntryTransitionResume(s,s2) && 
+    smc_resume(s.d, dispPage).1 != KEV_ERR_SUCCESS() ||
+    ((exists s2, s3, s4 :: validEntryTransitionResume(s,s2,dispPage) && 
         userspaceExecution(s2, s3) && exception(s3, s4))
         && s'.hw.conf.cpsr.m == Monitor)
 }

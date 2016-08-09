@@ -683,6 +683,7 @@ procedure kev_smc_enter(
         assert validSysState(s');
         assert tuple(s'.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
     } else {
+        ghost var todo := todo();
         ///  // ghost var s_test:SysState;
         ///  // ghost var err_test :int;
         ///  ghost var r:SysState; 
@@ -783,6 +784,10 @@ procedure smc_handler(
 
     // TODO: return path (movs pc, lr etc.)
 }
+
+#verbatim
+predicate todo() ensures false {true}
+#endverbatim
 
 #verbatim
 method Main()
