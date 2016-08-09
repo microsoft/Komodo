@@ -775,7 +775,8 @@ procedure smc_enter_err(
                 s.d[addrspace].entry.state != FinalState)
             {
                 reveal_validPageDb();
-                reveal_pageDbEntryCorresponds(); reveal_pageContentsCorresponds();
+                reveal_pageContentsCorresponds();
+                reveal_pageDbAddrspaceCorresponds();
             }
 
             // this particular RegPreserving assert saved 30s.
@@ -794,7 +795,8 @@ procedure smc_enter_err(
                 forall :: addrval(this, page_monvaddr(pagenr) + 
                     DISPATCHER_ENTERED()) == to_i(s.d[pagenr].entry.entered)
                 {
-                    reveal_pageDbEntryCorresponds(); reveal_pageContentsCorresponds();
+                    reveal_pageContentsCorresponds();
+                    reveal_pageDbDispatcherCorresponds();
                 }
                 LDR(r9,r9,sp_op_const(DISPATCHER_ENTERED()));
                 
