@@ -26,7 +26,7 @@ function {:opaque} smc_initL2PTable_premium(pageDbIn: PageDb, page: PageNr,
     requires validPageDb(pageDbIn)
     ensures validPageDb(smc_initL2PTable_premium(pageDbIn, page, addrspacePage, l1index).0)
 {
-    reveal_validPageDb();
+    initL2PTablePreservesPageDBValidity(pageDbIn, page, addrspacePage, l1index);
     smc_initL2PTable(pageDbIn, page, addrspacePage, l1index)
 }
 
@@ -144,6 +144,31 @@ lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
     }
 }
 
+lemma initL2PTablePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr,
+    addrspacePage: PageNr, l1index: int)
+    requires validPageDb(pageDbIn)
+    ensures validPageDb(smc_initL2PTable(pageDbIn, page, addrspacePage, l1index).0)
+{
+    reveal_validPageDb(); reveal_pageDbClosedRefs();
+    var (pageDbOut, errOut)
+        := smc_initL2PTable(pageDbIn, page, addrspacePage, l1index);
+    if( errOut != KEV_ERR_SUCCESS() ) {
+        // trivial
+    } else {
+        var l2pt := L2PTable(SeqRepeat(NR_L2PTES(), NoMapping));
+        var pageDbTmp := allocatePage(pageDbIn, page, addrspacePage, l2pt).0;
+        var l1ptnr := pageDbTmp[addrspacePage].entry.l1ptnr;
+        assert validL1PTable(pageDbOut, l1ptnr);
+
+        forall ( n | validPageNr(n) && n != l1ptnr)
+            ensures validPageDbEntry(pageDbOut, n)
+        {
+            assert pageDbOut[n] == pageDbTmp[n];
+            assert validPageDbEntry(pageDbTmp, n);
+            assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbTmp, n);
+        }
+    }
+}
 
 lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
     requires validPageDb(pageDbIn)
@@ -431,6 +456,7 @@ lemma smchandlerPreservesPageDbValidity(pageDbIn: PageDb, callno: int, arg1: int
         initAddrspacePreservesPageDBValidity(pageDbIn, arg1, arg2);
     } else if(callno == KEV_SMC_INIT_DISPATCHER()) {
     } else if(callno == KEV_SMC_INIT_L2PTABLE()) {
+        initL2PTablePreservesPageDBValidity(pageDbIn, arg1, arg2, arg3);
     } else if(callno == KEV_SMC_MAP_SECURE()) {
         mapSecurePreservesPageDBValidity(pageDbIn, arg1, arg2, intToMapping(arg3), arg4);
     } else if(callno == KEV_SMC_MAP_INSECURE()) {
