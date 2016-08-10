@@ -1,5 +1,6 @@
 include "kev_common.s.dfy"
 include "Maybe.dfy"
+include "Sets.dfy"
 include "ARMdef.dfy"
 
 type PageNr = int
@@ -170,17 +171,6 @@ predicate addrspaceL1Unique(d: PageDb, n: PageNr)
     var a := d[n].entry;
     forall p :: validPageNr(p) && p != a.l1ptnr && d[p].PageDbEntryTyped? && d[p].addrspace == n
         ==> !d[p].entry.L1PTable?
-}
-
-// taken from ironclad set libraries
-function SetOfNumbersInRightExclusiveRange(a:int, b:int):set<int>
-    requires a <= b;
-    ensures forall opn :: a <= opn < b ==> opn in SetOfNumbersInRightExclusiveRange(a, b);
-    ensures forall opn :: opn in SetOfNumbersInRightExclusiveRange(a, b) ==> a <= opn < b;
-    ensures |SetOfNumbersInRightExclusiveRange(a, b)| == b-a;
-    decreases b-a;
-{
-    if a == b then {} else {a} + SetOfNumbersInRightExclusiveRange(a+1, b)
 }
 
 function {:opaque} validPageNrs(): set<PageNr>
