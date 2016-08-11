@@ -5,7 +5,7 @@ SPARTANFLAGS = #-assumeUpdates 1
 ARMSPARTAN_NAMES = ARMdef ARMprint ARMspartan
 ARMSPARTAN_DEPS = $(foreach n,$(ARMSPARTAN_NAMES),$(dir)/$(n).verified)
 ARMSPARTAN_INCLUDES = $(foreach n,$(ARMSPARTAN_NAMES),-i $(n).dfy)
-KEVLAR_NAMES = kev_common.i pagedb.i smcapi.i abstate.s entry.s Sets
+KEVLAR_NAMES = kev_common.i pagedb.i smcapi.i abstate.s entry.i Sets
 KEVLAR_DEPS = $(foreach n,$(KEVLAR_NAMES),$(dir)/$(n).verified)
 KEVLAR_INCLUDES = $(foreach n,$(KEVLAR_NAMES),-i $(n).dfy)
 SDFY_INCLUDES =  $(dir)/ARMdecls.sdfy $(dir)/kev_utils.sdfy
@@ -66,3 +66,4 @@ $(dir)/smcapi.s.verified: $(dir)/kev_common.s.verified $(dir)/pagedb.s.verified
 $(dir)/smcapi.i.verified: $(dir)/smcapi.s.verified
 $(dir)/pagedb.i.verified: $(dir)/pagedb.s.verified $(dir)/kev_common.i.verified
 $(dir)/entry.s.verified:  $(dir)/smcapi.s.verified $(dir)/pagedb.i.verified $(dir)/abstate.s.verified
+$(dir)/entry.i.verified: $(dir)/entry.s.verified
