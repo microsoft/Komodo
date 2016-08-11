@@ -5,7 +5,7 @@ SPARTANFLAGS = #-assumeUpdates 1
 ARMSPARTAN_NAMES = ARMdef ARMprint ARMspartan
 ARMSPARTAN_DEPS = $(foreach n,$(ARMSPARTAN_NAMES),$(dir)/$(n).verified)
 ARMSPARTAN_INCLUDES = $(foreach n,$(ARMSPARTAN_NAMES),-i $(n).dfy)
-KEVLAR_NAMES = kev_common.i pagedb.i smcapi.i abstate.s entry.i
+KEVLAR_NAMES = kev_common.i pagedb.i smcapi.i abstate.s entry.i Sets
 KEVLAR_DEPS = $(foreach n,$(KEVLAR_NAMES),$(dir)/$(n).verified)
 KEVLAR_INCLUDES = $(foreach n,$(KEVLAR_NAMES),-i $(n).dfy)
 SDFY_INCLUDES =  $(dir)/ARMdecls.sdfy $(dir)/kev_utils.sdfy
@@ -25,7 +25,7 @@ SDFY_INCLUDES =  $(dir)/ARMdecls.sdfy $(dir)/kev_utils.sdfy
 #	$(SDFY_INCLUDES) $< && touch $@
 
 # Mindy can't handle these files, so we must use vanilla Dafny
-DAFNY_ONLY = ARMspartan Seq kev_common.s pagedb.s
+DAFNY_ONLY = ARMspartan Seq Sets kev_common.s
 $(foreach n,$(DAFNY_ONLY),$(dir)/$(n).verified): %.verified: %.dfy
 	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< && touch $@
 
@@ -60,7 +60,7 @@ $(dir)/ARMdef.verified: $(dir)/assembly.s.verified $(dir)/Maybe.verified $(dir)/
 $(dir)/ARMprint.verified: $(dir)/ARMdef.verified
 $(dir)/ARMspartan.verified: $(dir)/ARMdef.verified
 $(dir)/kev_common.s.verified: $(dir)/ARMdef.verified
-$(dir)/pagedb.s.verified: $(dir)/kev_common.s.verified $(dir)/Maybe.verified
+$(dir)/pagedb.s.verified: $(dir)/kev_common.s.verified $(dir)/Maybe.verified $(dir)/Sets.verified
 $(dir)/kev_common.i.verified: $(dir)/ARMspartan.verified $(dir)/kev_common.s.verified $(dir)/pagedb.s.verified
 $(dir)/smcapi.s.verified: $(dir)/kev_common.s.verified $(dir)/pagedb.s.verified
 $(dir)/smcapi.i.verified: $(dir)/smcapi.s.verified

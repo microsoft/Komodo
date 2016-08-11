@@ -28,29 +28,6 @@ lemma PageDbCorrespondsImpliesEntryCorresponds(s:memstate, d:PageDb, n:PageNr)
     reveal_pageDbClosedRefs();
 }
 
-// XXX: lifted from ironfleet/src/Dafny/Distributed/Common/Collections/Sets.i.dfy
-lemma ThingsIKnowAboutSubset<T>(x:set<T>, y:set<T>)
-    requires x<y;
-    ensures |x|<|y|;
-{
-    if (x!={}) {
-        var e :| e in x;
-        ThingsIKnowAboutSubset(x-{e}, y-{e});
-    }
-}
-
-// XXX: lifted from ironfleet/src/Dafny/Distributed/Common/Collections/Sets.i.dfy
-lemma SubsetCardinality<T>(x:set<T>, y:set<T>)
-    ensures x<y ==> |x|<|y|;
-    ensures x<=y ==> |x|<=|y|;
-{
-    if (x<y) {
-        ThingsIKnowAboutSubset(x, y);
-    }
-    if (x==y) { // OBSERVE the other case
-    }
-}
-
 lemma BoundedAddrspaceRefs(d:PageDb, n:PageNr)
     requires validPageDb(d)
     requires isAddrspace(d, n)
