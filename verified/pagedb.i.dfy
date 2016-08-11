@@ -196,13 +196,13 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
 }
 
 // TODO: refactor; some of this is a trusted spec for ARM's PTE format!
-function ARM_L2PT_BYTES(): int { 0x400 }
+function method ARM_L2PT_BYTES(): int { 0x400 }
 function ARM_L1PTE(paddr: int): int
     requires isUInt32(paddr) && (paddr % ARM_L2PT_BYTES() == 0)
     ensures isUInt32(ARM_L1PTE(paddr))
 {
     //or32(paddr, 1) // type = 1, pxn = 0, ns = 0, domain = 0
-        paddr + 1
+    paddr + 1
 }
 
 
@@ -248,6 +248,11 @@ function mkL1Pte(e: Maybe<PageNr>, subpage:int): int
             ARM_L1PTE(page_paddr(pgNr) + subpage * ARM_L2PT_BYTES())
 }
 
+function l1pteoffset(base: mem, i: int, j: int): int
+{
+    base + 4 * (i * 4 + j)
+}
+
 predicate {:opaque} pageDbL1PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
     requires validPageNr(p)
     requires memContainsPage(page, p)
@@ -255,7 +260,7 @@ predicate {:opaque} pageDbL1PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page
 {
     var base := page_monvaddr(p);
     forall i, j :: 0 <= i < NR_L1PTES() && 0 <= j < 4
-        ==> page[base + 4 * (i * 4 + j)] == mkL1Pte(e.l1pt[i], j)
+        ==> page[l1pteoffset(base, i, j)] == mkL1Pte(e.l1pt[i], j)
 }
 
 function mkL2Pte(pte: L2PTE): int

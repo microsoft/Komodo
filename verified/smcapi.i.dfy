@@ -144,6 +144,37 @@ lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
     }
 }
 
+lemma installL1PTEPreservesPageDbValidity(pageDbIn: PageDb, l1ptnr: PageNr,
+                                          l2page: PageNr, l1index: int)
+    requires validPageDb(pageDbIn)
+    requires validPageNr(l1ptnr) && pageDbIn[l1ptnr].PageDbEntryTyped?
+        && pageDbIn[l1ptnr].entry.L1PTable?
+        && closedRefsL1PTable(pageDbIn[l1ptnr].entry)
+    // l2page belongs to this addrspace
+    requires validPageNr(l2page) && validL1PTE(pageDbIn, l2page)
+        && pageDbIn[l2page].addrspace == pageDbIn[l1ptnr].addrspace
+    // no double mapping
+    requires forall i :: 0 <= i < NR_L1PTES() && i != l1index
+        ==> pageDbIn[l1ptnr].entry.l1pt[i] != Just(l2page)
+    requires 0 <= l1index < NR_L1PTES()
+    ensures validPageDb(installL1PTEInPageDb(pageDbIn, l1ptnr, l2page, l1index))
+{
+    reveal_validPageDb(); reveal_pageDbClosedRefs();
+
+    assert validL1PTable(pageDbIn, l1ptnr);
+    var pageDbOut := installL1PTEInPageDb(pageDbIn, l1ptnr, l2page, l1index);
+
+    assert validL1PTable(pageDbOut, l1ptnr);
+
+    forall ( n | validPageNr(n) && n != l1ptnr)
+        ensures validPageDbEntry(pageDbOut, n)
+    {
+        assert pageDbOut[n] == pageDbIn[n];
+        assert validPageDbEntry(pageDbIn, n);
+        assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
+    }
+}
+
 lemma initL2PTablePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr,
     addrspacePage: PageNr, l1index: int)
     requires validPageDb(pageDbIn)
@@ -155,18 +186,22 @@ lemma initL2PTablePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr,
     if( errOut != KEV_ERR_SUCCESS() ) {
         // trivial
     } else {
+        var l1ptnr := pageDbIn[addrspacePage].entry.l1ptnr;
+        var l1pt := pageDbIn[l1ptnr].entry.l1pt;
+        // no refs to the free page
+        forall (i | 0 <= i < NR_L1PTES())
+            ensures l1pt[i] != Just(page)
+        {
+            assert pageIsFree(pageDbIn, page);
+            assert !stoppedAddrspace(pageDbIn[addrspacePage]);
+            assert validL1PTable(pageDbIn, l1ptnr);
+            assert l1pt[i].Just? ==> validL1PTE(pageDbIn, fromJust(l1pt[i]));
+        }
+        assert forall i :: 0 <= i < NR_L1PTES()
+        ==> pageDbIn[l1ptnr].entry.l1pt[i] != Just(page);
         var l2pt := L2PTable(SeqRepeat(NR_L2PTES(), NoMapping));
         var pageDbTmp := allocatePage(pageDbIn, page, addrspacePage, l2pt).0;
-        var l1ptnr := pageDbTmp[addrspacePage].entry.l1ptnr;
-        assert validL1PTable(pageDbOut, l1ptnr);
-
-        forall ( n | validPageNr(n) && n != l1ptnr)
-            ensures validPageDbEntry(pageDbOut, n)
-        {
-            assert pageDbOut[n] == pageDbTmp[n];
-            assert validPageDbEntry(pageDbTmp, n);
-            assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbTmp, n);
-        }
+        installL1PTEPreservesPageDbValidity(pageDbTmp, l1ptnr, page, l1index);
     }
 }
 

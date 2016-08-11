@@ -26,15 +26,14 @@ predicate physPageIsSecure( physPage: int )
 predicate l1indexInUse(d: PageDb, a: PageNr, l1index: int)
     requires validPageDb(d)
     requires isAddrspace(d, a)
+    requires !stoppedAddrspace(d[a])
     requires 0 <= l1index < NR_L1PTES()
 {
     reveal_validPageDb();
     assert validAddrspace(d, a);
     var l1ptnr := d[a].entry.l1ptnr;
-    // if the addrspace is stopped, the l1pt may not even point to an l1ptable
-    // this is fine, since the caller will check that condition later
-    d[l1ptnr].PageDbEntryTyped? &&
-    (var l1pt := d[l1ptnr].entry; l1pt.L1PTable? && l1pt.l1pt[l1index].Just?)
+    var l1pt := d[l1ptnr].entry;
+    l1pt.l1pt[l1index].Just?
 }
 
 //=============================================================================
@@ -129,6 +128,29 @@ function smc_initDispatcher(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
        allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false, ctxt))
 }
 
+function installL1PTE(l1pt: PageDbEntryTyped, l2page: PageNr, l1index: int): PageDbEntryTyped
+    requires l1pt.L1PTable? && closedRefsL1PTable(l1pt)
+    requires validPageNr(l2page)
+    requires 0 <= l1index < NR_L1PTES()
+    ensures var r := installL1PTE(l1pt, l2page, l1index);
+        r.L1PTable? && closedRefsL1PTable(r)
+{
+    l1pt.(l1pt := l1pt.l1pt[l1index := Just(l2page)])
+}
+
+function installL1PTEInPageDb(pagedb: PageDb, l1ptnr: PageNr, l2page: PageNr,
+    l1index: int): PageDb
+    requires validPageDb(pagedb)
+    requires validPageNr(l1ptnr) && pagedb[l1ptnr].PageDbEntryTyped?
+    && pagedb[l1ptnr].entry.L1PTable?
+    requires validPageNr(l2page)
+    requires 0 <= l1index < NR_L1PTES()
+    ensures pageDbClosedRefs(installL1PTEInPageDb(pagedb, l1ptnr, l2page, l1index))
+{
+    reveal_validPageDb(); reveal_pageDbClosedRefs();
+    var l1ptentry := installL1PTE(pagedb[l1ptnr].entry, l2page, l1index);
+    pagedb[l1ptnr := pagedb[l1ptnr].(entry := l1ptentry)]
+}
 
 function smc_initL2PTable(pageDbIn: PageDb, page: PageNr,
     addrspacePage: PageNr, l1index: int) : (PageDb, int)
@@ -138,23 +160,26 @@ function smc_initL2PTable(pageDbIn: PageDb, page: PageNr,
     if(!(0<= l1index < NR_L1PTES())) then (pageDbIn, KEV_ERR_INVALID_MAPPING())
     else if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KEV_ERR_INVALID_ADDRSPACE())
+
+    // This gets caught later in allocatePage, but putting the check
+    // here means that the addrspace's state will not be stopped for the
+    // l1indexInUse check. The l1indexInUse check assumes that the l1ptnr
+    // is actually an l1pt table, which is true as long as the addrspace
+    // is not stopped.
+    else if(pageDbIn[addrspacePage].entry.state != InitState) then
+        (pageDbIn, KEV_ERR_ALREADY_FINAL())
     else if(l1indexInUse(pageDbIn, addrspacePage, l1index)) then
         (pageDbIn, KEV_ERR_ADDRINUSE())
     else 
         var l2pt := L2PTable(SeqRepeat(NR_L2PTES(), NoMapping));
         // allocate the page
-        var (pagedbTmp, err) := allocatePage(pageDbIn, page, addrspacePage, l2pt);
+        var (pagedb, err) := allocatePage(pageDbIn, page, addrspacePage, l2pt);
         // update the L1 table
         if err == KEV_ERR_SUCCESS() then
-            var l1ptnr := pagedbTmp[addrspacePage].entry.l1ptnr;
-            var l1pt := pagedbTmp[l1ptnr];
-            var l1ptentry := pagedbTmp[l1ptnr].entry;
-            assert l1ptentry.L1PTable?;
-            var pagedb := pagedbTmp[l1ptnr := l1pt.(entry := l1ptentry.(
-                                    l1pt := l1ptentry.l1pt[l1index := Just(page)]))];
-            (pagedb, err)
+            var l1ptnr := pagedb[addrspacePage].entry.l1ptnr;
+            (installL1PTEInPageDb(pagedb, l1ptnr, page, l1index), err)
         else
-            (pagedbTmp, err)
+            (pagedb, err)
 }
 
 predicate allocatePageEntryValid(entry: PageDbEntryTyped)

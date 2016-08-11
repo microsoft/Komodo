@@ -6,7 +6,7 @@ include "ARMdef.dfy"
 type PageNr = int
 type InsecurePageNr = int
 
-function NR_L1PTES(): int { 256 }
+function method NR_L1PTES(): int { 256 }
 function NR_L2PTES(): int { 1024 }
 
 predicate validPageNr(p: PageNr)
