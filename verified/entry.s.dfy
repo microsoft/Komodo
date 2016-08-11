@@ -5,54 +5,60 @@ include "smcapi.s.dfy"
 include "pagedb.i.dfy"
 include "abstate.s.dfy"
 
-predicate userEnteredState(s:SysState)
+function l1pOfDispatcher(d:PageDb, p:PageNr) : PageNr
+    requires validDispatcherPage(d, p) && !hasStoppedAddrspace(d, p)
+    ensures  validL1PTPage(d, l1pOfDispatcher(d, p))
 {
     reveal_validPageDb();
-    validSysState(s) &&
-    validL1PTPage(s.d, s.hw.conf.ttbr0) && !hasStoppedAddrspace(s.d, s.hw.conf.ttbr0) &&
-    s.hw.conf.cpsr.m == User && s.hw.conf.scr.ns == Secure
+    d[d[p].addrspace].entry.l1ptnr
+}
+
+// This must hold between all consecutive states on the addsrpace entry/return path.
+predicate validERTransition(s:SysState, s':SysState)
+{
+    reveal_validPageDb();
+    validSysState(s) && validSysState(s')
+    && s'.d == s.d && s'.hw.conf.ttbr0 == s.hw.conf.ttbr0 
+    && validL1PTPage(s.d, s.hw.conf.ttbr0)
+    && !hasStoppedAddrspace(s.d, s.hw.conf.ttbr0)
 }
 
 predicate validEntryTransitionEnter(s:SysState,s':SysState,
     dispPage:PageNr,a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
     requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KEV_ERR_SUCCESS()
-    // ensures validEntryTransitionEnter(s,s',dispPage,a1,a2,a3) ==> false
 {
     reveal_validPageDb();
     reveal_ValidConfig();
+    reveal_ValidRegState();
 	var addrspace := s.d[s.d[dispPage].addrspace].entry;
     
-    userEnteredState(s') && s'.d == s.d &&
-    s'.hw.conf.cpsr.m  == User && s'.hw.conf.scr.ns == Secure 
-        && s'.hw.conf.ttbr0 == addrspace.l1ptnr &&
+    validSysState(s') && s'.d == s.d &&
+    s'.hw.conf.ttbr0 == l1pOfDispatcher(s.d, dispPage) &&
+    s'.hw.conf.cpsr.m  == User && s'.hw.conf.scr.ns == Secure &&
     
-    (reveal_ValidRegState();
-    s'.hw.regs[R0] == a1 && s'.hw.regs[R1] == a2 && s'.hw.regs[R2] == a3) &&
+    s'.hw.regs[R0] == a1 && s'.hw.regs[R1] == a2 && s'.hw.regs[R2] == a3 &&
 
     s'.g.g_cur_dispatcher == dispPage &&
 
-    s'.hw.conf.cpsr.m == User &&
+    bankedRegsPreservedForMonitor(s, s') &&
+    WSMemInvariantExceptAddrspaceAtPage(s, s', l1pOfDispatcher(s.d, dispPage)) &&
 
     sp_eval(Ins(MOVS_PCLR), s.hw, s'.hw, true) &&
     OperandContents(s.hw, OLR) == s.d[dispPage].entry.entrypoint
 }
 
-
 predicate validEntryTransitionResume(s:SysState, s':SysState, dispPage:PageNr)
     requires validSysState(s)
     requires smc_resume(s.d, dispPage).1 == KEV_ERR_SUCCESS()
-    // ensures validEntryTransitionResume(s,s',dispPage) ==> false
 {
-    //reveal_validConfig();
     reveal_validPageDb();
     reveal_ValidConfig();
-	var addrspace := s.d[s.d[dispPage].addrspace].entry;
     var disp := s.d[dispPage].entry;
     
-    userEnteredState(s') && s'.d == s.d &&
+    validSysState(s') && s'.d == s.d &&
+    s'.hw.conf.ttbr0 == l1pOfDispatcher(s.d, dispPage) &&
     s'.hw.conf.cpsr.m  == User && s'.hw.conf.scr.ns == Secure &&
-        s'.hw.conf.ttbr0 == addrspace.l1ptnr &&
 
     s'.g.g_cur_dispatcher == dispPage &&
    
@@ -75,64 +81,79 @@ predicate validEntryTransitionResume(s:SysState, s':SysState, dispPage:PageNr)
     s'.hw.sregs[cpsr] == disp.ctxt.cpsr &&
     s'.hw.conf.cpsr == decode_psr(disp.ctxt.cpsr)) &&
     
+    bankedRegsPreservedForMonitor(s, s') &&
+    WSMemInvariantExceptAddrspaceAtPage(s, s', l1pOfDispatcher(s.d, dispPage)) &&
+
     sp_eval(Ins(MOVS_PCLR), s.hw, s'.hw, true) &&
     OperandContents(s.hw, OLR) == disp.ctxt.pc
 }
 
 predicate eqDisp(s:SysState, s':SysState) { s.g.g_cur_dispatcher == s'.g.g_cur_dispatcher }
 
-predicate {:opaque} validEnter(s:SysState,s':SysState,
+predicate validEnter(s:SysState,s':SysState,
     dispPage:PageNr,a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
-    // ensures validEnter(s,s',dispPage,a1,a2,a3) ==> false
 {
-    // s  : State on entry to the monitor
-    // s2 : State just before start of userspace execution.
-    // s3 : State between end of userspace execution and the exception handler
-    // s4 : State between the exception handler and re-entry to the monitor
-    // s' : State at the end of the monitor call
+    // s1 (s)  : State on entry to the monitor
+    // s2      : State just before start of userspace execution.
+    // s3      : State between end of userspace execution and the exception handler
+    // s4      : State between the exception handler and re-entry to the monitor
+    // s5 (s') : State at the end of the monitor call
     
     smc_enter(s.d, dispPage, a1, a2, a3).1 != KEV_ERR_SUCCESS() ||
-    ((exists s2, s3, s4 :: validEntryTransitionEnter(s,s2,dispPage,a1,a2,a3) && 
-        userspaceExecution(s2, s3) && exception(s3, s4))
-        && s'.hw.conf.cpsr.m == Monitor)
+    (exists s2, s3, s4 :: validEntryTransitionEnter(s,s2,dispPage,a1,a2,a3)
+        && userspaceExecution(s2, s3)
+        && exception(s3, s4)
+        && monitorReturn(s4, s'))
 }
 
-predicate {:opaque} validResume(s:SysState,s':SysState,dispPage:PageNr)
+predicate validResume(s:SysState,s':SysState,dispPage:PageNr)
     requires validSysState(s)
 {
-    // s  : State on entry to the monitor
-    // s2 : State just before start of userspace execution.
-    // s3 : State between end of userspace execution and the exception handler
-    // s4 : State between the exception handler and re-entry to the monitor
-    // s' : State at the end of the monitor call
-    
+    // s1 (s)  : State on entry to the monitor
+    // s2      : State just before start of userspace execution.
+    // s3      : State between end of userspace execution and the exception handler
+    // s4      : State between the exception handler and re-entry to the monitor
+    // s5 (s') : State at the end of the monitor call
+     
     smc_resume(s.d, dispPage).1 != KEV_ERR_SUCCESS() ||
-    ((exists s2, s3, s4 :: validEntryTransitionResume(s,s2,dispPage) && 
-        userspaceExecution(s2, s3) && exception(s3, s4))
-        && s'.hw.conf.cpsr.m == Monitor)
+    (exists s2, s3, s4 :: validEntryTransitionResume(s,s2,dispPage) 
+        && userspaceExecution(s2, s3)
+        && exception(s3, s4)
+        && monitorReturn(s4, s'))
+}
+
+predicate monitorReturn(s:SysState,s':SysState)
+{
+    reveal_ValidRegState();
+    validERTransition(s, s')
+    && (var ret := s'.hw.regs[R0];
+        var dispPage := s.g.g_cur_dispatcher;
+        if(ret == KEV_ERR_INTERRUPTED() || ret == KEV_ERR_FAULT()) then
+            s'.d[dispPage].entry.entered == true 
+        else // SUCCESS
+            s'.d[dispPage].entry.entered == false)
+    && WSMemInvariantExceptAddrspace(s, s')
+    && bankedRegsPreservedForMonitor(s, s')
+    && s'.hw.conf.scr.ns == NotSecure
 }
 
 predicate svc(s:SysState,s':SysState) 
-    // ensures svc(s,s') ==> false
 {
     reveal_ValidRegState();
-
-    // This entails s.hw.conf.cpsr.m == User
-    userEnteredState(s) && 
-
-    validSysState(s') && validL1PTPage(s'.d, s'.hw.conf.ttbr0) && 
-        !hasStoppedAddrspace(s'.d, s'.hw.conf.ttbr0) && 
-        s'.hw.conf.cpsr.m == Supervisor && s'.hw.conf.scr.ns == Secure &&
+    
+    validERTransition(s, s') &&
+    s.hw.conf.cpsr.m == Supervisor &&
+    s'.hw.conf.cpsr.m == Monitor &&
+    
+    WSMemInvariantExceptAddrspace(s, s') &&
+    bankedRegsPreservedForMonitor(s, s') &&
     
     s'.hw.regs[R0] == KEV_ERR_SUCCESS()  &&
-
-    // Set entered to false if this is a resume
-
+        
     (var dispPage := s.g.g_cur_dispatcher;
     validDispatcherPage(s'.d, dispPage) &&
-    s'.d[dispPage].addrspace == s.d[dispPage].addrspace &&
-    s'.d[dispPage].entry.entered == false) 
+    s'.d[dispPage].addrspace == s.d[dispPage].addrspace)
 }
 
 predicate irqfiq(s:SysState,s':SysState)
@@ -140,24 +161,23 @@ predicate irqfiq(s:SysState,s':SysState)
     reveal_ValidRegState();
     reveal_ValidSRegState();
     reveal_ValidConfig();
-
-    // This entails s.hw.conf.cpsr.m == User
-    userEnteredState(s) &&
     
-    validSysState(s') && validL1PTPage(s'.d, s'.hw.conf.ttbr0) && 
-        !hasStoppedAddrspace(s'.d, s'.hw.conf.ttbr0) && 
-        s'.hw.conf.cpsr.m == Monitor && s'.hw.conf.scr.ns == Secure &&
+    validERTransition(s, s') &&
+    s.hw.conf.cpsr.m == Monitor &&
+    s'.hw.conf.cpsr.m == Monitor &&
 
+    s.d == s'.d &&
+    WSMemInvariantExceptAddrspace(s, s') &&
+    bankedRegsPreservedForMonitor(s, s') &&
+    
     // Interrupts can be taken from other modes, but the interrupt should
     // only re-enter monitor mode when taken from user mode. The following 
     // condition checks that this interrupt was taken from user mode.
-    s'.hw.conf.spsr[Monitor].m == User &&
+    s.hw.conf.spsr[Monitor].m == User &&
 
     s'.hw.regs[R0] == KEV_ERR_INTERRUPTED() &&
     
-    // Set entered to true and save context if this is not a resume 
     (var dispPage := s.g.g_cur_dispatcher;
-
     validDispatcherPage(s'.d, dispPage) &&
     s'.d[dispPage].addrspace == s.d[dispPage].addrspace &&
     s'.d[dispPage].entry.entered == true &&
@@ -170,17 +190,17 @@ predicate irqfiq(s:SysState,s':SysState)
 predicate abort(s:SysState,s':SysState)
 {
     reveal_ValidRegState();
-
-    // This entails s.hw.conf.cpsr.m == User
-    userEnteredState(s) &&
+   
+    validERTransition(s, s') &&
+    s.hw.conf.cpsr.m == Abort  &&
+    s'.hw.conf.cpsr.m == Monitor &&
     
-    validSysState(s') && validL1PTPage(s'.d, s'.hw.conf.ttbr0) && 
-        !hasStoppedAddrspace(s'.d, s'.hw.conf.ttbr0) && 
-        s'.hw.conf.cpsr.m == Abort && s'.hw.conf.scr.ns == Secure &&
+    s.d == s'.d &&
+    bankedRegsPreservedForMonitor(s, s') &&
+    WSMemInvariantExceptAddrspace(s, s') &&
 
     s'.hw.regs[R0] == KEV_ERR_FAULT() &&
-
-    // Set entered to true if this is not a resume 
+    
     (var dispPage := s.g.g_cur_dispatcher;
     validDispatcherPage(s'.d, dispPage) &&
     s'.d[dispPage].addrspace == s.d[dispPage].addrspace &&
@@ -194,26 +214,51 @@ predicate abort(s:SysState,s':SysState)
 //The code executing in userspace is possibly malicious. This models its limitations.
 predicate userspaceExecution(s:SysState, s':SysState)
 {
-    userEnteredState(s) && WSMemInvariantExceptAddrspace(s, s') &&
-    userEnteredState(s') && s'.d == s.d
+    validERTransition(s, s')
+    && s.hw.conf.cpsr.m == User && s.hw.conf.cpsr.m == User
+    && WSMemInvariantExceptAddrspace(s, s')
+    && bankedRegsPreservedForMonitor(s, s')
 }
 
 predicate exception(s:SysState, s':SysState)
+    ensures exception(s, s') ==> 
+        validERTransition(s, s') &&
+        WSMemInvariantExceptAddrspace(s, s')
 {
-    (svc(s,s') || irqfiq(s,s') || abort(s,s'))
-
+    svc(s,s') || irqfiq(s,s') || abort(s,s')
 }
 
 // All writeable and secure memory addresses except the ones in the active l1
 // page table have their contents preserved
+
 predicate WSMemInvariantExceptAddrspace(s:SysState, s':SysState)
-    requires userEnteredState(s)
+    requires validERTransition(s, s')
+    //requires userEnteredState(s) && userEnteredState(s') && s'.d == s.d
+{
+    WSMemInvariantExceptAddrspaceAtPage(s, s', s.hw.conf.ttbr0)
+}
+
+predicate WSMemInvariantExceptAddrspaceAtPage(s:SysState, s':SysState, l1p:PageNr)
+    requires validSysState(s) && validSysState(s') && s.d == s'.d
+    requires validL1PTPage(s.d, l1p)
+    requires (validPageDbImpliesWellFormed(s.d); !hasStoppedAddrspace(s.d, l1p))
 {
     ValidState(s'.hw) && AlwaysInvariant(s.hw, s'.hw) &&
     s.hw.m.globals == s'.hw.m.globals &&
     forall i :: i in s.hw.m.addresses && address_is_secure(i) &&
-        !memSWrInAddrspace(s.d, s.hw.conf.ttbr0, i) ==>
+        !memSWrInAddrspace(s.d, l1p, i) ==>
             s.hw.m.addresses[i] == s'.hw.m.addresses[i]
+}
+
+predicate bankedRegsPreservedForMonitor(s:SysState, s':SysState)
+{
+        reveal_ValidRegState();
+        reveal_ValidConfig();
+        var m := Monitor;
+        validSysState(s) && validSysState(s') &&
+        s.hw.conf.spsr[m] == s'.hw.conf.spsr[m] &&
+        s.hw.regs[LR(m)] == s'.hw.regs[LR(m)] &&
+        s.hw.regs[SP(m)] == s'.hw.regs[SP(m)]
 }
 
 // Is the page secure, writeable, and in the L1PT
