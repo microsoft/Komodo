@@ -1149,7 +1149,7 @@ procedure exceptionProc(ghost s:SysState)
     requires
         this == s.hw;
         validSysState(s);
-        userEnteredState(s);
+        //userEnteredState(s);
     ensures 
         this == s'.hw;
         validSysState(s');
@@ -1179,7 +1179,7 @@ procedure kev_smc_enter(
         tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
         validEnter(s,s',pagenr,arg1,arg2,arg3);
 {
-    reveal_validEnter();
+    //reveal_validEnter();
     reveal_smc_enter_premium();
     r5 := pagenr;
     ghost var s_err;
