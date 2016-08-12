@@ -44,7 +44,7 @@ predicate validEntryTransitionEnter(s:SysState,s':SysState,
     bankedRegsPreservedForMonitor(s, s') &&
     WSMemInvariantExceptAddrspaceAtPage(s, s', l1pOfDispatcher(s.d, dispPage)) &&
 
-    sp_eval(Ins(MOVS_PCLR), s.hw, s'.hw, true) &&
+    sp_eval(Ins(MOVS_PCLR), s.hw, s'.hw) &&
     OperandContents(s.hw, OLR) == s.d[dispPage].entry.entrypoint
 }
 
@@ -84,7 +84,7 @@ predicate validEntryTransitionResume(s:SysState, s':SysState, dispPage:PageNr)
     bankedRegsPreservedForMonitor(s, s') &&
     WSMemInvariantExceptAddrspaceAtPage(s, s', l1pOfDispatcher(s.d, dispPage)) &&
 
-    sp_eval(Ins(MOVS_PCLR), s.hw, s'.hw, true) &&
+    sp_eval(Ins(MOVS_PCLR), s.hw, s'.hw) &&
     OperandContents(s.hw, OLR) == disp.ctxt.pc
 }
 

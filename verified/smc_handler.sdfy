@@ -385,7 +385,7 @@ procedure init_addrspace_mem(
     STR(r7,r6,sp_op_const(ADDRSPACE_L1PT_PHYS()));
     assert addrval(this,addrspace_va + ADDRSPACE_L1PT_PHYS()) == page_paddr(l1pt_page);
 
-    r7 += sp_op_const(KEVLAR_DIRECTMAP_VBASE());
+    ADD(r7, r7, sp_op_const(KEVLAR_DIRECTMAP_VBASE()));
     assert r7 == page_monvaddr(l1pt_page);
     STR(r7,r6,sp_op_const(ADDRSPACE_L1PT()));
     assert addrval(this,addrspace_va + ADDRSPACE_L1PT()) == page_monvaddr(l1pt_page);
@@ -448,7 +448,7 @@ procedure init_addrspace_pagedb(
         == KEV_PAGE_ADDRSPACE();
 
     page_monvaddr_impl(r6,addrspace_page,r0);
-    r4 += sp_op_const(PAGEDB_ENTRY_ADDRSPACE());
+    ADD(r4, r4, sp_op_const(PAGEDB_ENTRY_ADDRSPACE()));
     assert r4 == G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_ADDRSPACE();
     STRglobal(r6, PageDb(), r12, r4);
     assert extractPageDbEntry(this.m, addrspace_page)[BytesToWords(PAGEDB_ENTRY_ADDRSPACE())]
@@ -462,7 +462,7 @@ procedure init_addrspace_pagedb(
     STRglobal(r0, PageDb(), r12, r5);
     assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
                           + PAGEDB_ENTRY_TYPE()) == KEV_PAGE_L1PTABLE();
-    r5 += sp_op_const(PAGEDB_ENTRY_ADDRSPACE());
+    ADD(r5, r5, sp_op_const(PAGEDB_ENTRY_ADDRSPACE()));
     assert r5 == G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_ADDRSPACE();
     STRglobal(r6, PageDb(), r12, r5);
     assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
@@ -1081,7 +1081,7 @@ procedure smc_enter_err(
         } else {
             assert s.d[pagenr] is PageDbEntryTyped && s.d[pagenr].entry is Dispatcher;
 
-            r10 += sp_op_const(PAGEDB_ENTRY_ADDRSPACE());
+            ADD(r10, r10, sp_op_const(PAGEDB_ENTRY_ADDRSPACE()));
             assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE();
             WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE(), r10);
            

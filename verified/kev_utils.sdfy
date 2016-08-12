@@ -1,6 +1,4 @@
-#token += precedence :=
 procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
-procedure operator(+=) (inout{:operand} dst:int, {:operand} src:int) := plusEquals
 
 procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:operand} tmp:int)
     requires/ensures
@@ -30,7 +28,7 @@ procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:
     LDRglobaladdr(tmp, SecurePhysBaseOp());
     LDRglobal(tmp, SecurePhysBaseOp(), tmp, 0);
     assert WordAligned(tmp);
-    phys += tmp;
+    ADD(phys, phys, tmp);
 }
 
 procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out {:operand} tmp:int)
@@ -54,7 +52,7 @@ procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out
         isUInt32(virt);
 {
     page_paddr_impl(virt, pagenr, tmp);
-    virt += sp_op_const(KEVLAR_DIRECTMAP_VBASE());
+    ADD(virt, virt, sp_op_const(KEVLAR_DIRECTMAP_VBASE()));
 }
 
 procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand} size:int)
@@ -81,9 +79,9 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
     ghost var limit := base + size;
 
     // beyond this point, "base" is where we're up to, and "size" is the limit
-    size += base;
+    ADD(size, size, base);
 
-    for (; base < size; base += 4)
+    while (base < size)
         invariant
             SaneState(this);
             AlwaysInvariant(old(this),this);
@@ -105,6 +103,7 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
         STR(val, base, 0);
         assert forall p :: ValidMem(prevThis.m, p) && p != base
             ==> addrval(prevThis, p) == addrval(this, p);
+        ADD(base, base, 4);
     }
 }
 
