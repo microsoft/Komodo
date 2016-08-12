@@ -18,11 +18,13 @@ SDFY_INCLUDES =  $(dir)/ARMdecls.sdfy $(dir)/kev_utils.sdfy
 	$(SPARTAN) $(SPARTANFLAGS) $(SDFY_INCLUDES) $< -out $@ $(ARMSPARTAN_INCLUDES) $(KEVLAR_INCLUDES)
 	which dos2unix >/dev/null && dos2unix $@ || true
 
-# Spartan direct verification
-#%.verified: %.sdfy $(SDFY_INCLUDES) $(ARMSPARTAN_DEPS) $(KEVLAR_DEPS)
-#	$(SPARTAN_MINDY) $(SPARTANFLAGS) $(DAFNYFLAGS) /compile:0 -dafnyDirect \
-#	$(ARMSPARTAN_DEPS:%.verified=-i %.dfy) $(KEVLAR_DEPS:%.verified=-i %.dfy) \
-#	$(SDFY_INCLUDES) $< && touch $@
+# Spartan direct verification, including cheesy workaround for broken error code.
+%.verified: %.sdfy $(SDFY_INCLUDES) $(ARMSPARTAN_DEPS) $(KEVLAR_DEPS)
+	/bin/bash -c "$(SPARTAN_MINDY) $(SPARTANFLAGS) $(DAFNYFLAGS) /compile:0 -dafnyDirect \
+	$(ARMSPARTAN_DEPS:%.verified=-i %.dfy) $(KEVLAR_DEPS:%.verified=-i %.dfy) \
+	$(SDFY_INCLUDES) $< | tee $*.log; exit \$${PIPESTATUS[0]}"
+	grep -q "^Dafny program verifier finished with [^0][0-9]* verified, 0 errors$$" $*.log && touch $@
+	@$(RM) $*.log
 
 # Mindy can't handle these files, so we must use vanilla Dafny
 DAFNY_ONLY = ARMspartan Seq Sets kev_common.s
