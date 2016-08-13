@@ -1,5 +1,3 @@
-procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
-
 procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:operand} tmp:int)
     requires/ensures
         SaneState(this);

@@ -15,6 +15,8 @@ var{:register OReg(R12)} r12:int;
 var{:register op_sp()}  sp:int;
 var{:register op_lr()}  lr:int;
 
+procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
+
 function{:operand} sp_op_const(n:int):operand
 
 procedure {:instruction Ins(ADD(dst, src1, src2))}
