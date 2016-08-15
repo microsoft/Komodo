@@ -104,6 +104,8 @@ procedure install_l1ptes(
     assert l2_pg == mkL1Pte(Just(old(l2_pg)), 1);
     STR(l2_pg, l1pt_va, l1index);
 
+    assert RegPreservingExcept(old(this),this,set(@l1index, @l2_pg, @tmp));
+
     ADD(l1index, l1index, 4);
     ADD(l2_pg, l2_pg, sp_op_const(ARM_L2PT_BYTES()));
     assert l2_pg == mkL1Pte(Just(old(l2_pg)), 2);
