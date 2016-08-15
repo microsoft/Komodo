@@ -36,7 +36,8 @@ datatype memstate = MemState(addresses:map<mem, int>,
 datatype state = State(regs:map<ARMReg, int>,
                        sregs:map<SReg, int>,
                        m:memstate,
-                       conf:config)
+                       conf:config,
+                       ok:bool)
 
 // System mode is not modeled
 datatype mode = User | FIQ | IRQ | Supervisor | Abort | Undefined | Monitor
@@ -476,58 +477,58 @@ function GlobalWord(s:memstate, g:operand, offset:int): int
 
 function eval_op(s:state, o:operand): int
     requires ValidState(s)
-    requires ValidOperand(o) /* || ValidSpecialOperand(s,o) */
+    requires ValidOperand(o)
     ensures isUInt32(eval_op(s,o))
     { OperandContents(s,o) }
 
 
-predicate evalUpdate(s:state, o:operand, v:int, r:state, ok:bool)
+predicate evalUpdate(s:state, o:operand, v:int, r:state)
     requires ValidState(s)
     requires ValidDestinationOperand(o)
     requires isUInt32(v)
-    ensures evalUpdate(s, o, v, r, ok) ==> ValidState(r)
+    ensures evalUpdate(s, o, v, r) ==> ValidState(r)
 {
     reveal_ValidRegState();
-    ok && match o
+    match o
         case OReg(reg) => r == s.(regs := s.regs[o.r := v])
         case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := v])
         case OSP => r == s.(regs := s.regs[SP(mode_of_state(s)) := v])
 }
 
 
-predicate evalSRegUpdate(s:state, o:operand, v:int, r:state, ok:bool)
+predicate evalSRegUpdate(s:state, o:operand, v:int, r:state)
     requires ValidState(s)
     requires ValidSpecialOperand(s, o)
     requires isUInt32(v)
     requires o.sr.cpsr? || o.sr.spsr? ==> ValidModeEncoding(and32(v,0x1f))
-    ensures  evalSRegUpdate(s, o, v, r, ok) ==> ValidState(r)
+    ensures  evalSRegUpdate(s, o, v, r) ==> ValidState(r)
 {
-	reveal_ValidSRegState();
-    ok && r == s.( conf := decode_sreg(s, o.sr, v),
+    reveal_ValidSRegState();
+    r == s.( conf := decode_sreg(s, o.sr, v),
         sregs := s.sregs[ o.sr := v] )
 }
 
-predicate evalMemUpdate(s:state, m:mem, v:int, r:state, ok:bool)
+predicate evalMemUpdate(s:state, m:mem, v:int, r:state)
     requires ValidState(s)
     requires ValidMem(s.m, m)
     requires isUInt32(v)
-    ensures evalMemUpdate(s, m, v, r, ok) ==> ValidState(r)
+    ensures evalMemUpdate(s, m, v, r) ==> ValidState(r)
 {
     reveal_ValidMemState();
-    ok && r == s.(m := s.m.(addresses := s.m.addresses[m := v]))
+    r == s.(m := s.m.(addresses := s.m.addresses[m := v]))
 }
 
-predicate evalGlobalUpdate(s:state, g:operand, offset:nat, v:int, r:state, ok:bool)
+predicate evalGlobalUpdate(s:state, g:operand, offset:nat, v:int, r:state)
     requires ValidState(s)
     requires ValidGlobalOffset(g, offset)
     requires isUInt32(v)
-    ensures evalGlobalUpdate(s, g, offset, v, r, ok) ==> ValidState(r) && GlobalWord(r.m, g, offset) == v
+    ensures evalGlobalUpdate(s, g, offset, v, r) ==> ValidState(r) && GlobalWord(r.m, g, offset) == v
 {
     reveal_ValidMemState();
     var oldval := s.m.globals[g];
     var newval := oldval[BytesToWords(offset) := v];
     assert |newval| == |oldval|;
-    ok && r == s.(m := s.m.(globals := s.m.globals[g := newval]))
+    r == s.(m := s.m.(globals := s.m.globals[g := newval]))
 }
 
 function evalCmp(c:ocmp, i1:int, i2:int):bool
@@ -547,6 +548,14 @@ function evalOBool(s:state, o:obool):bool
     requires ValidOperand(o.o2)
 {
     evalCmp(o.cmp, OperandContents(s, o.o1), OperandContents(s, o.o2))
+}
+
+predicate evalGuard(s:state, o:obool, r:state)
+    requires ValidOperand(o.o1)
+    requires ValidOperand(o.o2)
+{
+    // TODO: this is where we havoc the flags for the comparison, once we model them
+    r == s
 }
 
 predicate ValidModeChange(m:mode, v:int)
@@ -634,108 +643,104 @@ predicate ValidInstruction(s:state, ins:ins)
             !(mode_of_state(s) == User)
 }
 
-predicate evalIns(ins:ins, s:state, r:state, ok:bool)
+predicate evalIns(ins:ins, s:state, r:state)
 {
-    if !ValidInstruction(s, ins) then !ok
+    if !s.ok || !ValidInstruction(s, ins) then !r.ok
     else match ins
         case ADD(dst, src1, src2) => evalUpdate(s, dst,
             ((OperandContents(s, src1) + OperandContents(s, src2))),
-            r, ok)
+            r)
         case SUB(dst, src1, src2) => evalUpdate(s, dst,
             ((OperandContents(s, src1) - OperandContents(s, src2))),
-            r, ok)
+            r)
         case MUL(dst, src1, src2) => evalUpdate(s, dst,
             ((OperandContents(s, src1) * OperandContents(s, src2))),
-            r, ok)
+            r)
         case UDIV(dst, src1, src2) => evalUpdate(s, dst,
             ((OperandContents(s, src1) / OperandContents(s, src2))),
-            r, ok)
+            r)
         case AND(dst, src1, src2) => evalUpdate(s, dst,
             and32(eval_op(s, src1), eval_op(s, src2)),
-            r, ok)
+            r)
         case ORR(dst, src1, src2) => evalUpdate(s, dst,
             or32(eval_op(s, src1), eval_op(s, src2)),
-            r, ok)
+            r)
         case EOR(dst, src1, src2) => evalUpdate(s, dst,
             xor32(eval_op(s, src1), eval_op(s, src2)),
-            r, ok)
-        case ROR(dst, src1, src2) => if !(src2.OConst? && 0 <= src2.n <32) then !ok
+            r)
+        case ROR(dst, src1, src2) => if !(src2.OConst? && 0 <= src2.n <32) then !r.ok
             else evalUpdate(s, dst,
                 ror32(eval_op(s, src1), eval_op(s, src2)),
-                r, ok)
-        case LSL(dst, src1, src2) => if !(src2.OConst? && 0 <= src2.n <32) then !ok 
+                r)
+        case LSL(dst, src1, src2) => if !(src2.OConst? && 0 <= src2.n <32) then !r.ok 
             else evalUpdate(s, dst,
                 shl32(eval_op(s, src1), eval_op(s, src2)),
-                r, ok)
-        case LSR(dst, src1, src2) => if !(src2.OConst? && 0 <= src2.n <32) then !ok
+                r)
+        case LSR(dst, src1, src2) => if !(src2.OConst? && 0 <= src2.n <32) then !r.ok
             else evalUpdate(s, dst,
                 shr32(eval_op(s, src1), eval_op(s, src2)),
-                r, ok)
+                r)
         case MVN(dst, src) => evalUpdate(s, dst,
-            not32(eval_op(s, src)), r, ok)
+            not32(eval_op(s, src)), r)
         case LDR(rd, base, ofs) => 
             evalUpdate(s, rd, MemContents(s.m, OperandContents(s, base) +
-                OperandContents(s, ofs)), r, ok)
+                OperandContents(s, ofs)), r)
         case LDR_global(rd, global, base, ofs) => 
-            evalUpdate(s, rd, GlobalWord(s.m, global, OperandContents(s, ofs)), r, ok)
+            evalUpdate(s, rd, GlobalWord(s.m, global, OperandContents(s, ofs)), r)
         case LDR_reloc(rd, name) =>
-            evalUpdate(s, rd, AddressOfGlobal(name), r, ok)
+            evalUpdate(s, rd, AddressOfGlobal(name), r)
         case STR(rd, base, ofs) => 
             evalMemUpdate(s, OperandContents(s, base) +
-                OperandContents(s, ofs), OperandContents(s, rd), r, ok)
+                OperandContents(s, ofs), OperandContents(s, rd), r)
         case STR_global(rd, global, base, ofs) => 
-            evalGlobalUpdate(s, global, OperandContents(s, ofs), OperandContents(s, rd), r, ok)
+            evalGlobalUpdate(s, global, OperandContents(s, ofs), OperandContents(s, rd), r)
         case MOV(dst, src) => evalUpdate(s, dst,
             OperandContents(s, src),
-            r, ok)
-        case MRS(dst, src) => evalUpdate(s, dst, SpecialOperandContents(s, src), r, ok)
-        case MSR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r, ok)
-        case MRC(dst, src) => evalUpdate(s, dst, SpecialOperandContents(s, OSReg(scr)), r, ok)
-        case MCR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r, ok)
+            r)
+        case MRS(dst, src) => evalUpdate(s, dst, SpecialOperandContents(s, src), r)
+        case MSR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r)
+        case MRC(dst, src) => evalUpdate(s, dst, SpecialOperandContents(s, OSReg(scr)), r)
+        case MCR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r)
         case MOVS_PCLR => 
             var spsr := OSReg(spsr(mode_of_state(s)));
-            evalSRegUpdate(s, OSReg(cpsr), SpecialOperandContents(s,spsr), r, ok)
+            evalSRegUpdate(s, OSReg(cpsr), SpecialOperandContents(s,spsr), r)
 }
 
-predicate evalBlock(block:codes, s:state, r:state, ok:bool)
+predicate evalBlock(block:codes, s:state, r:state)
 {
     if block.CNil? then
-        ok && r == s
+        r == s
     else
-        exists r0, ok0 :: evalCode(block.hd, s, r0, ok0) &&
-            (if !ok0 then !ok else evalBlock(block.tl, r0, r, ok))
+        exists r' :: evalCode(block.hd, s, r') && evalBlock(block.tl, r', r)
 }
 
-predicate evalWhile(b:obool, c:code, n:nat, s:state, r:state, ok:bool)
+predicate evalIfElse(cond:obool, ifT:code, ifF:code, s:state, r:state)
+    decreases if ValidState(s) && ValidOperand(cond.o1) && ValidOperand(cond.o2) && evalOBool(s, cond) then ifT else ifF
+{
+    if ValidState(s) && s.ok && ValidOperand(cond.o1) && ValidOperand(cond.o2) then
+        exists s' :: evalGuard(s, cond, s') && (if evalOBool(s, cond) then evalCode(ifT, s', r) else evalCode(ifF, s', r))
+    else
+        !r.ok
+}
+
+predicate evalWhile(b:obool, c:code, n:nat, s:state, r:state)
     decreases c, n
 {
-    if ValidState(s) && ValidOperand(b.o1) && ValidOperand(b.o2) then
+    if ValidState(s) && s.ok && ValidOperand(b.o1) && ValidOperand(b.o2) then
         if n == 0 then
-            !evalOBool(s, b) && ok && r == s
+            !evalOBool(s, b) && evalGuard(s, b, r)
         else
-            exists r0, ok0 :: evalOBool(s, b) &&
-                evalCode(c, s, r0, ok0) &&
-                (if !ok0 then !ok else evalWhile(b, c, n - 1, r0, r, ok))
-    else !ok
+            exists s':state, r':state :: evalGuard(s, b, s') && evalOBool(s, b) && evalCode(c, s', r') && evalWhile(b, c, n - 1, r', r)
+    else
+        !r.ok
 }
 
-predicate evalCode(c:code, s:state, r:state, ok:bool)
+predicate evalCode(c:code, s:state, r:state)
     decreases c, 0
 {
     match c
-        case Ins(ins) => evalIns(ins, s, r, ok)
-        case Block(block) => evalBlock(block, s, r, ok)
-        case IfElse(cond, ifT, ifF) => if ValidState(s) && ValidOperand(cond.o1) && ValidOperand(cond.o2) then
-                                           if evalOBool(s, cond) then
-                                               evalCode(ifT, s, r, ok)
-                                           else
-                                               evalCode(ifF, s, r, ok)
-                                       else
-                                           !ok
-        case While(cond, body) => exists n:nat :: evalWhile(cond, body, n, s, r, ok)
-}
-
-predicate{:opaque} sp_eval(c:code, s:state, r:state, ok:bool)
-{
-    evalCode(c, s, r, ok)
+        case Ins(ins) => evalIns(ins, s, r)
+        case Block(block) => evalBlock(block, s, r)
+        case IfElse(cond, ifT, ifF) => evalIfElse(cond, ifT, ifF, s, r)
+        case While(cond, body) => exists n:nat :: evalWhile(cond, body, n, s, r)
 }

@@ -66,7 +66,7 @@ predicate validEntryTransitionEnter(s:SysState,s':SysState,
     WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, l1p) &&
 
     // ENTER_ADDRSPACE is instruction evaluated on s->s'
-    // sp_eval(Ins(MOVS_PCLR), s.hw, s'.hw, true) &&
+    // sp_eval(Ins(MOVS_PCLR), s.hw, s'.hw) &&
     OperandContents(s.hw, OLR) == s.d[dispPage].entry.entrypoint
 }
 
@@ -107,7 +107,7 @@ predicate validEntryTransitionResume(s:SysState, s':SysState, dispPage:PageNr)
     bankedRegsPreservedForMonitor(s, s') &&
     WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, d, l1pOfDispatcher(s.d, dispPage)) &&
 
-    sp_eval(Ins(MOVS_PCLR), s.hw, s'.hw, true) &&
+    sp_eval(Ins(MOVS_PCLR), s.hw, s'.hw) &&
     OperandContents(s.hw, OLR) == disp.ctxt.pc
 }
 */

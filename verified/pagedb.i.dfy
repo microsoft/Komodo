@@ -310,3 +310,35 @@ function pageDbAddrspaceStateVal(s: AddrspaceState): int
     case StoppedState => KEV_ADDRSPACE_STOPPED()
     }
 }
+
+//-----------------------------------------------------------------------------
+// Common lemmas
+//-----------------------------------------------------------------------------
+
+lemma ValidPageDbImpliesValidAddrspace(d:PageDb, n:PageNr)
+    requires validPageDb(d)
+    requires isAddrspace(d, n)
+    ensures closedRefsPageDbEntry(d[n]) && validAddrspace(d, n)
+{
+    reveal_validPageDb();
+    assert validPageDbEntryTyped(d, n);
+}
+
+lemma PageDbCorrespondsImpliesEntryCorresponds(s:memstate, d:PageDb, n:PageNr)
+    requires SaneMem(s)
+    requires pageDbClosedRefs(d)
+    requires pageDbCorresponds(s, d)
+    requires validPageNr(n)
+    ensures closedRefsPageDbEntry(d[n])
+    ensures pageDbEntryCorresponds(d[n], extractPageDbEntry(s, n))
+{
+    reveal_pageDbClosedRefs();
+}
+
+lemma AllButOnePagePreserving(n:PageNr,s:state,r:state)
+    requires validPageNr(n)
+    requires SaneState(s) && SaneState(r) && AlwaysInvariant(s,r)
+    requires MemPreservingExcept(s, r, page_monvaddr(n), page_monvaddr(n) + KEVLAR_PAGE_SIZE())
+    ensures forall p :: validPageNr(p) && p != n ==> extractPage(s.m, p) == extractPage(r.m, p)
+{
+}
