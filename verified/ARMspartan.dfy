@@ -157,7 +157,7 @@ predicate valid_state(s:sp_state) { ValidState(s) }
 lemma sp_lemma_empty(s:sp_state, r:sp_state) returns(r':sp_state)
     requires sp_eval(Block(sp_CNil()), s, r)
     ensures  r.ok == s.ok
-    ensures  r' == s;
+    ensures  r' == s
     ensures  to_state(r) == to_state(s)
 {
     reveal_sp_eval();
@@ -188,34 +188,16 @@ lemma code_len_decreases(c:code)
 {
 }
 
-lemma unpack_evalWhile(b:obool, c:code, n:nat, s:state, r:state) returns (s':state, r':state)
-    requires evalWhile(b, c, n, s, r);
-    requires ValidState(s) && s.ok && ValidOperand(b.o1) && ValidOperand(b.o2);
-    requires n != 0;
-    ensures  evalGuard(s, b, s') && evalOBool(s, b) && evalCode(c, s', r') && evalWhile(b, c, n - 1, r', r);
-{
-    assert exists s'', r'':state :: evalGuard(s, b, s'') && evalOBool(s, b) && evalCode(c, s'', r'') && evalWhile(b, c, n - 1, r'', r);
-    s', r' :| evalGuard(s, b, s') && evalOBool(s, b) && evalCode(c, s', r') && evalWhile(b, c, n - 1, r', r);
-}
-
 lemma evalWhile_validity(b:obool, c:code, n:nat, s:state, r:state)
     requires evalWhile(b, c, n, s, r);
     decreases code_len(c), 1, n;
     ensures  valid_state(s) && r.ok ==> valid_state(r);
 {
-    if valid_state(s) && r.ok {
-        if ValidOperand(b.o1) && ValidOperand(b.o2) {
-            if n == 0 {
-                assert valid_state(r);
-            } else {
-                assert evalWhile(b, c, n, s, r);
-                var s', r' := unpack_evalWhile(b, c, n, s, r);
-                block_state_validity(c, s', r');
-                assert evalWhile(b, c, n - 1, r', r);
-                evalWhile_validity(b, c, n - 1, r', r);
-                assert valid_state(r);
-            }
-        }
+    if valid_state(s) && r.ok && ValidOperand(b.o1) && ValidOperand(b.o2) && n > 0 {
+        var s', r' :| evalGuard(s, b, s') && evalOBool(s, b) && evalCode(c, s', r') && evalWhile(b, c, n - 1, r', r);
+        block_state_validity(c, s', r');
+        evalWhile_validity(b, c, n - 1, r', r);
+        assert valid_state(r);
     }
 }
 
@@ -292,7 +274,7 @@ lemma sp_lemma_block(b:codes, s0:sp_state, r:sp_state) returns(r1:sp_state, c0:c
     ensures  b == sp_CCons(c0, b1)
     ensures  ValidState(s0) && r1.ok ==> ValidState(r1);
     ensures  sp_eval(c0, s0, r1)
-    ensures  r1.ok ==> sp_eval(Block(b1), r1, r)
+    ensures  sp_eval(Block(b1), r1, r)
 {
     reveal_sp_eval();
     assert evalBlock(b, to_state(s0), to_state(r));
