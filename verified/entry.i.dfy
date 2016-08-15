@@ -1,5 +1,5 @@
 include "entry.s.dfy"
-
+/*
 lemma MICommute(s1:SysState, s2:SysState, s3:SysState, p:PageNr)
     requires validSysState(s1) && validSysState(s2) && validSysState(s3) &&
         s1.d == s2.d == s3.d && validL1PTPage(s1.d, p) &&
@@ -165,3 +165,4 @@ predicate {:opaque} validEnter_premium(s:SysState,s':SysState,dispPage:PageNr,
         validEnter(s, s', dispPage,a1,a2,a3)
     
 }
+*/

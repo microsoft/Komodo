@@ -17,7 +17,8 @@ datatype SReg = cpsr | spsr(m:mode) | scr | ttbr0
 // The abstract representation should be used for reasoning about the status of
 // the processor and the concrete representation should be used only for
 // ensuring that the correct values are stored/returned by instructions
-datatype config = Config(cpsr:PSR, spsr:map<mode,PSR>, scr:SCR, ttbr0:int)
+datatype config = Config(cpsr:PSR, spsr:map<mode,PSR>, scr:SCR, ttbr0:int, 
+    ex:exception)
 datatype PSR  = PSR(m:mode)           // See B1.3.3
 datatype SCR  = SCR(ns:world)         // See B4.1.129
 //       TTBR0                           See B4.1.154
@@ -41,6 +42,7 @@ datatype state = State(regs:map<ARMReg, int>,
 datatype mode = User | FIQ | IRQ | Supervisor | Abort | Undefined | Monitor
 datatype priv = PL0 | PL1 // PL2 is only used in Hyp, not modeled
 datatype world = Secure | NotSecure
+datatype exception = none | abt | irq | fiq | svc
 
 //-----------------------------------------------------------------------------
 // TODO: get rid of these.
