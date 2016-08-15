@@ -1,6 +1,10 @@
 DAFNYFLAGS = /noNLarith /timeLimit:60 /trace
 SPARTANFLAGS = #-assumeUpdates 1
 
+# top-level target
+.PHONY: verified
+verified: $(dir)/main.S
+
 mkdeps = $(foreach n,$($(notdir $(1))_dep-dfy) $($(notdir $(1))_dep-sdfy),$(dir)/$(n).verified)
 mkdfyincs = $(foreach n,$($(notdir $(1))_dep-dfy),-i $(dir)/$(n).dfy)
 mksdfyincs = $(foreach n,$($(notdir $(1))_dep-sdfy),-i $(dir)/$(n).gen.dfy -include $(dir)/$(n).sdfy)
@@ -34,7 +38,7 @@ $(foreach n,$(DAFNY_ONLY),$(dir)/$(n).verified): %.verified: %.dfy
 
 # Mindy can't compile, but since we rely on .verified, we can just use
 # Dafny to compile without verifying
-%.exe: %.gen.dfy %.verified
+%.exe: %.i.dfy %.i.verified
 	$(DAFNY) $(DAFNYFLAGS) /noVerify /compile:2 /out:$@ $<
 
 %.S: %.exe
@@ -64,13 +68,37 @@ $(dir)/smcapi.i.verified: $(dir)/smcapi.s.verified
 $(dir)/pagedb.i.verified: $(dir)/pagedb.s.verified $(dir)/kev_common.i.verified
 $(dir)/entry.s.verified:  $(dir)/smcapi.s.verified $(dir)/pagedb.i.verified $(dir)/abstate.s.verified
 $(dir)/entry.i.verified: $(dir)/entry.s.verified
+$(dir)/main.i.verified: $(dir)/ARMprint.verified $(dir)/smc_handler.verified
 
 # variables used to emit deps/includes for all Spartan code
 ARMdecls_dep-dfy = ARMspartan
+$(dir)/ARMdecls.verified: $(call mkdeps,ARMdecls)
+
 kev_utils_dep-sdfy = ARMdecls
 kev_utils_dep-dfy = ARMspartan kev_common.i
-smc_handler_dep-sdfy = ARMdecls kev_utils
-smc_handler_dep-dfy = ARMspartan ARMprint kev_common.i pagedb.i smcapi.i abstate.s entry.i Sets
-$(dir)/ARMdecls.verified: $(call mkdeps,ARMdecls)
 $(dir)/kev_utils.verified: $(call mkdeps,kev_utils)
+
+allocate_page_dep-sdfy = ARMdecls kev_utils
+allocate_page_dep-dfy = ARMspartan Sets kev_common.i pagedb.i smcapi.i
+$(dir)/allocate_page.verified: $(call mkdeps,allocate_page)
+
+init_addrspace_dep-sdfy = ARMdecls kev_utils
+init_addrspace_dep-dfy = ARMspartan kev_common.i pagedb.i smcapi.i
+$(dir)/init_addrspace.verified: $(call mkdeps,init_addrspace)
+
+init_dispatcher_dep-sdfy = ARMdecls kev_utils allocate_page
+init_dispatcher_dep-dfy = ARMspartan kev_common.i pagedb.i smcapi.i
+$(dir)/init_dispatcher.verified: $(call mkdeps,init_dispatcher)
+
+init_l2ptable_dep-sdfy = ARMdecls kev_utils allocate_page
+init_l2ptable_dep-dfy = ARMspartan kev_common.i pagedb.i smcapi.i
+$(dir)/init_l2ptable.verified: $(call mkdeps,init_l2ptable)
+
+enter_resume_dep-sdfy = ARMdecls kev_utils
+enter_resume_dep-dfy = ARMspartan kev_common.i pagedb.i smcapi.i abstate.s entry.i
+$(dir)/enter_resume.verified: $(call mkdeps,enter_resume)
+
+smc_handler_dep-sdfy = ARMdecls kev_utils init_addrspace init_dispatcher \
+    init_l2ptable enter_resume
+smc_handler_dep-dfy = ARMspartan kev_common.i pagedb.i smcapi.i
 $(dir)/smc_handler.verified: $(call mkdeps,smc_handler)

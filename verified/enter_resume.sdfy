@@ -1,0 +1,189 @@
+procedure smc_enter_err(
+    {:register OReg(R0)} pagenr:int,
+    {:register OReg(R1)} arg1:int,
+    {:register OReg(R2)} arg2:int,
+    {:register OReg(R3)} arg3:int,
+    out {:register OReg(R0)} err:int,
+    ghost s:SysState)
+    returns (ghost s':SysState)
+    requires 
+        this == s.hw;
+        SaneState(this);
+        validSysState(s);
+    ensures
+        this == s'.hw; 
+        validSysState(s');
+        RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
+    ensures
+        tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
+{
+    reveal_smc_enter_premium();
+    if (pagenr >= sp_op_const(KEVLAR_SECURE_NPAGES())) {
+        assert !validPageNr(pagenr);
+        
+        err := sp_op_const(KEV_ERR_INVALID_PAGENO());
+        s' := s.(hw := this);
+    } else {
+        assert validPageNr(pagenr);
+
+        LDRglobaladdr(r12, PageDb());
+        r11 := sp_op_const(PAGEDB_ENTRY_SIZE());
+        MUL(r10,pagenr,r11);
+        assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_TYPE();
+        LDRglobal(r9, PageDb(), r12, r10);
+        forall :: pageDbEntryCorresponds(s.d[pagenr], extractPageDbEntry(this.m, pagenr))
+        {
+            reveal_validPageDb();
+        }
+        forall :: r9 == GlobalWord(s.hw.m, PageDb(), r10) &&
+            r9 == pageDbEntryTypeVal(s.d[pagenr])
+        {
+            reveal_pageDbEntryCorresponds(); reveal_pageContentsCorresponds();
+        }
+        assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
+        if( r9 != sp_op_const(KEV_PAGE_DISPATCHER()) ) {
+            assert !(s.d[pagenr] is PageDbEntryTyped && s.d[pagenr].entry is Dispatcher);
+
+            err := sp_op_const(KEV_ERR_INVALID_PAGENO());
+            s' := s.(hw := this);
+        } else {
+            assert s.d[pagenr] is PageDbEntryTyped && s.d[pagenr].entry is Dispatcher;
+
+            ADD(r10, r10, sp_op_const(PAGEDB_ENTRY_ADDRSPACE()));
+            assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE();
+            WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE(), r10);
+           
+            LDRglobal(r8, PageDb(), r12, r10);
+            ghost var addrspace := s.d[pagenr].addrspace;
+            forall :: r8 == page_monvaddr(addrspace) && WordAligned(r8)
+            {
+                reveal_pageDbEntryCorresponds(); reveal_pageContentsCorresponds();
+                reveal_validPageDb();
+            }
+            WordAlignedAdd_(r8,ADDRSPACE_STATE(),r8+ADDRSPACE_STATE());
+           
+            forall :: ValidMem(this.m, addr_mem(this, @r8, sp_op_const(ADDRSPACE_STATE())))
+                { reveal_validPageDb(); } 
+            LDR(r8, r8, sp_op_const(ADDRSPACE_STATE()));
+            forall :: 
+            (r8 == KEV_ADDRSPACE_FINAL() ==>
+                s.d[addrspace].entry.state == FinalState) &&
+            (r8 != KEV_ADDRSPACE_FINAL() ==>
+                s.d[addrspace].entry.state != FinalState)
+            {
+                reveal_validPageDb();
+                reveal_pageContentsCorresponds();
+                reveal_pageDbAddrspaceCorresponds();
+            }
+
+            // this particular RegPreserving assert saved 30s.
+            assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
+            if( r8 != sp_op_const(KEV_ADDRSPACE_FINAL()) ) {
+                forall :: s.d[addrspace].entry.state != FinalState { reveal_validPageDb(); }
+                err := sp_op_const(KEV_ERR_NOT_FINAL());
+                s' := s.(hw := this);
+            } else {
+                forall :: s.d[addrspace].entry.state == FinalState { reveal_validPageDb(); }
+                
+                assert this.m == old(this.m);
+                assert SaneState(this);
+                page_monvaddr_impl(r9,pagenr,r10);
+                assert r9 == page_monvaddr(pagenr);
+                forall :: addrval(this, page_monvaddr(pagenr) + 
+                    DISPATCHER_ENTERED()) == to_i(s.d[pagenr].entry.entered)
+                {
+                    reveal_pageContentsCorresponds();
+                    reveal_pageDbDispatcherCorresponds();
+                }
+                LDR(r9,r9,sp_op_const(DISPATCHER_ENTERED()));
+                
+                assert r9 == 1 ==> s.d[pagenr].entry.entered;
+                assert r9 != 1 ==> !(s.d[pagenr].entry.entered);
+                assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
+                if( r9 == 1 ) {
+                    err := sp_op_const(KEV_ERR_ALREADY_ENTERED());
+                    s' := s.(hw := this);
+                } else {
+                    err := sp_op_const(KEV_ERR_SUCCESS());
+                    s' := s.(hw := this);
+                }
+            }
+        }
+    }
+}
+
+procedure exceptionProc(ghost s:SysState)
+    returns (ghost s':SysState)
+    requires
+        this == s.hw;
+        validSysState(s);
+        //userEnteredState(s);
+    ensures 
+        this == s'.hw;
+        validSysState(s');
+        exception(s, s');
+{
+    assume false;
+}
+
+procedure kev_smc_enter(
+    {:register OReg(R0)} pagenr:int,
+    {:register OReg(R1)} arg1:int,
+    {:register OReg(R2)} arg2:int,
+    {:register OReg(R3)} arg3:int,
+    out {:register OReg(R0)} err:int,
+    out {:register OReg(R1)} val:int,
+    ghost s:SysState)
+    returns (ghost s':SysState)
+    requires 
+        this == s.hw; 
+        validSysState(s);
+        SaneState(s.hw);
+        isUInt32(arg1) && isUInt32(arg2) && isUInt32(arg3);
+    ensures
+        this == s'.hw;
+        //TODO SaneState(s'.hw);
+        validSysState(s');
+        tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
+        validEnter(s,s',pagenr,arg1,arg2,arg3);
+{
+    //reveal_validEnter();
+    reveal_smc_enter_premium();
+    r5 := pagenr;
+    ghost var s_err;
+    s_err := smc_enter_err(@r0,@r1,@r2,@r3,@r0,s.(hw := this));
+    if(err != sp_op_const(KEV_ERR_SUCCESS()) ) {
+        val := sp_op_const(0);
+        s' := s_err.(hw := this);
+        assert validSysState(s');
+        assert tuple(s'.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
+    } else {
+        assume false; // TODO
+        ///  // ghost var s_test:SysState;
+        ///  // ghost var err_test :int;
+        ///  ghost var r:SysState; 
+        ///  // assume validPageDb(s_test.d);
+        ///  // assume validSysState(s_test);
+        ///  assert specErr(smc_enter(s.d, pagenr, arg1, arg2, arg3)) == KEV_ERR_SUCCESS();
+        ///  assume r.hw == this;
+        ///  assume validEntryTransitionEnter(s,r,pagenr,arg1,arg2,arg3);
+
+        ///  // ghost var r := userspaceExecutionF(q); 
+        ///  
+        ///  s' := exceptionProc(r);
+        ///  // assume this == s';
+        ///  assert validEntryTransitionEnter(s,r,pagenr,arg1,arg2,arg3) && exception(r, s');
+
+        ///  // assert (validEntryTransitionEnter(s_test,q,pagenr,arg1,arg2,arg3)
+        ///  //     && userspaceExecution(q, r) && exception(r, s'));
+
+        ///  assert SaneMem(s'.hw.m);
+
+        ///  //assert SaneState(s'.hw); 
+
+        ///  // assert false;
+
+        ///  // val := sp_op_const(0);
+        ///  // s' := s'.(hw := this);
+    }
+}
