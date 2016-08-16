@@ -28,7 +28,7 @@ mkincs-nodir = $(call mkdfyincs,$(1),) $(call mksdfyincs,$(1),)
 	@$(RM) $*.log
 
 # Mindy can't handle these files, so we must use vanilla Dafny
-DAFNY_ONLY = ARMspartan Seq Sets kev_common.s
+DAFNY_ONLY = ARMdef ARMspartan Seq Sets
 $(foreach n,$(DAFNY_ONLY),$(dir)/$(n).verified): %.verified: %.dfy
 	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< && touch $@
 

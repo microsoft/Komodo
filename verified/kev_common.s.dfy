@@ -41,22 +41,8 @@ function method KEV_ERR_INVALID():int            { 0x1_0000_0000 }
 //-----------------------------------------------------------------------------
 // Memory Regions
 //-----------------------------------------------------------------------------
-function method KEVLAR_PAGE_SIZE():int
-    ensures KEVLAR_PAGE_SIZE() == 0x1000
-    { 0x1000 }
+function method KEVLAR_PAGE_SIZE():int { PAGESIZE() }
 
-predicate PageAligned(addr:int)
-    ensures PageAligned(addr) ==> WordAligned(addr)
-{
-    // XXX: help out poor dafny
-    assert addr % 0x1000 == 0 ==> addr % 4 == 0;
-    addr % 0x1000 == 0
-}
-
-function method KEVLAR_PAGE_SHIFT():int
-    ensures KEVLAR_PAGE_SHIFT() == 12
-    //ensures shl32(1, KEVLAR_PAGE_SHIFT()) == KEVLAR_PAGE_SIZE()
-    { 12 }
 function method KEVLAR_MON_VBASE():int
     ensures KEVLAR_MON_VBASE() == 0x4000_0000;
     { 0x4000_0000 }
