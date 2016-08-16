@@ -166,7 +166,7 @@ predicate entryTransitionEnter(s:SysState,s':SysState)
     // ensures (validSysState(s) && validSysState(s') && entryTransitionEnter(s,s')) ==>false
 {
     validERTransition(s, s') && s'.d == s.d &&
-    sp_eval(Ins(MOVS_PCLR), s.hw, s'.hw, true) &&
+    sp_eval(Ins(MOVS_PCLR), s.hw, s'.hw) &&
     OperandContents(s.hw, OLR) == s.d[s.g.g_cur_dispatcher].entry.entrypoint
 }
 
@@ -175,7 +175,7 @@ predicate entryTransitionResume(s:SysState,s':SysState)
 {
     validSysState(s) && validSysState(s') && s.d == s'.d &&    
     (var disp := s.d[s.g.g_cur_dispatcher].entry;
-    sp_eval(Ins(MOVS_PCLR), s.hw, s'.hw, true) &&
+    sp_eval(Ins(MOVS_PCLR), s.hw, s'.hw) &&
     OperandContents(s.hw, OLR) == disp.ctxt.pc)
 }
 

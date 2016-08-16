@@ -6,6 +6,12 @@ include "ARMdef.dfy"
 type PageNr = int
 type InsecurePageNr = int
 
+// XXX: allow PageNr type decls in spartan procedures
+function sp_eval_op_PageNr(s:state, o:operand):int
+    requires ValidState(s)
+    requires ValidOperand(o)
+    { OperandContents(s,o) }
+
 function method NR_L1PTES(): int { 256 }
 function NR_L2PTES(): int { 1024 }
 

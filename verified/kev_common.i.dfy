@@ -82,3 +82,7 @@ function page_monvaddr(pagenr:PageNr):int
     assert pa < SecurePhysBase() + KEVLAR_SECURE_RESERVE();
     page_paddr(pagenr) + KEVLAR_DIRECTMAP_VBASE()
 }
+
+// workarounds for Spartan's lack of Dafny language features
+function specPageDb(t: (PageDb, int)): PageDb { t.0 }
+function specErr(t: (PageDb, int)): int { t.1 }
