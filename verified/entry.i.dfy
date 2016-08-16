@@ -146,20 +146,16 @@ lemma valEnterImpliesMInv(s:SysState,s':SysState,dispPage:PageNr,
         && validSysState(s')
         && WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, p)
 {
-        //todo. or don't use this.
-    assume false;
     var p := l1pOfDispatcher(s.d, dispPage);
     assert nonStoppedL1(s.d, p);
     reveal_ValidRegState();
-    forall ( s2, s3, s4, s5 | validSysStates({s2,s3,s4,s5})
+    forall ( s2, s3, s4 | validSysStates({s2,s3,s4})
         && preEntryEnter(s,s2,dispPage,a1,a2,a3)
         && entryTransitionEnter(s2, s3)
         && s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d)
-        && validERTransition(s4, s5) &&
-            !s5.hw.conf.ex.none? && mode_of_state(s5.hw) != User
-        && validERTransition(s5, s')
+        && validERTransition(s4, s')
         && (s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
-            exceptionHandled(s5)
+            exceptionHandled(s4)
         && s'.hw.conf.scr.ns == NotSecure)
         ensures 
             ValidState(s.hw) && ValidState(s'.hw) && nonStoppedL1(s.d, p) &&

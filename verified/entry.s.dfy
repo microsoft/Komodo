@@ -75,15 +75,13 @@ predicate validEnter(s:SysState,s':SysState,
     // s4 == s5 except not in exceptional state in s4
     // s6 == s7 except branch has happened
     
-    (exists s2, s3, s4, s5 :: validSysStates({s2,s3,s4,s5})
+    (exists s2, s3, s4 :: validSysStates({s2,s3,s4})
         && preEntryEnter(s,s2,dispPage,a1,a2,a3)
         && entryTransitionEnter(s2, s3)
         && s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d)
-        && validERTransition(s4, s5) &&
-            !s5.hw.conf.ex.none? && mode_of_state(s5.hw) != User
-        && validERTransition(s5, s')
+        && validERTransition(s4, s')
         && (s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
-            exceptionHandled(s5))
+            exceptionHandled(s4))
 }
 
 /*
@@ -185,7 +183,7 @@ predicate userspaceExecution(hw:state, hw':state, d:PageDb)
         s.d == s'.d && userspaceExecution(s.hw, s'.hw, d)) ==> false */
 {
     validERTransitionHW(hw, hw', d)
-    && hw.conf.cpsr.m == User && hw'.conf.cpsr.m == User
+    && hw.conf.cpsr.m == User && hw'.conf.cpsr.m != User
     && WSMemInvariantExceptAddrspace(hw, hw', d)
     && !hw'.conf.ex.none?
     // TODO: ensure we didn't take any intermediate exceptions, by using a counter
