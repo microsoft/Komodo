@@ -50,7 +50,7 @@ predicate validERTransitionHW(hw:state, hw':state, d:PageDb)
     ValidState(hw) && ValidState(hw')
     && hw'.conf.ttbr0 == hw.conf.ttbr0 
     && nonStoppedL1(d, hw.conf.ttbr0)
-    && bankedRegsPreserved(hw, hw')
+    // && bankedRegsPreserved(hw, hw') Should be part of top-level spec
 }
 
 predicate validSysStates(sset:set<SysState>) { forall s :: s in sset ==> validSysState(s) }
@@ -75,14 +75,15 @@ predicate validEnter(s:SysState,s':SysState,
     // s4 == s5 except not in exceptional state in s4
     // s6 == s7 except branch has happened
     
-    (exists s2, s3, s4 :: validSysStates({s2,s3,s4})
+    (exists s2, s3, s4, s5 :: validSysStates({s2,s3,s4,s5})
         && preEntryEnter(s,s2,dispPage,a1,a2,a3)
         && entryTransitionEnter(s2, s3)
         && s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d)
-        && validERTransition(s4, s')
+        && validERTransition(s4, s5) &&
+            !s5.hw.conf.ex.none? && mode_of_state(s5.hw) != User
+        && validERTransition(s5, s')
         && (s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
-            exceptionHandled(s4, dispPage)
-        && s'.hw.conf.scr.ns == NotSecure)
+            exceptionHandled(s5))
 }
 
 /*
@@ -117,8 +118,8 @@ predicate preEntryEnter(s:SysState,s':SysState,
 
     s'.g.g_cur_dispatcher == dispPage &&
 
-    bankedRegsPreserved(s.hw, s'.hw) &&
-    WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, l1p)
+    // bankedRegsPreserved(s.hw, s'.hw) &&
+    WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, l1p) // TODO delete in future
 
 }
 
@@ -187,32 +188,39 @@ predicate userspaceExecution(hw:state, hw':state, d:PageDb)
     && hw.conf.cpsr.m == User && hw'.conf.cpsr.m == User
     && WSMemInvariantExceptAddrspace(hw, hw', d)
     && !hw'.conf.ex.none?
+    // TODO: ensure we didn't take any intermediate exceptions, by using a counter
 }
 
 //-----------------------------------------------------------------------------
 // Exception Handler Spec
 //-----------------------------------------------------------------------------
-function exceptionHandled(s:SysState,p:PageNr) : (int, int, PageDb)
+function exceptionHandled(s:SysState) : (int, int, PageDb)
     requires validSysState(s)
+    requires mode_of_state(s.hw) != User
     requires !s.hw.conf.ex.none?
 {
     reveal_validPageDb();
     reveal_ValidSRegState();
     reveal_ValidRegState();
     reveal_ValidConfig();
-    if(s.hw.conf.ex.svc?) then (KEV_ERR_SUCCESS(), 0, s.d)
+    if(s.hw.conf.ex.svc?) then
+        var p := s.g.g_cur_dispatcher;
+        var d' := s.d[ p := s.d[p].(entry := s.d[p].entry.(entered := false))];
+        (KEV_ERR_SUCCESS(), s.hw.regs[R0], d')
     else 
         var p := s.g.g_cur_dispatcher;
         var pc := OperandContents(s.hw, OLR);
-        var cpsr := s.hw.sregs[cpsr];
-        var disp' := Dispatcher(s.d[p].entry.entrypoint, true,
-            DispatcherContext(s.hw.regs, cpsr, pc));
-        var d' := s.d[ p := PageDbEntryTyped(s.d[p].addrspace, disp')];
+        var psr := s.hw.sregs[spsr(mode_of_state(s.hw))];
+        var disp' := s.d[p].entry.(entered:=true,
+            ctxt:= DispatcherContext(s.hw.regs, psr, pc));
+        var d' := s.d[ p := s.d[p].(entry := disp') ];
         if(s.hw.conf.ex.irq? || s.hw.conf.ex.fiq?) then
             (KEV_ERR_INTERRUPTED(), 0, d')
         else
             assert s.hw.conf.ex.abt?;
             (KEV_ERR_FAULT(), 0, d')
+
+    // TODO add undef exception
 }
 
 //-----------------------------------------------------------------------------

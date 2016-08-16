@@ -93,6 +93,7 @@ lemma MICommute(s1:SysState, s2:SysState, s3:SysState, p:PageNr)
 
 */
 
+/*
 lemma valEnterImpliesBRPres(s:SysState,s':SysState,dispPage:PageNr,
     a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
@@ -102,22 +103,26 @@ lemma valEnterImpliesBRPres(s:SysState,s':SysState,dispPage:PageNr,
         bankedRegsPreserved(s.hw, s'.hw)
 {
     reveal_ValidRegState();
-    forall ( s2, s3, s4 | validSysStates({s2,s3,s4})
+    forall ( s2, s3, s4, s5 | validSysStates({s2,s3,s4,s5})
         && preEntryEnter(s,s2,dispPage,a1,a2,a3)
         && entryTransitionEnter(s2, s3)
         && s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d)
-        && validERTransition(s4, s')
+        && validERTransition(s4, s5) &&
+            !s5.hw.conf.ex.none? && mode_of_state(s5.hw) != User
+        && validERTransition(s5, s')
         && (s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
-            exceptionHandled(s4, dispPage)
+            exceptionHandled(s5)
         && s'.hw.conf.scr.ns == NotSecure)
         ensures bankedRegsPreserved(s.hw, s'.hw)
     {
         assert bankedRegsPreserved(s.hw,  s2.hw);
         assert bankedRegsPreserved(s2.hw, s3.hw);
         assert bankedRegsPreserved(s3.hw, s4.hw);
-        assert bankedRegsPreserved(s4.hw, s'.hw);
+        assert bankedRegsPreserved(s4.hw, s5.hw);
+        assert bankedRegsPreserved(s5.hw, s'.hw);
     }
 }
+*/
 
 /*
 lemma validERImpliesMemInv(s:SysState, s':SysState)
@@ -141,15 +146,20 @@ lemma valEnterImpliesMInv(s:SysState,s':SysState,dispPage:PageNr,
         && validSysState(s')
         && WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, p)
 {
+        //todo. or don't use this.
+    assume false;
     var p := l1pOfDispatcher(s.d, dispPage);
     assert nonStoppedL1(s.d, p);
     reveal_ValidRegState();
-    forall ( s2, s3, s4 | validSysStates({s2,s3,s4})
+    forall ( s2, s3, s4, s5 | validSysStates({s2,s3,s4,s5})
         && preEntryEnter(s,s2,dispPage,a1,a2,a3)
         && entryTransitionEnter(s2, s3)
         && s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d)
+        && validERTransition(s4, s5) &&
+            !s5.hw.conf.ex.none? && mode_of_state(s5.hw) != User
+        && validERTransition(s5, s')
         && (s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
-            exceptionHandled(s4, dispPage)
+            exceptionHandled(s5)
         && s'.hw.conf.scr.ns == NotSecure)
         ensures 
             ValidState(s.hw) && ValidState(s'.hw) && nonStoppedL1(s.d, p) &&
@@ -175,35 +185,30 @@ lemma valEnterImpliesMInv(s:SysState,s':SysState,dispPage:PageNr,
     }
 }
 
-function exceptionHandled_premium(s:SysState,p:PageNr) : (int, int, PageDb)
+function exceptionHandled_premium(s:SysState) : (int, int, PageDb)
     requires validSysState(s)
     requires !s.hw.conf.ex.none?
-    ensures var (r0,r1,d) := exceptionHandled_premium(s,p);
+    requires mode_of_state(s.hw) != User
+    ensures var (r0,r1,d) := exceptionHandled_premium(s);
         validPageDb(d)
 {
-    exceptionHandledValidPageDb(s,p);
-    exceptionHandled(s,p)
+    exceptionHandledValidPageDb(s);
+    exceptionHandled(s)
 }
 
-lemma exceptionHandledValidPageDb(s:SysState,p:PageNr) 
+lemma exceptionHandledValidPageDb(s:SysState) 
     requires validSysState(s)
     requires !s.hw.conf.ex.none?
-    ensures var (r0,r1,d) := exceptionHandled(s,p);
+    requires mode_of_state(s.hw) != User
+    ensures var (r0,r1,d) := exceptionHandled(s);
         validPageDb(d)
 {
    reveal_validPageDb();
    reveal_ValidSRegState();
    reveal_ValidRegState();
    reveal_ValidConfig();
-   if(s.hw.conf.ex.svc?) {
-   } else {
+   var (r0,r1,d') := exceptionHandled(s);
         var p := s.g.g_cur_dispatcher;
-        var pc := OperandContents(s.hw, OLR);
-        var cpsr := s.hw.sregs[cpsr];
-        var disp' := Dispatcher(s.d[p].entry.entrypoint, true,
-            DispatcherContext(s.hw.regs, cpsr, pc));
-        var d' := s.d[ p := PageDbEntryTyped(s.d[p].addrspace, disp')];
-        
         assert validPageDbEntry(d', p);
        
         forall( p' | validPageNr(p') && d'[p'].PageDbEntryTyped? && p'!=p )
@@ -220,7 +225,6 @@ lemma exceptionHandledValidPageDb(s:SysState,p:PageNr)
         assert pageDbEntriesValid(d');
 
         assert validPageDb(d');
-   }
 }
 
 /*
