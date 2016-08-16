@@ -1,168 +1,253 @@
 include "entry.s.dfy"
+
 /*
+predicate weakEquiv(d:PageDb,d':PageDb)
+    requires validPageDb(d) && validPageDb(d')
+{
+    (forall p | validPageNr(p) :: 
+        d[p].PageDbEntryTyped? <==> d'[p].PageDbEntryTyped?) &&
+    (forall p | validPageNr(p) && d[p].PageDbEntryTyped? ::
+        d[p].addrspace == d'[p].addrspace) &&
+    (forall p | validPageNr(p) && d[p].PageDbEntryTyped? ::
+        d[p].entry.Addrspace?  <==> d'[p].entry.Addrspace? &&
+        d[p].entry.Dispatcher? <==> d'[p].entry.Dispatcher? &&
+        d[p].entry.L1PTable?   <==> d'[p].entry.L1PTable? &&
+        d[p].entry.L2PTable?   <==> d'[p].entry.L2PTable?)
+}
+
+lemma equivUpToEnteredImpliesWeakEquiv(d:PageDb,d':PageDb,p':PageNr)
+    requires nonStoppedL1(d,p') && nonStoppedL1(d',p') &&
+        equivalentExceptPage(d,d',p')
+    ensures weakEquiv(d,d')
+{
+    forall ( p | validPageNr(p)) 
+        ensures d[p].PageDbEntryTyped? <==> d'[p].PageDbEntryTyped?
+    {
+    }
+    forall (p | validPageNr(p) && d[p].PageDbEntryTyped?)
+        ensures d[p].addrspace == d'[p].addrspace
+    {
+        if(p == p'){
+        } else {
+            assert d[p] == d'[p];
+        }
+    }
+    forall (p | validPageNr(p) && d[p].PageDbEntryTyped?)
+        ensures 
+        (d[p].entry.Addrspace?  <==> d'[p].entry.Addrspace? &&
+        d[p].entry.Dispatcher? <==> d'[p].entry.Dispatcher? &&
+        d[p].entry.L1PTable?   <==> d'[p].entry.L1PTable? &&
+        d[p].entry.L2PTable?   <==> d'[p].entry.L2PTable?)
+    {
+        if(p == p'){
+            assert nonStoppedL1(d,p);
+            assert nonStoppedL1(d',p);
+        } else {
+            assert d[p] == d'[p];
+            assert d[p].entry == d'[p].entry;
+            assert (d[p].entry.Addrspace?  <==> d'[p].entry.Addrspace? &&
+                    d[p].entry.Dispatcher? <==> d'[p].entry.Dispatcher? &&
+                    d[p].entry.L1PTable?   <==> d'[p].entry.L1PTable? &&
+                    d[p].entry.L2PTable?   <==> d'[p].entry.L2PTable?);
+        }
+    }
+}
+
+lemma MIClosedOverEquivUpToEntered(hw:state,hw':state,d:PageDb,d':PageDb,p:PageNr)
+    requires ValidState(hw) && ValidState(hw') &&
+        nonStoppedL1(d, p) && nonStoppedL1(d', p)
+    requires equivalentExceptPage(d,d',p)
+    requires WSMemInvariantExceptAddrspaceAtPage(hw,hw',d ,p)
+    ensures  WSMemInvariantExceptAddrspaceAtPage(hw,hw',d',p)
+{
+    reveal_validPageDb();
+    equivUpToEnteredImpliesWeakEquiv(d,d',p);
+    forall(m | m in hw.m.addresses && address_is_secure(m))
+        ensures memSWrInAddrspace(d, p, m) <==> memSWrInAddrspace(d', p, m)
+    {
+        assert m in hw'.m.addresses;
+    }
+}
+
+lemma MIWeaklyCommute(s1:SysState, s2:SysState, s3:SysState, d:PageDb, p:PageNr)
+    requires validSysState(s1) && validSysState(s2) && validSysState(s3) && nonStoppedL1(d, p)
+    requires WSMemInvariantExceptAddrspaceAtPage(s1.hw, s2.hw, d, p) &&
+        WSMemInvariantExceptAddrspaceAtPage(s2.hw, s3.hw, d, p)
+    ensures WSMemInvariantExceptAddrspaceAtPage(s1.hw, s3.hw, d, p)
+{
+}
+
 lemma MICommute(s1:SysState, s2:SysState, s3:SysState, p:PageNr)
     requires validSysState(s1) && validSysState(s2) && validSysState(s3) &&
-        s1.d == s2.d == s3.d && validL1PTPage(s1.d, p) &&
-        (validPageDbImpliesWellFormed(s1.d); !hasStoppedAddrspace(s1.d, p))
-    requires WSMemInvariantExceptAddrspaceAtPage(s1, s2, p) &&
-        WSMemInvariantExceptAddrspaceAtPage(s2, s3, p)
-    ensures WSMemInvariantExceptAddrspaceAtPage(s1, s3, p)
+        nonStoppedL1(s1.d,p) && nonStoppedL1(s2.d,p) && nonStoppedL1(s3.d,p) 
+    requires equivalentExceptPage(s1.d,s2.d,p) && equivalentExceptPage(s2.d,s3.d,p) 
+    requires WSMemInvariantExceptAddrspaceAtPage(s1.hw, s2.hw, s1.d, p) &&
+        WSMemInvariantExceptAddrspaceAtPage(s2.hw, s3.hw, s2.d, p)
+    ensures WSMemInvariantExceptAddrspaceAtPage(s1.hw, s3.hw, s1.d, p)
 {
+    MIClosedOverEquivUpToEntered(s2.hw,s3.hw,s2.d,s1.d,p);
+    assert WSMemInvariantExceptAddrspaceAtPage(s2.hw, s3.hw, s1.d, p);
+    MIWeaklyCommute(s1,s2,s3,s1.d,p);
+    assert WSMemInvariantExceptAddrspaceAtPage(s1.hw, s3.hw, s1.d, p);
 }
 
-predicate {:opaque} validResume_premium(s:SysState,s':SysState,dispPage:PageNr)
-    requires validSysState(s)
-    ensures validResume_premium(s, s', dispPage) == validResume(s, s', dispPage)
-    ensures (smc_resume(s.d, dispPage).1 == KEV_ERR_SUCCESS()
-             && validResume(s, s', dispPage)) ==> 
-        validSysState(s')
-        && bankedRegsPreservedForMonitor(s, s')
-        && (var p := l1pOfDispatcher(s.d, dispPage);
-            validL1PTPage(s.d, p)
-            && (validPageDbImpliesWellFormed(s.d); !hasStoppedAddrspace(s.d, p))
-            && WSMemInvariantExceptAddrspaceAtPage(s, s', p))
-{
-    if(smc_resume(s.d, dispPage).1 == KEV_ERR_SUCCESS() && validResume(s, s', 
-        dispPage)) then
-        valResImpliesMInv(s, s', dispPage);
-        valResImpliesBRPres(s, s', dispPage);
-        validResume(s, s', dispPage)
-    else
-        validResume(s, s', dispPage)
-    
-}
-
-lemma valResImpliesBRPres(s:SysState,s':SysState,dispPage:PageNr)
-    requires validSysState(s)
-    requires smc_resume(s.d, dispPage).1 == KEV_ERR_SUCCESS()
-        && validResume(s, s', dispPage)
-    ensures bankedRegsPreservedForMonitor(s, s')
-{
-    
-    forall( s2, s3, s4 | validEntryTransitionResume(s,s2,dispPage) 
-        && userspaceExecution(s2, s3)
-        && exception(s3, s4)
-        && monitorReturn(s4, s') )
-        ensures bankedRegsPreservedForMonitor(s, s')
-    {
-        assert bankedRegsPreservedForMonitor(s, s2);
-        assert bankedRegsPreservedForMonitor(s2, s3);
-        assert bankedRegsPreservedForMonitor(s3, s4);
-        assert bankedRegsPreservedForMonitor(s4, s');
-    }
-}
-
-lemma valResImpliesMInv(s:SysState,s':SysState,dispPage:PageNr)
-    requires validSysState(s)
-    requires smc_resume(s.d, dispPage).1 == KEV_ERR_SUCCESS()
-                && validResume(s, s', dispPage)
-    ensures
-        validSysState(s) && validSysState(s') && s'.d == s.d
-    ensures
-        var p := l1pOfDispatcher(s.d, dispPage);
-        validL1PTPage(s.d, p)
-        && (validPageDbImpliesWellFormed(s.d); !hasStoppedAddrspace(s.d, p))
-        && WSMemInvariantExceptAddrspaceAtPage(s, s', p)
-{   
-    forall( s2, s3, s4 | validEntryTransitionResume(s,s2,dispPage) 
-        && userspaceExecution(s2, s3)
-        && exception(s3, s4)
-        && monitorReturn(s4, s') )
-        ensures WSMemInvariantExceptAddrspaceAtPage(s, s', 
-            l1pOfDispatcher(s.d, dispPage))
-    {
-        var p := l1pOfDispatcher(s.d, dispPage);
-        assert WSMemInvariantExceptAddrspaceAtPage(s,  s2, p);
-        assert s2.hw.conf.ttbr0 == p;
-        assert WSMemInvariantExceptAddrspaceAtPage(s2, s3, p);
-        assert s3.hw.conf.ttbr0 == s2.hw.conf.ttbr0;
-        assert s3.hw.conf.ttbr0 == p;
-        assert WSMemInvariantExceptAddrspaceAtPage(s3, s4, p);
-        assert s4.hw.conf.ttbr0 == p;
-        assert WSMemInvariantExceptAddrspaceAtPage(s4, s', p);
-        MICommute(s, s2, s3, p);
-        MICommute(s, s3, s4, p);
-        MICommute(s, s4, s', p);
-    }
-}
+*/
 
 lemma valEnterImpliesBRPres(s:SysState,s':SysState,dispPage:PageNr,
     a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
     requires smc_enter(s.d, dispPage,a1,a2,a3).1 == KEV_ERR_SUCCESS()
         && validEnter(s, s', dispPage,a1,a2,a3)
-    ensures bankedRegsPreservedForMonitor(s, s')
+    ensures validEnter(s,s',dispPage,a1,a2,a3) ==>
+        bankedRegsPreserved(s.hw, s'.hw)
 {
-    
-    forall( s2, s3, s4 | validEntryTransitionEnter(s,s2,dispPage,a1,a2,a3) 
-        && userspaceExecution(s2, s3)
-        && exception(s3, s4)
-        && monitorReturn(s4, s') )
-        ensures bankedRegsPreservedForMonitor(s, s')
+    reveal_ValidRegState();
+    forall ( s2, s3, s4 | validSysStates({s2,s3,s4})
+        && preEntryEnter(s,s2,dispPage,a1,a2,a3)
+        && entryTransitionEnter(s2, s3)
+        && s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d)
+        && validERTransition(s4, s')
+        && (s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
+            exceptionHandled(s4, dispPage)
+        && s'.hw.conf.scr.ns == NotSecure)
+        ensures bankedRegsPreserved(s.hw, s'.hw)
     {
-        assert bankedRegsPreservedForMonitor(s, s2);
-        assert bankedRegsPreservedForMonitor(s2, s3);
-        assert bankedRegsPreservedForMonitor(s3, s4);
-        assert bankedRegsPreservedForMonitor(s4, s');
+        assert bankedRegsPreserved(s.hw,  s2.hw);
+        assert bankedRegsPreserved(s2.hw, s3.hw);
+        assert bankedRegsPreserved(s3.hw, s4.hw);
+        assert bankedRegsPreserved(s4.hw, s'.hw);
     }
 }
+
+/*
+lemma validERImpliesMemInv(s:SysState, s':SysState)
+    requires validERTransition(s,s');
+    ensures nonStoppedL1(s.d, l1pOfDispatcher(s.d, s.g.g_cur_dispatcher));
+    ensures WSMemInvariantExceptAddrspaceAtPage(s.hw,s'.hw,s.d,
+        l1pOfDispatcher(s.d, s.g.g_cur_dispatcher));
+    // ensures equivalentExceptPage(s.d, s'.d, s.g.g_cur_dispatcher);
+{
+}
+*/
 
 lemma valEnterImpliesMInv(s:SysState,s':SysState,dispPage:PageNr,
     a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
     requires smc_enter(s.d, dispPage,a1,a2,a3).1 == KEV_ERR_SUCCESS()
-                && validEnter(s, s', dispPage,a1,a2,a3)
-    ensures
-        validSysState(s) && validSysState(s') && s'.d == s.d
+    requires validEnter(s, s', dispPage,a1,a2,a3)
     ensures
         var p := l1pOfDispatcher(s.d, dispPage);
-        validL1PTPage(s.d, p)
-        && (validPageDbImpliesWellFormed(s.d); !hasStoppedAddrspace(s.d, p))
-        && WSMemInvariantExceptAddrspaceAtPage(s, s', p)
-{   
-    forall( s2, s3, s4 | validEntryTransitionEnter(s,s2,dispPage,a1,a2,a3) 
-        && userspaceExecution(s2, s3)
-        && exception(s3, s4)
-        && monitorReturn(s4, s') )
-        ensures WSMemInvariantExceptAddrspaceAtPage(s, s', 
-            l1pOfDispatcher(s.d, dispPage))
+        nonStoppedL1(s.d,p)
+        && validSysState(s')
+        && WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, p)
+{
+    var p := l1pOfDispatcher(s.d, dispPage);
+    assert nonStoppedL1(s.d, p);
+    reveal_ValidRegState();
+    forall ( s2, s3, s4 | validSysStates({s2,s3,s4})
+        && preEntryEnter(s,s2,dispPage,a1,a2,a3)
+        && entryTransitionEnter(s2, s3)
+        && s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d)
+        && (s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
+            exceptionHandled(s4, dispPage)
+        && s'.hw.conf.scr.ns == NotSecure)
+        ensures 
+            ValidState(s.hw) && ValidState(s'.hw) && nonStoppedL1(s.d, p) &&
+            WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, p)
     {
-        var p := l1pOfDispatcher(s.d, dispPage);
-        assert WSMemInvariantExceptAddrspaceAtPage(s,  s2, p);
-        assert s2.hw.conf.ttbr0 == p;
-        assert WSMemInvariantExceptAddrspaceAtPage(s2, s3, p);
-        assert s3.hw.conf.ttbr0 == s2.hw.conf.ttbr0;
-        assert s3.hw.conf.ttbr0 == p;
-        assert WSMemInvariantExceptAddrspaceAtPage(s3, s4, p);
-        assert s4.hw.conf.ttbr0 == p;
-        assert WSMemInvariantExceptAddrspaceAtPage(s4, s', p);
+    /*
+        assert preEntryEnter(s,s2,dispPage,a1,a2,a3) ==> 
+            WSMemInvariantExceptAddrspaceAtPage(s.hw, s2.hw, s.d,p);
+        assert preEntryEnter(s,s2,dispPage,a1,a2,a3);
+        assert WSMemInvariantExceptAddrspaceAtPage(s.hw,  s2.hw, s.d, p);
+        
+        validERImpliesMemInv(s2,s3);
+        assert l1pOfDispatcher(s2.d, s2.g.g_cur_dispatcher) == p;
+        assert WSMemInvariantExceptAddrspaceAtPage(s2.hw, s3.hw, s2.d, p);
         MICommute(s, s2, s3, p);
-        MICommute(s, s3, s4, p);
-        MICommute(s, s4, s', p);
+        assert WSMemInvariantExceptAddrspaceAtPage(s.hw, s3.hw, s.d, p);
+     
+        assert WSMemInvariantExceptAddrspaceAtPage(s3.hw, s4.hw, s.d, p);
+        assert WSMemInvariantExceptAddrspaceAtPage(s.hw, s4.hw, s.d, p);
+        
+        assert WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, p);
+        */
     }
 }
 
+function exceptionHandled_premium(s:SysState,p:PageNr) : (int, int, PageDb)
+    requires validSysState(s)
+    requires !s.hw.conf.ex.none?
+    ensures var (r0,r1,d) := exceptionHandled_premium(s,p);
+        validPageDb(d)
+{
+    exceptionHandledValidPageDb(s,p);
+    exceptionHandled(s,p)
+}
+
+lemma exceptionHandledValidPageDb(s:SysState,p:PageNr) 
+    requires validSysState(s)
+    requires !s.hw.conf.ex.none?
+    ensures var (r0,r1,d) := exceptionHandled(s,p);
+        validPageDb(d)
+{
+   reveal_validPageDb();
+   reveal_ValidSRegState();
+   reveal_ValidRegState();
+   reveal_ValidConfig();
+   if(s.hw.conf.ex.svc?) {
+   } else {
+        var p := s.g.g_cur_dispatcher;
+        var pc := OperandContents(s.hw, OLR);
+        var cpsr := s.hw.sregs[cpsr];
+        var disp' := Dispatcher(s.d[p].entry.entrypoint, true,
+            DispatcherContext(s.hw.regs, cpsr, pc));
+        var d' := s.d[ p := PageDbEntryTyped(s.d[p].addrspace, disp')];
+        
+        assert validPageDbEntry(d', p);
+       
+        forall( p' | validPageNr(p') && d'[p'].PageDbEntryTyped? && p'!=p )
+            ensures validPageDbEntry(d', p');
+        {
+            var e  := s.d[p'].entry;
+            var e' := d'[p'].entry;
+            if(e.Addrspace?){
+                assert e.refcount == e'.refcount;
+                assert addrspaceRefs(d', p') == addrspaceRefs(s.d,p');
+                assert validAddrspace(d',p');
+            }
+        }
+        assert pageDbEntriesValid(d');
+
+        assert validPageDb(d');
+   }
+}
+
+/*
 predicate {:opaque} validEnter_premium(s:SysState,s':SysState,dispPage:PageNr,
     a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
+    requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KEV_ERR_SUCCESS()
     ensures validEnter_premium(s, s', dispPage,a1,a2,a3)
         == validEnter(s, s', dispPage,a1,a2,a3)
+        /*
     ensures (smc_enter(s.d, dispPage,a1,a2,a3).1 == KEV_ERR_SUCCESS()
              && validEnter(s, s', dispPage,a1,a2,a3)) ==> 
-        validSysState(s')
-        && bankedRegsPreservedForMonitor(s, s')
-        && (var p := l1pOfDispatcher(s.d, dispPage);
-            validL1PTPage(s.d, p)
-            && (validPageDbImpliesWellFormed(s.d); !hasStoppedAddrspace(s.d, p))
-            && WSMemInvariantExceptAddrspaceAtPage(s, s', p))
+             */
+    ensures validEnter_premium(s, s', dispPage,a1,a2,a3) ==> 
+        var p := l1pOfDispatcher(s.d, dispPage);
+        nonStoppedL1(s.d, dispPage)
+        && validSysState(s')
+        && WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, p)
+        && bankedRegsPreserved(s.hw, s'.hw)
 {
-    if(smc_enter(s.d, dispPage,a1,a2,a3).1 == KEV_ERR_SUCCESS() && validEnter(s, s', 
-        dispPage,a1,a2,a3)) then
+    if(validEnter(s, s',dispPage,a1,a2,a3)) then
         valEnterImpliesMInv(s, s', dispPage,a1,a2,a3);
+        assert WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, 
+            l1pOfDispatcher(s.d,dispPage));
         valEnterImpliesBRPres(s, s', dispPage,a1,a2,a3);
         validEnter(s, s', dispPage,a1,a2,a3)
     else
         validEnter(s, s', dispPage,a1,a2,a3)
-    
 }
 */
