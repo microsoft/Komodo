@@ -12,6 +12,7 @@ procedure smc_enter_err(
         validSysState(s);
     ensures
         this == s'.hw; 
+        SaneState(this);
         validSysState(s');
         RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
     ensures
@@ -112,6 +113,21 @@ procedure smc_enter_err(
     }
 }
 
+procedure havoc_state(ghost s:SysState)
+    returns (ghost s':SysState)
+    requires
+        this == s.hw;
+        validSysState(s);
+        SaneState(s.hw);
+    ensures
+        this == s'.hw;
+        validSysState(s');
+        SaneState(s'.hw);
+{
+    s' := s;
+}
+
+
 procedure kev_smc_enter(
     {:register OReg(R0)} pagenr:int,
     {:register OReg(R1)} arg1:int,
@@ -128,7 +144,6 @@ procedure kev_smc_enter(
         isUInt32(arg1) && isUInt32(arg2) && isUInt32(arg3);
     ensures
         this == s'.hw;
-        //TODO SaneState(s'.hw);
         validSysState(s');
         tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
         validEnter(s,s',pagenr,arg1,arg2,arg3);
@@ -142,8 +157,34 @@ procedure kev_smc_enter(
         val := sp_op_const(0);
         s' := s_err.(hw := this);
         assert validSysState(s');
+        assert err != KEV_ERR_SUCCESS();
         assert tuple(s'.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
     } else {
-        assume false; // TODO
+        assert err == KEV_ERR_SUCCESS();
+        ghost var s1;
+        ghost var s2;
+        ghost var s3;
+        ghost var s4;
+
+        s1 := s_err.(hw := this);  
+        assert validSysState(s1);
+        assert this == s1.hw;
+        assert SaneState(this);
+        
+        s2 := havoc_state(s1);
+        assume preEntryEnter(s,s2,pagenr,arg1,arg2,arg3);
+        s3 := havoc_state(s2);
+        assume entryTransitionEnter(s2,s3);
+        s4 := havoc_state(s3);
+        assume s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d);
+        s' := havoc_state(s4);
+        
+        assume validERTransition(s4, s');
+        assume tuple(r0,r1,s'.d) == exceptionHandled(s4);
+        
+        assert this == s'.hw;
+        assert validSysState(s');
+        assert tuple(s'.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
+        assert validEnter(s,s',pagenr,arg1,arg2,arg3);
     }
 }

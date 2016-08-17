@@ -58,10 +58,10 @@ predicate validSysStates(sset:set<SysState>) { forall s :: s in sset ==> validSy
 predicate validEnter(s:SysState,s':SysState,
     dispPage:PageNr,a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
-    requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KEV_ERR_SUCCESS()
+    // requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KEV_ERR_SUCCESS()
 {
     reveal_ValidRegState();
-    // smc_enter(s.d, dispPage, a1, a2, a3).1 != KEV_ERR_SUCCESS() ||
+    smc_enter(s.d, dispPage, a1, a2, a3).1 != KEV_ERR_SUCCESS() ||
     
     // s1 (s)  : State on entry to the monitor
     // s2      : prior to MOVSPCLR that transitions to userspace
