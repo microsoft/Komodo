@@ -18,9 +18,9 @@ datatype SReg = cpsr | spsr(m:mode) | scr | ttbr0
 // the processor and the concrete representation should be used only for
 // ensuring that the correct values are stored/returned by instructions
 datatype config = Config(cpsr:PSR, spsr:map<mode,PSR>, scr:SCR, ttbr0:TTBR, 
-    ex:exception)
+    ex:exception, excount:nat)
 datatype PSR  = PSR(m:mode)           // See B1.3.3
-datatype SCR  = SCR(ns:world)         // See B4.1.129
+datatype SCR  = SCR(ns:world, irq:bool, fiq:bool) // See B4.1.129
 datatype TTBR = TTBR(ptbase:mem)      // See B4.1.154
 
 type mem = int
@@ -43,7 +43,7 @@ datatype state = State(regs:map<ARMReg, int>,
 datatype mode = User | FIQ | IRQ | Supervisor | Abort | Undefined | Monitor
 datatype priv = PL0 | PL1 // PL2 is only used in Hyp, not modeled
 datatype world = Secure | NotSecure
-datatype exception = none | abt | irq | fiq | svc
+datatype exception = ExNone | ExAbt | ExUnd | ExIRQ | ExFIQ | ExSVC
 
 //-----------------------------------------------------------------------------
 // TODO: get rid of these.
@@ -99,7 +99,13 @@ function decode_psr(v:int) : PSR
 // See B4.1.129
 function decode_scr(v:int) : SCR
     requires isUInt32(v)
-    { SCR(if(and32(v, 1) == 1) then NotSecure else Secure) }
+{
+    SCR(
+        if and32(v, 1) != 0 then NotSecure else Secure,
+        and32(v, 2) != 0, // IRQ bit
+        and32(v, 4) != 0 // FIQ bit
+        )
+}
 
 function decode_ttbr(v:int): TTBR
     requires isUInt32(v)
@@ -194,20 +200,17 @@ datatype ins =
     | STR(rdSTR:operand,  baseSTR:operand, ofsSTR:operand)
     | STR_global(rdSTRR_global:operand, globalSTR:operand,
                  baseSTR_global:operand, ofsSTR_global:operand)
-    // | CPS(mod:operand) // TODO deprecate
+    // TODO: reinstate | CPSID_IAF(mod:operand)
     | MRS(dstMRS:operand, srcMRS: operand)
     | MSR(dstMSR:operand, srcMSR: operand)
     // Only accesses to SCR are supported
     // (See armv7a ref manual B4.1.129 "Accessing the SCR")
     | MRC(dstMRC:operand,srcMRC:operand)
     | MCR(dstMCR:operand,srcMCR:operand)
+    // go to usermode, take an exception, and return
     // Only the special case where rd is pc
     // (See armv7a ref manual A8.8.105 and B9.3.20)
-    | MOVS_PCLR
-
-//-----------------------------------------------------------------------------
-// Exception Handlers
-//-----------------------------------------------------------------------------
+    | MOVS_PCLR_TO_USERMODE_AND_CONTINUE
 
 //-----------------------------------------------------------------------------
 // Code Representation
@@ -232,11 +235,13 @@ predicate WordAligned(addr:int) { addr % 4 == 0}
 function WordsToBytes(w:int) : int { 4 * w }
 function BytesToWords(b:int) : int requires WordAligned(b) { b / 4 }
 
+// FIXME: delete or move elsewhere
 lemma WordAlignedAdd(x1:int,x2:int)
     requires WordAligned(x1) && WordAligned(x2)
     ensures  WordAligned(x1+x2)
     {}
 
+// FIXME: delete or move elsewhere
 lemma WordAlignedAdd_(x1:int,x2:int,y:int)
     requires WordAligned(x1) && WordAligned(x2) && y == x1+x2
     ensures WordAligned(y)
@@ -389,6 +394,74 @@ function SizeOfGlobal(g:operand): int
 // global declarations are the responsibility of the program, as long as they're valid
 function {:axiom} TheGlobalDecls(): globaldecls
     ensures ValidGlobalDecls(TheGlobalDecls());
+
+//-----------------------------------------------------------------------------
+// Exceptions
+//-----------------------------------------------------------------------------
+function mode_of_exception(conf:config, e:exception): mode
+    requires e != ExNone
+{
+    match e
+        case ExAbt => Abort
+        case ExUnd => Undefined
+        case ExIRQ => if conf.scr.irq then Monitor else IRQ
+        case ExFIQ => if conf.scr.fiq then Monitor else FIQ
+        case ExSVC => Supervisor
+}
+
+predicate evalExceptionTaken(s:state, e:exception, r:state)
+    requires ValidState(s)
+    requires e != ExNone
+    ensures evalExceptionTaken(s, e, r) ==> ValidState(r)
+{
+    reveal_ValidRegState();
+    reveal_ValidConfig();
+    reveal_ValidSRegState();
+    var oldmode := mode_of_state(s);
+    var newmode := mode_of_exception(s.conf, e);
+    // this does not model all of the CPSR update, since we don't model all the bits
+    var newpsr := or32(and32(s.sregs[cpsr], 0xffffffe0), encode_mode(newmode));
+    ValidState(r) &&
+    // update mode, copy CPSR of oldmode to SPSR of newmode, havoc LR
+    r == s.(conf := s.conf.(cpsr := PSR(newmode),
+                            spsr := s.conf.spsr[newmode := s.conf.cpsr],
+                            ex := e, excount := s.conf.excount + 1),
+            sregs := s.sregs[cpsr := newpsr][spsr(newmode) := s.sregs[cpsr]],
+            regs := s.regs[LR(newmode) := r.regs[LR(newmode)]])
+}
+
+//-----------------------------------------------------------------------------
+// Userspace execution model
+//-----------------------------------------------------------------------------
+
+// XXX: To be defined by application code
+predicate ApplicationUsermodeContinuationInvariant(s:state, r:state)
+
+predicate evalUserspaceExecution(s:state, r:state)
+    requires ValidState(s)
+    requires mode_of_state(s) == User
+    ensures evalUserspaceExecution(s, r) ==> ValidState(r) && mode_of_state(r) == User
+{
+    reveal_ValidMemState();
+    reveal_ValidRegState();
+    // if we can't extract a page table, we know nothing
+    var pt := ExtractAbsPageTable(s);
+    pt.Just? &&
+    var pages := WritablePagesInTable(fromJust(pt));
+    ValidState(r) && (forall m:mem :: m in s.m.addresses <==> m in r.m.addresses) &&
+    // havoc writable pages and user regs
+    r == s.(m := s.m.(addresses := havocPages(pages, s.m.addresses, r.m.addresses)),
+            regs := r.regs)
+    && (forall m:mode {:trigger SP(m)} {:trigger LR(m)} :: m != User
+        ==> r.regs[SP(m)] == s.regs[SP(m)] && r.regs[LR(m)] == s.regs[LR(m)])
+}
+
+function havocPages(pages:set<mem>, s:map<mem, int>, r:map<mem, int>): map<mem, int>
+    requires forall m :: m in s <==> m in r
+{
+    (map m | isUInt32(m) && m in s
+        :: if and32(m, 0xffff_f000) in pages then r[m] else s[m])
+}
 
 //-----------------------------------------------------------------------------
 // Model of page tables for userspace execution
@@ -743,13 +816,17 @@ predicate evalGuard(s:state, o:obool, r:state)
     r == s
 }
 
-predicate ValidModeChange(m:mode, v:int)
+predicate ValidModeChange'(s:state, m:mode)
 {
     // See B9.1.2
-    isUInt32(v) &&
-    ValidModeEncoding(and32(v,0x1f)) &&
-    (var m' := decode_mode(and32(v,0x1f));
-    m != User && !(m != Monitor && m' == Monitor))
+    priv_of_state(s) == PL1 && !(m == Monitor && world_of_state(s) != Secure)
+}
+
+predicate ValidModeChange(s:state, v:int)
+    requires isUInt32(v)
+{
+    var enc := and32(v,0x1f);
+    ValidModeEncoding(enc) && ValidModeChange'(s, decode_mode(enc))
 }
 
 predicate ValidInstruction(s:state, ins:ins)
@@ -814,18 +891,19 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidSpecialOperand(s, dst) && 
             !ValidMcrMrcOperand(s, dst) &&
             (dst.sr.cpsr? || dst.sr.spsr? ==>
-                ValidModeChange(s.conf.cpsr.m, OperandContents(s, src)))
+                ValidModeChange(s, OperandContents(s, src)))
         case MRC(dst, src) =>
             ValidMcrMrcOperand(s, src) &&
             ValidRegOperand(dst) 
         case MCR(dst, src) =>
             ValidMcrMrcOperand(s, dst) &&
             ValidRegOperand(src)
-        case MOVS_PCLR => 
+        case MOVS_PCLR_TO_USERMODE_AND_CONTINUE =>
+            mode_of_state(s) != User &&
             var spsr := OSReg(spsr(mode_of_state(s)));
-            ValidSpecialOperand(s, spsr) &&
-            ValidModeChange(s.conf.cpsr.m, SpecialOperandContents(s, spsr)) &&
-            !(mode_of_state(s) == User)
+            assert ValidSpecialOperand(s, spsr);
+            var mode := and32(SpecialOperandContents(s, spsr), 0x1f);
+            decode_mode'(mode) == Just(User) && ValidModeChange'(s, User)
 }
 
 predicate evalIns(ins:ins, s:state, r:state)
@@ -886,9 +964,13 @@ predicate evalIns(ins:ins, s:state, r:state)
         case MSR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r)
         case MRC(dst, src) => evalUpdate(s, dst, SpecialOperandContents(s, OSReg(scr)), r)
         case MCR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r)
-        case MOVS_PCLR => 
+        case MOVS_PCLR_TO_USERMODE_AND_CONTINUE => 
             var spsr := OSReg(spsr(mode_of_state(s)));
-            evalSRegUpdate(s, OSReg(cpsr), SpecialOperandContents(s,spsr), r)
+            exists ex, s2, s3, s4 :: ex != ExNone &&
+                evalSRegUpdate(s, OSReg(cpsr), SpecialOperandContents(s,spsr), s2)
+                && evalUserspaceExecution(s2, s3)
+                && evalExceptionTaken(s3, ex, s4)
+                && ApplicationUsermodeContinuationInvariant(s, r)
 }
 
 predicate evalBlock(block:codes, s:state, r:state)

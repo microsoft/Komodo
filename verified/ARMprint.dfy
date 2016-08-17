@@ -1,5 +1,10 @@
 include "ARMdef.dfy"
 
+function method user_continue_label(): string
+{
+    "usermode_return_continue"
+}
+
 method nl()
 {
     print("\n");
@@ -113,6 +118,15 @@ method printIns1Op(instr:string, op:operand)
     nl();
 }
 
+method printInsFixed(instr:string, ops:string)
+{
+    print("  ");
+    print(instr);
+    print(" ");
+    print(ops);
+    nl();
+}
+
 method printMcrMsr(instr:string,op:operand)
 {
     print("  ");
@@ -165,7 +179,9 @@ method printIns(ins:ins)
             else { print("MRC for non SCR not impl.");nl(); }
         case MCR(dst,src) => if(dst.OSReg? && dst.sr.scr?) { printMcrMsr("MCR",src); }
             else { print("MCR for non SCR not impl.");nl(); }
-        case MOVS_PCLR => print("  MOVS, pc, lr");nl();
+        case MOVS_PCLR_TO_USERMODE_AND_CONTINUE =>
+            printInsFixed("MOVS", "pc, lr");
+            print(user_continue_label()); print(":"); nl();
         // case CPS(mod) => printIns1Op("CPS", mod);
     }
 }
