@@ -164,38 +164,14 @@ lemma sp_lemma_empty(s:sp_state, r:sp_state) returns(r':sp_state)
     r' := s;
 }
 
-function codes_len(c:codes) : int
-    ensures codes_len(c) >= 0;
-{
-    match c
-        case CNil => 0
-        case sp_CCons(hd, tl) => code_len(hd) + codes_len(tl)
-}
-
-function code_len(c:code) : int
-    ensures code_len(c) >= 0;
-{
-    match c
-        case Ins(_) => 1
-        case Block(b) => 1 + codes_len(b)
-        case IfElse(_, t, f) => 1 + code_len(t) + code_len(f)
-        case While(_, body) => 1 + code_len(body)
-}
-
-lemma code_len_decreases(c:code)
-    requires c.Block? && !c.block.CNil?;
-    ensures  code_len(c.block.hd) < code_len(c);
-{
-}
-
 lemma evalWhile_validity(b:obool, c:code, n:nat, s:state, r:state)
     requires evalWhile(b, c, n, s, r);
-    decreases code_len(c), 1, n;
+    decreases c, 1, n;
     ensures  valid_state(s) && r.ok ==> valid_state(r);
 {
     if valid_state(s) && r.ok && ValidOperand(b.o1) && ValidOperand(b.o2) && n > 0 {
         var s', r' :| evalGuard(s, b, s') && evalOBool(s, b) && evalCode(c, s', r') && evalWhile(b, c, n - 1, r', r);
-        block_state_validity(c, s', r');
+        code_state_validity(c, s', r');
         evalWhile_validity(b, c, n - 1, r', r);
         assert valid_state(r);
     }
@@ -222,30 +198,35 @@ lemma lemma_FailurePreservedByCode(c:code, s:state, r:state)
     }
 }
 
-lemma block_state_validity(c:code, s:state, r:state)
+lemma block_state_validity(block:codes, s:state, r:state)
+    requires evalBlock(block, s, r);
+    requires valid_state(s);
+    decreases block, 0;
+    ensures  r.ok ==> valid_state(r);
+{
+    if block.sp_CCons? {
+        var r':state :| evalCode(block.hd, s, r') && evalBlock(block.tl, r', r);
+        code_state_validity(block.hd, s, r');
+        if r'.ok {
+            block_state_validity(block.tl, r', r);
+        }
+        else {
+            lemma_FailurePreservedByBlock(block.tl, r', r);
+        }
+    }
+}
+
+lemma code_state_validity(c:code, s:state, r:state)
     requires evalCode(c, s, r);
     requires valid_state(s);
-    decreases code_len(c), 0;
+    decreases c, 0;
     ensures  r.ok ==> valid_state(r);
 {
     if r.ok {
         if c.Ins? {
             assert valid_state(r);
         } else if c.Block? {
-            if c.block.CNil? {
-              assert valid_state(r);
-            } else {
-                assert evalBlock(c.block, s, r);        // OBSERVE
-                var r':state :| evalCode(c.block.hd, s, r') && evalBlock(c.block.tl, r', r);
-                code_len_decreases(c);
-                block_state_validity(c.block.hd, s, r');
-                if r'.ok {
-                    block_state_validity(Block(c.block.tl), r', r);
-                }
-                else {
-                    lemma_FailurePreservedByBlock(c.block.tl, r', r);
-                }
-            }
+            block_state_validity(c.block, s, r);
         } else if c.IfElse? {
             if ValidOperand(c.ifCond.o1) && ValidOperand(c.ifCond.o2) {
                 var s' :| evalGuard(s, c.ifCond, s') &&
@@ -254,9 +235,9 @@ lemma block_state_validity(c:code, s:state, r:state)
                     else
                         evalCode(c.ifFalse, s', r);
                 if evalOBool(s, c.ifCond) {
-                    block_state_validity(c.ifTrue, s', r);
+                    code_state_validity(c.ifTrue, s', r);
                 } else {
-                    block_state_validity(c.ifFalse, s', r);
+                    code_state_validity(c.ifFalse, s', r);
                 }
             }
             assert valid_state(r);
@@ -283,7 +264,7 @@ lemma sp_lemma_block(b:codes, s0:sp_state, r:sp_state) returns(r1:sp_state, c0:c
     b1 := b.tl;
     r1 := r';
     if ValidState(s0) {
-        block_state_validity(c0, to_state(s0), to_state(r1));
+        code_state_validity(c0, to_state(s0), to_state(r1));
     }
     assert sp_eval(c0, s0, r1);
 }
@@ -366,7 +347,7 @@ lemma sp_lemma_whileTrue(b:obool, c:code, n:sp_int, s:sp_state, r:sp_state) retu
     var s'', r'':state :| evalGuard(to_state(s), b, s'') && evalOBool(to_state(s), b) && evalCode(c, s'', r'')
         && evalWhile(b, c, n - 1, r'', to_state(r));
     if ValidState(s) {
-        block_state_validity(c, s'', r'');
+        code_state_validity(c, s'', r'');
     }
     s' := s'';
     r' := r'';
