@@ -19,7 +19,7 @@ predicate nonStoppedDispatcher(d:PageDb, p:PageNr)
 
 function l1pOfDispatcher(d:PageDb, p:PageNr) : PageNr
     requires validDispatcherPage(d, p) && !hasStoppedAddrspace(d, p)
-    ensures  validL1PTPage(d, l1pOfDispatcher(d, p))
+    ensures  nonStoppedL1(d,l1pOfDispatcher(d,p))
 {
     reveal_validPageDb();
     d[d[p].addrspace].entry.l1ptnr
@@ -98,7 +98,7 @@ predicate preEntryEnter(s:SysState,s':SysState,
     dispPage:PageNr,a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
     requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KEV_ERR_SUCCESS()
-    ensures  nonStoppedL1(s.d, l1pOfDispatcher(s.d, dispPage));
+    // ensures  nonStoppedL1(s.d, l1pOfDispatcher(s.d, dispPage));
     // ensures (validSysState(s) && validSysState(s') && 
     // preEntryEnter(s,s',dispPage,a1,a2,a3)) ==>false
 {
@@ -109,8 +109,8 @@ predicate preEntryEnter(s:SysState,s':SysState,
     var l1p := l1pOfDispatcher(s.d, dispPage);
     
     validSysState(s') &&  s.d == s'.d &&
-    s'.hw.conf.ttbr0 == l1p &&
-    s'.hw.conf.cpsr.m  == User && s'.hw.conf.scr.ns == Secure &&
+    s'.hw.conf.ttbr0 == page_paddr(l1p) &&
+    s'.hw.conf.scr.ns == Secure &&
     
     s'.hw.regs[R0] == a1 && s'.hw.regs[R1] == a2 && s'.hw.regs[R2] == a3 &&
 
@@ -225,7 +225,6 @@ function exceptionHandled(s:SysState) : (int, int, PageDb)
 // Userspace Execution
 //-----------------------------------------------------------------------------
 
-
 predicate bankedRegsPreserved(hw:state, hw':state)
     requires ValidState(hw) && ValidState(hw')
 {
@@ -252,7 +251,7 @@ predicate WSMemInvariantExceptAddrspaceAtPage(hw:state, hw':state,
     requires ValidState(hw) && ValidState(hw') && nonStoppedL1(d, l1p)
 {
     (forall m:mem :: m in hw.m.addresses <==> m in hw'.m.addresses) &&
-    hw.m.globals == hw'.m.globals &&
+    //TODO: exclude CurAddrspace??? hw.m.globals == hw'.m.globals &&
     (forall i | i in hw.m.addresses && address_is_secure(i) && 
         !memSWrInAddrspace(d, l1p, i) ::  
             hw.m.addresses[i] == hw'.m.addresses[i])

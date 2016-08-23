@@ -20,8 +20,5 @@ predicate validSysState(s:SysState)
 predicate globalsCorrespond(s:SysState)
     requires ValidState(s.hw) && SaneMem(s.hw.m)
 {
-	OSymbol("g_cur_dispatcher") in s.hw.m.globals &&
-	|s.hw.m.globals[OSymbol("g_cur_dispatcher")]| == 1 &&
-    s.hw.m.globals[OSymbol("g_cur_dispatcher")][0] == s.g.g_cur_dispatcher
+    GlobalFullContents(s.hw.m, CurAddrspaceOp())[0] == s.g.g_cur_dispatcher
 }
-

@@ -223,6 +223,13 @@ lemma exceptionHandledValidPageDb(s:SysState)
         assert validPageDb(d');
 }
 
+lemma MemInvarSubsumption(s:SysState,s':SysState,p:PageNr)
+    requires validSysState(s) && validSysState(s') && nonStoppedL1(s.d, p)
+    requires AllMemInvariant(s.hw,s'.hw) && s.d == s'.d
+    ensures  WSMemInvariantExceptAddrspaceAtPage(s.hw,s'.hw,s.d,p)
+{
+}
+
 /*
 predicate {:opaque} validEnter_premium(s:SysState,s':SysState,dispPage:PageNr,
     a1:int,a2:int,a3:int)

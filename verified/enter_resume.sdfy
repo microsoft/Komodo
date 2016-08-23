@@ -127,6 +127,137 @@ procedure havoc_state(ghost s:SysState)
     s' := s;
 }
 
+procedure pre_entry_enter(
+    {:register OReg(R0)} err:int,
+    {:register OReg(R1)} arg1:int,
+    {:register OReg(R2)} arg2:int,
+    {:register OReg(R3)} arg3:int,
+    {:register OReg(R5)} pagenr:int,
+    ghost s:SysState)
+    returns (ghost s':SysState)
+    requires
+        this == s.hw;
+        mode_of_state(s.hw) == Monitor;
+        validSysState(s);
+        SaneState(s.hw);
+        isUInt32(arg1) && isUInt32(arg2) && isUInt32(arg3);
+        specErr(smc_enter_premium(s.d, pagenr, arg1, arg2, arg3)) == 
+            KEV_ERR_SUCCESS();
+        err == KEV_ERR_SUCCESS();
+    ensures
+        this == s'.hw;
+        validSysState(s');
+        SaneState(s'.hw);
+        //RegPreservingExcept(old(this),this,set(@));
+        // tuple(s.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
+        // err == KEV_ERR_SUCCESS();
+        preEntryEnter(s,s',pagenr, arg1, arg2, arg3);
+{
+    reveal_validPageDb();
+    reveal_ValidRegState();
+    reveal_smc_enter_premium();
+    ghost var d := s.d;
+    assert validDispatcherPage(s.d, pagenr);
+    assert !hasStoppedAddrspace(s.d, pagenr);
+    ghost var l1p := l1pOfDispatcher(s.d, pagenr);
+  
+    // TODO: read r12, clear lsb, store into MCR
+    // MRC(r12,scr);
+    // Dafny/Spartan are unlikely to enjoy bit vector math
+    
+    r10 := 0;
+    MCR(OSReg(scr), r12);
+    forall :: this.conf.scr.ns == Secure
+    {
+        //FIXME
+        assume false;
+        assert BitwiseAnd(uint32(r10),uint32(1)) != 1;
+        assert and32(r10,1) != 1;
+        assert decode_scr(r10) == SCR(Secure);
+    }
+  
+    //-------------------------------------------------------------------------
+    // load l1p into ttbr0
+    //-------------------------------------------------------------------------
+    LDRglobaladdr(r12, PageDb());
+    assert validPageNr(pagenr);
+    r11 := sp_op_const(PAGEDB_ENTRY_SIZE());
+    MUL(r10,pagenr,r11);
+    assert r10 == G_PAGEDB_ENTRY(pagenr);
+    ADD(r9, r10, sp_op_const(PAGEDB_ENTRY_ADDRSPACE())); 
+    assert r9 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE();
+    WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE(), r9);
+
+    LDRglobal(r11, PageDb(), r12, r9);
+    ghost var addrspace := s.d[pagenr].addrspace;
+    forall :: r11 == page_monvaddr(addrspace) && WordAligned(r11) 
+        && PageAligned(r11)
+    {
+        reveal_pageDbEntryCorresponds(); reveal_pageContentsCorresponds();
+        reveal_validPageDb();
+        assert validAddrspacePage(s.d, s.d[pagenr].addrspace);
+    }
+
+    forall :: ValidMem(this.m, addr_mem(this, @r11, sp_op_const(ADDRSPACE_L1PT_PHYS())))
+        { reveal_validPageDb(); } 
+
+    // page_monvaddr_impl(r9,r11,r10); 
+    LDR(r10,r11,sp_op_const(ADDRSPACE_L1PT_PHYS()));
+
+    forall :: r10 == page_paddr(d[addrspace].entry.l1ptnr)
+    {
+        assert pageDbCorrespondsOnly(this.m, d, addrspace);
+        assert validAddrspacePage(d, addrspace);
+        reveal_pageDbClosedRefs();
+        reveal_pageContentsCorresponds();
+        assert pageContentsCorresponds(addrspace, d[addrspace],
+            extractPage(this.m, addrspace));
+        reveal_pageDbAddrspaceCorresponds();
+    }
+    
+    assert r10 == page_paddr(l1p);
+
+    // reveal_pageContentsCorresponds();
+    // reveal_pageDbAddrspaceCorresponds();
+    MSR(OSReg(ttbr0), r10);
+
+    assert this.conf.ttbr0 == page_paddr(l1p);
+    //-------------------------------------------------------------------------
+    
+    //-------------------------------------------------------------------------
+    //  Move arguments to regs
+    //-------------------------------------------------------------------------
+    r0 := arg1;
+    r1 := arg2;
+    r2 := arg3;
+
+    //-------------------------------------------------------------------------
+    // Update current dispatcher
+    //-------------------------------------------------------------------------
+    LDRglobaladdr(r12, CurAddrspaceOp());
+    STRglobal(pagenr, CurAddrspaceOp(), r12, 0);
+
+    s' := s.(g := s.g.(g_cur_dispatcher := pagenr)).(hw := this);
+    assert this == s'.hw;
+    forall :: validSysState(s')
+    {
+        assert s.d == s'.d;
+        assert s'.hw.m.addresses == s.hw.m.addresses;
+        globalUnmodifiedImpliesCorrespondingPreserved(s.d,s.hw.m,s'.hw.m);
+    }
+    //-------------------------------------------------------------------------
+   
+    assert s.d == s'.d;
+    assert s'.hw.conf.ttbr0 == page_paddr(l1p);
+    assert s'.hw.conf.scr.ns == Secure; // XXX FIXME TODO
+    assert s'.g.g_cur_dispatcher == pagenr;
+    assert s'.hw.regs[R0] == arg1 && s'.hw.regs[R1] == arg2 &&
+        s'.hw.regs[R2] == arg3; 
+    assert s'.g.g_cur_dispatcher == pagenr;
+    assert WSMemInvariantExceptAddrspaceAtPage(s.hw,s'.hw, s.d, l1p);
+    assert preEntryEnter(s,s',pagenr, arg1, arg2, arg3);
+}
+
 
 procedure kev_smc_enter(
     {:register OReg(R0)} pagenr:int,
@@ -140,6 +271,7 @@ procedure kev_smc_enter(
     requires 
         this == s.hw; 
         validSysState(s);
+        mode_of_state(s.hw) == Monitor;
         SaneState(s.hw);
         isUInt32(arg1) && isUInt32(arg2) && isUInt32(arg3);
     ensures
@@ -157,10 +289,10 @@ procedure kev_smc_enter(
         val := sp_op_const(0);
         s' := s_err.(hw := this);
         assert validSysState(s');
-        assert err != KEV_ERR_SUCCESS();
         assert tuple(s'.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
+        assert err != KEV_ERR_SUCCESS();
     } else {
-        assert err == KEV_ERR_SUCCESS();
+        
         ghost var s1;
         ghost var s2;
         ghost var s3;
@@ -169,10 +301,12 @@ procedure kev_smc_enter(
         s1 := s_err.(hw := this);  
         assert validSysState(s1);
         assert this == s1.hw;
-        assert SaneState(this);
+        assert SaneState(s1.hw);
         
-        s2 := havoc_state(s1);
-        assume preEntryEnter(s,s2,pagenr,arg1,arg2,arg3);
+        assert r5 == pagenr;
+        s2 := pre_entry_enter(err,r5,arg1,arg2,arg3,s1);
+        assert preEntryEnter(s1,s2,pagenr,arg1,arg2,arg3);
+        
         s3 := havoc_state(s2);
         assume entryTransitionEnter(s2,s3);
         s4 := havoc_state(s3);

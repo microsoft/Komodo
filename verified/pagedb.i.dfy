@@ -26,12 +26,16 @@ function method PAGEDB_ENTRY_ADDRSPACE():int
 //-----------------------------------------------------------------------------
 // addrspc = start address of address space metadata
 // TODO requires that this thing is an addrspce?
-function method ADDRSPACE_L1PT():int      { 0  }
-function method ADDRSPACE_L1PT_PHYS():int { 4  }
-function method ADDRSPACE_REF():int       { 8  }
+function method ADDRSPACE_L1PT():int
+    ensures ADDRSPACE_L1PT() == 0         { 0  }
+function method ADDRSPACE_L1PT_PHYS():int
+    ensures ADDRSPACE_L1PT_PHYS() == 4    { 4  }
+function method ADDRSPACE_REF():int
+    ensures ADDRSPACE_REF() == 8          { 8  }
 function method ADDRSPACE_STATE():int
     ensures ADDRSPACE_STATE() == 12       { 12 }
-function method ADDRSPACE_SIZE():int      { 16 }
+function method ADDRSPACE_SIZE():int
+    ensures ADDRSPACE_SIZE() == 16        { 16 }
 
 //-----------------------------------------------------------------------------
 // Dispatcher Fields
@@ -117,9 +121,9 @@ predicate pageDbCorresponds(s:memstate, pagedb:PageDb)
     // that we have no other dependencies on the state
     var db := (map p | 0 <= p < KEVLAR_SECURE_NPAGES() :: extractPageDbEntry(s,p));
     var secpages := (map p | 0 <= p < KEVLAR_SECURE_NPAGES() :: extractPage(s,p));
-    forall p {:trigger validPageNr(p)} :: validPageNr(p)
-        ==> (pageDbEntryCorresponds(pagedb[p], db[p])
-            && pageContentsCorresponds(p, pagedb[p], secpages[p]))
+    forall p {:trigger validPageNr(p)} | validPageNr(p) :: 
+        pageDbEntryCorresponds(pagedb[p], db[p])
+            && pageContentsCorresponds(p, pagedb[p], secpages[p])
 }
 
 predicate pageDbCorrespondsExcluding(s:memstate, pagedb:PageDb, modifiedPage:PageNr)
@@ -314,6 +318,34 @@ function pageDbAddrspaceStateVal(s: AddrspaceState): int
 //-----------------------------------------------------------------------------
 // Common lemmas
 //-----------------------------------------------------------------------------
+
+lemma globalUnmodifiedImpliesCorrespondingPreserved(d:PageDb,m:memstate,m':memstate)
+    requires SaneMem(m) && SaneMem(m') && validPageDb(d)
+    requires (reveal_ValidMemState();
+        m.globals[PageDb()] == m'.globals[PageDb()] &&
+        m.addresses == m'.addresses)
+    requires pageDbCorresponds(m,  d)
+    ensures  pageDbCorresponds(m', d)
+{
+    reveal_PageDb();
+    reveal_ValidMemState();
+    reveal_pageDbEntryCorresponds();
+    reveal_pageContentsCorresponds();
+    reveal_pageDbClosedRefs();
+   
+    forall ( p | validPageNr(p) )
+        ensures pageDbEntryCorresponds(d[p], extractPageDbEntry(m',p));
+        ensures pageContentsCorresponds(p, d[p], extractPage(m', p));
+    {
+        assert extractPageDbEntry(m, p) == extractPageDbEntry(m', p);
+        PageDbCorrespondsImpliesEntryCorresponds(m, d, p);
+        assert pageDbEntryCorresponds(d[p], extractPageDbEntry(m, p));
+        
+        assert extractPage(m, p) == extractPage(m', p);
+        assert pageContentsCorresponds(p, d[p], extractPage(m, p));
+    }
+
+}
 
 lemma ValidPageDbImpliesValidAddrspace(d:PageDb, n:PageNr)
     requires validPageDb(d)

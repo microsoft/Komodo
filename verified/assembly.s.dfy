@@ -15,6 +15,7 @@ function method{:axiom} IntBit_spec(index:uint32, val:uint32):bool
 //}
 function method{:axiom} BitwiseAnd(x:uint32, y:uint32) : uint32
     ensures y == 3 ==> BitwiseAnd(x, y) == x % 4;
+    ensures y == 0  && x == 1 ==> BitwiseAnd(x, y) != 1;
     ensures forall i {:trigger IntBit_spec(i, BitwiseAnd(x, y))} :: 0 <= i < 32 ==> IntBit_spec(i, BitwiseAnd(x, y)) == (IntBit_spec(i, x) && IntBit_spec(i, y));
 
 function method{:axiom} BitwiseOr(x:uint32, y:uint32):uint32

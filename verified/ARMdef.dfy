@@ -291,7 +291,8 @@ predicate {:opaque} ValidMemState(s:memstate)
     // globals
     && (match TheGlobalDecls() case GlobalDecls(decls) =>
         // same names as decls
-        forall g :: g in decls ==> g in s.globals
+        // The parentheses on the following line do actually matter!
+        (forall g :: g in decls ==> g in s.globals)
         // correct size, all uint32 values
         && forall g :: g in s.globals ==> (g in decls
             && WordsToBytes(|s.globals[g]|) == decls[g]

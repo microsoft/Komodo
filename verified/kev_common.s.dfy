@@ -104,6 +104,7 @@ function method G_PAGEDB_SIZE():int
     ensures G_PAGEDB_SIZE() == KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE();
     { KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE() }
 
+function method {:opaque} CurAddrspaceOp(): operand { op_sym("g_cur_addrspace") }
 function method {:opaque} PageDb(): operand { op_sym("g_pagedb") }
 function method {:opaque} SecurePhysBaseOp(): operand { op_sym("g_secure_physbase") }
 
@@ -115,8 +116,9 @@ function {:axiom} SecurePhysBase(): int
 function method KevGlobalDecls(): globaldecls
     ensures ValidGlobalDecls(KevGlobalDecls());
 {
-    reveal_PageDb(); reveal_SecurePhysBaseOp();
-    GlobalDecls(map[SecurePhysBaseOp() := 4, //BytesPerWord()
+    reveal_PageDb(); reveal_SecurePhysBaseOp(); reveal_CurAddrspaceOp();
+    GlobalDecls(map[SecurePhysBaseOp() := 4, //BytesPerWord() 
+                    CurAddrspaceOp() := 4,  //BytesPerWord()
                     PageDb() := G_PAGEDB_SIZE()])
 }
 
@@ -150,6 +152,8 @@ predicate SaneMem(s:memstate)
     && GlobalFullContents(s, SecurePhysBaseOp()) == [SecurePhysBase()]
     // XXX: workaround so dafny sees that these are distinct
     && SecurePhysBaseOp() != PageDb()
+    && SecurePhysBaseOp() != CurAddrspaceOp()
+    && CurAddrspaceOp() != PageDb()
 }
 
 predicate SaneState(s:state)
