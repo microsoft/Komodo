@@ -447,6 +447,7 @@ predicate evalExceptionTaken(s:state, e:exception, r:state)
 predicate evalEnterUserspace(s:state, r:state)
     requires ValidState(s)
     // ensures  evalEnterUserspace(s, r) ==> AlwaysInvariant(s, r)
+    ensures evalEnterUserspace(s, r) ==> mode_of_state(r) == User
 {
     mode_of_state(s) != User && ValidModeChange'(s, User) &&
     var spsr := op_spsr(s);

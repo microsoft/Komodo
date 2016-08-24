@@ -135,6 +135,7 @@ lemma validERImpliesMemInv(s:SysState, s':SysState)
 }
 */
 
+/*
 lemma valEnterImpliesMInv(s:SysState,s':SysState,dispPage:PageNr,
     a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
@@ -180,10 +181,11 @@ lemma valEnterImpliesMInv(s:SysState,s':SysState,dispPage:PageNr,
         */
     }
 }
+*/
 
 function exceptionHandled_premium(s:SysState) : (int, int, PageDb)
     requires validSysState(s)
-    requires !s.hw.conf.ex.none?
+    requires !s.hw.conf.ex.ExNone?
     requires mode_of_state(s.hw) != User
     ensures var (r0,r1,d) := exceptionHandled_premium(s);
         validPageDb(d)
@@ -194,7 +196,7 @@ function exceptionHandled_premium(s:SysState) : (int, int, PageDb)
 
 lemma exceptionHandledValidPageDb(s:SysState) 
     requires validSysState(s)
-    requires !s.hw.conf.ex.none?
+    requires !s.hw.conf.ex.ExNone?
     requires mode_of_state(s.hw) != User
     ensures var (r0,r1,d) := exceptionHandled(s);
         validPageDb(d)
@@ -202,7 +204,6 @@ lemma exceptionHandledValidPageDb(s:SysState)
    reveal_validPageDb();
    reveal_ValidSRegState();
    reveal_ValidRegState();
-   reveal_ValidConfig();
    var (r0,r1,d') := exceptionHandled(s);
         var p := s.g.g_cur_dispatcher;
         assert validPageDbEntry(d', p);
@@ -230,6 +231,7 @@ lemma MemInvarSubsumption(s:SysState,s':SysState,p:PageNr)
 {
 }
 
+/*
 predicate {:opaque} validEnter_premium(s:SysState,s':SysState,dispPage:PageNr,
     a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
@@ -256,4 +258,4 @@ predicate {:opaque} validEnter_premium(s:SysState,s':SysState,dispPage:PageNr,
     else
         validEnter(s, s', dispPage,a1,a2,a3)
 }
-
+*/

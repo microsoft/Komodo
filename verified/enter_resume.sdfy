@@ -173,7 +173,7 @@ procedure pre_entry_enter(
         assume false;
         assert BitwiseAnd(uint32(r10),uint32(1)) != 1;
         assert and32(r10,1) != 1;
-        assert decode_scr(r10) == SCR(Secure);
+        assert decode_scr(r10) == SCR(Secure, false, false);
     }
   
     //-------------------------------------------------------------------------
@@ -221,7 +221,11 @@ procedure pre_entry_enter(
     // reveal_pageDbAddrspaceCorresponds();
     MSR(OSReg(ttbr0), r10);
 
-    assert this.conf.ttbr0 == page_paddr(l1p);
+    MaskWithSizeIsAligned(r10, 0x1000);
+    assert isUInt32(r10);
+    assert isUInt32(0xffff_f000);
+    assume r10 == and32(r10, 0xffff_f000);
+    assert this.conf.ttbr0.ptbase == page_paddr(l1p);
     //-------------------------------------------------------------------------
     
     //-------------------------------------------------------------------------
@@ -248,7 +252,7 @@ procedure pre_entry_enter(
     //-------------------------------------------------------------------------
    
     assert s.d == s'.d;
-    assert s'.hw.conf.ttbr0 == page_paddr(l1p);
+    assert s'.hw.conf.ttbr0.ptbase == page_paddr(l1p);
     assert s'.hw.conf.scr.ns == Secure; // XXX FIXME TODO
     assert s'.g.g_cur_dispatcher == pagenr;
     assert s'.hw.regs[R0] == arg1 && s'.hw.regs[R1] == arg2 &&

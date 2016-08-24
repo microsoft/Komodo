@@ -55,7 +55,6 @@ function securePageFromPhysAddr(phys:int): PageNr
 predicate validERTransitionHW(hw:state, hw':state, d:PageDb)
 {
     reveal_validPageDb();
-    reveal_ValidConfig();
     ValidState(hw) && ValidState(hw') && hw'.conf.ttbr0 == hw.conf.ttbr0
     && physPageIsSecure(hw.conf.ttbr0.ptbase / PAGESIZE())
     && nonStoppedL1(d, securePageFromPhysAddr(hw.conf.ttbr0.ptbase))
@@ -112,7 +111,6 @@ predicate preEntryEnter(s:SysState,s':SysState,
     // preEntryEnter(s,s',dispPage,a1,a2,a3)) ==>false
 {
     reveal_validPageDb();
-    reveal_ValidConfig();
     reveal_ValidRegState();
     var addrspace := s.d[s.d[dispPage].addrspace];
     assert isAddrspace(s.d, s.d[dispPage].addrspace);
@@ -122,7 +120,7 @@ predicate preEntryEnter(s:SysState,s':SysState,
     assert !hasStoppedAddrspace(s.d, l1p);
 
     validSysState(s') &&  s.d == s'.d &&
-    s'.hw.conf.ttbr0 == page_paddr(l1p) &&
+    s'.hw.conf.ttbr0.ptbase == page_paddr(l1p) &&
     s'.hw.conf.scr.ns == Secure &&
 // =======
 //    s'.hw.conf.ttbr0.ptbase == page_paddr(l1p) &&
@@ -143,7 +141,6 @@ predicate preEntryResume(s:SysState, s':SysState, dispPage:PageNr)
     requires smc_resume(s.d, dispPage).1 == KEV_ERR_SUCCESS()
 {
     reveal_validPageDb();
-    reveal_ValidConfig();
     var disp := s.d[dispPage].entry;
     
     validSysState(s') && // s'.d == s.d &&
@@ -179,6 +176,7 @@ predicate preEntryResume(s:SysState, s':SysState, dispPage:PageNr)
 
 predicate entryTransitionEnter(s:SysState,s':SysState)
     // ensures (validSysState(s) && validSysState(s') && entryTransitionEnter(s,s')) ==>false
+    ensures entryTransitionEnter(s, s') ==> mode_of_state(s'.hw) == User
 {
     validERTransition(s, s') && s'.d == s.d &&
     evalEnterUserspace(s.hw, s'.hw) &&
@@ -220,7 +218,6 @@ function exceptionHandled(s:SysState) : (int, int, PageDb)
     reveal_validPageDb();
     reveal_ValidSRegState();
     reveal_ValidRegState();
-    reveal_ValidConfig();
     if(s.hw.conf.ex == ExSVC) then
         var p := s.g.g_cur_dispatcher;
         var d' := s.d[ p := s.d[p].(entry := s.d[p].entry.(entered := false))];
@@ -249,7 +246,6 @@ predicate bankedRegsPreserved(hw:state, hw':state)
     requires ValidState(hw) && ValidState(hw')
 {
         reveal_ValidRegState();
-        reveal_ValidConfig();
         forall m :: m != User ==>
         hw.conf.spsr[m] == hw'.conf.spsr[m] &&
         hw.regs[LR(m)] == hw'.regs[LR(m)] &&
@@ -264,7 +260,6 @@ predicate WSMemInvariantExceptAddrspace(hw:state, hw':state, d:PageDb)
     requires ValidState(hw)
     requires validERTransitionHW(hw, hw', d)
 {
-    reveal_ValidConfig();
     WSMemInvariantExceptAddrspaceAtPage(hw, hw', d,
         securePageFromPhysAddr(hw.conf.ttbr0.ptbase))
 }

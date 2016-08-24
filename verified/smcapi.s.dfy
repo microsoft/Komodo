@@ -419,7 +419,6 @@ predicate smchandlerInvariant(s:state, s':state)
     requires ValidState(s)
 {
     reveal_ValidRegState();
-    reveal_ValidConfig();
     ValidState(s')
         // non-volatile regs preserved
         && s.regs[R4] == s'.regs[R4] && s.regs[R5] == s'.regs[R5]
