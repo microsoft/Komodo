@@ -448,11 +448,11 @@ predicate evalEnterUserspace(s:state, r:state)
 
 predicate evalUserspaceExecution(s:state, r:state)
     requires ValidState(s)
-    requires mode_of_state(s) == User
     ensures evalUserspaceExecution(s, r) ==> ValidState(r) && mode_of_state(r) == User
 {
     reveal_ValidMemState();
     reveal_ValidRegState();
+    mode_of_state(s) == User &&
     // if we can't extract a page table, we know nothing
     var pt := ExtractAbsPageTable(s);
     pt.Just? &&
