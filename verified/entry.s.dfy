@@ -177,18 +177,18 @@ predicate preEntryResume(s:SysState, s':SysState, dispPage:PageNr)
 predicate entryTransitionEnter(s:SysState,s':SysState)
     // ensures (validSysState(s) && validSysState(s') && entryTransitionEnter(s,s')) ==>false
 {
-    validERTransition(s, s') && s'.d == s.d &&
-    evalEnterUserspace(s.hw, s'.hw) &&
-    OperandContents(s.hw, OLR) == s.d[s.g.g_cur_dispatcher].entry.entrypoint
+    validERTransition(s, s') && s'.d == s.d
+    && evalEnterUserspace(s.hw, s'.hw)
+    && s'.hw.steps == s.hw.steps + 1
+    && OperandContents(s.hw, OLR) == s.d[s.g.g_cur_dispatcher].entry.entrypoint
 }
 
 predicate entryTransitionResume(s:SysState,s':SysState)
     // ensures (validSysState(s) && validSysState(s') && entryTransitionResume(s,s')) ==>false
 {
     validSysState(s) && validSysState(s') && s.d == s'.d
-    && ValidModeChange'(s.hw, User)
-    && decode_mode'(and32(SpecialOperandContents(s.hw, op_spsr(s.hw)), 0x1f)) == Just(User) // XXX
     && evalEnterUserspace(s.hw, s'.hw)
+    && s'.hw.steps == s.hw.steps + 1
     && (var disp := s.d[s.g.g_cur_dispatcher].entry;
     OperandContents(s.hw, OLR) == disp.ctxt.pc)
 }
@@ -197,13 +197,13 @@ predicate userspaceExecution(hw:state, hw':state, d:PageDb)
     /*ensures (exists s, s' :: validSysState(s) && validSysState(s') &&
         s.d == s'.d && userspaceExecution(s.hw, s'.hw, d)) ==> false */
     requires ValidState(hw) && mode_of_state(hw) == User
-    ensures userspaceExecution(hw, hw', d) ==> hw'.conf.ex != ExNone
 {
     validERTransitionHW(hw, hw', d)
-    && exists s, ex :: ex != ExNone && evalUserspaceExecution(hw, s)
+    && exists s, ex :: evalUserspaceExecution(hw, s)
     && evalExceptionTaken(s, ex, hw')
     && WSMemInvariantExceptAddrspace(hw, hw', d)
     && hw.conf.excount + 1 == hw'.conf.excount
+    && hw.conf.exstep == hw'.steps
 }
 
 //-----------------------------------------------------------------------------
@@ -211,13 +211,12 @@ predicate userspaceExecution(hw:state, hw':state, d:PageDb)
 //-----------------------------------------------------------------------------
 function exceptionHandled(s:SysState,p:PageNr) : (int, int, PageDb)
     requires validSysState(s)
-    requires s.hw.conf.ex != ExNone
 {
     reveal_validPageDb();
     reveal_ValidSRegState();
     reveal_ValidRegState();
     reveal_ValidConfig();
-    if s.hw.conf.ex == ExSVC then (KEV_ERR_SUCCESS(), s.hw.regs[R0], s.d)
+    if s.hw.conf.ex.ExSVC? then (KEV_ERR_SUCCESS(), s.hw.regs[R0], s.d)
     else 
         var p := s.g.g_cur_dispatcher;
         var pc := OperandContents(s.hw, OLR);
@@ -225,7 +224,7 @@ function exceptionHandled(s:SysState,p:PageNr) : (int, int, PageDb)
         var disp' := Dispatcher(s.d[p].entry.entrypoint, true,
             DispatcherContext(s.hw.regs, cpsr, pc));
         var d' := s.d[ p := PageDbEntryTyped(s.d[p].addrspace, disp')];
-        if s.hw.conf.ex == ExIRQ || s.hw.conf.ex == ExFIQ then
+        if s.hw.conf.ex.ExIRQ? || s.hw.conf.ex.ExFIQ? then
             (KEV_ERR_INTERRUPTED(), 0, d')
         else
             assert s.hw.conf.ex.ExAbt? || s.hw.conf.ex.ExUnd?;
