@@ -2,7 +2,6 @@ include "kev_common.s.dfy"
 include "ARMdef.dfy"
 include "pagedb.s.dfy"
 include "smcapi.s.dfy"
-include "pagedb.i.dfy"
 include "abstate.s.dfy"
 
 predicate nonStoppedL1(d:PageDb, l1:PageNr)

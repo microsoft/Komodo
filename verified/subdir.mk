@@ -65,7 +65,7 @@ $(dir)/kev_common.i.verified: $(dir)/ARMspartan.verified $(dir)/kev_common.s.ver
 $(dir)/smcapi.s.verified: $(dir)/kev_common.s.verified $(dir)/pagedb.s.verified
 $(dir)/smcapi.i.verified: $(dir)/smcapi.s.verified
 $(dir)/pagedb.i.verified: $(dir)/pagedb.s.verified $(dir)/kev_common.i.verified
-$(dir)/entry.s.verified:  $(dir)/smcapi.s.verified $(dir)/pagedb.i.verified $(dir)/abstate.s.verified
+$(dir)/entry.s.verified:  $(dir)/kev_common.s.verified $(dir)/ARMdef.verified $(dir)/pagedb.s.verified $(dir)/smcapi.s.verified $(dir)/abstate.s.verified
 $(dir)/entry.i.verified: $(dir)/entry.s.verified
 $(dir)/main.i.verified: $(dir)/ARMprint.verified $(dir)/smc_handler.verified
 
