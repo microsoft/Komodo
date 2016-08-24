@@ -2,7 +2,6 @@ include "kev_common.s.dfy"
 include "ARMdef.dfy"
 include "pagedb.s.dfy"
 include "smcapi.s.dfy"
-include "pagedb.i.dfy"
 include "abstate.s.dfy"
 
 predicate nonStoppedL1(d:PageDb, l1:PageNr)
@@ -178,18 +177,18 @@ predicate entryTransitionEnter(s:SysState,s':SysState)
     // ensures (validSysState(s) && validSysState(s') && entryTransitionEnter(s,s')) ==>false
     ensures entryTransitionEnter(s, s') ==> mode_of_state(s'.hw) == User
 {
-    validERTransition(s, s') && s'.d == s.d &&
-    evalEnterUserspace(s.hw, s'.hw) &&
-    OperandContents(s.hw, OLR) == s.d[s.g.g_cur_dispatcher].entry.entrypoint
+    validERTransition(s, s') && s'.d == s.d
+    && evalEnterUserspace(s.hw, s'.hw)
+    && s'.hw.steps == s.hw.steps + 1
+    && OperandContents(s.hw, OLR) == s.d[s.g.g_cur_dispatcher].entry.entrypoint
 }
 
 predicate entryTransitionResume(s:SysState,s':SysState)
     // ensures (validSysState(s) && validSysState(s') && entryTransitionResume(s,s')) ==>false
 {
     validSysState(s) && validSysState(s') && s.d == s'.d
-    && ValidModeChange'(s.hw, User)
-    && decode_mode'(and32(SpecialOperandContents(s.hw, op_spsr(s.hw)), 0x1f)) == Just(User) // XXX
     && evalEnterUserspace(s.hw, s'.hw)
+    && s'.hw.steps == s.hw.steps + 1
     && (var disp := s.d[s.g.g_cur_dispatcher].entry;
     OperandContents(s.hw, OLR) == disp.ctxt.pc)
 }
@@ -198,13 +197,13 @@ predicate userspaceExecution(hw:state, hw':state, d:PageDb)
     /*ensures (exists s, s' :: validSysState(s) && validSysState(s') &&
         s.d == s'.d && userspaceExecution(s.hw, s'.hw, d)) ==> false */
     requires ValidState(hw) && mode_of_state(hw) == User
-    ensures userspaceExecution(hw, hw', d) ==> hw'.conf.ex != ExNone
 {
     validERTransitionHW(hw, hw', d)
-    && exists s, ex :: ex != ExNone && evalUserspaceExecution(hw, s)
+    && exists s, ex :: evalUserspaceExecution(hw, s)
     && evalExceptionTaken(s, ex, hw')
     && WSMemInvariantExceptAddrspace(hw, hw', d)
     && hw.conf.excount + 1 == hw'.conf.excount
+    && hw.conf.exstep == hw'.steps
 }
 
 //-----------------------------------------------------------------------------
@@ -213,12 +212,11 @@ predicate userspaceExecution(hw:state, hw':state, d:PageDb)
 function exceptionHandled(s:SysState) : (int, int, PageDb)
     requires validSysState(s)
     requires mode_of_state(s.hw) != User
-    requires s.hw.conf.ex != ExNone
 {
     reveal_validPageDb();
     reveal_ValidSRegState();
     reveal_ValidRegState();
-    if(s.hw.conf.ex == ExSVC) then
+    if(s.hw.conf.ex.ExSVC?) then
         var p := s.g.g_cur_dispatcher;
         var d' := s.d[ p := s.d[p].(entry := s.d[p].entry.(entered := false))];
         (KEV_ERR_SUCCESS(), s.hw.regs[R0], d')
@@ -229,7 +227,7 @@ function exceptionHandled(s:SysState) : (int, int, PageDb)
         var disp' := s.d[p].entry.(entered:=true,
             ctxt:= DispatcherContext(s.hw.regs, psr, pc));
         var d' := s.d[ p := s.d[p].(entry := disp') ];
-        if s.hw.conf.ex == ExIRQ || s.hw.conf.ex == ExFIQ then
+        if s.hw.conf.ex.ExIRQ? || s.hw.conf.ex.ExFIQ? then
             (KEV_ERR_INTERRUPTED(), 0, d')
         else
             assert s.hw.conf.ex.ExAbt? || s.hw.conf.ex.ExUnd?;

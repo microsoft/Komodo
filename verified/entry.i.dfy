@@ -185,7 +185,6 @@ lemma valEnterImpliesMInv(s:SysState,s':SysState,dispPage:PageNr,
 
 function exceptionHandled_premium(s:SysState) : (int, int, PageDb)
     requires validSysState(s)
-    requires !s.hw.conf.ex.ExNone?
     requires mode_of_state(s.hw) != User
     ensures var (r0,r1,d) := exceptionHandled_premium(s);
         validPageDb(d)
@@ -196,7 +195,6 @@ function exceptionHandled_premium(s:SysState) : (int, int, PageDb)
 
 lemma exceptionHandledValidPageDb(s:SysState) 
     requires validSysState(s)
-    requires !s.hw.conf.ex.ExNone?
     requires mode_of_state(s.hw) != User
     ensures var (r0,r1,d) := exceptionHandled(s);
         validPageDb(d)

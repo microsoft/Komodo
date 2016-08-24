@@ -18,7 +18,7 @@ datatype SReg = cpsr | spsr(m:mode) | scr | ttbr0
 // the processor and the concrete representation should be used only for
 // ensuring that the correct values are stored/returned by instructions
 datatype config = Config(cpsr:PSR, spsr:map<mode,PSR>, scr:SCR, ttbr0:TTBR, 
-    ex:exception, excount:nat)
+    ex:exception, excount:nat, exstep:nat)
 datatype PSR  = PSR(m:mode)           // See B1.3.3
 datatype SCR  = SCR(ns:world, irq:bool, fiq:bool) // See B4.1.129
 datatype TTBR = TTBR(ptbase:mem)      // See B4.1.154
@@ -37,13 +37,14 @@ datatype state = State(regs:map<ARMReg, int>,
                        sregs:map<SReg, int>,
                        m:memstate,
                        conf:config,
-                       ok:bool)
+                       ok:bool,
+                       steps:nat)
 
 // System mode is not modeled
 datatype mode = User | FIQ | IRQ | Supervisor | Abort | Undefined | Monitor
 datatype priv = PL0 | PL1 // PL2 is only used in Hyp, not modeled
 datatype world = Secure | NotSecure
-datatype exception = ExNone | ExAbt | ExUnd | ExIRQ | ExFIQ | ExSVC
+datatype exception = ExAbt | ExUnd | ExIRQ | ExFIQ | ExSVC
 
 //-----------------------------------------------------------------------------
 // TODO: get rid of these.
@@ -408,7 +409,6 @@ function {:axiom} TheGlobalDecls(): globaldecls
 // Exceptions
 //-----------------------------------------------------------------------------
 function mode_of_exception(conf:config, e:exception): mode
-    requires e != ExNone
 {
     match e
         case ExAbt => Abort
@@ -420,7 +420,6 @@ function mode_of_exception(conf:config, e:exception): mode
 
 predicate evalExceptionTaken(s:state, e:exception, r:state)
     requires ValidState(s)
-    requires e != ExNone
     ensures evalExceptionTaken(s, e, r) ==> ValidState(r)
     // ensures evalExceptionTaken(s, e, r) ==> AlwaysInvariant(s, r)
 {
@@ -435,7 +434,7 @@ predicate evalExceptionTaken(s:state, e:exception, r:state)
     // update mode, copy CPSR of oldmode to SPSR of newmode, havoc LR
     r == s.(conf := s.conf.(cpsr := PSR(newmode),
                             spsr := s.conf.spsr[newmode := s.conf.cpsr],
-                            ex := e, excount := s.conf.excount + 1),
+                            ex := e, excount := s.conf.excount + 1, exstep := s.steps),
             sregs := s.sregs[cpsr := newpsr][spsr(newmode) := s.sregs[cpsr]],
             regs := s.regs[LR(newmode) := r.regs[LR(newmode)]])
 }
@@ -458,20 +457,22 @@ predicate evalEnterUserspace(s:state, r:state)
 
 predicate evalUserspaceExecution(s:state, r:state)
     requires ValidState(s)
-    requires mode_of_state(s) == User
     ensures  evalUserspaceExecution(s, r) ==> ValidState(r) && mode_of_state(r) == User
     // ensures  evalUserspaceExecution(s, r) ==> AlwaysInvariant(s, r)
 {
     reveal_ValidMemState();
     reveal_ValidRegState();
+    mode_of_state(s) == User &&
     // if we can't extract a page table, we know nothing
     var pt := ExtractAbsPageTable(s);
     pt.Just? &&
     var pages := WritablePagesInTable(fromJust(pt));
     ValidState(r) && (forall m:mem :: m in s.m.addresses <==> m in r.m.addresses) &&
-    // havoc writable pages and user regs
+    // havoc writable pages and user regs, and take some steps
     r == s.(m := s.m.(addresses := havocPages(pages, s.m.addresses, r.m.addresses)),
-            regs := r.regs)
+            regs := r.regs,
+            steps := r.steps)
+    && r.steps > s.steps
     && (forall m:mode {:trigger SP(m)} {:trigger LR(m)} :: m != User
         ==> r.regs[SP(m)] == s.regs[SP(m)] && r.regs[LR(m)] == s.regs[LR(m)])
 }
@@ -498,8 +499,8 @@ function method PAGESIZE():int { 0x1000 }
 predicate PageAligned(addr:mem)
     ensures PageAligned(addr) ==> WordAligned(addr)
 {
-    // XXX: help out poor dafny
-    assert addr % 0x1000 == 0 ==> addr % 4 == 0;
+    // FIXME: help out poor dafny
+    assume addr % 0x1000 == 0 ==> addr % 4 == 0;
     addr % 0x1000 == 0
 }
 
@@ -765,6 +766,8 @@ function eval_op(s:state, o:operand): int
     ensures isUInt32(eval_op(s,o))
     { OperandContents(s,o) }
 
+function takestep(s:state): state
+    { s.(steps := s.steps + 1) }
 
 predicate evalUpdate(s:state, o:operand, v:int, r:state)
     requires ValidState(s)
@@ -774,9 +777,9 @@ predicate evalUpdate(s:state, o:operand, v:int, r:state)
 {
     reveal_ValidRegState();
     match o
-        case OReg(reg) => r == s.(regs := s.regs[o.r := v])
-        case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := v])
-        case OSP => r == s.(regs := s.regs[SP(mode_of_state(s)) := v])
+        case OReg(reg) => r == takestep(s).(regs := s.regs[o.r := v])
+        case OLR => r == takestep(s).(regs := s.regs[LR(mode_of_state(s)) := v])
+        case OSP => r == takestep(s).(regs := s.regs[SP(mode_of_state(s)) := v])
 }
 
 
@@ -788,7 +791,7 @@ predicate evalSRegUpdate(s:state, o:operand, v:int, r:state)
     ensures  evalSRegUpdate(s, o, v, r) ==> ValidState(r)
 {
     reveal_ValidSRegState();
-    r == s.( conf := decode_sreg(s, o.sr, v),
+    r == takestep(s).( conf := decode_sreg(s, o.sr, v),
         sregs := s.sregs[ o.sr := v] )
 }
 
@@ -799,7 +802,7 @@ predicate evalMemUpdate(s:state, m:mem, v:int, r:state)
     ensures evalMemUpdate(s, m, v, r) ==> ValidState(r)
 {
     reveal_ValidMemState();
-    r == s.(m := s.m.(addresses := s.m.addresses[m := v]))
+    r == takestep(s).(m := s.m.(addresses := s.m.addresses[m := v]))
 }
 
 predicate evalGlobalUpdate(s:state, g:operand, offset:nat, v:int, r:state)
@@ -812,7 +815,7 @@ predicate evalGlobalUpdate(s:state, g:operand, offset:nat, v:int, r:state)
     var oldval := s.m.globals[g];
     var newval := oldval[BytesToWords(offset) := v];
     assert |newval| == |oldval|;
-    r == s.(m := s.m.(globals := s.m.globals[g := newval]))
+    r == takestep(s).(m := s.m.(globals := s.m.globals[g := newval]))
 }
 
 function evalCmp(c:ocmp, i1:int, i2:int):bool
@@ -839,7 +842,7 @@ predicate evalGuard(s:state, o:obool, r:state)
     requires ValidOperand(o.o2)
 {
     // TODO: this is where we havoc the flags for the comparison, once we model them
-    r == s
+    r == takestep(s)
 }
 
 predicate ValidModeChange'(s:state, m:mode)
@@ -1010,7 +1013,7 @@ predicate evalMOVSPCLRUC(s:state, r:state)
     ensures  evalMOVSPCLRUC(s, r) ==> r.ok
 {
             exists ex, s2, s3, s4
-                :: ex != ExNone && ValidState(s2) && ValidState(s3) && ValidState(s4)
+                :: ValidState(s2) && ValidState(s3) && ValidState(s4)
                 && evalEnterUserspace(s, s2)
                 && evalUserspaceExecution(s2, s3)
                 && evalExceptionTaken(s3, ex, s4)
