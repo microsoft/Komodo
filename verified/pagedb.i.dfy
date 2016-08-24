@@ -209,17 +209,6 @@ function ARM_L1PTE(paddr: int): int
     paddr + 1
 }
 
-
-function ARM_L2PTE_CONST_BITS(): int
-{
-    0x2 /* type */
-        + 0x4 /* B */
-        + 0x30 /* AP0, AP1 */
-        + 0x140 /* TEX */
-        + 0x400 /* S */
-        + 0x800 /* NG */
-}
-
 function ARM_L2PTE_NX_BITS(): int
 {
     0x1 // XN
@@ -236,7 +225,7 @@ function ARM_L2PTE(paddr: int, write: bool, exec: bool): int
 {
     var nxbits := if exec then 0 else ARM_L2PTE_NX_BITS();
     var robits := if write then 0 else ARM_L2PTE_RO_BITS();
-    var ptebits := ARM_L2PTE_CONST_BITS() + nxbits + robits;
+    var ptebits := ARM_L2PTE_CONST_BITS() + 0x2 /* type */ + nxbits + robits;
     //or32(ARM_L2PTE_CONST_BITS(), or32(nxbits, robits))
     paddr + ptebits //or32(paddr, ptebits)
 }

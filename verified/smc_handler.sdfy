@@ -35,7 +35,8 @@ procedure smc_handler(
         pageDbCorresponds(this.m, pagedb_in);
     ensures
         NonvolatileRegPreserving(old(this),this);
-        //tuple(pagedb, err, retval) == old(smchandler_premium(pagedb_in, callno, arg1, arg2, arg3, arg4));
+        //TODO: tuple(pagedb, err, retval) == old(smchandler_premium(pagedb_in, callno, arg1, arg2, arg3, arg4));
+        //TODO: smchandlerInvariant(old(this),this);
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {

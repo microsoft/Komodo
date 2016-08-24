@@ -414,6 +414,26 @@ function smchandler(pageDbIn: PageDb, callno: int, arg1: int, arg2: int,
     else (pageDbIn, KEV_ERR_INVALID(), 0)
 }
 
+/* Invariant across SMC handler state */
+predicate smchandlerInvariant(s:state, s':state)
+    requires ValidState(s)
+{
+    reveal_ValidRegState();
+    reveal_ValidConfig();
+    ValidState(s')
+        // non-volatile regs preserved
+        && s.regs[R4] == s'.regs[R4] && s.regs[R5] == s'.regs[R5]
+        && s.regs[R6] == s'.regs[R6] && s.regs[R7] == s'.regs[R7]
+        && s.regs[R8] == s'.regs[R8] && s.regs[R9] == s'.regs[R9]
+        && s.regs[R10] == s'.regs[R10] && s.regs[R11] == s'.regs[R11]
+        && s.regs[R12] == s'.regs[R12]
+        // banked regs, including SPSR and LR (our return target) are preserved
+        && forall m :: ((m == User || s.conf.spsr[m] == s'.conf.spsr[m])
+                && s.regs[LR(m)] == s'.regs[LR(m)]
+                && s.regs[SP(m)] == s'.regs[SP(m)])
+        // non-secure world
+        && s'.conf.scr == SCR(NotSecure, false, false)
+}
 
 // lemma for allocatePage; FIXME: not trusted, should not be in a .s.dfy file
 lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
