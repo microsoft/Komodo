@@ -177,7 +177,6 @@ lemma valEnterImpliesMInv(s:SysState,s':SysState,dispPage:PageNr,
 
 function exceptionHandled_premium(s:SysState,p:PageNr) : (int, int, PageDb)
     requires validSysState(s)
-    requires !s.hw.conf.ex.none?
     ensures var (r0,r1,d) := exceptionHandled_premium(s,p);
         validPageDb(d)
 {
@@ -187,7 +186,6 @@ function exceptionHandled_premium(s:SysState,p:PageNr) : (int, int, PageDb)
 
 lemma exceptionHandledValidPageDb(s:SysState,p:PageNr) 
     requires validSysState(s)
-    requires !s.hw.conf.ex.none?
     ensures var (r0,r1,d) := exceptionHandled(s,p);
         validPageDb(d)
 {
@@ -195,7 +193,7 @@ lemma exceptionHandledValidPageDb(s:SysState,p:PageNr)
    reveal_ValidSRegState();
    reveal_ValidRegState();
    reveal_ValidConfig();
-   if(s.hw.conf.ex.svc?) {
+   if(s.hw.conf.ex.ExSVC?) {
    } else {
         var p := s.g.g_cur_dispatcher;
         var pc := OperandContents(s.hw, OLR);
