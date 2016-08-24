@@ -123,7 +123,7 @@ function decode_sreg(s:state, sr:SReg, v:int) : config
     requires (sr.cpsr? || sr.spsr?) ==> ValidModeEncoding(and32(v, 0x1f))
     ensures ValidConfig(decode_sreg(s, sr, v))
 {
-    reveal_ValidConfig();
+    // reveal_ValidConfig();
     match sr
         case ttbr0 => s.conf.(ttbr0 := decode_ttbr(v))
         case cpsr  => s.conf.(cpsr := decode_psr(v))
@@ -279,7 +279,7 @@ predicate {:opaque} ValidRegState(regs:map<ARMReg, int>)
     && R12 in regs && isUInt32(regs[R12])
 }
 
-predicate {:opaque} ValidConfig(c:config)
+predicate ValidConfig(c:config)
 {
     isUInt32(c.ttbr0.ptbase) && PageAligned(c.ttbr0.ptbase) &&
     User !in c.spsr &&
@@ -297,10 +297,15 @@ predicate {:opaque} ValidSRegState(sregs:map<SReg, int>)
     && ValidModeEncoding(and32(sregs[cpsr], 0x1f))
 }
 
+// All valid states have the same memory address domain, but we don't care what 
+// it is (at this level).
+function {:axiom} AddressDomain() : set<mem>
+
 predicate {:opaque} ValidMemState(s:memstate)
 {
     // regular mem
-    (forall m:mem :: m in s.addresses
+    (forall m:mem :: m in AddressDomain() <==> m in s.addresses)
+    && (forall m:mem :: m in s.addresses
         ==> WordAligned(m) && isUInt32(m) && isUInt32(s.addresses[m]))
     // globals
     && (match TheGlobalDecls() case GlobalDecls(decls) =>
@@ -417,9 +422,10 @@ predicate evalExceptionTaken(s:state, e:exception, r:state)
     requires ValidState(s)
     requires e != ExNone
     ensures evalExceptionTaken(s, e, r) ==> ValidState(r)
+    // ensures evalExceptionTaken(s, e, r) ==> AlwaysInvariant(s, r)
 {
     reveal_ValidRegState();
-    reveal_ValidConfig();
+    // reveal_ValidConfig();
     reveal_ValidSRegState();
     var oldmode := mode_of_state(s);
     var newmode := mode_of_exception(s.conf, e);
@@ -440,6 +446,7 @@ predicate evalExceptionTaken(s:state, e:exception, r:state)
 
 predicate evalEnterUserspace(s:state, r:state)
     requires ValidState(s)
+    // ensures  evalEnterUserspace(s, r) ==> AlwaysInvariant(s, r)
 {
     mode_of_state(s) != User && ValidModeChange'(s, User) &&
     var spsr := op_spsr(s);
@@ -451,7 +458,8 @@ predicate evalEnterUserspace(s:state, r:state)
 predicate evalUserspaceExecution(s:state, r:state)
     requires ValidState(s)
     requires mode_of_state(s) == User
-    ensures evalUserspaceExecution(s, r) ==> ValidState(r) && mode_of_state(r) == User
+    ensures  evalUserspaceExecution(s, r) ==> ValidState(r) && mode_of_state(r) == User
+    // ensures  evalUserspaceExecution(s, r) ==> AlwaysInvariant(s, r)
 {
     reveal_ValidMemState();
     reveal_ValidRegState();
@@ -477,7 +485,8 @@ function havocPages(pages:set<mem>, s:map<mem, int>, r:map<mem, int>): map<mem, 
 // XXX: To be defined by application code
 predicate ApplicationUsermodeContinuationInvariant(s:state, r:state)
     requires ValidState(s)
-    ensures ApplicationUsermodeContinuationInvariant(s,r) ==> ValidState(r)
+    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> ValidState(r)
+    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> r.ok
 
 //-----------------------------------------------------------------------------
 // Model of page tables for userspace execution
@@ -531,7 +540,7 @@ function ExtractAbsPageTable(s:state): Maybe<AbsPTable>
     ensures var r := ExtractAbsPageTable(s);
         r.Just? ==> WellformedAbsPTable(fromJust(r))
 {
-    reveal_ValidConfig();
+    // reveal_ValidConfig();
     var vbase := s.conf.ttbr0.ptbase + PhysBase();
     if ValidMemRange(s.m, vbase, vbase + ARM_L1PTABLE_BYTES()) then
         ExtractAbsL1PTable(s.m, vbase, 0)
@@ -835,6 +844,8 @@ predicate evalGuard(s:state, o:obool, r:state)
 predicate ValidModeChange'(s:state, m:mode)
 {
     // See B9.1.2
+    // Mode change into monitor is only allowed through an exception.
+    // evalExceptionTaken does not require ValidModeChange
     priv_of_state(s) == PL1 && !(m == Monitor && world_of_state(s) != Secure)
 }
 
@@ -846,7 +857,8 @@ predicate ValidModeChange(s:state, v:int)
 }
 
 predicate ValidInstruction(s:state, ins:ins)
-{
+{   
+    // reveal_ValidConfig();
     ValidState(s) && match ins
         case ADD(dest, src1, src2) => ValidOperand(src1) &&
             ValidOperand(src2) && ValidDestinationOperand(dest) &&
@@ -916,10 +928,8 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidRegOperand(src)
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE =>
             mode_of_state(s) != User &&
-            var spsr := OSReg(spsr(mode_of_state(s)));
-            assert ValidSpecialOperand(s, spsr);
-            var mode := and32(SpecialOperandContents(s, spsr), 0x1f);
-            decode_mode'(mode) == Just(User) && ValidModeChange'(s, User)
+            s.conf.spsr[mode_of_state(s)].m == User &&
+            ValidModeChange'(s, User)
 }
 
 predicate evalIns(ins:ins, s:state, r:state)
@@ -980,13 +990,31 @@ predicate evalIns(ins:ins, s:state, r:state)
         case MSR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r)
         case MRC(dst, src) => evalUpdate(s, dst, SpecialOperandContents(s, OSReg(scr)), r)
         case MCR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r)
-        case MOVS_PCLR_TO_USERMODE_AND_CONTINUE => 
+        case MOVS_PCLR_TO_USERMODE_AND_CONTINUE => evalMOVSPCLRUC(s, r)
+}
+
+/*
+predicate AlwaysInvariant(s:state, s':state)
+{
+    // valid state is maintained
+    ValidState(s) && ValidState(s')
+    // mem validity never changes
+    && (forall m:mem :: m in s.m.addresses <==> m in s'.m.addresses)
+}
+*/
+
+predicate evalMOVSPCLRUC(s:state, r:state)
+    requires ValidState(s)
+    ensures  evalMOVSPCLRUC(s, r) ==> ValidState(r)
+    ensures  evalMOVSPCLRUC(s, r) ==> r.ok
+{
             exists ex, s2, s3, s4
                 :: ex != ExNone && ValidState(s2) && ValidState(s3) && ValidState(s4)
                 && evalEnterUserspace(s, s2)
                 && evalUserspaceExecution(s2, s3)
                 && evalExceptionTaken(s3, ex, s4)
                 && ApplicationUsermodeContinuationInvariant(s4, r)
+                && r.ok
 }
 
 predicate evalBlock(block:codes, s:state, r:state)

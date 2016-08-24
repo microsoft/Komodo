@@ -148,6 +148,30 @@ predicate AddrMemInvariant(s:state, s':state)
 }
 
 //-----------------------------------------------------------------------------
+//  Lemmas for proving above invariants
+//-----------------------------------------------------------------------------
+lemma validStatesEnsureAlwaysInvariant(s:state,s':state)
+    requires ValidState(s) && ValidState(s');
+    ensures  AlwaysInvariant(s,s');
+{
+    reveal_ValidMemState();
+}
+
+//-----------------------------------------------------------------------------
+// Lemma for ARMdecls MOVS_PCLR_TO_USERMODE
+//-----------------------------------------------------------------------------
+lemma movsOK(s:sp_state)
+    requires ValidState(s);
+    requires mode_of_state(s) != User;
+    requires s.conf.spsr[mode_of_state(s)].m == User;
+    requires ValidModeChange'(s, User);
+    ensures  ValidInstruction(s, MOVS_PCLR_TO_USERMODE_AND_CONTINUE);
+{
+}
+
+
+
+//-----------------------------------------------------------------------------
 // Control Flow Lemmas
 //-----------------------------------------------------------------------------
 

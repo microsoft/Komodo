@@ -69,7 +69,7 @@ lemma MIClosedOverEquivUpToEntered(hw:state,hw':state,d:PageDb,d':PageDb,p:PageN
     }
 }
 
-lemma MIWeaklyCommute(s1:SysState, s2:SysState, s3:SysState, d:PageDb, p:PageNr)
+lemma MIWeaklyTransitive(s1:SysState, s2:SysState, s3:SysState, d:PageDb, p:PageNr)
     requires validSysState(s1) && validSysState(s2) && validSysState(s3) && nonStoppedL1(d, p)
     requires WSMemInvariantExceptAddrspaceAtPage(s1.hw, s2.hw, d, p) &&
         WSMemInvariantExceptAddrspaceAtPage(s2.hw, s3.hw, d, p)
@@ -77,7 +77,7 @@ lemma MIWeaklyCommute(s1:SysState, s2:SysState, s3:SysState, d:PageDb, p:PageNr)
 {
 }
 
-lemma MICommute(s1:SysState, s2:SysState, s3:SysState, p:PageNr)
+lemma MITransitive(s1:SysState, s2:SysState, s3:SysState, p:PageNr)
     requires validSysState(s1) && validSysState(s2) && validSysState(s3) &&
         nonStoppedL1(s1.d,p) && nonStoppedL1(s2.d,p) && nonStoppedL1(s3.d,p) 
     requires equivalentExceptPage(s1.d,s2.d,p) && equivalentExceptPage(s2.d,s3.d,p) 
@@ -87,7 +87,7 @@ lemma MICommute(s1:SysState, s2:SysState, s3:SysState, p:PageNr)
 {
     MIClosedOverEquivUpToEntered(s2.hw,s3.hw,s2.d,s1.d,p);
     assert WSMemInvariantExceptAddrspaceAtPage(s2.hw, s3.hw, s1.d, p);
-    MIWeaklyCommute(s1,s2,s3,s1.d,p);
+    MIWeaklyTransitive(s1,s2,s3,s1.d,p);
     assert WSMemInvariantExceptAddrspaceAtPage(s1.hw, s3.hw, s1.d, p);
 }
 
@@ -170,7 +170,7 @@ lemma valEnterImpliesMInv(s:SysState,s':SysState,dispPage:PageNr,
         validERImpliesMemInv(s2,s3);
         assert l1pOfDispatcher(s2.d, s2.g.g_cur_dispatcher) == p;
         assert WSMemInvariantExceptAddrspaceAtPage(s2.hw, s3.hw, s2.d, p);
-        MICommute(s, s2, s3, p);
+        MITransitive(s, s2, s3, p);
         assert WSMemInvariantExceptAddrspaceAtPage(s.hw, s3.hw, s.d, p);
      
         assert WSMemInvariantExceptAddrspaceAtPage(s3.hw, s4.hw, s.d, p);
@@ -230,7 +230,6 @@ lemma MemInvarSubsumption(s:SysState,s':SysState,p:PageNr)
 {
 }
 
-/*
 predicate {:opaque} validEnter_premium(s:SysState,s':SysState,dispPage:PageNr,
     a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
@@ -257,4 +256,4 @@ predicate {:opaque} validEnter_premium(s:SysState,s':SysState,dispPage:PageNr,
     else
         validEnter(s, s', dispPage,a1,a2,a3)
 }
-*/
+

@@ -317,7 +317,7 @@ MSR({:operand} dst:int, {:operand} src:int)
     requires
         ValidSpecialOperand(this, @dst);
         !ValidMcrMrcOperand(this, @dst);
-        is_psr(@dst) ==> ValidModeChange(mode_of_state(this), src);
+        is_psr(@dst) ==> ValidModeChange(this, src);
     ensures
         evalSRegUpdate(old(this), @dst, old(src), this);
         AlwaysInvariant(old(this), this);
@@ -358,22 +358,23 @@ MCR({:operand} dst:int, {:operand} src:int)
     reveal_sp_eval();
 }
 
-procedure {:instruction Ins(MOVS_PCLR)}
-MOVS_PCLR()
+procedure {:instruction Ins(MOVS_PCLR_TO_USERMODE_AND_CONTINUE)}
+MOVS_PCLR_TO_USERMODE_AND_CONTINUE()
     requires/ensures
         ValidState(this);
     requires 
-        ValidSpecialOperand(this, OSReg(spsr( mode_of_state(this) )));
-        ValidModeChange(mode_of_state(this),
-            SpecialOperandContents(this ,OSReg(spsr(this.conf.cpsr.m))));
         mode_of_state(this) != User;
+        this.conf.spsr[mode_of_state(this)].m == User;
+        ValidModeChange'(this, User);
     ensures
-        evalSRegUpdate(old(this), OSReg(cpsr), SpecialOperandContents(old(this),
-            OSReg( old(spsr(this.conf.cpsr.m) ))), this);
+        evalMOVSPCLRUC(old(this), this);
         AlwaysInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
+    // This caused a timeout without this stuff :(
+    movsOK(old(this));
+    assert this.ok;
+    validStatesEnsureAlwaysInvariant(old(this),this);
 }
 
 procedure {:instruction Ins(LDR_reloc(rd, g))}
