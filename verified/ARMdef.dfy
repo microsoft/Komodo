@@ -60,6 +60,9 @@ function method op_lr():operand
 function method op_sym(sym:string):operand
     { OSymbol(sym) }
 
+function op_spsr(s:state):operand
+    { OSReg(spsr(mode_of_state(s))) }
+
 //-----------------------------------------------------------------------------
 // Configuration State
 //-----------------------------------------------------------------------------
@@ -434,8 +437,15 @@ predicate evalExceptionTaken(s:state, e:exception, r:state)
 // Userspace execution model
 //-----------------------------------------------------------------------------
 
-// XXX: To be defined by application code
-predicate ApplicationUsermodeContinuationInvariant(s:state, r:state)
+predicate evalEnterUserspace(s:state, r:state)
+    requires ValidState(s)
+{
+    mode_of_state(s) != User && ValidModeChange'(s, User) &&
+    var spsr := op_spsr(s);
+    assert ValidSpecialOperand(s, spsr);
+    decode_mode'(and32(SpecialOperandContents(s, spsr), 0x1f)) == Just(User) &&
+    evalSRegUpdate(s, OSReg(cpsr), SpecialOperandContents(s,spsr), r)
+}
 
 predicate evalUserspaceExecution(s:state, r:state)
     requires ValidState(s)
@@ -462,6 +472,11 @@ function havocPages(pages:set<mem>, s:map<mem, int>, r:map<mem, int>): map<mem, 
     (map m | isUInt32(m) && m in s
         :: if and32(m, 0xffff_f000) in pages then r[m] else s[m])
 }
+
+// XXX: To be defined by application code
+predicate ApplicationUsermodeContinuationInvariant(s:state, r:state)
+    requires ValidState(s)
+    ensures ApplicationUsermodeContinuationInvariant(s,r) ==> ValidState(r)
 
 //-----------------------------------------------------------------------------
 // Model of page tables for userspace execution
@@ -965,12 +980,12 @@ predicate evalIns(ins:ins, s:state, r:state)
         case MRC(dst, src) => evalUpdate(s, dst, SpecialOperandContents(s, OSReg(scr)), r)
         case MCR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r)
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE => 
-            var spsr := OSReg(spsr(mode_of_state(s)));
-            exists ex, s2, s3, s4 :: ex != ExNone &&
-                evalSRegUpdate(s, OSReg(cpsr), SpecialOperandContents(s,spsr), s2)
+            exists ex, s2, s3, s4
+                :: ex != ExNone && ValidState(s2) && ValidState(s3) && ValidState(s4)
+                && evalEnterUserspace(s, s2)
                 && evalUserspaceExecution(s2, s3)
                 && evalExceptionTaken(s3, ex, s4)
-                && ApplicationUsermodeContinuationInvariant(s, r)
+                && ApplicationUsermodeContinuationInvariant(s4, r)
 }
 
 predicate evalBlock(block:codes, s:state, r:state)
