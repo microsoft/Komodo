@@ -1,4 +1,4 @@
-DAFNYFLAGS = /noNLarith /timeLimit:60 /trace
+DAFNYFLAGS = /noNLarith /timeLimit:60 /trace /rewriteOpaqueUseFuel:0
 SPARTANFLAGS = #-assumeUpdates 1
 
 # top-level target
@@ -22,21 +22,14 @@ mkincs-nodir = $(call mkdfyincs,$(1),) $(call mksdfyincs,$(1),)
 
 # Spartan direct verification, including cheesy workaround for broken error code.
 %.verified %.log: %.sdfy %.gen.dfy
-	/bin/bash -c "$(SPARTAN_MINDY) $(SPARTANFLAGS) $(call mkincs-dir,$*) $< \
+	/bin/bash -c "$(SPARTAN) $(SPARTANFLAGS) $(call mkincs-dir,$*) $< \
 	-dafnyDirect $(DAFNYFLAGS) /compile:0 | tee $*.log; exit \$${PIPESTATUS[0]}"
 	@grep -q "^Dafny program verifier finished with [^0][0-9]* verified, 0 errors$$" $*.log && touch $*.verified
 	@$(RM) $*.log
 
-# Mindy can't handle these files, so we must use vanilla Dafny
-DAFNY_ONLY = ARMdef ARMspartan Seq Sets
-$(foreach n,$(DAFNY_ONLY),$(dir)/$(n).verified): %.verified: %.dfy
+%.verified: %.dfy
 	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< && touch $@
 
-%.verified: %.dfy
-	$(MINDY) $(DAFNYFLAGS) /compile:0 $< && touch $@
-
-# Mindy can't compile, but since we rely on .verified, we can just use
-# Dafny to compile without verifying
 %.exe: %.i.dfy %.i.verified
 	$(DAFNY) $(DAFNYFLAGS) /noVerify /compile:2 /out:$@ $<
 
