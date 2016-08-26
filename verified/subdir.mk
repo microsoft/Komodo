@@ -1,4 +1,4 @@
-DAFNYFLAGS = /noNLarith /timeLimit:60 /trace /rewriteOpaqueUseFuel:0 /induction:3
+DAFNYFLAGS = /noNLarith /timeLimit:60 /trace
 SPARTANFLAGS = #-assumeUpdates 1
 
 # top-level target
