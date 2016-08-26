@@ -319,7 +319,7 @@ predicate{:opaque} evalWhileOpaque(b:obool, c:code, n:nat, s:state, r:state)
     evalWhile(b, c, n, s, r)
 }
 
-predicate sp_whileInv(b:obool, c:code, n:nat, r1:sp_state, r2:sp_state)
+predicate sp_whileInv(b:obool, c:code, n:int, r1:sp_state, r2:sp_state)
 {
     n >= 0 && r1.ok && evalWhileOpaque(b, c, n, to_state(r1), to_state(r2))
 }
