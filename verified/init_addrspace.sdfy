@@ -38,13 +38,12 @@ procedure init_addrspace_mem(
         addrspace_page != l1pt_page;
         addrspace_va == page_monvaddr(addrspace_page);
     ensures
-        AlwaysInvariant(old(this),this);
         GlobalsInvariant(old(this),this);
         StackPreserving(old(this),this);
-        forall i :: ValidMem(this.m, i)
+        forall i :: ValidMem(i)
             && !(page_monvaddr(addrspace_page) <= i < page_monvaddr(addrspace_page) + KEVLAR_PAGE_SIZE())
             && !(page_monvaddr(l1pt_page) <= i < page_monvaddr(l1pt_page) + KEVLAR_PAGE_SIZE())
-            ==> addrval(this,i) == addrval(old(this),i);
+            ==> MemContents(this.m,i) == MemContents(old(this).m,i);
         RegPreservingExcept(old(this),this, set(@r0, @r3, @r7));
         pageContentsCorresponds(old(addrspace_page), initAddrspaceEntry(addrspace_page, l1pt_page), extractPage(this.m, old(addrspace_page)));
         pageContentsCorresponds(old(l1pt_page), initL1PTEntry(addrspace_page), extractPage(this.m, old(l1pt_page)));
@@ -55,20 +54,20 @@ procedure init_addrspace_mem(
     page_paddr_impl(r7,l1pt_page,r0);
 
     STR(r7,r6,sp_op_const(ADDRSPACE_L1PT_PHYS()));
-    assert addrval(this,addrspace_va + ADDRSPACE_L1PT_PHYS()) == page_paddr(l1pt_page);
+    assert MemContents(this.m,addrspace_va + ADDRSPACE_L1PT_PHYS()) == page_paddr(l1pt_page);
 
     ADD(r7, r7, sp_op_const(KEVLAR_DIRECTMAP_VBASE()));
     assert r7 == page_monvaddr(l1pt_page);
     STR(r7,r6,sp_op_const(ADDRSPACE_L1PT()));
-    assert addrval(this,addrspace_va + ADDRSPACE_L1PT()) == page_monvaddr(l1pt_page);
+    assert MemContents(this.m,addrspace_va + ADDRSPACE_L1PT()) == page_monvaddr(l1pt_page);
 
     r0 := 1;
     STR(r0,r6,sp_op_const(ADDRSPACE_REF()));
-    assert addrval(this,addrspace_va + ADDRSPACE_REF()) == 1;
+    assert MemContents(this.m,addrspace_va + ADDRSPACE_REF()) == 1;
 
     r0 := sp_op_const(KEV_ADDRSPACE_INIT());
     STR(r0,r6,sp_op_const(ADDRSPACE_STATE()));
-    assert addrval(this,addrspace_va + ADDRSPACE_STATE()) == KEV_ADDRSPACE_INIT();
+    assert MemContents(this.m,addrspace_va + ADDRSPACE_STATE()) == KEV_ADDRSPACE_INIT();
 
     r3 := sp_op_const(KEVLAR_PAGE_SIZE());
     r0 := 0;
@@ -79,7 +78,7 @@ procedure init_addrspace_mem(
     forall :: pageDbL1PTableCorresponds(l1pt_page, L1PTable(emptyptes), l1pg)
     {
         reveal_pageDbL1PTableCorresponds();
-        assert forall m :: addrInPage(m, l1pt_page) ==> l1pg[m] == 0;
+        assert forall m:mem :: addrInPage(m, l1pt_page) ==> l1pg[m] == 0;
     }
 }
 
@@ -100,7 +99,6 @@ procedure init_addrspace_pagedb(
         l1pt_entry == G_PAGEDB_ENTRY(l1pt_page);
         pagedb_base == AddressOfGlobal(PageDb());
     ensures
-        AlwaysInvariant(old(this),this);
         AddrMemInvariant(old(this),this);
         RegPreservingExcept(old(this),this, set(@r0, @r4, @r5, @r6));
         addrspace_va == page_monvaddr(old(addrspace_page));
@@ -168,7 +166,6 @@ procedure init_addrspace(
         pageIsFree(pagedb_in, addrspace_page);
         pageIsFree(pagedb_in, l1pt_page);
     ensures
-        AlwaysInvariant(old(this),this);
         StackPreserving(old(this),this);
         RegPreservingExcept(old(this),this, set(@r0, @r3, @r4, @r5, @r6, @r7));
         old(specPageDb(smc_initAddrspace_premium(pagedb_in, addrspace_page, l1pt_page))) == pagedb;
@@ -212,6 +209,12 @@ procedure init_addrspace(
     }
 }
 
+#verbatim
+// FIXME: temp kludge for limitations of dafny's bitvectors
+lemma {:axiom} lemma_maskModEquivalence(x:word)
+    ensures BitwiseAnd(x, 3) == x % 4;
+#endverbatim
+
 procedure kev_smc_init_addrspace(
     {:register OReg(R1)} addrspace_page:int,
     {:register OReg(R2)} l1pt_page:int,
@@ -233,9 +236,12 @@ procedure kev_smc_init_addrspace(
     reveal_pageDbEntryCorresponds();
     pagedb := pagedb_in;
     reveal_pageDbClosedRefs();
+    reveal_smc_initAddrspace_premium();
 
     // check alignment of l1pt page
     AND(r0,l1pt_page,3);
+    // FIXME: dafny's bv32 type doesn't seem allow proving equivalence of %
+    lemma_maskModEquivalence(l1pt_page);
     assert r0 == l1pt_page % 4;
 
     if (addrspace_page == l1pt_page) {
@@ -274,11 +280,6 @@ procedure kev_smc_init_addrspace(
             err := sp_op_const(KEV_ERR_PAGEINUSE());
         }
     }
-    forall :: 
-        tuple(pagedb, err) == old(smc_initAddrspace_premium(pagedb_in, addrspace_page, l1pt_page))
-        && pageDbClosedRefs(pagedb) && pageDbCorresponds(this.m, pagedb)
-    {
-        reveal_smc_initAddrspace_premium();
-        reveal_validPageDb();
-    }
+
+    assert err == old(specErr(smc_initAddrspace(pagedb_in, addrspace_page, l1pt_page)));
 }

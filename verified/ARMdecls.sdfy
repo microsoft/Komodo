@@ -12,12 +12,12 @@ var{:register OReg(R10)} r10:int;
 var{:register OReg(R11)} r11:int;
 var{:register OReg(R12)} r12:int;
 
-var{:register op_sp()}  sp:int;
-var{:register op_lr()}  lr:int;
+var{:register OSP} sp:int;
+var{:register OLR} lr:int;
 
 procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
 
-function{:operand} sp_op_const(n:int):operand
+function{:operand} sp_op_const(n:word):operand
 
 procedure {:instruction Ins(ADD(dst, src1, src2))}
 ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
@@ -26,14 +26,12 @@ ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires
         ValidOperand(@src1);
         ValidOperand(@src2);
-        ValidDestinationOperand(@dst);
+        ValidRegOperand(@dst);
         isUInt32(src1 + src2);
     ensures
         evalUpdate(old(this), @dst, old(src1 + src2), this);
         WordAligned(src1) && WordAligned(src2) ==> WordAligned(dst);
-        AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -46,13 +44,11 @@ SUB(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires
         ValidOperand(@src1);
         ValidOperand(@src2);
-        ValidDestinationOperand(@dst);
+        ValidRegOperand(@dst);
         isUInt32(src1 - src2);
     ensures
         evalUpdate(old(this), @dst, old(src1 - src2), this);
-        AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -65,13 +61,11 @@ MUL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires
         ValidRegOperand(@src1);
         ValidRegOperand(@src2);
-        ValidDestinationOperand(@dst);
+        ValidRegOperand(@dst);
         isUInt32(src1 * src2);
     ensures
         evalUpdate(old(this), @dst, old(src1 * src2), this);
-        AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -84,14 +78,12 @@ UDIV(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires
         ValidOperand(@src1);
         ValidOperand(@src2);
-        ValidDestinationOperand(@dst);
+        ValidRegOperand(@dst);
         src2 > 0;
         isUInt32(src1 / src2);
     ensures
         evalUpdate(old(this), @dst, old(src1 / src2), this);
-        AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -104,12 +96,10 @@ AND(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires
         ValidOperand(@src1);
         ValidOperand(@src2);
-        ValidDestinationOperand(@dst);
+        ValidRegOperand(@dst);
     ensures
-        evalUpdate(old(this), @dst, old(and32(src1, src2)), this);
-        AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        evalUpdate(old(this), @dst, old(BitwiseAnd(src1, src2)), this);
+        SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -122,12 +112,10 @@ ORR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires
         ValidOperand(@src1);
         ValidOperand(@src2);
-        ValidDestinationOperand(@dst);
+        ValidRegOperand(@dst);
     ensures
-        evalUpdate(old(this), @dst, old(or32(src1,src2)), this);
-        AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        evalUpdate(old(this), @dst, old(BitwiseOr(src1,src2)), this);
+        SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -140,32 +128,10 @@ EOR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires
         ValidOperand(@src1);
         ValidOperand(@src2);
-        ValidDestinationOperand(@dst);
+        ValidRegOperand(@dst);
     ensures
-        evalUpdate(old(this), @dst, old(xor32(src1,src2)), this);
-        AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
-        ModeInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
-{
-    reveal_sp_eval();
-}
-
-procedure {:instruction Ins(ROR(dst, src1, src2))}
-ROR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
-    requires/ensures
-        ValidState(this);
-    requires
-        ValidOperand(@src1);
-        ValidOperand(@src2);
-        ValidDestinationOperand(@dst);
-        @src2 is OConst;
-        0 <= src2 < 32;
-    ensures
-        evalUpdate(old(this), @dst, old(ror32(src1,src2)), this);
-        AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        evalUpdate(old(this), @dst, old(BitwiseXor(src1,src2)), this);
+        SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -178,14 +144,12 @@ LSL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires
         ValidOperand(@src1);
         ValidOperand(@src2);
-        ValidDestinationOperand(@dst);
+        ValidRegOperand(@dst);
         @src2 is OConst;
         0 <= src2 < 32;
     ensures
-        evalUpdate(old(this), @dst, old(shl32(src1,src2)), this);
-        AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        evalUpdate(old(this), @dst, old(LeftShift(src1,src2)), this);
+        SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -198,14 +162,12 @@ LSR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires
         ValidOperand(@src1);
         ValidOperand(@src2);
-        ValidDestinationOperand(@dst);
+        ValidRegOperand(@dst);
         @src2 is OConst;
         0 <= src2 < 32;
     ensures
-        evalUpdate(old(this), @dst, old(shr32(src1,src2)), this);
-        AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        evalUpdate(old(this), @dst, old(RightShift(src1,src2)), this);
+        SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -217,12 +179,10 @@ MVN(out{:operand} dst:int, {:operand} src:int)
         ValidState(this);
     requires
         ValidOperand(@src);
-        ValidDestinationOperand(@dst);
+        ValidRegOperand(@dst);
     ensures
-        evalUpdate(old(this), @dst, old(not32(src)), this);
-        AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        evalUpdate(old(this), @dst, old(BitwiseNot(src)), this);
+        SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -234,12 +194,10 @@ MOV(out{:operand} dst:int, {:operand} src:int)
         ValidState(this);
     requires
         ValidOperand(@src);
-        ValidDestinationOperand(@dst);
+        ValidRegOperand(@dst);
     ensures
         evalUpdate(old(this), @dst, old(src), this);
-        AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -250,16 +208,13 @@ LDR(out{:operand} rd:int, {:operand} base:int, {:operand} ofs:int)
     requires/ensures
         ValidState(this);
     requires
-        ValidDestinationOperand(@rd);
+        ValidRegOperand(@rd);
         ValidOperand(@base);
         ValidOperand(@ofs);
-        WordAligned(base + ofs);
-        ValidMem(this.m, addr_mem(this, @base, @ofs));
+        ValidMem(base + ofs);
     ensures
-        evalUpdate(old(this), @rd, MemContents(old(this.m), addr_mem(old(this), @base, @ofs)), this);
-        AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        evalUpdate(old(this), @rd, MemContents(old(this.m), old(base + ofs)), this);
+        SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -273,13 +228,10 @@ STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
         ValidRegOperand(@rd);
         ValidOperand(@base);
         ValidOperand(@ofs);
-        WordAligned(base + ofs);
-        ValidMem(this.m, addr_mem(this, @base, @ofs));
+        ValidMem(base + ofs);
     ensures
-        evalMemUpdate(old(this), addr_mem(old(this), @base, @ofs), old(rd), this);
-        AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        evalMemUpdate(old(this), old(base + ofs), old(rd), this);
+        AllRegsInvariant(old(this), this);
         GlobalsInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -294,9 +246,7 @@ MRS({:operand} dst:int, {:operand} src:int)
         ValidRegOperand(@dst);
     ensures
         evalUpdate(old(this), @dst, SpecialOperandContents(old(this), @src), this);
-        AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -320,7 +270,6 @@ MSR({:operand} dst:int, {:operand} src:int)
         is_psr(@dst) ==> ValidModeChange(this, src);
     ensures
         evalSRegUpdate(old(this), @dst, old(src), this);
-        AlwaysInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -334,9 +283,7 @@ MRC({:operand} dst:int, {:operand} src:int)
         ValidMcrMrcOperand(this, @src);
     ensures
         evalUpdate(old(this), @dst, SpecialOperandContents(old(this), @src), this);
-        AlwaysInvariant(old(this), this);
-        WorldInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -351,8 +298,6 @@ MCR({:operand} dst:int, {:operand} src:int)
         ValidMcrMrcOperand(this, @dst);
     ensures
         evalSRegUpdate(old(this), OSReg(scr), src, this);
-        AlwaysInvariant(old(this), this);
-        ModeInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -368,25 +313,19 @@ MOVS_PCLR_TO_USERMODE_AND_CONTINUE()
         ValidModeChange'(this, User);
     ensures
         evalMOVSPCLRUC(old(this), this);
-        AlwaysInvariant(old(this), this);
 {
     reveal_sp_eval();
-    // This caused a timeout without this stuff :(
-    movsOK(old(this));
-    assert this.ok;
-    validStatesEnsureAlwaysInvariant(old(this),this);
 }
 
 procedure {:instruction Ins(LDR_reloc(rd, g))}
 LDRglobaladdr(out{:operand} rd:int, {:operand} g:string)
     requires
         ValidState(this);
-        ValidDestinationOperand(@rd);
+        ValidRegOperand(@rd);
         ValidGlobal(@g);
     ensures
         evalUpdate(old(this), @rd, AddressOfGlobal(@g), this);
-        AlwaysInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -397,15 +336,14 @@ LDRglobal(out{:operand} rd:int, {:operand} g:string,
           {:operand} base:int, {:operand} ofs:int)
     requires
         ValidState(this);
-        ValidDestinationOperand(@rd);
+        ValidRegOperand(@rd);
         ValidOperand(@base);
         ValidOperand(@ofs);
         ValidGlobalOffset(@g, ofs);
         AddressOfGlobal(@g) == base;
     ensures
         evalUpdate(old(this), @rd, old(GlobalWord(this.m, @g, ofs)), this);
-        AlwaysInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -424,8 +362,7 @@ STRglobal({:operand} rd:int, {:operand} g:string,
         isUInt32(rd);
     ensures
         evalGlobalUpdate(old(this), @g, old(ofs), old(rd), this);
-        AlwaysInvariant(old(this), this);
-        ModeInvariant(old(this), this);
+        AllRegsInvariant(old(this), this);
         AddrMemInvariant(old(this), this);
 {
     reveal_sp_eval();

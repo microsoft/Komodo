@@ -9,26 +9,26 @@ include "pagedb.s.dfy"
 predicate StackBytesRemaining(s:state,bytes:int)
 {
     ValidState(s) && ValidStack(s) &&
-    (StackLimit() + bytes < eval_op(s,op_sp()) <= StackBase())
+    (StackLimit() + bytes < OperandContents(s, OSP) <= StackBase())
 }
 
 predicate ParentStackPreserving(s:state, r:state)
     requires SaneState(s) && SaneState(r)
 {
-    var sp := eval_op(s,op_sp());
-    forall i :: sp <= i < StackBase() && WordAligned(i) ==> addrval(r,i) == addrval(s,i)
+    forall m:mem :: OperandContents(s, OSP) <= m < StackBase()
+        ==> MemContents(r.m, m) == MemContents(s.m, m)
 }
 
 predicate StackPreserving(s:state, r:state)
     requires SaneState(s) && SaneState(r)
 {
-    eval_op(s,op_sp()) == eval_op(r,op_sp())
+    OperandContents(s, OSP) == OperandContents(r, OSP)
     && ParentStackPreserving(s, r)
 }
 
 predicate DistinctRegOperands(operands:set<operand>, count:nat)
 {
-    |operands| == count && forall o :: o in operands ==> ValidRegOperand(o) && o != op_sp()
+    |operands| == count && forall o :: o in operands ==> ValidRegOperand(o) && o != OSP
 }
 
 predicate RegPreservingExcept(s:state, r:state, trashed:set<operand>)
@@ -36,9 +36,10 @@ predicate RegPreservingExcept(s:state, r:state, trashed:set<operand>)
     requires forall o :: o in trashed ==> ValidRegOperand(o);
 {
     forall reg {:trigger OReg(reg)} :: OReg(reg) !in trashed && ValidRegOperand(OReg(reg))
-        ==> eval_op(s,OReg(reg)) == eval_op(r,OReg(reg))
-    && (op_sp() !in trashed ==> eval_op(s,op_sp()) == eval_op(r,op_sp()))
-    && (op_lr() !in trashed ==> eval_op(s,op_lr()) == eval_op(r,op_lr()))
+        ==> OperandContents(s, OReg(reg)) == OperandContents(r, OReg(reg))
+    && (OSP !in trashed ==> OperandContents(s, OSP) == OperandContents(r, OSP))
+    && (OLR !in trashed ==> OperandContents(s, OLR) == OperandContents(r, OLR))
+    && SRegsInvariant(s, r)
 }
 
 predicate NonvolatileRegPreserving(s:state, r:state)
@@ -48,14 +49,15 @@ predicate NonvolatileRegPreserving(s:state, r:state)
 }
 
 predicate MemPreservingExcept(s:state, r:state, base:int, limit:int)
-    requires AlwaysInvariant(s,r);
+    requires ValidState(s) && ValidState(r);
     requires limit >= base;
 {
-    forall i :: ValidMem(s.m,i) && !(base <= i < limit) ==> addrval(s,i) == addrval(r,i)
+    forall m:mem :: ValidMem(m) && !(base <= m < limit)
+        ==> MemContents(s.m, m) == MemContents(r.m, m)
 }
 
 predicate NonStackMemPreserving(s:state, r:state)
-    requires AlwaysInvariant(s,r);
+    requires ValidState(s) && ValidState(r);
 {
     MemPreservingExcept(s, r, StackLimit(), StackBase())
 }
@@ -65,17 +67,17 @@ predicate NonStackMemPreserving(s:state, r:state)
 // Common functions
 //-----------------------------------------------------------------------------
 
-function page_paddr(p: PageNr) : int
+function page_paddr(p: PageNr): mem
     requires validPageNr(p)
-    ensures isUInt32(page_paddr(p)) && PageAligned(page_paddr(p))
+    ensures PageAligned(page_paddr(p))
 {
     assert PageAligned(KEVLAR_PAGE_SIZE());
     SecurePhysBase() + p * KEVLAR_PAGE_SIZE()
 }
 
-function page_monvaddr(pagenr:PageNr):int
+function page_monvaddr(pagenr:PageNr): mem
     requires validPageNr(pagenr)
-    ensures isUInt32(page_monvaddr(pagenr)) && PageAligned(page_monvaddr(pagenr))
+    ensures PageAligned(page_monvaddr(pagenr))
 {
     assert pagenr < KEVLAR_SECURE_NPAGES();
     var pa := page_paddr(pagenr);
@@ -86,3 +88,14 @@ function page_monvaddr(pagenr:PageNr):int
 // workarounds for Spartan's lack of Dafny language features
 function specPageDb(t: (PageDb, int)): PageDb { t.0 }
 function specErr(t: (PageDb, int)): int { t.1 }
+
+// FIXME: delete
+lemma WordAlignedAdd(x1:int,x2:int)
+    requires WordAligned(x1) && WordAligned(x2)
+    ensures  WordAligned(x1+x2)
+    {}
+
+lemma WordAlignedAdd_(x1:int,x2:int,y:int)
+    requires WordAligned(x1) && WordAligned(x2) && y == x1+x2
+    ensures WordAligned(y)
+    {}

@@ -78,27 +78,26 @@ function method KEV_ADDRSPACE_STOPPED():int            { 2 }
 predicate addrInPage(m:mem, p:PageNr)
     requires validPageNr(p)
 {
-    WordAligned(m) && page_monvaddr(p) <= m < page_monvaddr(p) + KEVLAR_PAGE_SIZE()
+    page_monvaddr(p) <= m < page_monvaddr(p) + KEVLAR_PAGE_SIZE()
 }
 
-predicate memContainsPage(memmap: map<mem, int>, p:PageNr)
+predicate memContainsPage(page: memmap, p:PageNr)
     requires validPageNr(p)
 {
-    forall m :: addrInPage(m,p) ==> m in memmap
+    forall m:mem :: addrInPage(m,p) ==> m in page
 }
 
-function extractPage(s:memstate, p:PageNr): map<mem, int>
+function extractPage(s:memstate, p:PageNr): memmap
     requires SaneMem(s)
     requires validPageNr(p)
     ensures memContainsPage(extractPage(s,p), p)
 {
     // XXX: expanded addrInPage() to help Dafny see a bounded set
-    (map m | WordAligned(m)
-        && page_monvaddr(p) <= m < page_monvaddr(p) + KEVLAR_PAGE_SIZE()
-        :: s.addresses[m])
+    (map m:mem | page_monvaddr(p) <= m < page_monvaddr(p) + KEVLAR_PAGE_SIZE()
+        :: MemContents(s, m) as word)
 }
 
-function extractPageDbEntry(s:memstate, p:PageNr): seq<int>
+function extractPageDbEntry(s:memstate, p:PageNr): seq<word>
     requires SaneMem(s)
     requires validPageNr(p)
     ensures |extractPageDbEntry(s,p)| == BytesToWords(PAGEDB_ENTRY_SIZE())
@@ -146,7 +145,7 @@ predicate pageDbCorrespondsOnly(s:memstate, pagedb:PageDb, p:PageNr)
     && pageContentsCorresponds(p, pagedb[p], extractPage(s, p))
 }
 
-predicate {:opaque} pageDbEntryCorresponds(e:PageDbEntry, entryWords:seq<int>)
+predicate {:opaque} pageDbEntryCorresponds(e:PageDbEntry, entryWords:seq<word>)
     requires |entryWords| == BytesToWords(PAGEDB_ENTRY_SIZE())
     requires closedRefsPageDbEntry(e)
 {
@@ -159,7 +158,7 @@ predicate {:opaque} pageDbEntryCorresponds(e:PageDbEntry, entryWords:seq<int>)
     }
 }
 
-predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:map<mem, int>)
+predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:memmap)
     requires validPageNr(p)
     requires memContainsPage(page, p)
     requires closedRefsPageDbEntry(e)
@@ -173,7 +172,7 @@ predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:map<me
         || et.DataPage?))
 }
 
-predicate {:opaque} pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
+predicate {:opaque} pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
     requires validPageNr(p)
     requires memContainsPage(page, p)
     requires e.Addrspace? && closedRefsPageDbEntryTyped(e)
@@ -187,7 +186,7 @@ predicate {:opaque} pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, pag
 }
 
 function  to_i(b:bool):int { if(b) then 1 else 0 }
-predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
+predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
     requires validPageNr(p)
     requires memContainsPage(page, p)
     requires e.Dispatcher? && closedRefsPageDbEntryTyped(e)
@@ -246,7 +245,7 @@ function l1pteoffset(base: mem, i: int, j: int): int
     base + 4 * (i * 4 + j)
 }
 
-predicate {:opaque} pageDbL1PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
+predicate {:opaque} pageDbL1PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
     requires validPageNr(p)
     requires memContainsPage(page, p)
     requires e.L1PTable? && closedRefsL1PTable(e)
@@ -269,7 +268,7 @@ function mkL2Pte(pte: L2PTE): int
         case NoMapping => 0
 }
 
-predicate {:opaque} pageDbL2PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page:map<mem, int>)
+predicate {:opaque} pageDbL2PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
     requires validPageNr(p)
     requires memContainsPage(page, p)
     requires e.L2PTable? && closedRefsL2PTable(e)
@@ -358,8 +357,12 @@ lemma PageDbCorrespondsImpliesEntryCorresponds(s:memstate, d:PageDb, n:PageNr)
 
 lemma AllButOnePagePreserving(n:PageNr,s:state,r:state)
     requires validPageNr(n)
-    requires SaneState(s) && SaneState(r) && AlwaysInvariant(s,r)
-    requires MemPreservingExcept(s, r, page_monvaddr(n), page_monvaddr(n) + KEVLAR_PAGE_SIZE())
-    ensures forall p :: validPageNr(p) && p != n ==> extractPage(s.m, p) == extractPage(r.m, p)
+    requires SaneState(s) && SaneState(r)
+    requires MemPreservingExcept(s, r, page_monvaddr(n),
+                                 page_monvaddr(n) + KEVLAR_PAGE_SIZE())
+    ensures forall p :: validPageNr(p) && p != n
+        ==> extractPage(s.m, p) == extractPage(r.m, p)
 {
+    forall (p, a:mem | validPageNr(p) && p != n && addrInPage(a, p)) ensures MemContents(s.m, a) == MemContents(r.m, a)
+        {}
 }

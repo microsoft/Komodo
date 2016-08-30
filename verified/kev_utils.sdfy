@@ -8,11 +8,10 @@ procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:
         // NB: @phys == @pagenr is supported
         @phys != @tmp;
         @pagenr != @tmp;
-        @phys != op_sp();
-        @tmp != op_sp();
+        @phys != OSP;
+        @tmp != OSP;
         validPageNr(pagenr);
     ensures
-        AlwaysInvariant(old(this),this);
         AllMemInvariant(old(this),this);
         RegPreservingExcept(old(this), this, set(@phys, @tmp));
         phys == page_paddr(old(pagenr));
@@ -39,11 +38,10 @@ procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out
         // NB: @pagenr == @virt is supported
         @pagenr != @tmp;
         @virt != @tmp;
-        @virt != op_sp();
-        @tmp != op_sp();
+        @virt != OSP;
+        @tmp != OSP;
         validPageNr(pagenr);
     ensures
-        AlwaysInvariant(old(this),this);
         AllMemInvariant(old(this),this);
         RegPreservingExcept(old(this), this, set(@virt, @tmp));
         virt == page_monvaddr(old(pagenr));
@@ -62,16 +60,15 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
         WordAligned(size);
         isUInt32(val);
         isUInt32(base + size);
-        ValidMemRange(this.m, base, base + size);
+        ValidMemRange(base, base + size);
         base >= StackBase() || base + size <= StackLimit();
     ensures
-        AlwaysInvariant(old(this),this);
         GlobalsInvariant(old(this),this);
         StackPreserving(old(this),this);
         RegPreservingExcept(old(this), this, set(@base,@size));
         MemPreservingExcept(old(this), this, old(base), old(base + size));
         forall i :: old(base) <= i < old(base + size) && WordAligned(i)
-            ==> addrval(this,i) == old(val);
+            ==> MemContents(this.m,i) == old(val);
 {
     ghost var lower := base;
     ghost var limit := base + size;
@@ -82,7 +79,6 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
     while (base < size)
         invariant
             SaneState(this);
-            AlwaysInvariant(old(this),this);
             GlobalsInvariant(old(this),this);
             StackPreserving(old(this),this);
             WordAligned(base);
@@ -90,7 +86,7 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
             lower <= base <= limit;
             lower >= StackBase() || limit <= StackLimit();
             forall i :: (lower <= i < base) && WordAligned(i)
-                ==> addrval(this,i) == old(val);
+                ==> MemContents(this.m,i) == old(val);
             MemPreservingExcept(old(this), this, lower, limit);
             RegPreservingExcept(old(this), this, set(@base, @size));
             val == old(val);
@@ -99,8 +95,8 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
     {
         ghost var prevThis := this;
         STR(val, base, 0);
-        assert forall p :: ValidMem(prevThis.m, p) && p != base
-            ==> addrval(prevThis, p) == addrval(this, p);
+        assert forall p :: ValidMem(p) && p != base
+            ==> MemContents(prevThis.m, p) == MemContents(this.m, p);
         ADD(base, base, 4);
     }
 }
@@ -121,18 +117,17 @@ procedure fcall_prologue(ghost stack_bytes:int)
         r3 == old(r3);
 
         // pushes r4-r11, sp, lr
-        addrval(this, sp)    == old(r12);
-        addrval(this, sp+4)  == old(r11);
-        addrval(this, sp+8)  == old(r10);
-        addrval(this, sp+12) == old(r9);
-        addrval(this, sp+16) == old(r8);
-        addrval(this, sp+20) == old(r7);
-        addrval(this, sp+24) == old(r6);
-        addrval(this, sp+28) == old(r5);
-        addrval(this, sp+32) == old(r4);
-        addrval(this, sp+36) == old(lr);
+        MemContents(this.m, sp)    == old(r12);
+        MemContents(this.m, sp+4)  == old(r11);
+        MemContents(this.m, sp+8)  == old(r10);
+        MemContents(this.m, sp+12) == old(r9);
+        MemContents(this.m, sp+16) == old(r8);
+        MemContents(this.m, sp+20) == old(r7);
+        MemContents(this.m, sp+24) == old(r6);
+        MemContents(this.m, sp+28) == old(r5);
+        MemContents(this.m, sp+32) == old(r4);
+        MemContents(this.m, sp+36) == old(lr);
 
-        AlwaysInvariant(old(this),this);
         GlobalsInvariant(old(this),this);
         NonStackMemPreserving(old(this),this);
         ParentStackPreserving(old(this),this);
@@ -172,18 +167,17 @@ procedure fcall_epilogue(ghost stack_bytes_left:int)
         r3 == old(r3);
 
         // pop lr, r4-r11 from stack.
-        lr  == old(addrval(this, sp+36));
-        r4  == old(addrval(this, sp+32));
-        r5  == old(addrval(this, sp+28));
-        r6  == old(addrval(this, sp+24));
-        r7  == old(addrval(this, sp+20));
-        r8  == old(addrval(this, sp+16));
-        r9  == old(addrval(this, sp+12));
-        r10 == old(addrval(this, sp+8));
-        r11 == old(addrval(this, sp+4));
-        r12 == old(addrval(this, sp));
+        lr  == old(MemContents(this.m, sp+36));
+        r4  == old(MemContents(this.m, sp+32));
+        r5  == old(MemContents(this.m, sp+28));
+        r6  == old(MemContents(this.m, sp+24));
+        r7  == old(MemContents(this.m, sp+20));
+        r8  == old(MemContents(this.m, sp+16));
+        r9  == old(MemContents(this.m, sp+12));
+        r10 == old(MemContents(this.m, sp+8));
+        r11 == old(MemContents(this.m, sp+4));
+        r12 == old(MemContents(this.m, sp));
 
-        AlwaysInvariant(old(this),this);
         AllMemInvariant(old(this),this);
         StackBytesRemaining(this,stack_bytes_left+40);
 {

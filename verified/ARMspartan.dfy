@@ -42,7 +42,7 @@ predicate sp_eq_ops(s1:sp_state, s2:sp_state, o:operand)
 
 function sp_eval_mem(s:state, m:mem):int
     requires ValidMemState(s.m);
-    requires ValidMem(s.m, m);
+    requires ValidMem(m);
     ensures isUInt32(sp_eval_mem(s,m));
     { MemContents(s.m, m) }
 
@@ -67,7 +67,7 @@ predicate sp_ensure(b0:codes, b1:codes, s0:sp_state, s1:sp_state, sN:sp_state)
 }
 
 function method fromOperand(o:operand):operand { o }
-function method sp_op_const(n:int):operand { OConst(n) }
+function method sp_op_const(n:word):operand { OConst(n) }
 
 function method sp_cmp_eq(o1:operand, o2:operand):obool { OCmp(OEq, o1, o2) }
 function method sp_cmp_ne(o1:operand, o2:operand):obool { OCmp(ONe, o1, o2) }
@@ -88,46 +88,13 @@ function method sp_get_whileCond(c:code):obool requires c.While? { c.whileCond }
 function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
 
 //-----------------------------------------------------------------------------
-// Address Helper Functions
-//-----------------------------------------------------------------------------
-function addrval(s:state, a:int):int
-    requires ValidState(s)
-    requires ValidMem(s.m, a)
-    ensures isUInt32(addrval(s, a))
-{
-    MemContents(s.m, a)
-}
-
-function addr_mem(s:state, base:operand, ofs:operand):mem
-    requires ValidState(s)
-    requires ValidOperand(base)
-    requires ValidOperand(ofs)
-{
-    OperandContents(s, base) + OperandContents(s, ofs)
-}
-
-//-----------------------------------------------------------------------------
 // Useful invariants preserved by instructions
 //-----------------------------------------------------------------------------
-predicate AlwaysInvariant(s:state, s':state)
+/*predicate AlwaysInvariant(s:state, s':state)
 {
     // valid state is maintained
     ValidState(s) && ValidState(s')
-    // mem validity never changes
-    && (forall m:mem :: m in s.m.addresses <==> m in s'.m.addresses)
-}
-
-predicate ModeInvariant(s:state, s':state)
-    requires ValidState(s) && ValidState(s')
-{
-    mode_of_state(s) == mode_of_state(s')
-}
-
-predicate WorldInvariant(s:state, s':state)
-    requires ValidState(s) && ValidState(s')
-{
-    world_of_state(s) == world_of_state(s')
-}
+}*/
 
 predicate AllMemInvariant(s:state, s':state)
     requires ValidState(s) && ValidState(s')
@@ -147,29 +114,17 @@ predicate AddrMemInvariant(s:state, s':state)
     s.m.addresses == s'.m.addresses
 }
 
-//-----------------------------------------------------------------------------
-//  Lemmas for proving above invariants
-//-----------------------------------------------------------------------------
-lemma validStatesEnsureAlwaysInvariant(s:state,s':state)
-    requires ValidState(s) && ValidState(s');
-    ensures  AlwaysInvariant(s,s');
+predicate SRegsInvariant(s:state, s':state)
+    requires ValidState(s) && ValidState(s')
 {
-    reveal_ValidMemState();
+    s.sregs == s'.sregs && s.conf == s'.conf
 }
 
-//-----------------------------------------------------------------------------
-// Lemma for ARMdecls MOVS_PCLR_TO_USERMODE
-//-----------------------------------------------------------------------------
-lemma movsOK(s:sp_state)
-    requires ValidState(s);
-    requires mode_of_state(s) != User;
-    requires s.conf.spsr[mode_of_state(s)].m == User;
-    requires ValidModeChange'(s, User);
-    ensures  ValidInstruction(s, MOVS_PCLR_TO_USERMODE_AND_CONTINUE);
+predicate AllRegsInvariant(s:state, s':state)
+    requires ValidState(s) && ValidState(s')
 {
+    s.regs == s'.regs && SRegsInvariant(s, s')
 }
-
-
 
 //-----------------------------------------------------------------------------
 // Control Flow Lemmas

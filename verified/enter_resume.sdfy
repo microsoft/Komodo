@@ -63,7 +63,7 @@ procedure smc_enter_err(
             }
             WordAlignedAdd_(r8,ADDRSPACE_STATE(),r8+ADDRSPACE_STATE());
            
-            forall :: ValidMem(this.m, addr_mem(this, @r8, sp_op_const(ADDRSPACE_STATE())))
+            forall :: ValidMem(r8 + ADDRSPACE_STATE())
                 { reveal_validPageDb(); } 
             LDR(r8, r8, sp_op_const(ADDRSPACE_STATE()));
             forall :: 
@@ -90,7 +90,7 @@ procedure smc_enter_err(
                 assert SaneState(this);
                 page_monvaddr_impl(r9,pagenr,r10);
                 assert r9 == page_monvaddr(pagenr);
-                forall :: addrval(this, page_monvaddr(pagenr) + 
+                forall :: MemContents(this.m, page_monvaddr(pagenr) + 
                     DISPATCHER_ENTERED()) == to_i(s.d[pagenr].entry.entered)
                 {
                     reveal_pageContentsCorresponds();
@@ -171,8 +171,7 @@ procedure pre_entry_enter(
     {
         //FIXME
         assume false;
-        assert BitwiseAnd(uint32(r10),uint32(1)) != 1;
-        assert and32(r10,1) != 1;
+        assert BitwiseAnd(r10,1) != 1;
         assert decode_scr(r10) == SCR(Secure, false, false);
     }
   
@@ -198,7 +197,7 @@ procedure pre_entry_enter(
         assert validAddrspacePage(s.d, s.d[pagenr].addrspace);
     }
 
-    forall :: ValidMem(this.m, addr_mem(this, @r11, sp_op_const(ADDRSPACE_L1PT_PHYS())))
+    forall :: ValidMem(r11 + ADDRSPACE_L1PT_PHYS())
         { reveal_validPageDb(); } 
 
     // page_monvaddr_impl(r9,r11,r10); 
@@ -224,7 +223,7 @@ procedure pre_entry_enter(
     MaskWithSizeIsAligned(r10, 0x1000);
     assert isUInt32(r10);
     assert isUInt32(0xffff_f000);
-    assume r10 == and32(r10, 0xffff_f000);
+    assert r10 == BitwiseAnd(r10, 0xffff_f000);
     assert this.conf.ttbr0.ptbase == page_paddr(l1p);
     //-------------------------------------------------------------------------
     

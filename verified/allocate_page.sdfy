@@ -53,7 +53,6 @@ procedure addrspace_incref(
         as_va == page_monvaddr(pagenr);
         pageDbCorresponds(this.m, pagedb_in);
     ensures
-        AlwaysInvariant(old(this),this);
         GlobalsInvariant(old(this),this);
         StackPreserving(old(this),this);
         MemPreservingExcept(old(this),this, as_va, as_va + KEVLAR_PAGE_SIZE());
@@ -75,7 +74,7 @@ procedure addrspace_incref(
         reveal_pageContentsCorresponds();
         reveal_pageDbAddrspaceCorresponds();
         assert pageDbAddrspaceCorresponds(pagenr,
-                pagedb_in[pagenr].entry, this.m.addresses);
+                pagedb_in[pagenr].entry, extractPage(this.m, pagenr));
         assert tmp == pagedb_in[pagenr].entry.refcount;
         BoundedAddrspaceRefs(pagedb_in, pagenr);
     }
@@ -130,7 +129,6 @@ procedure allocate_page_success(
         validPageNr(pagenr) && pageIsFree(pagedb_in, pagenr);
         pagedb_in[entry.addrspace].entry.state == InitState;
     ensures
-        AlwaysInvariant(old(this),this);
         StackPreserving(old(this),this);
         RegPreservingExcept(old(this),this, set(@tmp, @tmp2));
         pagedb == specPageDb(allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry));
@@ -214,7 +212,6 @@ procedure allocate_page(
         as_pagenr == entry.addrspace;
         pageDbCorresponds(this.m, pagedb_in);
     ensures
-        AlwaysInvariant(old(this),this);
         StackPreserving(old(this),this);
         RegPreservingExcept(old(this),this, set(@tmp, @tmp2, @err));
         tuple(pagedb, err)

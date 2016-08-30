@@ -163,7 +163,6 @@ method printIns(ins:ins)
         case AND(dest, src1, src2) => printIns3Op("AND", dest, src1, src2);
         case ORR(dest, src1, src2) => printIns3Op("ORR", dest, src1, src2);
         case EOR(dest, src1, src2) => printIns3Op("EOR", dest, src1, src2);
-        case ROR(dest, src1, src2) => printIns3Op("ROR", dest, src1, src2);
         case LSL(dest, src1, src2) => printIns3Op("LSL", dest, src1, src2);
         case LSR(dest, src1, src2) => printIns3Op("LSR", dest, src1, src2);
         case MVN(dest, src) => printIns2Op("MVN", dest, src);
@@ -275,15 +274,14 @@ method printBss(gdecls: globaldecls)
     nl();
     print(".section .bss"); nl();
     print(".align 2"); nl(); // 4-byte alignment
-    match gdecls case GlobalDecls(decls) =>
-        var syms := (set k | k in decls :: k);
-        while (|syms| > 0)
-            invariant forall s :: s in syms ==> s in decls;
-        {
-            var s :| s in syms;
-            printGlobal(SymbolName(s), decls[s]);
-            syms := syms - {s};
-        }
+    var syms := (set k | k in gdecls :: k);
+    while (|syms| > 0)
+        invariant forall s :: s in syms ==> s in gdecls;
+    {
+        var s :| s in syms;
+        printGlobal(SymbolName(s), gdecls[s]);
+        syms := syms - {s};
+    }
 }
 
 method printFooter()

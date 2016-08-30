@@ -31,7 +31,6 @@ procedure fetch_l1pte(
         l1pt_va == page_monvaddr(l1pg);
         0 <= l1index < NR_L1PTES();
     ensures
-        AlwaysInvariant(old(this),this);
         AllMemInvariant(old(this),this);
         StackPreserving(old(this),this);
         RegPreservingExcept(old(this),this, set(@tmp, @res));
@@ -42,7 +41,7 @@ procedure fetch_l1pte(
     tmp := 16;
     MUL(tmp, l1index, tmp);
     LDR(res, l1pt_va, tmp);
-    assert res == addrval(this, l1pteoffset(l1pt_va, l1index, 0));
+    assert res == MemContents(this.m, l1pteoffset(l1pt_va, l1index, 0));
     assert res == mkL1Pte(pagedb[l1pg].entry.l1pt[l1index], 0);
 }
 
@@ -68,7 +67,6 @@ procedure install_l1ptes(
         validPageNr(l2_pg);
         0 <= l1index < NR_L1PTES();
     ensures
-        AlwaysInvariant(old(this),this);
         GlobalsInvariant(old(this),this);
         StackPreserving(old(this),this);
         MemPreservingExcept(old(this),this, l1pt_va + old(l1index) * 16,
@@ -170,7 +168,6 @@ procedure init_l2ptable_success(
         pageDbCorrespondsExcluding(this.m, pagedb_in, l2_pg);
         pageDbEntryCorresponds(pagedb_in[l2_pg], extractPageDbEntry(this.m, l2_pg));
     ensures
-        AlwaysInvariant(old(this),this);
         GlobalsInvariant(old(this),this);
         StackPreserving(old(this),this);
         //PagePreservingExcept(old(this),this, set(l1pg, l2_pg));
@@ -190,11 +187,11 @@ procedure init_l2ptable_success(
     ghost var newl2pt := L2PTable(SeqRepeat(NR_L2PTES(), NoMapping));
     forall :: pageDbL2PTableCorresponds(l2_pg, newl2pt, pg)
     {
-        assert forall m :: addrInPage(m, l2_pg) ==> pg[m] == 0;
+        assert forall m:mem :: addrInPage(m, l2_pg) ==> pg[m] == 0;
         reveal_pageDbL2PTableCorresponds();
     }
     forall :: pageDbCorrespondsOnly(this.m, pagedb, l2_pg) {
-        assert forall m :: addrInPage(m, l2_pg) ==> pg[m] == 0;
+        assert forall m:mem :: addrInPage(m, l2_pg) ==> pg[m] == 0;
         reveal_pageContentsCorresponds();
     }
     AllButOnePagePreserving(l2_pg, old(this), this);

@@ -43,34 +43,33 @@ function method KEV_ERR_INVALID():int            { 0x1_0000_0000 }
 //-----------------------------------------------------------------------------
 function method KEVLAR_PAGE_SIZE():int { PAGESIZE() }
 
-function method KEVLAR_MON_VBASE():int
+function method KEVLAR_MON_VBASE():mem
     ensures KEVLAR_MON_VBASE() == 0x4000_0000;
     { 0x4000_0000 }
-function method KEVLAR_DIRECTMAP_VBASE():int
+function method KEVLAR_DIRECTMAP_VBASE():mem
     ensures KEVLAR_DIRECTMAP_VBASE() == 0x8000_0000;
     { 0x8000_0000 }
-function method KEVLAR_DIRECTMAP_SIZE():int   { 0x8000_0000 }
-function method KEVLAR_SECURE_RESERVE():int
+function method KEVLAR_DIRECTMAP_SIZE():word   { 0x8000_0000 }
+function method KEVLAR_SECURE_RESERVE():mem
     ensures KEVLAR_SECURE_RESERVE() == 1 * 1024 * 1024;
     { 1 * 1024 * 1024 }
-function method KEVLAR_SECURE_NPAGES():int
+function method KEVLAR_SECURE_NPAGES():word
     ensures KEVLAR_SECURE_NPAGES() == 256;
     { KEVLAR_SECURE_RESERVE() / KEVLAR_PAGE_SIZE() }
 
 // we don't support/consider more than 1GB of physical memory in our maps
-function method KEVLAR_PHYSMEM_LIMIT():int
+function method KEVLAR_PHYSMEM_LIMIT():mem
     { 0x4000_0000 }
 
-function KEVLAR_STACK_SIZE():int
+function KEVLAR_STACK_SIZE():mem
     { 0x4000 }
 
 // we don't know where the stack is exactly, but we know how big it is
-function {:axiom} StackLimit():int
-    ensures WordAligned(StackLimit())
+function {:axiom} StackLimit():mem
     ensures KEVLAR_MON_VBASE() <= StackLimit()
     ensures StackLimit() <= KEVLAR_DIRECTMAP_VBASE() - KEVLAR_STACK_SIZE()
 
-function StackBase():int
+function StackBase():mem
 {
     StackLimit() + KEVLAR_STACK_SIZE()
 }
@@ -90,12 +89,12 @@ function method G_PAGEDB_SIZE():int
     ensures G_PAGEDB_SIZE() == KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE();
     { KEVLAR_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE() }
 
-function method {:opaque} CurAddrspaceOp(): operand { op_sym("g_cur_addrspace") }
-function method {:opaque} PageDb(): operand { op_sym("g_pagedb") }
-function method {:opaque} SecurePhysBaseOp(): operand { op_sym("g_secure_physbase") }
+function method {:opaque} CurAddrspaceOp(): operand { OSymbol("g_cur_addrspace") }
+function method {:opaque} PageDb(): operand { OSymbol("g_pagedb") }
+function method {:opaque} SecurePhysBaseOp(): operand { OSymbol("g_secure_physbase") }
 
 // the phys base is unknown, but never changes
-function {:axiom} SecurePhysBase(): int
+function {:axiom} SecurePhysBase(): mem
     ensures 0 < SecurePhysBase() <= KEVLAR_PHYSMEM_LIMIT() - KEVLAR_SECURE_RESERVE();
     ensures PageAligned(SecurePhysBase());
 
@@ -103,9 +102,9 @@ function method KevGlobalDecls(): globaldecls
     ensures ValidGlobalDecls(KevGlobalDecls());
 {
     reveal_PageDb(); reveal_SecurePhysBaseOp(); reveal_CurAddrspaceOp();
-    GlobalDecls(map[SecurePhysBaseOp() := 4, //BytesPerWord() 
-                    CurAddrspaceOp() := 4,  //BytesPerWord()
-                    PageDb() := G_PAGEDB_SIZE()])
+    map[SecurePhysBaseOp() := 4, //BytesPerWord() 
+        CurAddrspaceOp() := 4,  //BytesPerWord()
+        PageDb() := G_PAGEDB_SIZE()]
 }
 
 //-----------------------------------------------------------------------------
@@ -118,21 +117,21 @@ function method KevGlobalDecls(): globaldecls
 predicate ValidStack(s:state)
     requires ValidState(s)
 {
-    WordAligned(eval_op(s, op_sp()))
-    && StackLimit() < eval_op(s, op_sp()) <= StackBase()
+    WordAligned(OperandContents(s, OSP))
+    && StackLimit() < OperandContents(s, OSP) <= StackBase()
 }
 
 predicate SaneMem(s:memstate)
 {
     ValidMemState(s)
     // TODO: our insecure phys mapping must be valid
-    //&& ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE(),
+    //&& ValidMemRange(KEVLAR_DIRECTMAP_VBASE(),
     //    (KEVLAR_DIRECTMAP_VBASE() + MonitorPhysBaseValue()))
     // our secure phys mapping must be valid
-    && ValidMemRange(s, KEVLAR_DIRECTMAP_VBASE() + SecurePhysBase(),
+    && ValidMemRange(KEVLAR_DIRECTMAP_VBASE() + SecurePhysBase(),
         (KEVLAR_DIRECTMAP_VBASE() + SecurePhysBase() + KEVLAR_SECURE_RESERVE()))
     // the stack must be mapped
-    && ValidMemRange(s, StackLimit(), StackBase())
+    && ValidMemRange(StackLimit(), StackBase())
     // globals are as we expect
     && KevGlobalDecls() == TheGlobalDecls()
     && GlobalFullContents(s, SecurePhysBaseOp()) == [SecurePhysBase()]

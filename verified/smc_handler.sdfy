@@ -5,7 +5,6 @@
 #verbatim
 lemma SameMemAndGlobalsImpliesSamePageDb(s:state, s':state, pagedb:PageDb)
     requires SaneState(s) && SaneState(s')
-    requires AlwaysInvariant(s,s')
     requires pageDbClosedRefs(pagedb)
     requires pageDbCorresponds(s.m, pagedb)
     requires NonStackMemPreserving(s,s')
