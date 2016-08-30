@@ -19,10 +19,10 @@ procedure smc_enter_err(
         tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
 {
     reveal_smc_enter_premium();
-    if (pagenr >= sp_op_const(KEVLAR_SECURE_NPAGES())) {
+    if (pagenr >= sp_op_const(KOM_SECURE_NPAGES())) {
         assert !validPageNr(pagenr);
         
-        err := sp_op_const(KEV_ERR_INVALID_PAGENO());
+        err := sp_op_const(KOM_ERR_INVALID_PAGENO());
         s' := s.(hw := this);
     } else {
         assert validPageNr(pagenr);
@@ -42,10 +42,10 @@ procedure smc_enter_err(
             reveal_pageDbEntryCorresponds(); reveal_pageContentsCorresponds();
         }
         assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
-        if( r9 != sp_op_const(KEV_PAGE_DISPATCHER()) ) {
+        if( r9 != sp_op_const(KOM_PAGE_DISPATCHER()) ) {
             assert !(s.d[pagenr] is PageDbEntryTyped && s.d[pagenr].entry is Dispatcher);
 
-            err := sp_op_const(KEV_ERR_INVALID_PAGENO());
+            err := sp_op_const(KOM_ERR_INVALID_PAGENO());
             s' := s.(hw := this);
         } else {
             assert s.d[pagenr] is PageDbEntryTyped && s.d[pagenr].entry is Dispatcher;
@@ -67,9 +67,9 @@ procedure smc_enter_err(
                 { reveal_validPageDb(); } 
             LDR(r8, r8, sp_op_const(ADDRSPACE_STATE()));
             forall :: 
-            (r8 == KEV_ADDRSPACE_FINAL() ==>
+            (r8 == KOM_ADDRSPACE_FINAL() ==>
                 s.d[addrspace].entry.state == FinalState) &&
-            (r8 != KEV_ADDRSPACE_FINAL() ==>
+            (r8 != KOM_ADDRSPACE_FINAL() ==>
                 s.d[addrspace].entry.state != FinalState)
             {
                 reveal_validPageDb();
@@ -79,9 +79,9 @@ procedure smc_enter_err(
 
             // this particular RegPreserving assert saved 30s.
             assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
-            if( r8 != sp_op_const(KEV_ADDRSPACE_FINAL()) ) {
+            if( r8 != sp_op_const(KOM_ADDRSPACE_FINAL()) ) {
                 forall :: s.d[addrspace].entry.state != FinalState { reveal_validPageDb(); }
-                err := sp_op_const(KEV_ERR_NOT_FINAL());
+                err := sp_op_const(KOM_ERR_NOT_FINAL());
                 s' := s.(hw := this);
             } else {
                 forall :: s.d[addrspace].entry.state == FinalState { reveal_validPageDb(); }
@@ -102,10 +102,10 @@ procedure smc_enter_err(
                 assert r9 != 1 ==> !(s.d[pagenr].entry.entered);
                 assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
                 if( r9 == 1 ) {
-                    err := sp_op_const(KEV_ERR_ALREADY_ENTERED());
+                    err := sp_op_const(KOM_ERR_ALREADY_ENTERED());
                     s' := s.(hw := this);
                 } else {
-                    err := sp_op_const(KEV_ERR_SUCCESS());
+                    err := sp_op_const(KOM_ERR_SUCCESS());
                     s' := s.(hw := this);
                 }
             }
@@ -142,15 +142,15 @@ procedure pre_entry_enter(
         SaneState(s.hw);
         isUInt32(arg1) && isUInt32(arg2) && isUInt32(arg3);
         specErr(smc_enter_premium(s.d, pagenr, arg1, arg2, arg3)) == 
-            KEV_ERR_SUCCESS();
-        err == KEV_ERR_SUCCESS();
+            KOM_ERR_SUCCESS();
+        err == KOM_ERR_SUCCESS();
     ensures
         this == s'.hw;
         validSysState(s');
         SaneState(s'.hw);
         //RegPreservingExcept(old(this),this,set(@));
         // tuple(s.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
-        // err == KEV_ERR_SUCCESS();
+        // err == KOM_ERR_SUCCESS();
         preEntryEnter(s,s',pagenr, arg1, arg2, arg3);
 {
     reveal_validPageDb();
@@ -262,7 +262,7 @@ procedure pre_entry_enter(
 }
 
 
-procedure kev_smc_enter(
+procedure kom_smc_enter(
     {:register OReg(R0)} pagenr:int,
     {:register OReg(R1)} arg1:int,
     {:register OReg(R2)} arg2:int,
@@ -288,12 +288,12 @@ procedure kev_smc_enter(
     r5 := pagenr;
     ghost var s_err;
     s_err := smc_enter_err(@r0,@r1,@r2,@r3,@r0,s.(hw := this));
-    if(err != sp_op_const(KEV_ERR_SUCCESS()) ) {
+    if(err != sp_op_const(KOM_ERR_SUCCESS()) ) {
         val := sp_op_const(0);
         s' := s_err.(hw := this);
         assert validSysState(s');
         assert tuple(s'.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
-        assert err != KEV_ERR_SUCCESS();
+        assert err != KOM_ERR_SUCCESS();
     } else {
         
         ghost var s1;

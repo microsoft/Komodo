@@ -1,5 +1,5 @@
-MODULE_SRC := driver/kevlar.ko
-MODULE_DST := /lib/modules/kevlar.ko
+MODULE_SRC := driver/komodo.ko
+MODULE_DST := /lib/modules/komodo.ko
 CPTOVHD := $(dir)/cptovhd.sh
 
 $(dir)/guestdisk.img: $(MODULE_SRC)

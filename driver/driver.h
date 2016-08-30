@@ -1,5 +1,5 @@
 #include <linux/kernel.h>
-#include <kevlar/smcapi.h>
+#include <komodo/smcapi.h>
 
 /* pgalloc.c */
 

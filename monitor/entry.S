@@ -18,9 +18,9 @@
 
 #define ARM_SCTLR_V     0x2000 /* SCTLR vectors bit (1 = hivecs) */
 
-#define KEV_ERR_SUCCESS         0
-#define KEV_ERR_INTERRUPTED     9
-#define KEV_ERR_FAULT           10
+#define KOM_ERR_SUCCESS         0
+#define KOM_ERR_INTERRUPTED     9
+#define KOM_ERR_FAULT           10
 
         /* Vector table */
         .section vectors, "ax"
@@ -230,7 +230,7 @@ irqfiq_common:
         //leave_secure_world r1
 
         /* return to SMC dispatch path */
-        mov     r0, #KEV_ERR_INTERRUPTED
+        mov     r0, #KOM_ERR_INTERRUPTED
         mov     r1, #0
         b       dispatch_return
 
@@ -242,7 +242,7 @@ _abort: /* Data abort or undefined instruction, only taken from secure user-mode
 
         //leave_secure_world r1
 
-        mov     r0, #KEV_ERR_FAULT
+        mov     r0, #KOM_ERR_FAULT
         mov     r1, #0
         b       dispatch_return
 
@@ -257,11 +257,11 @@ _svc: /* Supervisor call, only taken from secure user-mode */
 
         /* return to SMC dispatch path */
         mov     r1, r0 // return value from call
-        mov     r0, #KEV_ERR_SUCCESS
+        mov     r0, #KOM_ERR_SUCCESS
         b       dispatch_return
 
         .global dispatch
-        /* kev_multival_t dispatch(struct kev_dispatcher *dispatcher) */
+        /* kom_multival_t dispatch(struct kom_dispatcher *dispatcher) */
 dispatch:
         /* save non-volatile registers on monitor's stack */
         push    {r4-r11,lr}

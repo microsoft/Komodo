@@ -1,4 +1,4 @@
-include "kev_common.s.dfy"
+include "kom_common.s.dfy"
 include "Maybe.dfy"
 include "Sets.dfy"
 include "ARMdef.dfy"
@@ -17,7 +17,7 @@ function NR_L2PTES(): int { 1024 }
 
 predicate validPageNr(p: PageNr)
 {
-    0 <= p < KEVLAR_SECURE_NPAGES()
+    0 <= p < KOM_SECURE_NPAGES()
 }
 
 datatype PageDbEntryTyped
@@ -182,7 +182,7 @@ predicate addrspaceL1Unique(d: PageDb, n: PageNr)
 function {:opaque} validPageNrs(): set<PageNr>
     ensures forall n :: n in validPageNrs() <==> validPageNr(n)
 {
-    SetOfNumbersInRightExclusiveRange(0, KEVLAR_SECURE_NPAGES())
+    SetOfNumbersInRightExclusiveRange(0, KOM_SECURE_NPAGES())
 }
 
 // returns the set of references to an addrspace page with the given index
@@ -282,7 +282,7 @@ predicate closedRefsL2PTE(pte: L2PTE)
     match pte
         case SecureMapping(p, w, e) => validPageNr(p)
         case InsecureMapping(p, w)
-            => 0 <= p < KEVLAR_PHYSMEM_LIMIT() / KEVLAR_PAGE_SIZE()
+            => 0 <= p < KOM_PHYSMEM_LIMIT() / PAGESIZE()
         case NoMapping => true
 }
 

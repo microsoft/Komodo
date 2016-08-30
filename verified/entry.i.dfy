@@ -97,7 +97,7 @@ lemma MITransitive(s1:SysState, s2:SysState, s3:SysState, p:PageNr)
 lemma valEnterImpliesBRPres(s:SysState,s':SysState,dispPage:PageNr,
     a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
-    requires smc_enter(s.d, dispPage,a1,a2,a3).1 == KEV_ERR_SUCCESS()
+    requires smc_enter(s.d, dispPage,a1,a2,a3).1 == KOM_ERR_SUCCESS()
         && validEnter(s, s', dispPage,a1,a2,a3)
     ensures validEnter(s,s',dispPage,a1,a2,a3) ==>
         bankedRegsPreserved(s.hw, s'.hw)
@@ -139,7 +139,7 @@ lemma validERImpliesMemInv(s:SysState, s':SysState)
 lemma valEnterImpliesMInv(s:SysState,s':SysState,dispPage:PageNr,
     a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
-    requires smc_enter(s.d, dispPage,a1,a2,a3).1 == KEV_ERR_SUCCESS()
+    requires smc_enter(s.d, dispPage,a1,a2,a3).1 == KOM_ERR_SUCCESS()
     requires validEnter(s, s', dispPage,a1,a2,a3)
     ensures
         var p := l1pOfDispatcher(s.d, dispPage);
@@ -233,11 +233,11 @@ lemma MemInvarSubsumption(s:SysState,s':SysState,p:PageNr)
 predicate {:opaque} validEnter_premium(s:SysState,s':SysState,dispPage:PageNr,
     a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
-    requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KEV_ERR_SUCCESS()
+    requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KOM_ERR_SUCCESS()
     ensures validEnter_premium(s, s', dispPage,a1,a2,a3)
         == validEnter(s, s', dispPage,a1,a2,a3)
         /*
-    ensures (smc_enter(s.d, dispPage,a1,a2,a3).1 == KEV_ERR_SUCCESS()
+    ensures (smc_enter(s.d, dispPage,a1,a2,a3).1 == KOM_ERR_SUCCESS()
              && validEnter(s, s', dispPage,a1,a2,a3)) ==> 
              */
     ensures validEnter_premium(s, s', dispPage,a1,a2,a3) ==> 

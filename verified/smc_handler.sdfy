@@ -5,7 +5,7 @@
 #verbatim
 lemma SameMemAndGlobalsImpliesSamePageDb(s:state, s':state, pagedb:PageDb)
     requires SaneState(s) && SaneState(s')
-    requires pageDbClosedRefs(pagedb)
+     requires pageDbClosedRefs(pagedb)
     requires pageDbCorresponds(s.m, pagedb)
     requires NonStackMemPreserving(s,s')
     requires GlobalsInvariant(s,s')
@@ -46,17 +46,17 @@ procedure smc_handler(
     fcall_prologue(stack_bytes);
     SameMemAndGlobalsImpliesSamePageDb(old(this), this, pagedb);
 
-    if(callno == sp_op_const(KEV_SMC_QUERY())) {
-        err := sp_op_const(KEV_MAGIC());
-    } else if(callno == sp_op_const(KEV_SMC_GETPHYSPAGES())) {
-        retval := sp_op_const(KEVLAR_SECURE_NPAGES());
-        err := sp_op_const(KEV_ERR_SUCCESS());
-    } else if(callno == sp_op_const(KEV_SMC_INIT_ADDRSPACE())) {
-        pagedb := kev_smc_init_addrspace(arg1, arg2, err, pagedb);
-    } else if(callno == sp_op_const(KEV_SMC_INIT_DISPATCHER())) {
-        pagedb := kev_smc_init_dispatcher(arg1, arg2, arg3, err, pagedb);
-    } else if(callno == sp_op_const(KEV_SMC_INIT_L2PTABLE())) {
-        pagedb := kev_smc_init_l2ptable(arg1, arg2, arg3, err, pagedb);
+    if(callno == sp_op_const(KOM_SMC_QUERY())) {
+        err := sp_op_const(KOM_MAGIC());
+    } else if(callno == sp_op_const(KOM_SMC_GETPHYSPAGES())) {
+        retval := sp_op_const(KOM_SECURE_NPAGES());
+        err := sp_op_const(KOM_ERR_SUCCESS());
+    } else if(callno == sp_op_const(KOM_SMC_INIT_ADDRSPACE())) {
+        pagedb := kom_smc_init_addrspace(arg1, arg2, err, pagedb);
+    } else if(callno == sp_op_const(KOM_SMC_INIT_DISPATCHER())) {
+        pagedb := kom_smc_init_dispatcher(arg1, arg2, arg3, err, pagedb);
+    } else if(callno == sp_op_const(KOM_SMC_INIT_L2PTABLE())) {
+        pagedb := kom_smc_init_l2ptable(arg1, arg2, arg3, err, pagedb);
     }
 
     ghost var prePopThis := this;

@@ -1,8 +1,8 @@
 ifneq ($(KERNELRELEASE),)
 
 ccflags-y := -I$(M)/../include
-obj-m := kevlar.o
-kevlar-y := driver.o smc.o smcapi.o pgalloc.o
+obj-m := komodo.o
+komodo-y := driver.o smc.o smcapi.o pgalloc.o
 
 else
 

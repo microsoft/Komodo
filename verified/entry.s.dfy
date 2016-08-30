@@ -1,4 +1,4 @@
-include "kev_common.s.dfy"
+include "kom_common.s.dfy"
 include "ARMdef.dfy"
 include "pagedb.s.dfy"
 include "smcapi.s.dfy"
@@ -45,7 +45,7 @@ predicate validERTransition(s:SysState, s':SysState)
 function securePageFromPhysAddr(phys:int): PageNr
     requires PageAligned(phys)
     requires SecurePhysBase() <= phys < SecurePhysBase() +
-        KEVLAR_SECURE_NPAGES() * PAGESIZE() // physPageIsSecure(phys/PAGESIZE())
+        KOM_SECURE_NPAGES() * PAGESIZE() // physPageIsSecure(phys/PAGESIZE())
     ensures validPageNr(securePageFromPhysAddr(phys))
 {
     (phys - SecurePhysBase()) / PAGESIZE()
@@ -65,10 +65,10 @@ predicate validSysStates(sset:set<SysState>) { forall s :: s in sset ==> validSy
 predicate validEnter(s:SysState,s':SysState,
     dispPage:PageNr,a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
-    // requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KEV_ERR_SUCCESS()
+    // requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KOM_ERR_SUCCESS()
 {
     reveal_ValidRegState();
-    smc_enter(s.d, dispPage, a1, a2, a3).1 != KEV_ERR_SUCCESS() ||
+    smc_enter(s.d, dispPage, a1, a2, a3).1 != KOM_ERR_SUCCESS() ||
     
     // s1 (s)  : State on entry to the monitor
     // s2      : prior to MOVSPCLR that transitions to userspace
@@ -96,7 +96,7 @@ predicate validResume(s:SysState,s':SysState,dispPage:PageNr)
     requires validSysState(s)
 {
      
-    smc_resume(s.d, dispPage).1 != KEV_ERR_SUCCESS() ||
+    smc_resume(s.d, dispPage).1 != KOM_ERR_SUCCESS() ||
         ... state transitions
 }
 */
@@ -104,7 +104,7 @@ predicate validResume(s:SysState,s':SysState,dispPage:PageNr)
 predicate preEntryEnter(s:SysState,s':SysState,
     dispPage:PageNr,a1:int,a2:int,a3:int)
     requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
-    requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KEV_ERR_SUCCESS()
+    requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KOM_ERR_SUCCESS()
     // ensures  nonStoppedL1(s.d, l1pOfDispatcher(s.d, dispPage));
     // ensures (validSysState(s) && validSysState(s') && 
     // preEntryEnter(s,s',dispPage,a1,a2,a3)) ==>false
@@ -137,7 +137,7 @@ predicate preEntryEnter(s:SysState,s':SysState,
 /*
 predicate preEntryResume(s:SysState, s':SysState, dispPage:PageNr)
     requires validSysState(s)
-    requires smc_resume(s.d, dispPage).1 == KEV_ERR_SUCCESS()
+    requires smc_resume(s.d, dispPage).1 == KOM_ERR_SUCCESS()
 {
     reveal_validPageDb();
     var disp := s.d[dispPage].entry;
@@ -219,7 +219,7 @@ function exceptionHandled(s:SysState) : (int, int, PageDb)
     if(s.hw.conf.ex.ExSVC?) then
         var p := s.g.g_cur_dispatcher;
         var d' := s.d[ p := s.d[p].(entry := s.d[p].entry.(entered := false))];
-        (KEV_ERR_SUCCESS(), s.hw.regs[R0], d')
+        (KOM_ERR_SUCCESS(), s.hw.regs[R0], d')
     else 
         var p := s.g.g_cur_dispatcher;
         var pc := OperandContents(s.hw, OLR);
@@ -228,10 +228,10 @@ function exceptionHandled(s:SysState) : (int, int, PageDb)
             ctxt:= DispatcherContext(s.hw.regs, psr, pc));
         var d' := s.d[ p := s.d[p].(entry := disp') ];
         if s.hw.conf.ex.ExIRQ? || s.hw.conf.ex.ExFIQ? then
-            (KEV_ERR_INTERRUPTED(), 0, d')
+            (KOM_ERR_INTERRUPTED(), 0, d')
         else
             assert s.hw.conf.ex.ExAbt? || s.hw.conf.ex.ExUnd?;
-            (KEV_ERR_FAULT(), 0, d')
+            (KOM_ERR_FAULT(), 0, d')
 
     // TODO add undef exception
 }

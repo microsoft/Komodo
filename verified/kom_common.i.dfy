@@ -1,5 +1,5 @@
 include "ARMspartan.dfy"
-include "kev_common.s.dfy"
+include "kom_common.s.dfy"
 include "pagedb.s.dfy"
 
 //-----------------------------------------------------------------------------
@@ -71,18 +71,18 @@ function page_paddr(p: PageNr): mem
     requires validPageNr(p)
     ensures PageAligned(page_paddr(p))
 {
-    assert PageAligned(KEVLAR_PAGE_SIZE());
-    SecurePhysBase() + p * KEVLAR_PAGE_SIZE()
+    assert PageAligned(PAGESIZE());
+    SecurePhysBase() + p * PAGESIZE()
 }
 
 function page_monvaddr(pagenr:PageNr): mem
     requires validPageNr(pagenr)
     ensures PageAligned(page_monvaddr(pagenr))
 {
-    assert pagenr < KEVLAR_SECURE_NPAGES();
+    assert pagenr < KOM_SECURE_NPAGES();
     var pa := page_paddr(pagenr);
-    assert pa < SecurePhysBase() + KEVLAR_SECURE_RESERVE();
-    page_paddr(pagenr) + KEVLAR_DIRECTMAP_VBASE()
+    assert pa < SecurePhysBase() + KOM_SECURE_RESERVE();
+    page_paddr(pagenr) + KOM_DIRECTMAP_VBASE()
 }
 
 // workarounds for Spartan's lack of Dafny language features

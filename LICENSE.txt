@@ -1,4 +1,4 @@
-Project Kevlar
+Project Komodo
 Copyright (c) Microsoft Corporation
 All rights reserved. 
 MIT License

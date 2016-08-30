@@ -1,4 +1,4 @@
-MONITOR_OBJS := $(dir)/entry.o $(dir)/smchandler.o
+MONITOR_OBJS := $(dir)/entry.o $(dir)/monitor.o
 MONITOR_LINKER_SCRIPT := $(dir)/monitor.lds
 
 $(dir)/monitor.elf: $(MONITOR_OBJS) $(MONITOR_LINKER_SCRIPT) pdclib/pdclib.a

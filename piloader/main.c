@@ -17,8 +17,8 @@
 #include "serial.h"
 #include "console.h"
 #include "atags.h"
-#include "armpte.h"
-#include <kevlar/memregions.h>
+#include <komodo/armpte.h>
+#include <komodo/memregions.h>
 
 #define ROUND_UP(N, S) ((((N) + (S) - 1) / (S)) * (S))
 
@@ -29,7 +29,7 @@
 
 #define ARM_SCR_NS      0x01 // non-secure bit
 
-// defined in kevlar linker script
+// defined in linker script
 extern char monitor_image_start, monitor_image_data, monitor_image_end;
 // defined in monitor image
 extern char monitor_stack_base, _monitor_vectors, _secure_vectors,
@@ -217,8 +217,8 @@ void __attribute__((noreturn)) main(void)
     
     monitor_physbase = atags_reserve_physmem(monitor_image_reserve
                                              + ARM_L1_PTABLE_BYTES
-                                             + KEVLAR_PAGE_SIZE
-                                             + KEVLAR_SECURE_RESERVE);
+                                             + KOM_PAGE_SIZE
+                                             + KOM_SECURE_RESERVE);
 
     /* copy the monitor image into place */
     console_printf("Copying monitor to %lx\n", monitor_physbase);
@@ -232,7 +232,7 @@ void __attribute__((noreturn)) main(void)
     armpte_short_l1 *l1pt = (void *)ptbase;
     armpte_short_l2 *l2pt = (void *)(ptbase + ARM_L1_PTABLE_BYTES);
 
-    uintptr_t secure_physbase = (uintptr_t)l2pt + KEVLAR_PAGE_SIZE;
+    uintptr_t secure_physbase = (uintptr_t)l2pt + KOM_PAGE_SIZE;
 
     console_printf("L1 %p L2 %p\n", l1pt, l2pt);
 
@@ -241,12 +241,12 @@ void __attribute__((noreturn)) main(void)
     map_section(l1pt, 0x3f200000, 0x3f200000); // TODO: not-cacheable!?
 
     /* direct-map phys memory in the 2-4G region for the monitor to use */
-    for (uintptr_t off = 0; off < KEVLAR_DIRECTMAP_SIZE; off += ARM_L1_SECTION_SIZE) {
-        map_section(l1pt, KEVLAR_DIRECTMAP_VBASE + off, off);
+    for (uintptr_t off = 0; off < KOM_DIRECTMAP_SIZE; off += ARM_L1_SECTION_SIZE) {
+        map_section(l1pt, KOM_DIRECTMAP_VBASE + off, off);
     }
 
     /* install a second-level page table for the monitor image */
-    l1pt[KEVLAR_MON_VBASE >> 20].raw = (armpte_short_l1){
+    l1pt[KOM_MON_VBASE >> 20].raw = (armpte_short_l1){
         .pagetable = {
             .type = 1,
             .pxn = 0,
@@ -258,25 +258,25 @@ void __attribute__((noreturn)) main(void)
     // text and rodata
     size_t monitor_executable_size = &monitor_image_data - &monitor_image_start;
     console_printf("mapping monitor executable at %lx-%lx\n",
-                   KEVLAR_MON_VBASE, KEVLAR_MON_VBASE + monitor_executable_size);
-    map_l2_pages(l2pt, KEVLAR_MON_VBASE, monitor_physbase,
+                   KOM_MON_VBASE, KOM_MON_VBASE + monitor_executable_size);
+    map_l2_pages(l2pt, KOM_MON_VBASE, monitor_physbase,
                  monitor_executable_size, true);
 
     // data and bss
     console_printf("mapping monitor RW at %lx-%lx\n",
-                   KEVLAR_MON_VBASE + monitor_executable_size,
-                   KEVLAR_MON_VBASE + ROUND_UP(monitor_image_bytes, 0x1000));
-    map_l2_pages(l2pt, KEVLAR_MON_VBASE + monitor_executable_size,
+                   KOM_MON_VBASE + monitor_executable_size,
+                   KOM_MON_VBASE + ROUND_UP(monitor_image_bytes, 0x1000));
+    map_l2_pages(l2pt, KOM_MON_VBASE + monitor_executable_size,
                  monitor_physbase + monitor_executable_size,
                  ROUND_UP(monitor_image_bytes, 0x1000) - monitor_executable_size, false);
 
     uintptr_t monitor_stack
-        = &monitor_stack_base - &monitor_image_start + KEVLAR_MON_VBASE;
+        = &monitor_stack_base - &monitor_image_start + KOM_MON_VBASE;
 
     g_ptbase = ptbase;
     assert(&_monitor_vectors == &monitor_image_start);
-    g_mvbar = &_monitor_vectors - &monitor_image_start + KEVLAR_MON_VBASE;
-    g_vbar = &_secure_vectors - &monitor_image_start + KEVLAR_MON_VBASE;
+    g_mvbar = &_monitor_vectors - &monitor_image_start + KOM_MON_VBASE;
+    g_vbar = &_secure_vectors - &monitor_image_start + KOM_MON_VBASE;
 
     //print_hex(0x4237);
     //console_printf(" <-- Print_hex test\n"),
@@ -287,7 +287,7 @@ void __attribute__((noreturn)) main(void)
     console_printf("passing secure_physbase %lx to monitor\n", secure_physbase);
 
     uintptr_t *monitor_secure_physbase
-        = (uintptr_t *)(&g_secure_physbase - &monitor_image_start + KEVLAR_MON_VBASE);
+        = (uintptr_t *)(&g_secure_physbase - &monitor_image_start + KOM_MON_VBASE);
     *monitor_secure_physbase = secure_physbase;
 
     // this call will return in non-secure world (where MMUs are still off)

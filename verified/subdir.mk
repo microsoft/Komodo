@@ -52,13 +52,13 @@ CLEAN := $(CLEAN) $(dir)/*.exe $(dir)/*.dll $(dir)/*.pdb $(dir)/*.S $(dir)/*.o $
 $(dir)/ARMdef.verified: $(dir)/Maybe.verified $(dir)/Seq.verified
 $(dir)/ARMprint.verified: $(dir)/ARMdef.verified
 $(dir)/ARMspartan.verified: $(dir)/ARMdef.verified
-$(dir)/kev_common.s.verified: $(dir)/ARMdef.verified
-$(dir)/pagedb.s.verified: $(dir)/kev_common.s.verified $(dir)/Maybe.verified $(dir)/Sets.verified
-$(dir)/kev_common.i.verified: $(dir)/ARMspartan.verified $(dir)/kev_common.s.verified $(dir)/pagedb.s.verified
-$(dir)/smcapi.s.verified: $(dir)/kev_common.s.verified $(dir)/pagedb.s.verified
+$(dir)/kom_common.s.verified: $(dir)/ARMdef.verified
+$(dir)/pagedb.s.verified: $(dir)/kom_common.s.verified $(dir)/Maybe.verified $(dir)/Sets.verified
+$(dir)/kom_common.i.verified: $(dir)/ARMspartan.verified $(dir)/kom_common.s.verified $(dir)/pagedb.s.verified
+$(dir)/smcapi.s.verified: $(dir)/kom_common.s.verified $(dir)/pagedb.s.verified
 $(dir)/smcapi.i.verified: $(dir)/smcapi.s.verified
-$(dir)/pagedb.i.verified: $(dir)/pagedb.s.verified $(dir)/kev_common.i.verified
-$(dir)/entry.s.verified:  $(dir)/kev_common.s.verified $(dir)/ARMdef.verified $(dir)/pagedb.s.verified $(dir)/smcapi.s.verified $(dir)/abstate.s.verified
+$(dir)/pagedb.i.verified: $(dir)/pagedb.s.verified $(dir)/kom_common.i.verified
+$(dir)/entry.s.verified:  $(dir)/kom_common.s.verified $(dir)/ARMdef.verified $(dir)/pagedb.s.verified $(dir)/smcapi.s.verified $(dir)/abstate.s.verified
 $(dir)/entry.i.verified: $(dir)/entry.s.verified
 $(dir)/main.i.verified: $(dir)/ARMprint.verified $(dir)/smc_handler.verified
 
@@ -66,31 +66,31 @@ $(dir)/main.i.verified: $(dir)/ARMprint.verified $(dir)/smc_handler.verified
 ARMdecls_dep-dfy = ARMspartan
 $(dir)/ARMdecls.verified: $(call mkdeps,ARMdecls)
 
-kev_utils_dep-sdfy = ARMdecls
-kev_utils_dep-dfy = ARMspartan kev_common.i
-$(dir)/kev_utils.verified: $(call mkdeps,kev_utils)
+kom_utils_dep-sdfy = ARMdecls
+kom_utils_dep-dfy = ARMspartan kom_common.i
+$(dir)/kom_utils.verified: $(call mkdeps,kom_utils)
 
-allocate_page_dep-sdfy = ARMdecls kev_utils
-allocate_page_dep-dfy = ARMspartan Sets kev_common.i pagedb.i smcapi.i
+allocate_page_dep-sdfy = ARMdecls kom_utils
+allocate_page_dep-dfy = ARMspartan Sets kom_common.i pagedb.i smcapi.i
 $(dir)/allocate_page.verified: $(call mkdeps,allocate_page)
 
-init_addrspace_dep-sdfy = ARMdecls kev_utils
-init_addrspace_dep-dfy = ARMspartan kev_common.i pagedb.i smcapi.i
+init_addrspace_dep-sdfy = ARMdecls kom_utils
+init_addrspace_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/init_addrspace.verified: $(call mkdeps,init_addrspace)
 
-init_dispatcher_dep-sdfy = ARMdecls kev_utils allocate_page
-init_dispatcher_dep-dfy = ARMspartan kev_common.i pagedb.i smcapi.i
+init_dispatcher_dep-sdfy = ARMdecls kom_utils allocate_page
+init_dispatcher_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/init_dispatcher.verified: $(call mkdeps,init_dispatcher)
 
-init_l2ptable_dep-sdfy = ARMdecls kev_utils allocate_page
-init_l2ptable_dep-dfy = ARMspartan kev_common.i pagedb.i smcapi.i
+init_l2ptable_dep-sdfy = ARMdecls kom_utils allocate_page
+init_l2ptable_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/init_l2ptable.verified: $(call mkdeps,init_l2ptable)
 
-enter_resume_dep-sdfy = ARMdecls kev_utils
-enter_resume_dep-dfy = ARMspartan kev_common.i pagedb.i smcapi.i abstate.s entry.i
+enter_resume_dep-sdfy = ARMdecls kom_utils
+enter_resume_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
 $(dir)/enter_resume.verified: $(call mkdeps,enter_resume)
 
-smc_handler_dep-sdfy = ARMdecls kev_utils init_addrspace init_dispatcher \
+smc_handler_dep-sdfy = ARMdecls kom_utils init_addrspace init_dispatcher \
     init_l2ptable enter_resume
-smc_handler_dep-dfy = ARMspartan kev_common.i pagedb.i smcapi.i
+smc_handler_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/smc_handler.verified: $(call mkdeps,smc_handler)

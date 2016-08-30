@@ -1,7 +1,7 @@
 include "pagedb.s.dfy"
 include "pagedb.i.dfy"
 include "ARMdef.dfy"
-include "kev_common.s.dfy"
+include "kom_common.s.dfy"
 
 datatype SysState = SysState(hw:state, d:PageDb, g:Globs)
 datatype Globs = Globs(g_cur_dispatcher:PageNr)

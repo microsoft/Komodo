@@ -1,12 +1,12 @@
 include "pagedb.s.dfy"
-include "kev_common.i.dfy"
+include "kom_common.i.dfy"
 
 //-----------------------------------------------------------------------------
 // Data Structures
 //-----------------------------------------------------------------------------
 // computes byte offset of a specific pagedb entry
 function method G_PAGEDB_ENTRY(pageno:int):int 
-    requires 0 <= pageno < KEVLAR_SECURE_NPAGES();
+    requires 0 <= pageno < KOM_SECURE_NPAGES();
     ensures G_PAGEDB_ENTRY(pageno) == pageno * PAGEDB_ENTRY_SIZE();
     ensures WordAligned(G_PAGEDB_ENTRY(pageno))
 {
@@ -49,27 +49,27 @@ function method DISPATCHER_ENTRYPOINT():int { 4 }
 //-----------------------------------------------------------------------------
 // Page Types
 //-----------------------------------------------------------------------------
-function method KEV_PAGE_FREE():int
-    ensures KEV_PAGE_FREE() == 0; { 0 }
-function method KEV_PAGE_ADDRSPACE():int
-    ensures KEV_PAGE_ADDRSPACE() == 1; { 1 }
-function method KEV_PAGE_DISPATCHER():int
-    ensures KEV_PAGE_DISPATCHER() == 2; { 2 }
-function method KEV_PAGE_L1PTABLE():int
-    ensures KEV_PAGE_L1PTABLE() == 3; { 3 }
-function method KEV_PAGE_L2PTABLE():int
-    ensures KEV_PAGE_L2PTABLE() == 4; { 4 }
-function method KEV_PAGE_DATA():int
-    ensures KEV_PAGE_DATA() == 5; { 5 }
+function method KOM_PAGE_FREE():int
+    ensures KOM_PAGE_FREE() == 0; { 0 }
+function method KOM_PAGE_ADDRSPACE():int
+    ensures KOM_PAGE_ADDRSPACE() == 1; { 1 }
+function method KOM_PAGE_DISPATCHER():int
+    ensures KOM_PAGE_DISPATCHER() == 2; { 2 }
+function method KOM_PAGE_L1PTABLE():int
+    ensures KOM_PAGE_L1PTABLE() == 3; { 3 }
+function method KOM_PAGE_L2PTABLE():int
+    ensures KOM_PAGE_L2PTABLE() == 4; { 4 }
+function method KOM_PAGE_DATA():int
+    ensures KOM_PAGE_DATA() == 5; { 5 }
 
 //-----------------------------------------------------------------------------
 // Address Space States
 //-----------------------------------------------------------------------------
-function method KEV_ADDRSPACE_INIT():int
-    ensures KEV_ADDRSPACE_INIT() == 0; { 0 }
-function method KEV_ADDRSPACE_FINAL():int
-    ensures KEV_ADDRSPACE_FINAL() == 1; { 1 }
-function method KEV_ADDRSPACE_STOPPED():int            { 2 }
+function method KOM_ADDRSPACE_INIT():int
+    ensures KOM_ADDRSPACE_INIT() == 0; { 0 }
+function method KOM_ADDRSPACE_FINAL():int
+    ensures KOM_ADDRSPACE_FINAL() == 1; { 1 }
+function method KOM_ADDRSPACE_STOPPED():int            { 2 }
 
 //-----------------------------------------------------------------------------
 //
@@ -78,7 +78,7 @@ function method KEV_ADDRSPACE_STOPPED():int            { 2 }
 predicate addrInPage(m:mem, p:PageNr)
     requires validPageNr(p)
 {
-    page_monvaddr(p) <= m < page_monvaddr(p) + KEVLAR_PAGE_SIZE()
+    page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE()
 }
 
 predicate memContainsPage(page: memmap, p:PageNr)
@@ -93,7 +93,7 @@ function extractPage(s:memstate, p:PageNr): memmap
     ensures memContainsPage(extractPage(s,p), p)
 {
     // XXX: expanded addrInPage() to help Dafny see a bounded set
-    (map m:mem | page_monvaddr(p) <= m < page_monvaddr(p) + KEVLAR_PAGE_SIZE()
+    (map m:mem | page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE()
         :: MemContents(s, m) as word)
 }
 
@@ -118,8 +118,8 @@ predicate pageDbCorresponds(s:memstate, pagedb:PageDb)
     reveal_pageDbClosedRefs();
     // XXX: unpack the entry and page contents here to help dafny see
     // that we have no other dependencies on the state
-    var db := (map p | 0 <= p < KEVLAR_SECURE_NPAGES() :: extractPageDbEntry(s,p));
-    var secpages := (map p | 0 <= p < KEVLAR_SECURE_NPAGES() :: extractPage(s,p));
+    var db := (map p | 0 <= p < KOM_SECURE_NPAGES() :: extractPageDbEntry(s,p));
+    var secpages := (map p | 0 <= p < KOM_SECURE_NPAGES() :: extractPage(s,p));
     forall p {:trigger validPageNr(p)} | validPageNr(p) :: 
         pageDbEntryCorresponds(pagedb[p], db[p])
             && pageContentsCorresponds(p, pagedb[p], secpages[p])
@@ -261,8 +261,8 @@ function mkL2Pte(pte: L2PTE): int
     match pte
         case SecureMapping(pg, w, x) => ARM_L2PTE(page_paddr(pg), w, x)
         case InsecureMapping(ipg, w) => (
-            assert KEVLAR_PAGE_SIZE() == 0x1000; // sigh
-            var pa := ipg * KEVLAR_PAGE_SIZE();
+            assert PAGESIZE() == 0x1000; // sigh
+            var pa := ipg * PAGESIZE();
             assert PageAligned(pa); // double sigh
             ARM_L2PTE(pa, w, false))
         case NoMapping => 0
@@ -283,13 +283,13 @@ predicate {:opaque} pageDbL2PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page
 function pageDbEntryTypeVal(e: PageDbEntry): int
     ensures isUInt32(pageDbEntryTypeVal(e))
 {
-    if e.PageDbEntryFree? then KEV_PAGE_FREE()
+    if e.PageDbEntryFree? then KOM_PAGE_FREE()
     else match e.entry {
-        case Addrspace(l1pt, ref, state) => KEV_PAGE_ADDRSPACE()
-        case Dispatcher(ep, entered, ctxt) => KEV_PAGE_DISPATCHER()
-        case L1PTable(pt) => KEV_PAGE_L1PTABLE()
-        case L2PTable(pt) => KEV_PAGE_L2PTABLE()
-        case DataPage => KEV_PAGE_DATA()
+        case Addrspace(l1pt, ref, state) => KOM_PAGE_ADDRSPACE()
+        case Dispatcher(ep, entered, ctxt) => KOM_PAGE_DISPATCHER()
+        case L1PTable(pt) => KOM_PAGE_L1PTABLE()
+        case L2PTable(pt) => KOM_PAGE_L2PTABLE()
+        case DataPage => KOM_PAGE_DATA()
     }
 }
 
@@ -297,9 +297,9 @@ function pageDbAddrspaceStateVal(s: AddrspaceState): int
     ensures isUInt32(pageDbAddrspaceStateVal(s))
 {
     match s {
-    case InitState => KEV_ADDRSPACE_INIT()
-    case FinalState => KEV_ADDRSPACE_FINAL()
-    case StoppedState => KEV_ADDRSPACE_STOPPED()
+    case InitState => KOM_ADDRSPACE_INIT()
+    case FinalState => KOM_ADDRSPACE_FINAL()
+    case StoppedState => KOM_ADDRSPACE_STOPPED()
     }
 }
 
@@ -359,7 +359,7 @@ lemma AllButOnePagePreserving(n:PageNr,s:state,r:state)
     requires validPageNr(n)
     requires SaneState(s) && SaneState(r)
     requires MemPreservingExcept(s, r, page_monvaddr(n),
-                                 page_monvaddr(n) + KEVLAR_PAGE_SIZE())
+                                 page_monvaddr(n) + PAGESIZE())
     ensures forall p :: validPageNr(p) && p != n
         ==> extractPage(s.m, p) == extractPage(r.m, p)
 {

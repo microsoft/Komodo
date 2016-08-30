@@ -1,45 +1,45 @@
-#ifndef _KEVLAR_MONITOR_H
-#define _KEVLAR_MONITOR_H
+#ifndef _KOM_MONITOR_H
+#define _KOM_MONITOR_H
 
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <kevlar/memregions.h>
-#include <kevlar/smcapi.h>
-#include <armpte.h>
+#include <komodo/memregions.h>
+#include <komodo/smcapi.h>
+#include <komodo/armpte.h>
 
 #define ROUND_UP(N, S) ((((N) + (S) - 1) / (S)) * (S))
 
 typedef enum {
-    KEV_PAGE_FREE = 0,
-    KEV_PAGE_ADDRSPACE,
-    KEV_PAGE_DISPATCHER,
-    KEV_PAGE_L1PTABLE,
-    KEV_PAGE_L2PTABLE,
-    KEV_PAGE_DATA,
-    KEV_PAGE_INVALID = -1
-} kev_pagetype_t;
+    KOM_PAGE_FREE = 0,
+    KOM_PAGE_ADDRSPACE,
+    KOM_PAGE_DISPATCHER,
+    KOM_PAGE_L1PTABLE,
+    KOM_PAGE_L2PTABLE,
+    KOM_PAGE_DATA,
+    KOM_PAGE_INVALID = -1
+} kom_pagetype_t;
 
-struct kev_pagedb_entry {
-    kev_pagetype_t type;
-    struct kev_addrspace *addrspace;
+struct kom_pagedb_entry {
+    kom_pagetype_t type;
+    struct kom_addrspace *addrspace;
     // do we need the mapping offset?
 };
 
 typedef enum {
-    KEV_ADDRSPACE_INIT = 0,
-    KEV_ADDRSPACE_FINAL = 1,
-    KEV_ADDRSPACE_STOPPED = 2,
-} kev_addrspace_state_t;
+    KOM_ADDRSPACE_INIT = 0,
+    KOM_ADDRSPACE_FINAL = 1,
+    KOM_ADDRSPACE_STOPPED = 2,
+} kom_addrspace_state_t;
 
-struct kev_addrspace {
+struct kom_addrspace {
     armpte_short_l1 *l1pt;
     uintptr_t l1pt_phys;
     uint32_t refcount;
-    kev_addrspace_state_t state;
+    kom_addrspace_state_t state;
 };
 
-struct kev_dispatcher {
+struct kom_dispatcher {
     uint32_t regs[16]; // core regs
     uint32_t cpsr;
     uint32_t entrypoint;
@@ -47,9 +47,9 @@ struct kev_dispatcher {
 };
 
 //extern uintptr_t g_secure_physbase;
-//extern struct kev_pagedb_entry g_pagedb[KEVLAR_SECURE_NPAGES];
+//extern struct kom_pagedb_entry g_pagedb[KOM_SECURE_NPAGES];
 
 /* entry.S */
-uint64_t dispatch(struct kev_dispatcher *dispatcher);
+uint64_t dispatch(struct kom_dispatcher *dispatcher);
 
-#endif // _KEVLAR_MONITOR_H
+#endif // _KOM_MONITOR_H

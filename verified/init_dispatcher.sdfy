@@ -1,4 +1,4 @@
-procedure kev_smc_init_dispatcher(
+procedure kom_smc_init_dispatcher(
     {:register OReg(R1)} disp_page:int,
     {:register OReg(R2)} as_page:int,
     {:register OReg(R3)} entrypoint:int,
@@ -21,8 +21,8 @@ procedure kev_smc_init_dispatcher(
     reveal_pageDbClosedRefs();
     reveal_smc_initDispatcher_premium();
 
-    if (as_page >= sp_op_const(KEVLAR_SECURE_NPAGES())) {
-        err := sp_op_const(KEV_ERR_INVALID_ADDRSPACE());
+    if (as_page >= sp_op_const(KOM_SECURE_NPAGES())) {
+        err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE());
     } else {
         LDRglobaladdr(r12, PageDb());
         assert validPageNr(as_page);
@@ -35,17 +35,17 @@ procedure kev_smc_init_dispatcher(
             reveal_pageDbEntryCorresponds();
         }
 
-        if (r0 != sp_op_const(KEV_PAGE_ADDRSPACE())) {
-            err := sp_op_const(KEV_ERR_INVALID_ADDRSPACE());
+        if (r0 != sp_op_const(KOM_PAGE_ADDRSPACE())) {
+            err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE());
         } else {
             assert isAddrspace(pagedb, as_page);
             ghost var entry := PageDbEntryTyped(as_page,
                             Dispatcher(entrypoint, false, dispctxt(entrypoint)));
             pagedb := allocate_page(disp_page, as_page,
-                                    sp_op_const(KEV_PAGE_DISPATCHER()),
+                                    sp_op_const(KOM_PAGE_DISPATCHER()),
                                     r12, r4, r5, err, pagedb, entry);
 
-            if (err == sp_op_const(KEV_ERR_SUCCESS())) {
+            if (err == sp_op_const(KOM_ERR_SUCCESS())) {
                 assert pageDbCorrespondsExcluding(this.m, pagedb, disp_page);
                 assert pageDbEntryCorresponds(pagedb[disp_page],
                                          extractPageDbEntry(this.m, disp_page));

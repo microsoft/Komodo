@@ -5,6 +5,6 @@ method Main()
 {
     printHeader();
     var n := printFunction("smc_handler", sp_code_smc_handler(), 0);
-    printBss(KevGlobalDecls());
+    printBss(KomGlobalDecls());
     printFooter();
 }

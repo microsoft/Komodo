@@ -1,4 +1,7 @@
+#-----------------------------------------------------------------------------
+# Configuration options
 # config.mk can override any of the config variables below
+#-----------------------------------------------------------------------------
 -include config.mk
 PREFIX ?= arm-eabi-
 INSTALLDIR ?= .
@@ -7,6 +10,7 @@ GUEST_DISKIMG ?= raspbian.img
 IRON_TOOLS_PATH ?= $(HOME)/src/spartan/tools
 SPARTAN ?= $(IRON_TOOLS_PATH)/Spartan/bin/spartan.exe
 DAFNY ?= $(IRON_TOOLS_PATH)/Dafny/Dafny.exe
+#-----------------------------------------------------------------------------
 
 AS = $(PREFIX)as
 CC = $(PREFIX)gcc
@@ -19,18 +23,21 @@ LIBGCC = $(shell $(CC) -print-libgcc-file-name)
 CFLAGS_ALL = -Wall -Werror -ffreestanding -nostdinc -mcpu=cortex-a7 -std=c99 -g -O -I include -I pdclib/include
 LDFLAGS_ALL = -nostdlib
 
-all: piimage/kevlar.img
+TARGET = piimage/piimage.img
+GUEST = guestimg/guestdisk.img
+
+all: $(TARGET)
 
 QEMU ?= qemu-system-arm
 QEMU_ARGS = -M raspi2 -display none -serial stdio -gdb tcp:127.0.0.1:1234
-QEMU_CMD = $(QEMU) $(QEMU_ARGS) -bios piimage/kevlar.img -sd guestimg/guestdisk.img
+QEMU_CMD = $(QEMU) $(QEMU_ARGS) -bios $(TARGET) -sd $(GUEST)
 
 .PHONY: clean qemu qemugdb
 
-qemu: piimage/kevlar.img guestimg/guestdisk.img
+qemu: $(TARGET) $(GUEST)
 	$(QEMU_CMD)
 
-qemugdb: piimage/kevlar.img guestimg/guestdisk.img
+qemugdb: $(TARGET) $(GUEST)
 	$(QEMU_CMD) -S
 
 gdb: piloader/piloader.elf monitor/monitor.elf

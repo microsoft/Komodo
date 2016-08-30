@@ -180,7 +180,7 @@ procedure init_l2ptable_success(
     // update L2 page contents
     page_monvaddr_impl(tmp1, l2_pg, tmp2);
     tmp2 := 0;
-    tmp3 := sp_op_const(KEVLAR_PAGE_SIZE());
+    tmp3 := sp_op_const(PAGESIZE());
     memset(tmp1, tmp2, tmp3);
 
     ghost var pg := extractPage(this.m, l2_pg);
@@ -219,7 +219,7 @@ procedure init_l2ptable_success(
     AllButOnePagePreserving(l1pg, tmpstate, this);
 }
 
-procedure kev_smc_init_l2ptable(
+procedure kom_smc_init_l2ptable(
     {:register OReg(R1)} pagenr:int,
     {:register OReg(R2)} as_page:int,
     {:register OReg(R3)} l1index:int,
@@ -241,10 +241,10 @@ procedure kev_smc_init_l2ptable(
     pagedb := pagedb_in;
 
     if (l1index >= sp_op_const(NR_L1PTES())) {
-        err := sp_op_const(KEV_ERR_INVALID_MAPPING());
+        err := sp_op_const(KOM_ERR_INVALID_MAPPING());
         assert err == specErr(specResult);
-    } else if (as_page >= sp_op_const(KEVLAR_SECURE_NPAGES())) {
-        err := sp_op_const(KEV_ERR_INVALID_ADDRSPACE());
+    } else if (as_page >= sp_op_const(KOM_SECURE_NPAGES())) {
+        err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE());
         assert err == specErr(specResult);
     } else {
         assert validPageNr(as_page);
@@ -258,8 +258,8 @@ procedure kev_smc_init_l2ptable(
             reveal_pageDbEntryCorresponds();
         }
 
-        if (r4 != sp_op_const(KEV_PAGE_ADDRSPACE())) {
-            err := sp_op_const(KEV_ERR_INVALID_ADDRSPACE());
+        if (r4 != sp_op_const(KOM_PAGE_ADDRSPACE())) {
+            err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE());
             assert err == specErr(specResult);
         } else {
             forall :: validAddrspacePage(pagedb, as_page) {
@@ -277,8 +277,8 @@ procedure kev_smc_init_l2ptable(
                 reveal_pageContentsCorresponds();
                 reveal_pageDbAddrspaceCorresponds();
             }
-            if (r5 != sp_op_const(KEV_ADDRSPACE_INIT())) {
-                err := sp_op_const(KEV_ERR_ALREADY_FINAL());
+            if (r5 != sp_op_const(KOM_ADDRSPACE_INIT())) {
+                err := sp_op_const(KOM_ERR_ALREADY_FINAL());
                 assert err == specErr(specResult);
             } else {
                 // check for L1 index in use
@@ -306,18 +306,18 @@ procedure kev_smc_init_l2ptable(
                 fetch_l1pte(r4, l1index, r5, r6, pagedb, l1pg);
                 if (r6 != 0) {
                     assert l1indexInUse(pagedb, as_page, l1index);
-                    err := sp_op_const(KEV_ERR_ADDRINUSE());
+                    err := sp_op_const(KOM_ERR_ADDRINUSE());
                     assert err == specErr(specResult);
                 } else {
                     ghost var emptyptes := SeqRepeat(NR_L2PTES(), NoMapping);
                     ghost var entry := PageDbEntryTyped(as_page, L2PTable(emptyptes));
 
                     pagedb := allocate_page(pagenr, as_page,
-                                        sp_op_const(KEV_PAGE_L2PTABLE()),
+                                        sp_op_const(KOM_PAGE_L2PTABLE()),
                                         r12, r4, r5, err, pagedb, entry);
 
                     assert err == specErr(specResult);
-                    if (err == sp_op_const(KEV_ERR_SUCCESS())) {
+                    if (err == sp_op_const(KOM_ERR_SUCCESS())) {
                         r4 := pagenr;
                         r5 := l1index;
                         pagedb := init_l2ptable_success(r4, as_page, r5, r6, r7, r8,
@@ -330,6 +330,6 @@ procedure kev_smc_init_l2ptable(
     }
 
     assert err == specErr(specResult);
-    assert err != KEV_ERR_SUCCESS() ==> pagedb == pagedb_in;
+    assert err != KOM_ERR_SUCCESS() ==> pagedb == pagedb_in;
     reveal_smc_initL2PTable_premium();
 }
