@@ -253,8 +253,7 @@ predicate {:opaque} ValidSRegState(sregs:map<SReg, word>)
 
 // All valid states have the same memory address domain, but we don't care what 
 // it is (at this level).
-function {:axiom} TheValidAddresses() : set<mem>
-    ensures forall m :: m in TheValidAddresses() ==> WordAligned(m)
+function {:axiom} TheValidAddresses(): set<mem>
 
 predicate {:opaque} ValidMemState(s:memstate)
 {
