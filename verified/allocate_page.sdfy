@@ -258,6 +258,7 @@ procedure allocate_page(
             if (tmp != sp_op_const(KOM_ADDRSPACE_INIT())) {
                 err := sp_op_const(KOM_ERR_ALREADY_FINAL());
             } else {
+                assert pageDbCorresponds(this.m, pagedb);
                 pagedb := allocate_page_success(pagenr, tmp2, typeval,
                                 pagedb_base, tmp, err, pagedb_in, entry);
                 err := sp_op_const(KOM_ERR_SUCCESS());
