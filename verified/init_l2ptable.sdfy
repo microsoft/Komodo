@@ -114,6 +114,8 @@ procedure install_l1ptes(
     assert l2_pg == mkL1Pte(Just(old(l2_pg)), 3);
     STR(l2_pg, l1pt_va, l1index);
 
+    assert RegPreservingExcept(old(this),this,set(@l1index, @l2_pg, @tmp));
+
     ghost var pg := extractPage(this.m, l1pg);
     forall :: pageDbL1PTableCorresponds(l1pg, newl1pt, pg)
     {
@@ -209,6 +211,7 @@ procedure init_l2ptable_success(
         assert validAddrspacePage(pagedb, as_pg);
         reveal_pageDbClosedRefs();
         reveal_pageContentsCorresponds();
+        assert pageDbClosedRefs(pagedb);
         assert pageContentsCorresponds(as_pg, pagedb[as_pg],
                                        extractPage(this.m, as_pg));
         reveal_pageDbAddrspaceCorresponds();
