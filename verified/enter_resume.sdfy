@@ -313,11 +313,13 @@ procedure kom_smc_enter(
         s3 := havoc_state(s2);
         assume entryTransitionEnter(s2,s3);
         s4 := havoc_state(s3);
-        assume s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d);
+        // XXX: workaround dafny crash; the following failing assert was an assume
+        assert s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d);
         s' := havoc_state(s4);
         
-        assume validERTransition(s4, s');
-        assume tuple(r0,r1,s'.d) == exceptionHandled(s4);
+        // XXX: workaround dafny crash; the following failing asserts were assumes
+        assert validERTransition(s4, s');
+        assert tuple(r0,r1,s'.d) == exceptionHandled(s4);
         
         assert this == s'.hw;
         assert validSysState(s');
