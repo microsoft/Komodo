@@ -121,18 +121,25 @@ predicate ValidStack(s:state)
 
 predicate SaneMem(s:memstate)
 {
-    ValidMemState(s)
-    // TODO: our insecure phys mapping must be valid
-    //&& ValidMemRange(KOM_DIRECTMAP_VBASE(),
-    //    (KOM_DIRECTMAP_VBASE() + MonitorPhysBaseValue()))
+    SaneConstants() && ValidMemState(s)
+    // globals are as we expect
+    && GlobalFullContents(s, SecurePhysBaseOp()) == [SecurePhysBase()]
+}
+
+predicate SaneConstants()
+{
+    TheValidAddresses() == (
     // our secure phys mapping must be valid
-    && ValidMemRange(KOM_DIRECTMAP_VBASE() + SecurePhysBase(),
-        (KOM_DIRECTMAP_VBASE() + SecurePhysBase() + KOM_SECURE_RESERVE()))
-    // the stack must be mapped
-    && ValidMemRange(StackLimit(), StackBase())
+    (set m:mem | KOM_DIRECTMAP_VBASE() + SecurePhysBase() <= m
+               < KOM_DIRECTMAP_VBASE() + SecurePhysBase() + KOM_SECURE_RESERVE())
+        // the stack must be mapped
+        + (set m:mem | StackLimit() <= m < StackBase()))
+    // TODO: our insecure phys mapping must be valid
+    //ValidMemRange(KOM_DIRECTMAP_VBASE(),
+    //    (KOM_DIRECTMAP_VBASE() + MonitorPhysBaseValue()))
+
     // globals are as we expect
     && KomGlobalDecls() == TheGlobalDecls()
-    && GlobalFullContents(s, SecurePhysBaseOp()) == [SecurePhysBase()]
     // XXX: workaround so dafny sees that these are distinct
     && SecurePhysBaseOp() != PageDb()
     && SecurePhysBaseOp() != CurAddrspaceOp()
@@ -141,5 +148,5 @@ predicate SaneMem(s:memstate)
 
 predicate SaneState(s:state)
 {
-    ValidState(s) && ValidStack(s) && SaneMem(s.m) && mode_of_state(s) == Monitor
+    SaneConstants() && ValidState(s) && ValidStack(s) && SaneMem(s.m) && mode_of_state(s) == Monitor
 }
