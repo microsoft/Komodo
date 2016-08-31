@@ -15,7 +15,7 @@ predicate StackBytesRemaining(s:state,bytes:int)
 predicate ParentStackPreserving(s:state, r:state)
     requires SaneState(s) && SaneState(r)
 {
-    forall m:mem :: OperandContents(s, OSP) <= m < StackBase()
+    forall m:addr :: OperandContents(s, OSP) <= m < StackBase()
         ==> MemContents(r.m, m) == MemContents(s.m, m)
 }
 
@@ -52,7 +52,7 @@ predicate MemPreservingExcept(s:state, r:state, base:int, limit:int)
     requires ValidState(s) && ValidState(r);
     requires limit >= base;
 {
-    forall m:mem :: ValidMem(m) && !(base <= m < limit)
+    forall m:addr :: ValidMem(m) && !(base <= m < limit)
         ==> MemContents(s.m, m) == MemContents(r.m, m)
 }
 
@@ -67,7 +67,7 @@ predicate NonStackMemPreserving(s:state, r:state)
 // Common functions
 //-----------------------------------------------------------------------------
 
-function page_paddr(p: PageNr): mem
+function page_paddr(p: PageNr): addr
     requires validPageNr(p)
     ensures PageAligned(page_paddr(p))
 {
@@ -75,7 +75,7 @@ function page_paddr(p: PageNr): mem
     SecurePhysBase() + p * PAGESIZE()
 }
 
-function page_monvaddr(pagenr:PageNr): mem
+function page_monvaddr(pagenr:PageNr): addr
     requires validPageNr(pagenr)
     ensures PageAligned(page_monvaddr(pagenr))
 {

@@ -29,7 +29,7 @@ function sp_eval_op(s:state, o:operand):int
     requires ValidOperand(o)
     { OperandContents(s, o) }
 
-function sp_eval_op_mem(s:state, o:operand):int
+function sp_eval_op_addr(s:state, o:operand):int
     requires ValidState(s)
     requires ValidOperand(o)
     { sp_eval_op(s,o) }
@@ -40,10 +40,10 @@ predicate sp_eq_ops(s1:sp_state, s2:sp_state, o:operand)
         && sp_eval_op(s1, o) == sp_eval_op(s2, o)
 }
 
-function sp_eval_mem(s:state, m:mem):int
+function sp_eval_addr(s:state, m:addr):int
     requires ValidMemState(s.m);
     requires ValidMem(m);
-    ensures isUInt32(sp_eval_mem(s,m));
+    ensures isUInt32(sp_eval_addr(s,m));
     { MemContents(s.m, m) }
 
 function method sp_CNil():codes { CNil }

@@ -266,7 +266,7 @@ predicate WSMemInvariantExceptAddrspaceAtPage(hw:state, hw':state,
         d:PageDb, l1p:PageNr)
     requires ValidState(hw) && ValidState(hw') && nonStoppedL1(d, l1p)
 {
-    (forall m:mem :: m in hw.m.addresses <==> m in hw'.m.addresses) &&
+    (forall m:addr :: m in hw.m.addresses <==> m in hw'.m.addresses) &&
     //TODO: exclude CurAddrspace??? hw.m.globals == hw'.m.globals &&
     (forall i | i in hw.m.addresses && address_is_secure(i) && 
         !memSWrInAddrspace(d, l1p, i) ::  
@@ -286,7 +286,7 @@ predicate pageSWrInAddrspace(d:PageDb, l1p:PageNr, p:PageNr)
     exists p' :: Just(p') in l1pt && assert validL1PTE(d, p'); pageSWrInL2PT(d[p'].entry.l2pt,p)
 }
 
-predicate memSWrInAddrspace(d:PageDb, l1p:PageNr, m: mem)
+predicate memSWrInAddrspace(d:PageDb, l1p:PageNr, m: addr)
     requires validL1PTPage(d, l1p)
     requires (validPageDbImpliesWellFormed(d); !hasStoppedAddrspace(d, l1p))
 {

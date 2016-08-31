@@ -13,7 +13,7 @@ lemma SameEntriesImpliesPageDbCorresponds(s:memstate, p: PageNr,
 #endverbatim
 
 procedure fetch_l1pte(
-    {:operand} l1pt_va:mem,
+    {:operand} l1pt_va:addr,
     {:operand} l1index:int,
     out {:operand} tmp:int,
     out {:operand} res:int,
@@ -46,7 +46,7 @@ procedure fetch_l1pte(
 }
 
 procedure install_l1ptes(
-    {:operand} l1pt_va:mem,
+    {:operand} l1pt_va:addr,
     inout {:operand} l2_pg:int,
     inout {:operand} l1index:int,
     out {:operand} tmp:int,
@@ -189,11 +189,11 @@ procedure init_l2ptable_success(
     ghost var newl2pt := L2PTable(SeqRepeat(NR_L2PTES(), NoMapping));
     forall :: pageDbL2PTableCorresponds(l2_pg, newl2pt, pg)
     {
-        assert forall m:mem :: addrInPage(m, l2_pg) ==> pg[m] == 0;
+        assert forall m:addr :: addrInPage(m, l2_pg) ==> pg[m] == 0;
         reveal_pageDbL2PTableCorresponds();
     }
     forall :: pageDbCorrespondsOnly(this.m, pagedb, l2_pg) {
-        assert forall m:mem :: addrInPage(m, l2_pg) ==> pg[m] == 0;
+        assert forall m:addr :: addrInPage(m, l2_pg) ==> pg[m] == 0;
         reveal_pageContentsCorresponds();
     }
     AllButOnePagePreserving(l2_pg, old(this), this);

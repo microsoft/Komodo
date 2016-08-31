@@ -39,35 +39,35 @@ function method KOM_ERR_INVALID():int            { 0x1_0000_0000 }
 //-----------------------------------------------------------------------------
 // Memory Regions
 //-----------------------------------------------------------------------------
-function method KOM_MON_VBASE():mem
+function method KOM_MON_VBASE():addr
     { 0x4000_0000 }
-function method KOM_DIRECTMAP_VBASE():mem
+function method KOM_DIRECTMAP_VBASE():addr
     { 0x8000_0000 }
 function method KOM_DIRECTMAP_SIZE():word   { 0x8000_0000 }
-function method KOM_SECURE_RESERVE():mem
+function method KOM_SECURE_RESERVE():addr
     { 1 * 1024 * 1024 }
 function method KOM_SECURE_NPAGES():word
     ensures KOM_SECURE_NPAGES() == 256;
     { KOM_SECURE_RESERVE() / PAGESIZE() }
 
 // we don't support/consider more than 1GB of physical memory in our maps
-function method KOM_PHYSMEM_LIMIT():mem
+function method KOM_PHYSMEM_LIMIT():addr
     { 0x4000_0000 }
 
-function KOM_STACK_SIZE():mem
+function KOM_STACK_SIZE():addr
     { 0x4000 }
 
 // we don't know where the stack is exactly, but we know how big it is
-function {:axiom} StackLimit():mem
+function {:axiom} StackLimit():addr
     ensures KOM_MON_VBASE() <= StackLimit()
     ensures StackLimit() <= KOM_DIRECTMAP_VBASE() - KOM_STACK_SIZE()
 
-function StackBase():mem
+function StackBase():addr
 {
     StackLimit() + KOM_STACK_SIZE()
 }
 
-predicate address_is_secure(m:mem)
+predicate address_is_secure(m:addr)
 {
     (KOM_DIRECTMAP_VBASE() + SecurePhysBase()) <= m <
         (KOM_DIRECTMAP_VBASE() + SecurePhysBase() + KOM_SECURE_RESERVE())
@@ -86,7 +86,7 @@ function method {:opaque} PageDb(): operand { OSymbol("g_pagedb") }
 function method {:opaque} SecurePhysBaseOp(): operand { OSymbol("g_secure_physbase") }
 
 // the phys base is unknown, but never changes
-function {:axiom} SecurePhysBase(): mem
+function {:axiom} SecurePhysBase(): addr
     ensures 0 < SecurePhysBase() <= KOM_PHYSMEM_LIMIT() - KOM_SECURE_RESERVE();
     ensures PageAligned(SecurePhysBase());
 
@@ -124,10 +124,10 @@ predicate SaneConstants()
 {
     TheValidAddresses() == (
     // our secure phys mapping must be valid
-    (set m:mem | KOM_DIRECTMAP_VBASE() + SecurePhysBase() <= m
+    (set m:addr | KOM_DIRECTMAP_VBASE() + SecurePhysBase() <= m
                < KOM_DIRECTMAP_VBASE() + SecurePhysBase() + KOM_SECURE_RESERVE())
         // the stack must be mapped
-        + (set m:mem | StackLimit() <= m < StackBase()))
+        + (set m:addr | StackLimit() <= m < StackBase()))
     // TODO: our insecure phys mapping must be valid
     //ValidMemRange(KOM_DIRECTMAP_VBASE(),
     //    (KOM_DIRECTMAP_VBASE() + MonitorPhysBaseValue()))

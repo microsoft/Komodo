@@ -78,7 +78,7 @@ procedure init_addrspace_mem(
     forall :: pageDbL1PTableCorresponds(l1pt_page, L1PTable(emptyptes), l1pg)
     {
         reveal_pageDbL1PTableCorresponds();
-        assert forall m:mem :: addrInPage(m, l1pt_page) ==> l1pg[m] == 0;
+        assert forall m:addr :: addrInPage(m, l1pt_page) ==> l1pg[m] == 0;
     }
 }
 

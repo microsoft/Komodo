@@ -11,7 +11,7 @@ function WordsToBytes(w:int) : int { 4 * w }
 function BytesToWords(b:int) : int requires WordAligned(b) { b / 4 }
 
 type word = x | isUInt32(x)
-type mem = x | isUInt32(x) && WordAligned(x) // TODO: would be better named "addr"
+type addr = x | isUInt32(x) && WordAligned(x)
 
 //-----------------------------------------------------------------------------
 // Microarchitectural State
@@ -32,7 +32,7 @@ datatype config = Config(cpsr:PSR, spsr:map<mode,PSR>, scr:SCR, ttbr0:TTBR,
     ex:exception, excount:nat, exstep:nat)
 datatype PSR  = PSR(m:mode)           // See B1.3.3
 datatype SCR  = SCR(ns:world, irq:bool, fiq:bool) // See B4.1.129
-datatype TTBR = TTBR(ptbase:mem)      // See B4.1.154
+datatype TTBR = TTBR(ptbase:addr)      // See B4.1.154
 
 datatype operand = OConst(n:word)
     | OReg(r:ARMReg)
@@ -40,7 +40,7 @@ datatype operand = OConst(n:word)
     | OSReg(sr:SReg)
     | OSP | OLR
 
-type memmap = map<mem, word>
+type memmap = map<addr, word>
 datatype memstate = MemState(addresses:memmap,
                              globals:map<operand, seq<word>>)
 
@@ -253,12 +253,12 @@ predicate {:opaque} ValidSRegState(sregs:map<SReg, word>)
 
 // All valid states have the same memory address domain, but we don't care what 
 // it is (at this level).
-function {:axiom} TheValidAddresses(): set<mem>
+function {:axiom} TheValidAddresses(): set<addr>
 
 predicate {:opaque} ValidMemState(s:memstate)
 {
     // regular mem
-    (forall m:mem :: m in TheValidAddresses() <==> m in s.addresses)
+    (forall m:addr :: m in TheValidAddresses() <==> m in s.addresses)
     // globals: same names/sizes as decls
     && (forall g :: g in TheGlobalDecls() <==> g in s.globals)
     && (forall g :: g in TheGlobalDecls()
@@ -297,7 +297,7 @@ predicate ValidMem(addr:int)
 predicate ValidMemRange(base:int, limit:int)
 {
     isUInt32(base) && isUInt32(limit) &&
-    forall m:mem :: base <= m < limit && WordAligned(m) ==> m in TheValidAddresses()
+    forall m:addr :: base <= m < limit && WordAligned(m) ==> m in TheValidAddresses()
 }
 
 predicate ValidShiftOperand(s:state, o:operand)
@@ -328,7 +328,7 @@ predicate ValidGlobalOffset(g:operand, offset:word)
 }
 
 // globals have an unknown (uint32) address, only establised by LDR-reloc
-function {:axiom} AddressOfGlobal(g:operand): mem
+function {:axiom} AddressOfGlobal(g:operand): addr
 
 function SizeOfGlobal(g:operand): word
     requires ValidGlobal(g)
@@ -402,7 +402,7 @@ predicate evalUserspaceExecution(s:state, r:state)
     var pt := ExtractAbsPageTable(s);
     pt.Just? &&
     var pages := WritablePagesInTable(fromJust(pt));
-    ValidState(r) && (forall m:mem :: m in s.m.addresses <==> m in r.m.addresses) &&
+    ValidState(r) && (forall m:addr :: m in s.m.addresses <==> m in r.m.addresses) &&
     // havoc writable pages and user regs, and take some steps
     r == s.(m := s.m.(addresses := havocPages(pages, s.m.addresses, r.m.addresses)),
             regs := r.regs,
@@ -412,7 +412,7 @@ predicate evalUserspaceExecution(s:state, r:state)
         ==> r.regs[SP(m)] == s.regs[SP(m)] && r.regs[LR(m)] == s.regs[LR(m)])
 }
 
-function havocPages(pages:set<mem>, s:memmap, r:memmap): memmap
+function havocPages(pages:set<addr>, s:memmap, r:memmap): memmap
     requires forall m :: m in s <==> m in r
 {
     (map m | m in s :: if BitwiseAnd(m, 0xffff_f000) in pages then r[m] else s[m])
@@ -440,14 +440,14 @@ predicate PageAligned(addr:int)
 
 // We model a trivial memory map (for our own code and page tables)
 // with a flat 1:1 mapping of virtual to physical addresses.
-function {:axiom} PhysBase(): mem
+function {:axiom} PhysBase(): addr
     ensures PageAligned(PhysBase());
 
 // Our model of page tables is also very abstract, because it just needs to encode
 // which pages are mapped and their permissions
 type AbsPTable = seq<Maybe<AbsL2PTable>>
 type AbsL2PTable = seq<Maybe<AbsPTE>>
-datatype AbsPTE = AbsPTE(phys: mem, write: bool, exec: bool)
+datatype AbsPTE = AbsPTE(phys: addr, write: bool, exec: bool)
 
 function method ARM_L1PTES(): int { 1024 }
 function ARM_L1PTABLE_BYTES(): int { ARM_L1PTES() * BytesPerWord() }
@@ -484,16 +484,16 @@ function ExtractAbsPageTable(s:state): Maybe<AbsPTable>
         Nothing
 }
 
-function WritablePagesInTable(pt:AbsPTable): set<mem>
+function WritablePagesInTable(pt:AbsPTable): set<addr>
     requires WellformedAbsPTable(pt)
-    ensures forall m:mem :: m in WritablePagesInTable(pt) ==> PageAligned(m)
+    ensures forall m:addr :: m in WritablePagesInTable(pt) ==> PageAligned(m)
 {
     (set i, j | 0 <= i < |pt| && pt[i].Just? && 0 <= j < |fromJust(pt[i])|
         && fromJust(pt[i])[j].Just? && fromJust(fromJust(pt[i])[j]).write
         :: fromJust(fromJust(pt[i])[j]).phys + PhysBase())
 }
 
-function ExtractAbsL1PTable(m:memstate, vbase:mem, index:nat): Maybe<AbsPTable>
+function ExtractAbsL1PTable(m:memstate, vbase:addr, index:nat): Maybe<AbsPTable>
     requires ValidMemState(m)
     requires WordAligned(vbase)
         && ValidMemRange(vbase, vbase + ARM_L1PTABLE_BYTES())
@@ -528,7 +528,7 @@ function ExtractAbsL1PTable(m:memstate, vbase:mem, index:nat): Maybe<AbsPTable>
 }
 
 /* ARM ref B3.5.1 short descriptor format for first-level page table */
-function ExtractAbsL1PTE(pte:word): Maybe<Maybe<mem>>
+function ExtractAbsL1PTE(pte:word): Maybe<Maybe<addr>>
     ensures var r := ExtractAbsL1PTE(pte);
         r.Just? && fromJust(r).Just? ==> WordAligned(fromJust(fromJust(r)))
 {
@@ -546,7 +546,7 @@ function ExtractAbsL1PTE(pte:word): Maybe<Maybe<mem>>
     else Nothing
 }
 
-function ExtractAbsL2PTable(m:memstate, vbase:mem, index:nat): Maybe<AbsL2PTable>
+function ExtractAbsL2PTable(m:memstate, vbase:addr, index:nat): Maybe<AbsL2PTable>
     requires ValidMemState(m)
     requires WordAligned(vbase)
         && ValidMemRange(vbase, vbase + ARM_L2PTABLE_BYTES())
@@ -651,7 +651,7 @@ function SpecialOperandContents(s:state, o:operand): word
         case OSReg(sr) => s.sregs[sr] 
 }
 
-function MemContents(s:memstate, m:mem): word
+function MemContents(s:memstate, m:addr): word
     requires ValidMemState(s)
     requires ValidMem(m)
 {
@@ -703,7 +703,7 @@ predicate evalSRegUpdate(s:state, o:operand, v:word, r:state)
         sregs := s.sregs[ o.sr := v] )
 }
 
-predicate evalMemUpdate(s:state, m:mem, v:word, r:state)
+predicate evalMemUpdate(s:state, m:addr, v:word, r:state)
     requires ValidState(s)
     requires ValidMem(m)
     ensures evalMemUpdate(s, m, v, r) ==> ValidState(r)

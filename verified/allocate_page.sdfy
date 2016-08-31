@@ -39,7 +39,7 @@ lemma AllocatePageImpliesIncrefAddrspace(dbin: PageDb, pg: PageNr,
 #endverbatim
 
 procedure addrspace_incref(
-    {:operand} as_va:mem,
+    {:operand} as_va:addr,
     out {:operand} tmp:int,
     ghost pagedb_in:PageDb,
     ghost pagenr:int)
@@ -105,9 +105,9 @@ procedure addrspace_incref(
 
 procedure allocate_page_success(
     {:operand} pagenr:PageNr,
-    {:operand} as_va:mem,
+    {:operand} as_va:addr,
     {:operand} typeval:int,
-    {:operand} pagedb_base:mem,
+    {:operand} pagedb_base:addr,
     out {:operand} tmp:int,
     out {:operand} tmp2:int,
     ghost pagedb_in:PageDb,
@@ -191,7 +191,7 @@ procedure allocate_page(
     {:operand} pagenr:PageNr,
     {:operand} as_pagenr:PageNr,
     {:operand} typeval:int,
-    {:operand} pagedb_base:mem,
+    {:operand} pagedb_base:addr,
     out {:operand} tmp:int,
     out {:operand} tmp2:int,
     out {:operand} err:int,

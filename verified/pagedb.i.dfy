@@ -5,7 +5,7 @@ include "kom_common.i.dfy"
 // Data Structures
 //-----------------------------------------------------------------------------
 // computes byte offset of a specific pagedb entry
-function method G_PAGEDB_ENTRY(pageno:PageNr): mem
+function method G_PAGEDB_ENTRY(pageno:PageNr): addr
     requires validPageNr(pageno);
 {
     assert WordAligned(PAGEDB_ENTRY_SIZE());
@@ -57,7 +57,7 @@ function method KOM_ADDRSPACE_STOPPED():int { 2 }
 //
 //-----------------------------------------------------------------------------
 
-predicate addrInPage(m:mem, p:PageNr)
+predicate addrInPage(m:addr, p:PageNr)
     requires validPageNr(p)
 {
     page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE()
@@ -66,7 +66,7 @@ predicate addrInPage(m:mem, p:PageNr)
 predicate memContainsPage(page: memmap, p:PageNr)
     requires validPageNr(p)
 {
-    forall m:mem :: addrInPage(m,p) ==> m in page
+    forall m:addr :: addrInPage(m,p) ==> m in page
 }
 
 function extractPage(s:memstate, p:PageNr): memmap
@@ -75,7 +75,7 @@ function extractPage(s:memstate, p:PageNr): memmap
     ensures memContainsPage(extractPage(s,p), p)
 {
     // XXX: expanded addrInPage() to help Dafny see a bounded set
-    (map m:mem {:trigger addrInPage(m, p), MemContents(s, m)}
+    (map m:addr {:trigger addrInPage(m, p), MemContents(s, m)}
         | page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE()
         // XXX: this mess seems to be needed to help Dafny see that we have a legit word
         :: var v:word := MemContents(s, m); assert isUInt32(v); v as word)
@@ -224,7 +224,7 @@ function mkL1Pte(e: Maybe<PageNr>, subpage:int): int
             ARM_L1PTE(page_paddr(pgNr) + subpage * ARM_L2PT_BYTES())
 }
 
-function l1pteoffset(base: mem, i: int, j: int): int
+function l1pteoffset(base: addr, i: int, j: int): int
 {
     base + 4 * (i * 4 + j)
 }
@@ -347,7 +347,7 @@ lemma AllButOnePagePreserving(n:PageNr,s:state,r:state)
     ensures forall p :: validPageNr(p) && p != n
         ==> extractPage(s.m, p) == extractPage(r.m, p)
 {
-    forall (p, a:mem | validPageNr(p) && p != n && addrInPage(a, p))
+    forall (p, a:addr | validPageNr(p) && p != n && addrInPage(a, p))
         ensures MemContents(s.m, a) == MemContents(r.m, a)
         {}
 }
