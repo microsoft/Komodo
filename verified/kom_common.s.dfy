@@ -21,9 +21,7 @@ function method KOM_SMC_STOP():int            { 29 }
 //-----------------------------------------------------------------------------
 // Errors
 //-----------------------------------------------------------------------------
-function method KOM_ERR_SUCCESS():int
-    ensures KOM_ERR_SUCCESS() == 0;
-    { 0 }
+function method KOM_ERR_SUCCESS():int            { 0  }
 function method KOM_ERR_INVALID_PAGENO():int     { 1  }
 function method KOM_ERR_PAGEINUSE():int          { 2  }
 function method KOM_ERR_INVALID_ADDRSPACE():int  { 3  }
@@ -42,14 +40,11 @@ function method KOM_ERR_INVALID():int            { 0x1_0000_0000 }
 // Memory Regions
 //-----------------------------------------------------------------------------
 function method KOM_MON_VBASE():mem
-    ensures KOM_MON_VBASE() == 0x4000_0000;
     { 0x4000_0000 }
 function method KOM_DIRECTMAP_VBASE():mem
-    ensures KOM_DIRECTMAP_VBASE() == 0x8000_0000;
     { 0x8000_0000 }
 function method KOM_DIRECTMAP_SIZE():word   { 0x8000_0000 }
 function method KOM_SECURE_RESERVE():mem
-    ensures KOM_SECURE_RESERVE() == 1 * 1024 * 1024;
     { 1 * 1024 * 1024 }
 function method KOM_SECURE_NPAGES():word
     ensures KOM_SECURE_NPAGES() == 256;
@@ -84,7 +79,6 @@ predicate address_is_secure(m:mem)
 
 function method PAGEDB_ENTRY_SIZE():int { 8 }
 function method G_PAGEDB_SIZE():int
-    ensures G_PAGEDB_SIZE() == KOM_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE();
     { KOM_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE() }
 
 function method {:opaque} CurAddrspaceOp(): operand { OSymbol("g_cur_addrspace") }

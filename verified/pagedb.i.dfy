@@ -5,42 +5,32 @@ include "kom_common.i.dfy"
 // Data Structures
 //-----------------------------------------------------------------------------
 // computes byte offset of a specific pagedb entry
-function method G_PAGEDB_ENTRY(pageno:int):int 
-    requires 0 <= pageno < KOM_SECURE_NPAGES();
-    ensures G_PAGEDB_ENTRY(pageno) == pageno * PAGEDB_ENTRY_SIZE();
-    ensures WordAligned(G_PAGEDB_ENTRY(pageno))
+function method G_PAGEDB_ENTRY(pageno:PageNr): mem
+    requires validPageNr(pageno);
 {
     assert WordAligned(PAGEDB_ENTRY_SIZE());
     pageno * PAGEDB_ENTRY_SIZE()
 }
 
 // entry = start offset of pagedb entry
-function method PAGEDB_ENTRY_TYPE():int { 0 }
-function method PAGEDB_ENTRY_ADDRSPACE():int
-    ensures PAGEDB_ENTRY_ADDRSPACE() == 4 
-    ensures WordAligned(PAGEDB_ENTRY_ADDRSPACE())
-    {4}
+function method PAGEDB_ENTRY_TYPE():int      { 0 }
+function method PAGEDB_ENTRY_ADDRSPACE():int { 4 }
 
 //-----------------------------------------------------------------------------
 // Addrspace Fields
 //-----------------------------------------------------------------------------
 // addrspc = start address of address space metadata
 // TODO requires that this thing is an addrspce?
-function method ADDRSPACE_L1PT():int
-    ensures ADDRSPACE_L1PT() == 0         { 0  }
-function method ADDRSPACE_L1PT_PHYS():int
-    ensures ADDRSPACE_L1PT_PHYS() == 4    { 4  }
-function method ADDRSPACE_REF():int
-    ensures ADDRSPACE_REF() == 8          { 8  }
-function method ADDRSPACE_STATE():int
-    ensures ADDRSPACE_STATE() == 12       { 12 }
-function method ADDRSPACE_SIZE():int
-    ensures ADDRSPACE_SIZE() == 16        { 16 }
+function method ADDRSPACE_L1PT():int        {  0 }
+function method ADDRSPACE_L1PT_PHYS():int   {  4 }
+function method ADDRSPACE_REF():int         {  8 }
+function method ADDRSPACE_STATE():int       { 12 }
+function method ADDRSPACE_SIZE():int        { 16 }
 
 //-----------------------------------------------------------------------------
 // Dispatcher Fields
 //-----------------------------------------------------------------------------
-function method DISPATCHER_ENTERED():int { 0 }
+function method DISPATCHER_ENTERED():int    { 0 }
 function method DISPATCHER_ENTRYPOINT():int { 4 }
 // TODO context
 // psr
@@ -49,27 +39,19 @@ function method DISPATCHER_ENTRYPOINT():int { 4 }
 //-----------------------------------------------------------------------------
 // Page Types
 //-----------------------------------------------------------------------------
-function method KOM_PAGE_FREE():int
-    ensures KOM_PAGE_FREE() == 0; { 0 }
-function method KOM_PAGE_ADDRSPACE():int
-    ensures KOM_PAGE_ADDRSPACE() == 1; { 1 }
-function method KOM_PAGE_DISPATCHER():int
-    ensures KOM_PAGE_DISPATCHER() == 2; { 2 }
-function method KOM_PAGE_L1PTABLE():int
-    ensures KOM_PAGE_L1PTABLE() == 3; { 3 }
-function method KOM_PAGE_L2PTABLE():int
-    ensures KOM_PAGE_L2PTABLE() == 4; { 4 }
-function method KOM_PAGE_DATA():int
-    ensures KOM_PAGE_DATA() == 5; { 5 }
+function method KOM_PAGE_FREE():int         { 0 }
+function method KOM_PAGE_ADDRSPACE():int    { 1 }
+function method KOM_PAGE_DISPATCHER():int   { 2 }
+function method KOM_PAGE_L1PTABLE():int     { 3 }
+function method KOM_PAGE_L2PTABLE():int     { 4 }
+function method KOM_PAGE_DATA():int         { 5 }
 
 //-----------------------------------------------------------------------------
 // Address Space States
 //-----------------------------------------------------------------------------
-function method KOM_ADDRSPACE_INIT():int
-    ensures KOM_ADDRSPACE_INIT() == 0; { 0 }
-function method KOM_ADDRSPACE_FINAL():int
-    ensures KOM_ADDRSPACE_FINAL() == 1; { 1 }
-function method KOM_ADDRSPACE_STOPPED():int            { 2 }
+function method KOM_ADDRSPACE_INIT():int    { 0 }
+function method KOM_ADDRSPACE_FINAL():int   { 1 }
+function method KOM_ADDRSPACE_STOPPED():int { 2 }
 
 //-----------------------------------------------------------------------------
 //
@@ -93,8 +75,10 @@ function extractPage(s:memstate, p:PageNr): memmap
     ensures memContainsPage(extractPage(s,p), p)
 {
     // XXX: expanded addrInPage() to help Dafny see a bounded set
-    (map m:mem | page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE()
-        :: MemContents(s, m) as word)
+    (map m:mem {:trigger addrInPage(m, p), MemContents(s, m)}
+        | page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE()
+        // XXX: this mess seems to be needed to help Dafny see that we have a legit word
+        :: var v:word := MemContents(s, m); assert isUInt32(v); v as word)
 }
 
 function extractPageDbEntry(s:memstate, p:PageNr): seq<word>
@@ -363,6 +347,7 @@ lemma AllButOnePagePreserving(n:PageNr,s:state,r:state)
     ensures forall p :: validPageNr(p) && p != n
         ==> extractPage(s.m, p) == extractPage(r.m, p)
 {
-    forall (p, a:mem | validPageNr(p) && p != n && addrInPage(a, p)) ensures MemContents(s.m, a) == MemContents(r.m, a)
+    forall (p, a:mem | validPageNr(p) && p != n && addrInPage(a, p))
+        ensures MemContents(s.m, a) == MemContents(r.m, a)
         {}
 }
