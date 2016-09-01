@@ -19,10 +19,9 @@ function increfAddrspaceEntry(entry:PageDbEntry): PageDbEntry
 
 function increfAddrspacePageDb(d:PageDb, n:PageNr): PageDb
     requires validAddrspacePage(d, n)
-    requires pageDbClosedRefs(d)
-    ensures pageDbClosedRefs(d)
+    requires wellFormedPageDb(d)
+    ensures wellFormedPageDb(d)
 {
-    reveal_pageDbClosedRefs();
     d[n := increfAddrspaceEntry(d[n])]
 }
 
@@ -58,12 +57,10 @@ procedure addrspace_incref(
         MemPreservingExcept(old(this),this, as_va, as_va + PAGESIZE());
         RegPreservingExcept(old(this),this, set(@tmp));
         pagedb == increfAddrspacePageDb(pagedb_in, pagenr);
-        pageDbClosedRefs(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
     ValidPageDbImpliesValidAddrspace(pagedb_in, pagenr);
     pagedb := increfAddrspacePageDb(pagedb_in, pagenr);
-    reveal_pageDbClosedRefs();
 
     LDR(tmp, as_va, sp_op_const(ADDRSPACE_REF()));
 
@@ -120,7 +117,7 @@ procedure allocate_page_success(
         ValidOperand(@typeval) && @typeval is OConst;
         pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb_in);
-        closedRefsPageDbEntry(entry);
+        wellFormedPageDbEntry(entry);
         entry is PageDbEntryTyped && validAddrspacePage(pagedb_in, entry.addrspace);
         allocatePageEntryValid(entry.entry);
         typeval == pageDbEntryTypeVal(entry);
@@ -205,7 +202,7 @@ procedure allocate_page(
         ValidOperand(@typeval) && @typeval is OConst;
         pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb_in);
-        closedRefsPageDbEntry(entry);
+        wellFormedPageDbEntry(entry);
         entry is PageDbEntryTyped && validAddrspacePage(pagedb_in, entry.addrspace);
         allocatePageEntryValid(entry.entry);
         typeval == pageDbEntryTypeVal(entry);

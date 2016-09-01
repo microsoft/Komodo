@@ -160,8 +160,6 @@ procedure init_addrspace(
         l1pt_entry == G_PAGEDB_ENTRY(l1pt_page);
         pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb_in);
-        pageDbClosedRefs(pagedb_in);
-        wellFormedPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         pageIsFree(pagedb_in, addrspace_page);
         pageIsFree(pagedb_in, l1pt_page);
@@ -169,7 +167,6 @@ procedure init_addrspace(
         StackPreserving(old(this),this);
         RegPreservingExcept(old(this),this, set(@r0, @r3, @r4, @r5, @r6, @r7));
         old(specPageDb(smc_initAddrspace_premium(pagedb_in, addrspace_page, l1pt_page))) == pagedb;
-        pageDbClosedRefs(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
     ghost var gaddrspace_entry := initAddrspaceEntry(addrspace_page, l1pt_page);
@@ -189,7 +186,6 @@ procedure init_addrspace(
     // It should be okay that this isn't wrapped in a forall ::.
     // The rest of this code is about pagedb anyway.
     reveal_validPageDb();
-    reveal_pageDbClosedRefs();
 
     assert pageDbCorrespondsOnly(this.m, pagedb, addrspace_page);
     assert pageDbCorrespondsOnly(this.m, pagedb, l1pt_page);
@@ -224,7 +220,6 @@ procedure kom_smc_init_addrspace(
         SaneState(this);
     requires
         validPageDb(pagedb_in);
-        pageDbClosedRefs(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
     ensures
         StackPreserving(old(this),this);
@@ -235,7 +230,6 @@ procedure kom_smc_init_addrspace(
 {
     reveal_pageDbEntryCorresponds();
     pagedb := pagedb_in;
-    reveal_pageDbClosedRefs();
     reveal_smc_initAddrspace_premium();
 
     // check alignment of l1pt page

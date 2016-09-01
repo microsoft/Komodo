@@ -8,17 +8,14 @@ procedure kom_smc_init_dispatcher(
         SaneState(this);
     requires
         validPageDb(pagedb_in);
-        pageDbClosedRefs(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
     ensures
         StackPreserving(old(this),this);
         tuple(pagedb, err)
             == old(smc_initDispatcher_premium(pagedb_in, disp_page, as_page, entrypoint));
-        validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
     pagedb := pagedb_in;
-    reveal_pageDbClosedRefs();
     reveal_smc_initDispatcher_premium();
 
     if (as_page >= sp_op_const(KOM_SECURE_NPAGES())) {
@@ -72,7 +69,7 @@ procedure kom_smc_init_dispatcher(
 }
 
 #verbatim
-function dispctxt(entrypoint:int) : DispatcherContext
+function dispctxt(entrypoint: word) : DispatcherContext
 {
     DispatcherContext(map[], entrypoint, encode_mode(User))
 }

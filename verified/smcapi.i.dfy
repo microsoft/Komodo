@@ -152,7 +152,6 @@ lemma installL1PTEPreservesPageDbValidity(pageDbIn: PageDb, l1ptnr: PageNr,
                                           l2page: PageNr, l1index: int)
     requires validPageDb(pageDbIn)
     requires pageDbIn[l1ptnr].PageDbEntryTyped? && pageDbIn[l1ptnr].entry.L1PTable?
-        && closedRefsL1PTable(pageDbIn[l1ptnr].entry)
     // l2page belongs to this addrspace
     requires validL1PTE(pageDbIn, l2page)
         && pageDbIn[l2page].addrspace == pageDbIn[l1ptnr].addrspace
@@ -162,7 +161,7 @@ lemma installL1PTEPreservesPageDbValidity(pageDbIn: PageDb, l1ptnr: PageNr,
     requires 0 <= l1index < NR_L1PTES()
     ensures validPageDb(installL1PTEInPageDb(pageDbIn, l1ptnr, l2page, l1index))
 {
-    reveal_validPageDb(); reveal_pageDbClosedRefs();
+    reveal_validPageDb();
 
     assert validL1PTable(pageDbIn, l1ptnr);
     var pageDbOut := installL1PTEInPageDb(pageDbIn, l1ptnr, l2page, l1index);
@@ -183,7 +182,7 @@ lemma initL2PTablePreservesPageDBValidity(pageDbIn: PageDb, page: word,
     requires validPageDb(pageDbIn)
     ensures validPageDb(smc_initL2PTable(pageDbIn, page, addrspacePage, l1index).0)
 {
-    reveal_validPageDb(); reveal_pageDbClosedRefs();
+    reveal_validPageDb();
     var (pageDbOut, errOut)
         := smc_initL2PTable(pageDbIn, page, addrspacePage, l1index);
     if( errOut != KOM_ERR_SUCCESS() ) {

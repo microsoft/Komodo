@@ -63,8 +63,8 @@ predicate validERTransitionHW(hw:state, hw':state, d:PageDb)
 predicate validSysStates(sset:set<SysState>) { forall s :: s in sset ==> validSysState(s) }
 
 predicate validEnter(s:SysState,s':SysState,
-    dispPage:PageNr,a1:int,a2:int,a3:int)
-    requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
+    dispPage:word,a1:word,a2:word,a3:word)
+    requires validSysState(s)
     // requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KOM_ERR_SUCCESS()
 {
     reveal_ValidRegState();
@@ -102,8 +102,8 @@ predicate validResume(s:SysState,s':SysState,dispPage:PageNr)
 */
 
 predicate preEntryEnter(s:SysState,s':SysState,
-    dispPage:PageNr,a1:int,a2:int,a3:int)
-    requires isUInt32(a1) && isUInt32(a2) && isUInt32(a3) && validSysState(s)
+    dispPage:PageNr,a1:word,a2:word,a3:word)
+    requires validSysState(s)
     requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KOM_ERR_SUCCESS()
     // ensures  nonStoppedL1(s.d, l1pOfDispatcher(s.d, dispPage));
     // ensures (validSysState(s) && validSysState(s') && 
@@ -209,7 +209,7 @@ predicate userspaceExecution(hw:state, hw':state, d:PageDb)
 //-----------------------------------------------------------------------------
 // Exception Handler Spec
 //-----------------------------------------------------------------------------
-function exceptionHandled(s:SysState) : (int, int, PageDb)
+function exceptionHandled(s:SysState) : (word, word, PageDb)
     requires validSysState(s)
     requires mode_of_state(s.hw) != User
 {

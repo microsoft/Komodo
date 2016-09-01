@@ -58,7 +58,6 @@ function updateL2Pte(pageDbIn: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
     requires pageDbIn[a].entry.state.InitState?
 {
     reveal_validPageDb();
-    reveal_pageDbClosedRefs();
     var addrspace := pageDbIn[a].entry;
     assert validAddrspace(pageDbIn, a);
     var l1 := pageDbIn[addrspace.l1ptnr].entry;
@@ -132,10 +131,10 @@ function smc_initDispatcher(pageDbIn: PageDb, page:word, addrspacePage:word,
 }
 
 function installL1PTE(l1pt: PageDbEntryTyped, l2page: PageNr, l1index: int): PageDbEntryTyped
-    requires l1pt.L1PTable? && closedRefsL1PTable(l1pt)
+    requires l1pt.L1PTable? && wellFormedPageDbEntryTyped(l1pt)
     requires 0 <= l1index < NR_L1PTES()
     ensures var r := installL1PTE(l1pt, l2page, l1index);
-        r.L1PTable? && closedRefsL1PTable(r)
+        r.L1PTable? && wellFormedPageDbEntryTyped(r)
 {
     l1pt.(l1pt := l1pt.l1pt[l1index := Just(l2page)])
 }
@@ -145,9 +144,9 @@ function installL1PTEInPageDb(pagedb: PageDb, l1ptnr: PageNr, l2page: PageNr,
     requires validPageDb(pagedb)
     requires pagedb[l1ptnr].PageDbEntryTyped? && pagedb[l1ptnr].entry.L1PTable?
     requires 0 <= l1index < NR_L1PTES()
-    ensures pageDbClosedRefs(installL1PTEInPageDb(pagedb, l1ptnr, l2page, l1index))
+    ensures wellFormedPageDb(installL1PTEInPageDb(pagedb, l1ptnr, l2page, l1index))
 {
-    reveal_validPageDb(); reveal_pageDbClosedRefs();
+    reveal_validPageDb();
     var l1ptentry := installL1PTE(pagedb[l1ptnr].entry, l2page, l1index);
     pagedb[l1ptnr := pagedb[l1ptnr].(entry := l1ptentry)]
 }
@@ -184,7 +183,7 @@ function smc_initL2PTable(pageDbIn: PageDb, page: word, addrspacePage: word,
 
 predicate allocatePageEntryValid(entry: PageDbEntryTyped)
 {
-    closedRefsPageDbEntryTyped(entry)
+    wellFormedPageDbEntryTyped(entry)
     && ((entry.Dispatcher? && !entry.entered)
         || (entry.L2PTable? && entry.l2pt == SeqRepeat(NR_L2PTES(), NoMapping))
         || entry.DataPage?)
@@ -284,7 +283,7 @@ function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,
 }
 
 function smc_mapInsecure(pageDbIn: PageDb, addrspacePage: word,
-    physPage: int, mapping : Mapping) : (PageDb, word)
+    physPage: word, mapping : Mapping) : (PageDb, word)
     requires validPageDb(pageDbIn)
 {
     reveal_validPageDb();
@@ -293,11 +292,11 @@ function smc_mapInsecure(pageDbIn: PageDb, addrspacePage: word,
     else
         var err := isValidMappingTarget(pageDbIn, addrspacePage, mapping);
         if( err != KOM_ERR_SUCCESS() ) then (pageDbIn, err)
-        else if( physPage < 0
-            || physPage >= KOM_PHYSMEM_LIMIT() / PAGESIZE()
+        else if(physPage >= KOM_PHYSMEM_LIMIT() / PAGESIZE()
             || physPageIsSecure(physPage) ) then
             (pageDbIn, KOM_ERR_INVALID_PAGENO())
         else
+            assert validInsecurePageNr(physPage);
             var l2pte := InsecureMapping( physPage,  mapping.perm.w);
             var pageDbOut := updateL2Pte(pageDbIn, addrspacePage, mapping, l2pte);
             (pageDbOut, KOM_ERR_SUCCESS())
@@ -443,7 +442,6 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
         pageDbIn, securePage, addrspacePage, entry).0);
 {
     reveal_validPageDb();
-    reveal_pageDbClosedRefs();
     assert validAddrspace(pageDbIn, addrspacePage);
     var result := allocatePage_inner(pageDbIn, securePage, addrspacePage, entry);
     var pageDbOut := result.0;

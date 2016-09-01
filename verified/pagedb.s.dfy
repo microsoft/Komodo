@@ -4,10 +4,11 @@ include "Sets.dfy"
 include "ARMdef.dfy"
 
 type PageNr = x | validPageNr(x)
-type InsecurePageNr = int
+type InsecurePageNr = x | validInsecurePageNr(x)
 
-// XXX: allow PageNr type decls in spartan procedures
-// unfortunately, we can't return a PageNr, because spartan can't propagate the constraints, so this is mostly just window-dressing
+// allow PageNr type decls in spartan procedures.
+// unfortunately, we can't return a PageNr, because spartan can't
+// propagate the constraints, so this is mostly just window-dressing
 function sp_eval_op_PageNr(s:state, o:operand): word
     requires ValidState(s)
     requires ValidOperand(o)
@@ -21,6 +22,11 @@ predicate validPageNr(p: int)
     0 <= p < KOM_SECURE_NPAGES()
 }
 
+predicate validInsecurePageNr(p: int)
+{
+    0 <= p < KOM_PHYSMEM_LIMIT() / PAGESIZE()
+}
+
 datatype PageDbEntryTyped
     = Addrspace(l1ptnr: PageNr, refcount: nat, state: AddrspaceState)
     | Dispatcher(entrypoint:int, entered:bool, ctxt:DispatcherContext)
@@ -30,7 +36,8 @@ datatype PageDbEntryTyped
 
 datatype AddrspaceState = InitState | FinalState | StoppedState
 
-datatype DispatcherContext = DispatcherContext(regs:map<ARMReg,int>, pc:int, cpsr:int)
+datatype DispatcherContext
+    = DispatcherContext(regs:map<ARMReg,word>, pc:word, cpsr:word)
 
 datatype L2PTE
     = SecureMapping(page: PageNr, write: bool, exec: bool)
@@ -45,18 +52,23 @@ type PageDb = imap<PageNr, PageDbEntry>
 
 predicate wellFormedPageDb(d: PageDb)
 {
-    forall n {:trigger validPageNr(n)} :: validPageNr(n) <==> n in d
+    forall n {:trigger validPageNr(n)} ::
+        validPageNr(n) <==> n in d && wellFormedPageDbEntry(d[n])
 }
 
-// this is a weak predicate that simply says internal refs are all in bounds
-predicate {:opaque} pageDbClosedRefs(d: PageDb)
-    ensures pageDbClosedRefs(d) ==> wellFormedPageDb(d)
+predicate wellFormedPageDbEntry(e: PageDbEntry)
 {
-    wellFormedPageDb(d) && forall n :: validPageNr(n) ==> closedRefsPageDbEntry(d[n])
+    e.PageDbEntryTyped? ==> wellFormedPageDbEntryTyped(e.entry)
+}
+
+predicate wellFormedPageDbEntryTyped(e: PageDbEntryTyped)
+{
+    (e.L1PTable? ==> |e.l1pt| == NR_L1PTES())
+    && (e.L2PTable? ==> |e.l2pt| == NR_L2PTES())
 }
 
 predicate {:opaque} validPageDb(d: PageDb)
-    ensures validPageDb(d) ==> pageDbClosedRefs(d)
+    ensures validPageDb(d) ==> wellFormedPageDb(d)
 {
     wellFormedPageDb(d) && pageDbEntriesValid(d) && pageDbEntriesValidRefs(d)
 }
@@ -70,30 +82,15 @@ lemma validPageDbImpliesWellFormed(d:PageDb)
 
 predicate validDispatcherContext(dc:DispatcherContext)
 {
-       R0  in dc.regs && isUInt32(dc.regs[R0])
-    && R1  in dc.regs && isUInt32(dc.regs[R1])
-    && R2  in dc.regs && isUInt32(dc.regs[R2])
-    && R3  in dc.regs && isUInt32(dc.regs[R3])
-    && R4  in dc.regs && isUInt32(dc.regs[R4])
-    && R5  in dc.regs && isUInt32(dc.regs[R5])
-    && R6  in dc.regs && isUInt32(dc.regs[R6])
-    && R7  in dc.regs && isUInt32(dc.regs[R7])
-    && R8  in dc.regs && isUInt32(dc.regs[R8])
-    && R9  in dc.regs && isUInt32(dc.regs[R9])
-    && R10 in dc.regs && isUInt32(dc.regs[R10])
-    && R11 in dc.regs && isUInt32(dc.regs[R11])
-    && R12 in dc.regs && isUInt32(dc.regs[R12])
-    && LR(User)  in dc.regs && isUInt32(dc.regs[LR(User)])
-    && SP(User)  in dc.regs && isUInt32(dc.regs[SP(User)])
-    && isUInt32(dc.pc)
-    && isUInt32(dc.cpsr)
+      R0  in dc.regs && R1  in dc.regs && R2  in dc.regs && R3  in dc.regs
+    && R4  in dc.regs && R5  in dc.regs && R6  in dc.regs && R7  in dc.regs
+    && R8  in dc.regs && R9  in dc.regs && R10 in dc.regs && R11 in dc.regs
+    && R12 in dc.regs && LR(User) in dc.regs && SP(User) in dc.regs
 }
 
 predicate pageDbEntriesValid(d:PageDb)
     requires wellFormedPageDb(d)
-    ensures pageDbEntriesValid(d) ==> pageDbClosedRefs(d)
 {
-    reveal_pageDbClosedRefs();
     forall n :: validPageNr(n) ==> validPageDbEntry(d, n)
 }
 
@@ -114,7 +111,6 @@ predicate pageDbEntryValidRefs(d: PageDb, n: PageNr)
 
 predicate validPageDbEntry(d: PageDb, n: PageNr)
     requires wellFormedPageDb(d)
-    //ensures validPageDbEntry(d, n) ==> closedRefsPageDbEntry(d[n])
 {
     var e := d[n];
     e.PageDbEntryFree? ||
@@ -125,7 +121,7 @@ predicate validPageDbEntryTyped(d: PageDb, n: PageNr)
     requires wellFormedPageDb(d)
     requires d[n].PageDbEntryTyped?
 {
-    closedRefsPageDbEntry(d[n]) && isAddrspace(d, d[n].addrspace)
+    wellFormedPageDbEntry(d[n]) && isAddrspace(d, d[n].addrspace)
     // Type-specific requirements
     && (var entry := d[n].entry;
          (entry.Addrspace? && validAddrspace(d, n))
@@ -161,7 +157,6 @@ predicate hasStoppedAddrspace(d: PageDb, n: PageNr)
 
 predicate validAddrspace(d: PageDb, n: PageNr)
     requires isAddrspace(d, n)
-    requires closedRefsPageDbEntry(d[n])
 {
     var addrspace := d[n].entry;
     n == d[n].addrspace
@@ -199,7 +194,6 @@ function addrspaceRefs(d: PageDb, addrspacePageNr: PageNr): set<PageNr>
 
 predicate validL1PTable(d: PageDb, n: PageNr)
     requires wellFormedPageDb(d)
-    requires closedRefsPageDbEntry(d[n])
     requires d[n].PageDbEntryTyped? && d[n].entry.L1PTable?
 {
     var l1pt := d[n].entry.l1pt;
@@ -223,7 +217,6 @@ predicate validL1PTE(d: PageDb, pte: PageNr)
 
 predicate validL2PTable(d: PageDb, n: PageNr)
     requires wellFormedPageDb(d)
-    requires closedRefsPageDbEntry(d[n])
     requires d[n].PageDbEntryTyped? && d[n].entry.L2PTable?
 {
     var a := d[n].addrspace;
@@ -240,43 +233,6 @@ predicate validL2PTE(d: PageDb, pte: PageNr)
     requires wellFormedPageDb(d)
 {
     d[pte].PageDbEntryTyped? && d[pte].entry.DataPage?
-}
-
-predicate closedRefsPageDbEntry(e: PageDbEntry)
-{
-    e.PageDbEntryFree? || (e.PageDbEntryTyped? && closedRefsPageDbEntryTyped(e.entry))
-}
-
-predicate closedRefsPageDbEntryTyped(e: PageDbEntryTyped)
-{
-    (e.Addrspace? )
-    || (e.L1PTable? && closedRefsL1PTable(e))
-    || (e.L2PTable? && closedRefsL2PTable(e))
-    || (e.Dispatcher? )
-    || (e.DataPage? )
-}
-
-predicate closedRefsL1PTable(e: PageDbEntryTyped)
-    requires e.L1PTable?
-{
-    |e.l1pt| == NR_L1PTES()
-}
-
-predicate closedRefsL2PTable(e: PageDbEntryTyped)
-    requires e.L2PTable?
-{
-    var l2pt := e.l2pt;
-    |l2pt| == NR_L2PTES()
-    && forall pte :: pte in l2pt ==> closedRefsL2PTE(pte)
-}
-
-predicate closedRefsL2PTE(pte: L2PTE)
-{
-    match pte
-        case SecureMapping(p, w, e) => true
-        case InsecureMapping(p, w)
-            => 0 <= p < KOM_PHYSMEM_LIMIT() / PAGESIZE()
-        case NoMapping => true
 }
 
 /*

@@ -92,9 +92,8 @@ function extractPageDbEntry(s:memstate, p:PageNr): seq<word>
 
 predicate pageDbCorresponds(s:memstate, pagedb:PageDb)
     requires SaneMem(s)
-    requires pageDbClosedRefs(pagedb)
+    requires wellFormedPageDb(pagedb)
 {
-    reveal_pageDbClosedRefs();
     // XXX: unpack the entry and page contents here to help dafny see
     // that we have no other dependencies on the state
     var db := (map p | 0 <= p < KOM_SECURE_NPAGES() :: extractPageDbEntry(s,p));
@@ -106,9 +105,8 @@ predicate pageDbCorresponds(s:memstate, pagedb:PageDb)
 
 predicate pageDbCorrespondsExcluding(s:memstate, pagedb:PageDb, modifiedPage:PageNr)
     requires SaneMem(s)
-    requires pageDbClosedRefs(pagedb)
+    requires wellFormedPageDb(pagedb)
 {
-    reveal_pageDbClosedRefs();
     forall p {:trigger validPageNr(p)} :: validPageNr(p) && p != modifiedPage
         ==> (pageDbEntryCorresponds(pagedb[p], extractPageDbEntry(s, p))
             && pageContentsCorresponds(p, pagedb[p], extractPage(s, p)))
@@ -116,16 +114,15 @@ predicate pageDbCorrespondsExcluding(s:memstate, pagedb:PageDb, modifiedPage:Pag
 
 predicate pageDbCorrespondsOnly(s:memstate, pagedb:PageDb, p:PageNr)
     requires SaneMem(s)
-    requires pageDbClosedRefs(pagedb)
+    requires wellFormedPageDb(pagedb)
 {
-    reveal_pageDbClosedRefs();
     pageDbEntryCorresponds(pagedb[p], extractPageDbEntry(s, p))
     && pageContentsCorresponds(p, pagedb[p], extractPage(s, p))
 }
 
 predicate {:opaque} pageDbEntryCorresponds(e:PageDbEntry, entryWords:seq<word>)
     requires |entryWords| == BytesToWords(PAGEDB_ENTRY_SIZE())
-    requires closedRefsPageDbEntry(e)
+    requires wellFormedPageDbEntry(e)
 {
     pageDbEntryTypeVal(e) == entryWords[BytesToWords(PAGEDB_ENTRY_TYPE())]
     && match e {
@@ -138,7 +135,7 @@ predicate {:opaque} pageDbEntryCorresponds(e:PageDbEntry, entryWords:seq<word>)
 
 predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:memmap)
     requires memContainsPage(page, p)
-    requires closedRefsPageDbEntry(e)
+    requires wellFormedPageDbEntry(e)
 {
     e.PageDbEntryFree? || (e.PageDbEntryTyped? && (
         var et := e.entry;
@@ -151,7 +148,7 @@ predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:memmap
 
 predicate {:opaque} pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
     requires memContainsPage(page, p)
-    requires e.Addrspace? && closedRefsPageDbEntryTyped(e)
+    requires e.Addrspace?
 {
     var base := page_monvaddr(p);
     assert base in page;
@@ -165,7 +162,7 @@ function  to_i(b:bool):int { if(b) then 1 else 0 }
 
 predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
     requires memContainsPage(page, p)
-    requires e.Dispatcher? && closedRefsPageDbEntryTyped(e)
+    requires e.Dispatcher?
 {
     var base := page_monvaddr(p);
     assert base in page;
@@ -176,9 +173,8 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
 
 // TODO: refactor; some of this is a trusted spec for ARM's PTE format!
 function method ARM_L2PT_BYTES(): int { 0x400 }
-function ARM_L1PTE(paddr: int): int
-    requires isUInt32(paddr) && (paddr % ARM_L2PT_BYTES() == 0)
-    ensures isUInt32(ARM_L1PTE(paddr))
+function ARM_L1PTE(paddr: word): word
+    requires paddr % ARM_L2PT_BYTES() == 0
 {
     //or32(paddr, 1) // type = 1, pxn = 0, ns = 0, domain = 0
     paddr + 1
@@ -194,9 +190,8 @@ function ARM_L2PTE_RO_BITS(): int
     0x200 // AP2
 }
 
-function ARM_L2PTE(paddr: int, write: bool, exec: bool): int
-    requires isUInt32(paddr) && PageAligned(paddr)
-    ensures isUInt32(ARM_L2PTE(paddr, write, exec))
+function ARM_L2PTE(paddr: word, write: bool, exec: bool): word
+    requires PageAligned(paddr)
 {
     var nxbits := if exec then 0 else ARM_L2PTE_NX_BITS();
     var robits := if write then 0 else ARM_L2PTE_RO_BITS();
@@ -215,26 +210,29 @@ function mkL1Pte(e: Maybe<PageNr>, subpage:int): int
             ARM_L1PTE(page_paddr(pgNr) + subpage * ARM_L2PT_BYTES())
 }
 
-function l1pteoffset(base: addr, i: int, j: int): int
+function l1pteoffset(base: addr, i: int, j: int): addr
+    requires base < 0xfffff000
+    requires 0 <= i < NR_L1PTES() && 0 <= j < 4
 {
     base + 4 * (i * 4 + j)
 }
 
-predicate {:opaque} pageDbL1PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
+predicate {:opaque} pageDbL1PTableCorresponds(p:PageNr, e:PageDbEntryTyped,
+                                              page:memmap)
     requires memContainsPage(page, p)
-    requires e.L1PTable? && closedRefsL1PTable(e)
+    requires e.L1PTable? && wellFormedPageDbEntryTyped(e)
 {
     var base := page_monvaddr(p);
     forall i, j :: 0 <= i < NR_L1PTES() && 0 <= j < 4
         ==> page[l1pteoffset(base, i, j)] == mkL1Pte(e.l1pt[i], j)
 }
 
-function mkL2Pte(pte: L2PTE): int
-    requires closedRefsL2PTE(pte)
+function mkL2Pte(pte: L2PTE): word
 {
     match pte
         case SecureMapping(pg, w, x) => ARM_L2PTE(page_paddr(pg), w, x)
         case InsecureMapping(ipg, w) => (
+            assert validInsecurePageNr(ipg);
             assert PAGESIZE() == 0x1000; // sigh
             var pa := ipg * PAGESIZE();
             assert PageAligned(pa); // double sigh
@@ -242,9 +240,10 @@ function mkL2Pte(pte: L2PTE): int
         case NoMapping => 0
 }
 
-predicate {:opaque} pageDbL2PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
+predicate {:opaque} pageDbL2PTableCorresponds(p:PageNr, e:PageDbEntryTyped,
+                                              page:memmap)
     requires memContainsPage(page, p)
-    requires e.L2PTable? && closedRefsL2PTable(e)
+    requires e.L2PTable? && wellFormedPageDbEntryTyped(e)
 {
     var base := page_monvaddr(p);
     forall i :: 0 <= i < NR_L2PTES() ==>
@@ -253,8 +252,7 @@ predicate {:opaque} pageDbL2PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page
         page[a] == mkL2Pte(e.l2pt[i])
 }
 
-function pageDbEntryTypeVal(e: PageDbEntry): int
-    ensures isUInt32(pageDbEntryTypeVal(e))
+function pageDbEntryTypeVal(e: PageDbEntry): word
 {
     if e.PageDbEntryFree? then KOM_PAGE_FREE()
     else match e.entry {
@@ -266,8 +264,7 @@ function pageDbEntryTypeVal(e: PageDbEntry): int
     }
 }
 
-function pageDbAddrspaceStateVal(s: AddrspaceState): int
-    ensures isUInt32(pageDbAddrspaceStateVal(s))
+function pageDbAddrspaceStateVal(s: AddrspaceState): word
 {
     match s {
     case InitState => KOM_ADDRSPACE_INIT()
@@ -292,7 +289,6 @@ lemma globalUnmodifiedImpliesCorrespondingPreserved(d:PageDb,m:memstate,m':memst
     reveal_ValidMemState();
     reveal_pageDbEntryCorresponds();
     reveal_pageContentsCorresponds();
-    reveal_pageDbClosedRefs();
    
     forall ( p | validPageNr(p) )
         ensures pageDbEntryCorresponds(d[p], extractPageDbEntry(m',p));
@@ -311,7 +307,7 @@ lemma globalUnmodifiedImpliesCorrespondingPreserved(d:PageDb,m:memstate,m':memst
 lemma ValidPageDbImpliesValidAddrspace(d:PageDb, n:PageNr)
     requires validPageDb(d)
     requires isAddrspace(d, n)
-    ensures closedRefsPageDbEntry(d[n]) && validAddrspace(d, n)
+    ensures validAddrspace(d, n)
 {
     reveal_validPageDb();
     assert validPageDbEntryTyped(d, n);
@@ -319,12 +315,10 @@ lemma ValidPageDbImpliesValidAddrspace(d:PageDb, n:PageNr)
 
 lemma PageDbCorrespondsImpliesEntryCorresponds(s:memstate, d:PageDb, n:PageNr)
     requires SaneMem(s)
-    requires pageDbClosedRefs(d)
+    requires wellFormedPageDb(d)
     requires pageDbCorresponds(s, d)
-    ensures closedRefsPageDbEntry(d[n])
     ensures pageDbEntryCorresponds(d[n], extractPageDbEntry(s, n))
 {
-    reveal_pageDbClosedRefs();
 }
 
 lemma AllButOnePagePreserving(n:PageNr,s:state,r:state)

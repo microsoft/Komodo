@@ -3,12 +3,11 @@ lemma SameEntriesImpliesPageDbCorresponds(s:memstate, p: PageNr,
                                           db1: PageDb, db2: PageDb)
     requires SaneMem(s)
     requires validPageNr(p)
-    requires pageDbClosedRefs(db1) && pageDbClosedRefs(db2)
+    requires wellFormedPageDb(db1) && wellFormedPageDb(db2)
     requires pageDbCorresponds(s, db1) || pageDbCorrespondsOnly(s, db1, p)
     requires db1[p] == db2[p]
     ensures pageDbCorrespondsOnly(s, db2, p)
 {
-    reveal_pageDbClosedRefs();
 }
 #endverbatim
 
@@ -26,8 +25,7 @@ procedure fetch_l1pte(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validPageNr(l1pg) && pagedb[l1pg] is PageDbEntryTyped
-            && pagedb[l1pg].entry is L1PTable
-            && closedRefsL1PTable(pagedb[l1pg].entry);
+            && pagedb[l1pg].entry is L1PTable;
         l1pt_va == page_monvaddr(l1pg);
         0 <= l1index < NR_L1PTES();
     ensures
@@ -61,8 +59,7 @@ procedure install_l1ptes(
         pageDbCorresponds(this.m, pagedb_in);
         validAddrspacePage(pagedb_in, as_pg) && !stoppedAddrspace(pagedb_in[as_pg]);
         l1pg == pagedb_in[as_pg].entry.l1ptnr;
-        pagedb_in[l1pg] is PageDbEntryTyped && pagedb_in[l1pg].entry is L1PTable
-                && closedRefsL1PTable(pagedb_in[l1pg].entry);
+        pagedb_in[l1pg] is PageDbEntryTyped && pagedb_in[l1pg].entry is L1PTable;
         l1pt_va == page_monvaddr(l1pg);
         validPageNr(l2_pg);
         0 <= l1index < NR_L1PTES();
@@ -164,8 +161,7 @@ procedure init_l2ptable_success(
         validPageDb(pagedb_in);
         validAddrspacePage(pagedb_in, as_pg) && !stoppedAddrspace(pagedb_in[as_pg]);
         l1pg == pagedb_in[as_pg].entry.l1ptnr;
-        pagedb_in[l1pg] is PageDbEntryTyped && pagedb_in[l1pg].entry is L1PTable
-                && closedRefsL1PTable(pagedb_in[l1pg].entry);
+        pagedb_in[l1pg] is PageDbEntryTyped && pagedb_in[l1pg].entry is L1PTable;
         pagedb_in[l2_pg] == PageDbEntryTyped(as_pg, L2PTable(SeqRepeat(NR_L2PTES(), NoMapping)));
         pageDbCorrespondsExcluding(this.m, pagedb_in, l2_pg);
         pageDbEntryCorresponds(pagedb_in[l2_pg], extractPageDbEntry(this.m, l2_pg));
@@ -209,9 +205,7 @@ procedure init_l2ptable_success(
         assert AllMemInvariant(tmpstate, this);
         assert pageDbCorrespondsOnly(this.m, pagedb, as_pg);
         assert validAddrspacePage(pagedb, as_pg);
-        reveal_pageDbClosedRefs();
         reveal_pageContentsCorresponds();
-        assert pageDbClosedRefs(pagedb);
         assert pageContentsCorresponds(as_pg, pagedb[as_pg],
                                        extractPage(this.m, as_pg));
         reveal_pageDbAddrspaceCorresponds();
@@ -232,7 +226,6 @@ procedure kom_smc_init_l2ptable(
         SaneState(this);
     requires
         validPageDb(pagedb_in);
-        pageDbClosedRefs(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
     ensures
         StackPreserving(old(this),this);
@@ -267,7 +260,6 @@ procedure kom_smc_init_l2ptable(
         } else {
             forall :: validAddrspacePage(pagedb, as_page) {
                 assert isAddrspace(pagedb, as_page);
-                reveal_pageDbClosedRefs();
             }
 
             ghost var l1pg := pagedb[as_page].entry.l1ptnr;
@@ -290,7 +282,6 @@ procedure kom_smc_init_l2ptable(
                 forall :: r4 == page_monvaddr(l1pg) {
                     assert pageDbCorrespondsOnly(this.m, pagedb, as_page);
                     assert validAddrspacePage(pagedb, as_page);
-                    reveal_pageDbClosedRefs();
                     reveal_pageContentsCorresponds();
                     assert pageContentsCorresponds(as_page, pagedb[as_page],
                                                    extractPage(this.m, as_page));
@@ -299,7 +290,7 @@ procedure kom_smc_init_l2ptable(
 
                 forall :: pagedb[l1pg] is PageDbEntryTyped
                     && pagedb[l1pg].entry is L1PTable
-                    && closedRefsL1PTable(pagedb[l1pg].entry)
+                    && wellFormedPageDbEntryTyped(pagedb[l1pg].entry)
                 {
                     assert isAddrspace(pagedb, as_page);
                     assert !stoppedAddrspace(pagedb[as_page]);

@@ -207,7 +207,6 @@ procedure pre_entry_enter(
     {
         assert pageDbCorrespondsOnly(this.m, d, addrspace);
         assert validAddrspacePage(d, addrspace);
-        reveal_pageDbClosedRefs();
         reveal_pageContentsCorresponds();
         assert pageContentsCorresponds(addrspace, d[addrspace],
             extractPage(this.m, addrspace));
@@ -276,7 +275,6 @@ procedure kom_smc_enter(
         validSysState(s);
         mode_of_state(s.hw) == Monitor;
         SaneState(s.hw);
-        isUInt32(arg1) && isUInt32(arg2) && isUInt32(arg3);
     ensures
         this == s'.hw;
         validSysState(s');
