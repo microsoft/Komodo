@@ -34,7 +34,7 @@ function method KOM_ERR_INTERRUPTED():int        { 9  }
 function method KOM_ERR_FAULT():int              { 10 }
 function method KOM_ERR_ALREADY_ENTERED():int    { 11 }
 function method KOM_ERR_NOT_ENTERED():int        { 12 }
-function method KOM_ERR_INVALID():int            { 0x1_0000_0000 }
+function method KOM_ERR_INVALID():int            { 0xffffffff }
 
 //-----------------------------------------------------------------------------
 // Memory Regions
