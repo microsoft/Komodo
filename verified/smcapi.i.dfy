@@ -3,8 +3,8 @@ include "smcapi.s.dfy"
 //=============================================================================
 // Hoare Specification of Monitor Calls
 //=============================================================================
-function {:opaque} smc_initAddrspace_premium(pageDbIn: PageDb, addrspacePage: PageNr,
-    l1PTPage: PageNr) : (PageDb, int) // PageDbOut, KOM_ERR
+function {:opaque} smc_initAddrspace_premium(pageDbIn: PageDb, addrspacePage: word,
+    l1PTPage: word) : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn);
     ensures  validPageDb(smc_initAddrspace_premium(pageDbIn, addrspacePage, l1PTPage).0);
 {
@@ -12,8 +12,8 @@ function {:opaque} smc_initAddrspace_premium(pageDbIn: PageDb, addrspacePage: Pa
     smc_initAddrspace(pageDbIn, addrspacePage, l1PTPage)
 }
 
-function {:opaque} smc_initDispatcher_premium(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
-    entrypoint:int) : (PageDb, int) // PageDbOut, KOM_ERR
+function {:opaque} smc_initDispatcher_premium(pageDbIn: PageDb, page:word,
+    addrspacePage:word, entrypoint:word) : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn);
     ensures  validPageDb(smc_initDispatcher_premium(pageDbIn, page, addrspacePage, entrypoint).0);
 {
@@ -21,8 +21,8 @@ function {:opaque} smc_initDispatcher_premium(pageDbIn: PageDb, page:PageNr, add
     smc_initDispatcher(pageDbIn, page, addrspacePage, entrypoint)
 }
 
-function {:opaque} smc_initL2PTable_premium(pageDbIn: PageDb, page: PageNr,
-    addrspacePage: PageNr, l1index: int) : (PageDb, int)
+function {:opaque} smc_initL2PTable_premium(pageDbIn: PageDb, page: word,
+    addrspacePage: word, l1index: word) : (PageDb, word)
     requires validPageDb(pageDbIn)
     ensures validPageDb(smc_initL2PTable_premium(pageDbIn, page, addrspacePage, l1index).0)
 {
@@ -30,7 +30,8 @@ function {:opaque} smc_initL2PTable_premium(pageDbIn: PageDb, page: PageNr,
     smc_initL2PTable(pageDbIn, page, addrspacePage, l1index)
 }
 
-function {:opaque} smc_remove_premium(pageDbIn: PageDb, page: PageNr) : (PageDb, int) // PageDbOut, KOM_ERR
+function {:opaque} smc_remove_premium(pageDbIn: PageDb, page: word)
+    : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_remove_premium(pageDbIn, page).0)
 {
@@ -38,8 +39,8 @@ function {:opaque} smc_remove_premium(pageDbIn: PageDb, page: PageNr) : (PageDb,
     smc_remove(pageDbIn, page)
 }
 
-function {:opaque} smc_mapSecure_premium(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
-    mapping: Mapping, physPage: int) : (PageDb, int) // PageDbOut, KOM_ERR
+function {:opaque} smc_mapSecure_premium(pageDbIn: PageDb, page: word,
+    addrspacePage: word, mapping: Mapping, physPage: word) : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_mapSecure_premium(pageDbIn, page, addrspacePage, mapping, physPage).0)
 {
@@ -47,8 +48,8 @@ function {:opaque} smc_mapSecure_premium(pageDbIn: PageDb, page: PageNr, addrspa
     smc_mapSecure(pageDbIn, page, addrspacePage, mapping, physPage)
 }
 
-function {:opaque} smc_mapInsecure_premium(pageDbIn: PageDb, addrspacePage: PageNr,
-    physPage: int, mapping : Mapping) : (PageDb, int)
+function {:opaque} smc_mapInsecure_premium(pageDbIn: PageDb, addrspacePage: word,
+    physPage: word, mapping : Mapping) : (PageDb, word)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_mapInsecure_premium(pageDbIn, addrspacePage, physPage, mapping).0)
 {
@@ -56,7 +57,8 @@ function {:opaque} smc_mapInsecure_premium(pageDbIn: PageDb, addrspacePage: Page
     smc_mapInsecure(pageDbIn, addrspacePage, physPage, mapping)
 }
 
-function {:opaque} smc_finalise_premium(pageDbIn: PageDb, addrspacePage: PageNr) : (PageDb, int)
+function {:opaque} smc_finalise_premium(pageDbIn: PageDb, addrspacePage: word)
+    : (PageDb, word)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_finalise_premium(pageDbIn, addrspacePage).0)
 {
@@ -64,8 +66,8 @@ function {:opaque} smc_finalise_premium(pageDbIn: PageDb, addrspacePage: PageNr)
     smc_finalise(pageDbIn, addrspacePage)
 }
 
-function {:opaque} smc_enter_premium(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, arg3: int)
-    : (PageDb, int)
+function {:opaque} smc_enter_premium(pageDbIn: PageDb, dispPage: word, arg1: word,
+    arg2: word, arg3: word) : (PageDb, word)
     requires validPageDb(pageDbIn) 
     ensures smc_enter_premium(pageDbIn,dispPage,arg1,arg2,arg3) ==
         smc_enter(pageDbIn,dispPage,arg1,arg2,arg3)
@@ -77,8 +79,8 @@ function {:opaque} smc_enter_premium(pageDbIn: PageDb, dispPage: PageNr, arg1: i
     smc_enter(pageDbIn, dispPage, arg1, arg2, arg3)
 }
 
-function {:opaque} smc_resume_premium(pageDbIn: PageDb, dispPage: PageNr)
-    : (PageDb, int)
+function {:opaque} smc_resume_premium(pageDbIn: PageDb, dispPage: word)
+    : (PageDb, word)
     requires validPageDb(pageDbIn) 
     ensures validPageDb(smc_resume_premium(pageDbIn, dispPage).0)
 {
@@ -86,8 +88,8 @@ function {:opaque} smc_resume_premium(pageDbIn: PageDb, dispPage: PageNr)
     smc_resume(pageDbIn, dispPage)
 }
 
-function {:opaque} smc_stop_premium(pageDbIn: PageDb, addrspacePage: PageNr)
-    : (PageDb, int)
+function {:opaque} smc_stop_premium(pageDbIn: PageDb, addrspacePage: word)
+    : (PageDb, word)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_stop_premium(pageDbIn, addrspacePage).0)
 {
@@ -95,8 +97,8 @@ function {:opaque} smc_stop_premium(pageDbIn: PageDb, addrspacePage: PageNr)
     smc_stop(pageDbIn, addrspacePage)
 }
 
-function {:opaque} smchandler_premium(pageDbIn: PageDb, callno: int, arg1: int, arg2: int,
-    arg3: int, arg4: int) : (PageDb, int, int) // pageDbOut, err, val
+function {:opaque} smchandler_premium(pageDbIn: PageDb, callno: word, arg1: word,
+    arg2: word, arg3: word, arg4: word) : (PageDb, word, word) // pageDbOut, err, val
     requires validPageDb(pageDbIn)
     ensures validPageDb(smchandler_premium(pageDbIn, callno, arg1, arg2, arg3, arg4).0)
 {
@@ -112,7 +114,7 @@ function {:opaque} smchandler_premium(pageDbIn: PageDb, callno: int, arg1: int, 
 // PageDb Validity Preservation
 //-----------------------------------------------------------------------------
 lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
-    addrspacePage : PageNr, l1PTPage : PageNr)
+    addrspacePage : word, l1PTPage : word)
     requires validPageDb(pageDbIn)
     ensures validPageDb(smc_initAddrspace(pageDbIn, addrspacePage, l1PTPage).0)
 {
@@ -149,11 +151,10 @@ lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
 lemma installL1PTEPreservesPageDbValidity(pageDbIn: PageDb, l1ptnr: PageNr,
                                           l2page: PageNr, l1index: int)
     requires validPageDb(pageDbIn)
-    requires validPageNr(l1ptnr) && pageDbIn[l1ptnr].PageDbEntryTyped?
-        && pageDbIn[l1ptnr].entry.L1PTable?
+    requires pageDbIn[l1ptnr].PageDbEntryTyped? && pageDbIn[l1ptnr].entry.L1PTable?
         && closedRefsL1PTable(pageDbIn[l1ptnr].entry)
     // l2page belongs to this addrspace
-    requires validPageNr(l2page) && validL1PTE(pageDbIn, l2page)
+    requires validL1PTE(pageDbIn, l2page)
         && pageDbIn[l2page].addrspace == pageDbIn[l1ptnr].addrspace
     // no double mapping
     requires forall i :: 0 <= i < NR_L1PTES() && i != l1index
@@ -177,8 +178,8 @@ lemma installL1PTEPreservesPageDbValidity(pageDbIn: PageDb, l1ptnr: PageNr,
     }
 }
 
-lemma initL2PTablePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr,
-    addrspacePage: PageNr, l1index: int)
+lemma initL2PTablePreservesPageDBValidity(pageDbIn: PageDb, page: word,
+    addrspacePage: word, l1index: word)
     requires validPageDb(pageDbIn)
     ensures validPageDb(smc_initL2PTable(pageDbIn, page, addrspacePage, l1index).0)
 {
@@ -207,7 +208,7 @@ lemma initL2PTablePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr,
     }
 }
 
-lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
+lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: word)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_remove(pageDbIn, page).0)
 {
@@ -291,8 +292,8 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr)
     }
 }
 
-lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
-    mapping: Mapping, physPage: int)
+lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: word,
+    addrspacePage: word, mapping: Mapping, physPage: word)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_mapSecure(pageDbIn, page, addrspacePage,
         mapping, physPage).0)
@@ -332,8 +333,8 @@ lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: PageNr, addrspace
 
 }
 
-lemma mapInsecurePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr,
-    physPage: int, mapping : Mapping)
+lemma mapInsecurePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word,
+    physPage: word, mapping : Mapping)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_mapInsecure(pageDbIn, addrspacePage, physPage, mapping).0)
 {
@@ -364,7 +365,7 @@ lemma mapInsecurePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr
     }
 }
 
-lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr)
+lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_finalise(pageDbIn, addrspacePage).0)
 {
@@ -393,8 +394,8 @@ lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr)
     }
 }
 
-lemma enterPreservesPageDbValidity(pageDbIn: PageDb, dispPage: PageNr,
-    arg1: int, arg2: int, arg3: int)
+lemma enterPreservesPageDbValidity(pageDbIn: PageDb, dispPage: word,
+    arg1: word, arg2: word, arg3: word)
     requires validPageDb(pageDbIn) 
     ensures validPageDb(smc_enter(pageDbIn, dispPage, arg1, arg2, arg3).0)
 {
@@ -423,7 +424,7 @@ lemma enterPreservesPageDbValidity(pageDbIn: PageDb, dispPage: PageNr,
     }
 }
 
-lemma resumePreservesPageDbValidity(pageDbIn: PageDb, dispPage: PageNr)
+lemma resumePreservesPageDbValidity(pageDbIn: PageDb, dispPage: word)
     requires validPageDb(pageDbIn) 
     ensures validPageDb(smc_resume(pageDbIn, dispPage).0)
 {
@@ -453,7 +454,7 @@ lemma resumePreservesPageDbValidity(pageDbIn: PageDb, dispPage: PageNr)
     }
 }
 
-lemma stopPreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr)
+lemma stopPreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_stop(pageDbIn, addrspacePage).0)
 {
@@ -483,8 +484,8 @@ lemma stopPreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: PageNr)
     }
 }
 
-lemma smchandlerPreservesPageDbValidity(pageDbIn: PageDb, callno: int, arg1: int,
-    arg2: int, arg3: int, arg4: int)
+lemma smchandlerPreservesPageDbValidity(pageDbIn: PageDb, callno: word, arg1: word,
+    arg2: word, arg3: word, arg4: word)
     requires validPageDb(pageDbIn)
     ensures validPageDb(smchandler(pageDbIn, callno, arg1, arg2, arg3, arg4).0)
 {
@@ -495,9 +496,9 @@ lemma smchandlerPreservesPageDbValidity(pageDbIn: PageDb, callno: int, arg1: int
     } else if(callno == KOM_SMC_INIT_L2PTABLE()) {
         initL2PTablePreservesPageDBValidity(pageDbIn, arg1, arg2, arg3);
     } else if(callno == KOM_SMC_MAP_SECURE()) {
-        mapSecurePreservesPageDBValidity(pageDbIn, arg1, arg2, intToMapping(arg3), arg4);
+        mapSecurePreservesPageDBValidity(pageDbIn, arg1, arg2, wordToMapping(arg3), arg4);
     } else if(callno == KOM_SMC_MAP_INSECURE()) {
-        mapInsecurePreservesPageDbValidity(pageDbIn, arg1, arg2, intToMapping(arg3));
+        mapInsecurePreservesPageDbValidity(pageDbIn, arg1, arg2, wordToMapping(arg3));
     } else if(callno == KOM_SMC_REMOVE()) {
         removePreservesPageDBValidity(pageDbIn, arg1);
     } else if(callno == KOM_SMC_FINALISE()) {

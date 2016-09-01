@@ -51,8 +51,8 @@ procedure install_l1ptes(
     inout {:operand} l1index:int,
     out {:operand} tmp:int,
     ghost pagedb_in:PageDb,
-    ghost as_pg:int,
-    ghost l1pg:int) returns (ghost pagedb: PageDb)
+    ghost as_pg:PageNr,
+    ghost l1pg:PageNr) returns (ghost pagedb: PageDb)
     requires/ensures
         SaneState(this);
     requires

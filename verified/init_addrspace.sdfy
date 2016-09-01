@@ -15,12 +15,12 @@
  */
 
 #verbatim
-function initAddrspaceEntry(addrspace_page:int, l1pt_page:int): PageDbEntry
+function initAddrspaceEntry(addrspace_page:PageNr, l1pt_page:PageNr): PageDbEntry
 {
     PageDbEntryTyped(addrspace_page, Addrspace(l1pt_page, 1, InitState))
 }
 
-function initL1PTEntry(addrspace_page:int): PageDbEntry
+function initL1PTEntry(addrspace_page:PageNr): PageDbEntry
 {
     PageDbEntryTyped(addrspace_page, L1PTable(SeqRepeat(NR_L1PTES(), Nothing)))
 }

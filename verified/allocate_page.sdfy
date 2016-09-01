@@ -42,7 +42,7 @@ procedure addrspace_incref(
     {:operand} as_va:addr,
     out {:operand} tmp:int,
     ghost pagedb_in:PageDb,
-    ghost pagenr:int)
+    ghost pagenr:PageNr)
     returns (ghost pagedb: PageDb)
     requires/ensures
         SaneState(this);
@@ -104,7 +104,7 @@ procedure addrspace_incref(
 }
 
 procedure allocate_page_success(
-    {:operand} pagenr:PageNr,
+    {:operand} pagenr:int,
     {:operand} as_va:addr,
     {:operand} typeval:int,
     {:operand} pagedb_base:addr,
@@ -188,8 +188,8 @@ procedure allocate_page_success(
 }
 
 procedure allocate_page(
-    {:operand} pagenr:PageNr,
-    {:operand} as_pagenr:PageNr,
+    {:operand} pagenr:int,
+    {:operand} as_pagenr:int,
     {:operand} typeval:int,
     {:operand} pagedb_base:addr,
     out {:operand} tmp:int,

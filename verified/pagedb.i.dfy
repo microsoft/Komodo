@@ -6,7 +6,6 @@ include "kom_common.i.dfy"
 //-----------------------------------------------------------------------------
 // computes byte offset of a specific pagedb entry
 function method G_PAGEDB_ENTRY(pageno:PageNr): addr
-    requires validPageNr(pageno);
 {
     assert WordAligned(PAGEDB_ENTRY_SIZE());
     pageno * PAGEDB_ENTRY_SIZE()
@@ -58,20 +57,17 @@ function method KOM_ADDRSPACE_STOPPED():int { 2 }
 //-----------------------------------------------------------------------------
 
 predicate addrInPage(m:addr, p:PageNr)
-    requires validPageNr(p)
 {
     page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE()
 }
 
 predicate memContainsPage(page: memmap, p:PageNr)
-    requires validPageNr(p)
 {
     forall m:addr :: addrInPage(m,p) ==> m in page
 }
 
 function extractPage(s:memstate, p:PageNr): memmap
     requires SaneMem(s)
-    requires validPageNr(p)
     ensures memContainsPage(extractPage(s,p), p)
 {
     // XXX: expanded addrInPage() to help Dafny see a bounded set
@@ -83,7 +79,6 @@ function extractPage(s:memstate, p:PageNr): memmap
 
 function extractPageDbEntry(s:memstate, p:PageNr): seq<word>
     requires SaneMem(s)
-    requires validPageNr(p)
     ensures |extractPageDbEntry(s,p)| == BytesToWords(PAGEDB_ENTRY_SIZE())
     ensures forall o :: WordAligned(o) && 0 <= o < PAGEDB_ENTRY_SIZE()
         ==> GlobalWord(s, PageDb(), G_PAGEDB_ENTRY(p) + o)
@@ -122,7 +117,6 @@ predicate pageDbCorrespondsExcluding(s:memstate, pagedb:PageDb, modifiedPage:Pag
 predicate pageDbCorrespondsOnly(s:memstate, pagedb:PageDb, p:PageNr)
     requires SaneMem(s)
     requires pageDbClosedRefs(pagedb)
-    requires validPageNr(p)
 {
     reveal_pageDbClosedRefs();
     pageDbEntryCorresponds(pagedb[p], extractPageDbEntry(s, p))
@@ -143,7 +137,6 @@ predicate {:opaque} pageDbEntryCorresponds(e:PageDbEntry, entryWords:seq<word>)
 }
 
 predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:memmap)
-    requires validPageNr(p)
     requires memContainsPage(page, p)
     requires closedRefsPageDbEntry(e)
 {
@@ -157,7 +150,6 @@ predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:memmap
 }
 
 predicate {:opaque} pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
-    requires validPageNr(p)
     requires memContainsPage(page, p)
     requires e.Addrspace? && closedRefsPageDbEntryTyped(e)
 {
@@ -170,8 +162,8 @@ predicate {:opaque} pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, pag
 }
 
 function  to_i(b:bool):int { if(b) then 1 else 0 }
+
 predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
-    requires validPageNr(p)
     requires memContainsPage(page, p)
     requires e.Dispatcher? && closedRefsPageDbEntryTyped(e)
 {
@@ -214,7 +206,6 @@ function ARM_L2PTE(paddr: int, write: bool, exec: bool): int
 }
 
 function mkL1Pte(e: Maybe<PageNr>, subpage:int): int
-    requires e.Just? ==> validPageNr(fromJust(e))
     requires 0 <= subpage < 4
 {
     match e
@@ -230,7 +221,6 @@ function l1pteoffset(base: addr, i: int, j: int): int
 }
 
 predicate {:opaque} pageDbL1PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
-    requires validPageNr(p)
     requires memContainsPage(page, p)
     requires e.L1PTable? && closedRefsL1PTable(e)
 {
@@ -253,7 +243,6 @@ function mkL2Pte(pte: L2PTE): int
 }
 
 predicate {:opaque} pageDbL2PTableCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
-    requires validPageNr(p)
     requires memContainsPage(page, p)
     requires e.L2PTable? && closedRefsL2PTable(e)
 {
@@ -332,7 +321,6 @@ lemma PageDbCorrespondsImpliesEntryCorresponds(s:memstate, d:PageDb, n:PageNr)
     requires SaneMem(s)
     requires pageDbClosedRefs(d)
     requires pageDbCorresponds(s, d)
-    requires validPageNr(n)
     ensures closedRefsPageDbEntry(d[n])
     ensures pageDbEntryCorresponds(d[n], extractPageDbEntry(s, n))
 {
@@ -340,7 +328,6 @@ lemma PageDbCorrespondsImpliesEntryCorresponds(s:memstate, d:PageDb, n:PageNr)
 }
 
 lemma AllButOnePagePreserving(n:PageNr,s:state,r:state)
-    requires validPageNr(n)
     requires SaneState(s) && SaneState(r)
     requires MemPreservingExcept(s, r, page_monvaddr(n),
                                  page_monvaddr(n) + PAGESIZE())

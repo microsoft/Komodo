@@ -3,11 +3,12 @@ include "Maybe.dfy"
 include "Sets.dfy"
 include "ARMdef.dfy"
 
-type PageNr = int
+type PageNr = x | validPageNr(x)
 type InsecurePageNr = int
 
 // XXX: allow PageNr type decls in spartan procedures
-function sp_eval_op_PageNr(s:state, o:operand):int
+// unfortunately, we can't return a PageNr, because spartan can't propagate the constraints, so this is mostly just window-dressing
+function sp_eval_op_PageNr(s:state, o:operand): word
     requires ValidState(s)
     requires ValidOperand(o)
     { OperandContents(s,o) }
@@ -15,7 +16,7 @@ function sp_eval_op_PageNr(s:state, o:operand):int
 function method NR_L1PTES(): int { 256 }
 function NR_L2PTES(): int { 1024 }
 
-predicate validPageNr(p: PageNr)
+predicate validPageNr(p: int)
 {
     0 <= p < KOM_SECURE_NPAGES()
 }
@@ -104,7 +105,7 @@ predicate pageDbEntriesValidRefs(d: PageDb)
 
 // Free pages and non-addrspace entries should have a refcount of 0
 predicate pageDbEntryValidRefs(d: PageDb, n: PageNr)
-    requires wellFormedPageDb(d) && validPageNr(n)
+    requires wellFormedPageDb(d)
 {
     var e := d[n];
     (e.PageDbEntryTyped? && e.entry.Addrspace?) ||
@@ -112,7 +113,7 @@ predicate pageDbEntryValidRefs(d: PageDb, n: PageNr)
 }
 
 predicate validPageDbEntry(d: PageDb, n: PageNr)
-    requires wellFormedPageDb(d) && validPageNr(n)
+    requires wellFormedPageDb(d)
     //ensures validPageDbEntry(d, n) ==> closedRefsPageDbEntry(d[n])
 {
     var e := d[n];
@@ -121,7 +122,7 @@ predicate validPageDbEntry(d: PageDb, n: PageNr)
 }
 
 predicate validPageDbEntryTyped(d: PageDb, n: PageNr)
-    requires wellFormedPageDb(d) && validPageNr(n)
+    requires wellFormedPageDb(d)
     requires d[n].PageDbEntryTyped?
 {
     closedRefsPageDbEntry(d[n]) && isAddrspace(d, d[n].addrspace)
@@ -135,9 +136,10 @@ predicate validPageDbEntryTyped(d: PageDb, n: PageNr)
        || (entry.DataPage?) )
 }
 
-predicate isAddrspace(d: PageDb, n: PageNr)
+predicate isAddrspace(d: PageDb, n: int)
 {
-    wellFormedPageDb(d) && validPageNr(n)
+    wellFormedPageDb(d)
+        && validPageNr(n)
         && d[n].PageDbEntryTyped?
         && d[n].entry.Addrspace?
 }
@@ -149,7 +151,7 @@ predicate stoppedAddrspace(e: PageDbEntry)
 
 // The addrspace of the thing pointed to by n is stopped
 predicate hasStoppedAddrspace(d: PageDb, n: PageNr)
-    requires wellFormedPageDb(d) && validPageNr(n)
+    requires wellFormedPageDb(d)
     requires d[n].PageDbEntryTyped?
 {
     var a := d[n].addrspace;
@@ -187,7 +189,7 @@ function {:opaque} validPageNrs(): set<PageNr>
 
 // returns the set of references to an addrspace page with the given index
 function addrspaceRefs(d: PageDb, addrspacePageNr: PageNr): set<PageNr>
-    requires wellFormedPageDb(d) && validPageNr(addrspacePageNr)
+    requires wellFormedPageDb(d)
 {
     (set n | n in validPageNrs()
         && d[n].PageDbEntryTyped?
@@ -196,7 +198,7 @@ function addrspaceRefs(d: PageDb, addrspacePageNr: PageNr): set<PageNr>
 }
 
 predicate validL1PTable(d: PageDb, n: PageNr)
-    requires wellFormedPageDb(d) && validPageNr(n)
+    requires wellFormedPageDb(d)
     requires closedRefsPageDbEntry(d[n])
     requires d[n].PageDbEntryTyped? && d[n].entry.L1PTable?
 {
@@ -216,13 +218,11 @@ predicate validL1PTable(d: PageDb, n: PageNr)
 predicate validL1PTE(d: PageDb, pte: PageNr)
     requires wellFormedPageDb(d)
 {
-    validPageNr(pte)
-        && d[pte].PageDbEntryTyped?
-        && d[pte].entry.L2PTable?
+    d[pte].PageDbEntryTyped? && d[pte].entry.L2PTable?
 }
 
 predicate validL2PTable(d: PageDb, n: PageNr)
-    requires wellFormedPageDb(d) && validPageNr(n)
+    requires wellFormedPageDb(d)
     requires closedRefsPageDbEntry(d[n])
     requires d[n].PageDbEntryTyped? && d[n].entry.L2PTable?
 {
@@ -239,22 +239,17 @@ predicate validL2PTable(d: PageDb, n: PageNr)
 predicate validL2PTE(d: PageDb, pte: PageNr)
     requires wellFormedPageDb(d)
 {
-    validPageNr(pte)
-        && d[pte].PageDbEntryTyped?
-        && d[pte].entry.DataPage?
+    d[pte].PageDbEntryTyped? && d[pte].entry.DataPage?
 }
 
 predicate closedRefsPageDbEntry(e: PageDbEntry)
 {
-    e.PageDbEntryFree? ||
-        (e.PageDbEntryTyped?
-        && validPageNr(e.addrspace)
-        && closedRefsPageDbEntryTyped(e.entry))
+    e.PageDbEntryFree? || (e.PageDbEntryTyped? && closedRefsPageDbEntryTyped(e.entry))
 }
 
 predicate closedRefsPageDbEntryTyped(e: PageDbEntryTyped)
 {
-    (e.Addrspace? && validPageNr(e.l1ptnr) )
+    (e.Addrspace? )
     || (e.L1PTable? && closedRefsL1PTable(e))
     || (e.L2PTable? && closedRefsL2PTable(e))
     || (e.Dispatcher? )
@@ -264,9 +259,7 @@ predicate closedRefsPageDbEntryTyped(e: PageDbEntryTyped)
 predicate closedRefsL1PTable(e: PageDbEntryTyped)
     requires e.L1PTable?
 {
-    var l1pt := e.l1pt;
-    |l1pt| == NR_L1PTES()
-    && forall pte :: pte in l1pt && pte.Just? ==> validPageNr(fromJust(pte))
+    |e.l1pt| == NR_L1PTES()
 }
 
 predicate closedRefsL2PTable(e: PageDbEntryTyped)
@@ -280,7 +273,7 @@ predicate closedRefsL2PTable(e: PageDbEntryTyped)
 predicate closedRefsL2PTE(pte: L2PTE)
 {
     match pte
-        case SecureMapping(p, w, e) => validPageNr(p)
+        case SecureMapping(p, w, e) => true
         case InsecureMapping(p, w)
             => 0 <= p < KOM_PHYSMEM_LIMIT() / PAGESIZE()
         case NoMapping => true
@@ -300,20 +293,17 @@ function initialPageDb(): PageDb
 predicate validL1PTPage(d:PageDb, p:PageNr)
 {
     reveal_validPageDb();
-    validPageDb(d) && validPageNr(p) &&
-        d[p].PageDbEntryTyped? && d[p].entry.L1PTable?
+    validPageDb(d) && d[p].PageDbEntryTyped? && d[p].entry.L1PTable?
 }
 
 predicate validDispatcherPage(d:PageDb, p:PageNr)
 {
     reveal_validPageDb();
-    validPageDb(d) && validPageNr(p) &&
-        d[p].PageDbEntryTyped? && d[p].entry.Dispatcher?
+    validPageDb(d) && d[p].PageDbEntryTyped? && d[p].entry.Dispatcher?
 }
 
 // a points to an address space and it is closed
-predicate validAddrspacePage(d: PageDb, a: PageNr)
+predicate validAddrspacePage(d: PageDb, a: int)
 {
-    wellFormedPageDb(d) &&
-    isAddrspace(d, a) && validPageNr(d[a].entry.l1ptnr)
+    wellFormedPageDb(d) && isAddrspace(d, a)
 }

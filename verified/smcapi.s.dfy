@@ -2,21 +2,23 @@ include "kom_common.s.dfy"
 include "pagedb.s.dfy"
 
 
-predicate physPageInvalid( physPage: int )
+predicate physPageInvalid(physPage: word)
 {
     physPage != 0 && !(physPageIsRam(physPage)
         && !physPageIsSecure(physPage))
 }
 
 predicate pageIsFree(d:PageDb, pg:PageNr)
-    { pg in d && d[pg].PageDbEntryFree? }
-
-predicate physPageIsRam( physPage: int )
 {
-   physPage * PAGESIZE() < SecurePhysBase()
+    pg in d && d[pg].PageDbEntryFree?
 }
 
-predicate physPageIsSecure( physPage: int )
+predicate physPageIsRam(physPage: int)
+{
+    physPage * PAGESIZE() < SecurePhysBase()
+}
+
+predicate physPageIsSecure(physPage: int)
 {
     var paddr := physPage * PAGESIZE();
     SecurePhysBase() <= paddr < SecurePhysBase() +
@@ -42,8 +44,9 @@ predicate l1indexInUse(d: PageDb, a: PageNr, l1index: int)
 datatype Mapping = Mapping(l1index: PageNr, l2index: PageNr, perm: Perm)
 datatype Perm = Perm(r: bool, w: bool, x: bool)
 
-function {:opaque} intToMapping(arg: int) : Mapping
+function {:opaque} wordToMapping(arg: word): Mapping
 {
+    // TODO!
     Mapping(1,1,Perm(false,false,false))
 }
 
@@ -93,8 +96,8 @@ function smc_query() : int { KOM_MAGIC() }
 
 function smc_getPhysPages() : int { KOM_SECURE_NPAGES() }
 
-function smc_initAddrspace(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: PageNr)
-    : (PageDb, int) // PageDbOut, KOM_ERR
+function smc_initAddrspace(pageDbIn: PageDb, addrspacePage: word, l1PTPage: word)
+    : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn);
 {
     reveal_validPageDb();
@@ -115,9 +118,9 @@ function smc_initAddrspace(pageDbIn: PageDb, addrspacePage: PageNr, l1PTPage: Pa
         (pageDbOut, KOM_ERR_SUCCESS())
 }
 
-function smc_initDispatcher(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
-    entrypoint:int)
-    : (PageDb, int) // PageDbOut, KOM_ERR
+function smc_initDispatcher(pageDbIn: PageDb, page:word, addrspacePage:word,
+    entrypoint:word)
+    : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn);
 {
     reveal_validPageDb();
@@ -130,7 +133,6 @@ function smc_initDispatcher(pageDbIn: PageDb, page:PageNr, addrspacePage:PageNr,
 
 function installL1PTE(l1pt: PageDbEntryTyped, l2page: PageNr, l1index: int): PageDbEntryTyped
     requires l1pt.L1PTable? && closedRefsL1PTable(l1pt)
-    requires validPageNr(l2page)
     requires 0 <= l1index < NR_L1PTES()
     ensures var r := installL1PTE(l1pt, l2page, l1index);
         r.L1PTable? && closedRefsL1PTable(r)
@@ -141,9 +143,7 @@ function installL1PTE(l1pt: PageDbEntryTyped, l2page: PageNr, l1index: int): Pag
 function installL1PTEInPageDb(pagedb: PageDb, l1ptnr: PageNr, l2page: PageNr,
     l1index: int): PageDb
     requires validPageDb(pagedb)
-    requires validPageNr(l1ptnr) && pagedb[l1ptnr].PageDbEntryTyped?
-    && pagedb[l1ptnr].entry.L1PTable?
-    requires validPageNr(l2page)
+    requires pagedb[l1ptnr].PageDbEntryTyped? && pagedb[l1ptnr].entry.L1PTable?
     requires 0 <= l1index < NR_L1PTES()
     ensures pageDbClosedRefs(installL1PTEInPageDb(pagedb, l1ptnr, l2page, l1index))
 {
@@ -152,8 +152,8 @@ function installL1PTEInPageDb(pagedb: PageDb, l1ptnr: PageNr, l2page: PageNr,
     pagedb[l1ptnr := pagedb[l1ptnr].(entry := l1ptentry)]
 }
 
-function smc_initL2PTable(pageDbIn: PageDb, page: PageNr,
-    addrspacePage: PageNr, l1index: int) : (PageDb, int)
+function smc_initL2PTable(pageDbIn: PageDb, page: word, addrspacePage: word,
+                          l1index: word) : (PageDb, word)
     requires validPageDb(pageDbIn)
 {
     reveal_validPageDb();
@@ -191,9 +191,9 @@ predicate allocatePageEntryValid(entry: PageDbEntryTyped)
 }
 
 // This is not literally an SMC handler. Move elsewhere in file???
-function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
+function allocatePage_inner(pageDbIn: PageDb, securePage: word,
     addrspacePage:PageNr, entry:PageDbEntryTyped)
-    : (PageDb, int) // PageDbOut, KOM_ERR
+    : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
     requires allocatePageEntryValid(entry)
@@ -214,9 +214,9 @@ function allocatePage_inner(pageDbIn: PageDb, securePage: PageNr,
 }
 
 // TODO move this elsewhere since it is not a monitor call
-function allocatePage(pageDbIn: PageDb, securePage: PageNr,
+function allocatePage(pageDbIn: PageDb, securePage: word,
     addrspacePage:PageNr, entry:PageDbEntryTyped )
-    : (PageDb, int) // PageDbOut, KOM_ERR
+    : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
     requires allocatePageEntryValid(entry)
@@ -227,8 +227,8 @@ function allocatePage(pageDbIn: PageDb, securePage: PageNr,
     allocatePage_inner(pageDbIn, securePage, addrspacePage, entry)
 }
 
-function smc_remove(pageDbIn: PageDb, page: PageNr)
-    : (PageDb, int) // PageDbOut, KOM_ERR
+function smc_remove(pageDbIn: PageDb, page: word)
+    : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
 {
     reveal_validPageDb();
@@ -255,8 +255,8 @@ function smc_remove(pageDbIn: PageDb, page: PageNr)
                 (pageDbOut, KOM_ERR_SUCCESS())
 }
 
-function smc_mapSecure(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
-    mapping: Mapping, physPage: int) : (PageDb, int) // PageDbOut, KOM_ERR
+function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,
+    mapping: Mapping, physPage: word) : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
 {
     reveal_validPageDb();
@@ -283,8 +283,8 @@ function smc_mapSecure(pageDbIn: PageDb, page: PageNr, addrspacePage: PageNr,
                     (pageDbOut, KOM_ERR_SUCCESS())
 }
 
-function smc_mapInsecure(pageDbIn: PageDb, addrspacePage: PageNr,
-    physPage: int, mapping : Mapping) : (PageDb, int)
+function smc_mapInsecure(pageDbIn: PageDb, addrspacePage: word,
+    physPage: int, mapping : Mapping) : (PageDb, word)
     requires validPageDb(pageDbIn)
 {
     reveal_validPageDb();
@@ -303,7 +303,7 @@ function smc_mapInsecure(pageDbIn: PageDb, addrspacePage: PageNr,
             (pageDbOut, KOM_ERR_SUCCESS())
 }
 
-function smc_finalise(pageDbIn: PageDb, addrspacePage: PageNr) : (PageDb, int)
+function smc_finalise(pageDbIn: PageDb, addrspacePage: word) : (PageDb, word)
     requires validPageDb(pageDbIn)
 {
     reveal_validPageDb();
@@ -320,8 +320,8 @@ function smc_finalise(pageDbIn: PageDb, addrspacePage: PageNr) : (PageDb, int)
         (pageDbOut, KOM_ERR_SUCCESS())
 }
 
-function smc_enter(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, arg3: int)
-    : (PageDb, int)
+function smc_enter(pageDbIn: PageDb, dispPage: word, arg1: word, arg2: word, arg3: word)
+    : (PageDb, word)
     requires validPageDb(pageDbIn)
 {
     reveal_validPageDb();
@@ -336,8 +336,8 @@ function smc_enter(pageDbIn: PageDb, dispPage: PageNr, arg1: int, arg2: int, arg
         (pageDbIn, KOM_ERR_SUCCESS())
 }
 
-function smc_resume(pageDbIn: PageDb, dispPage: PageNr)
-    : (PageDb, int)
+function smc_resume(pageDbIn: PageDb, dispPage: word)
+    : (PageDb, word)
     requires validPageDb(pageDbIn)
 {
     reveal_validPageDb();
@@ -352,8 +352,8 @@ function smc_resume(pageDbIn: PageDb, dispPage: PageNr)
         (pageDbIn, KOM_ERR_SUCCESS())
 }
 
-function smc_stop(pageDbIn: PageDb, addrspacePage: PageNr)
-    : (PageDb, int)
+function smc_stop(pageDbIn: PageDb, addrspacePage: word)
+    : (PageDb, word)
     requires validPageDb(pageDbIn)
 {
     reveal_validPageDb();
@@ -373,11 +373,10 @@ function smc_stop(pageDbIn: PageDb, addrspacePage: PageNr)
 //=============================================================================
 // Behavioral Specification of SMC Handler
 //=============================================================================
-function smchandler(pageDbIn: PageDb, callno: int, arg1: int, arg2: int,
-    arg3: int, arg4: int) : (PageDb, int, int) // pageDbOut, err, val
+function smchandler(pageDbIn: PageDb, callno: word, arg1: word, arg2: word,
+    arg3: word, arg4: word) : (PageDb, word, word) // pageDbOut, err, val
     requires validPageDb(pageDbIn)
 {
-    reveal_validPageDb();
     if(callno == KOM_SMC_QUERY()) then (pageDbIn, KOM_MAGIC(), 0)
     else if(callno == KOM_SMC_GETPHYSPAGES()) then
         (pageDbIn, KOM_ERR_SUCCESS(), KOM_SECURE_NPAGES())
@@ -391,10 +390,10 @@ function smchandler(pageDbIn: PageDb, callno: int, arg1: int, arg2: int,
         var ret := smc_initL2PTable(pageDbIn, arg1, arg2, arg3);
         (ret.0, ret.1, 0)
     else if(callno == KOM_SMC_MAP_SECURE()) then
-        var ret := smc_mapSecure(pageDbIn, arg1, arg2, intToMapping(arg3), arg4);
+        var ret := smc_mapSecure(pageDbIn, arg1, arg2, wordToMapping(arg3), arg4);
         (ret.0, ret.1, 0)
     else if(callno == KOM_SMC_MAP_INSECURE()) then
-        var ret := smc_mapInsecure(pageDbIn, arg1, arg2, intToMapping(arg3));
+        var ret := smc_mapInsecure(pageDbIn, arg1, arg2, wordToMapping(arg3));
         (ret.0, ret.1, 0)
     else if(callno == KOM_SMC_REMOVE()) then
         var ret := smc_remove(pageDbIn, arg1);
@@ -436,7 +435,7 @@ predicate smchandlerInvariant(s:state, s':state)
 
 // lemma for allocatePage; FIXME: not trusted, should not be in a .s.dfy file
 lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
-    securePage: PageNr, addrspacePage: PageNr, entry: PageDbEntryTyped)
+    securePage: word, addrspacePage: PageNr, entry: PageDbEntryTyped)
     requires validPageDb(pageDbIn)
     requires validAddrspacePage(pageDbIn, addrspacePage)
     requires allocatePageEntryValid(entry)
