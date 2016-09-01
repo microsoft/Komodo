@@ -24,12 +24,12 @@ predicate{:opaque} sp_eval(c:code, s:state, r:state)
     evalCode(c, s, r)
 }
 
-function sp_eval_op(s:state, o:operand):int
+function sp_eval_op(s:state, o:operand): word
     requires ValidState(s)
     requires ValidOperand(o)
     { OperandContents(s, o) }
 
-function sp_eval_op_addr(s:state, o:operand):int
+function sp_eval_op_addr(s:state, o:operand): word
     requires ValidState(s)
     requires ValidOperand(o)
     { sp_eval_op(s,o) }
@@ -39,12 +39,6 @@ predicate sp_eq_ops(s1:sp_state, s2:sp_state, o:operand)
     ValidState(s1) && ValidState(s2) && ValidOperand(o)
         && sp_eval_op(s1, o) == sp_eval_op(s2, o)
 }
-
-function sp_eval_addr(s:state, m:addr):int
-    requires ValidMemState(s.m);
-    requires ValidMem(m);
-    ensures isUInt32(sp_eval_addr(s,m));
-    { MemContents(s.m, m) }
 
 function method sp_CNil():codes { CNil }
 function sp_cHead(b:codes):code requires b.sp_CCons? { b.hd }
