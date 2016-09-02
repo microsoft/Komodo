@@ -254,6 +254,7 @@ procedure kom_smc_init_addrspace(
         assert r4 == G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_TYPE();
         LDRglobal(r3, PageDb(), r12, r4);
         assert pageDbEntryCorresponds(pagedb[addrspace_page], extractPageDbEntry(this.m, addrspace_page));
+        extractPageDbToAbstractOne(this.m, addrspace_page, PAGEDB_ENTRY_TYPE());
         assert r3 == GlobalWord(this.m, PageDb(), r4) == pageDbEntryTypeVal(pagedb[addrspace_page]);
         if (r3 == sp_op_const(KOM_PAGE_FREE())) {
             assert pageIsFree(pagedb, addrspace_page);

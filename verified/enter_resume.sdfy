@@ -56,10 +56,32 @@ procedure smc_enter_err(
            
             LDRglobal(r8, PageDb(), r12, r10);
             ghost var addrspace := s.d[pagenr].addrspace;
+            forall :: validPageNr(addrspace)
+            {
+                reveal_validPageDb();
+            }
+            // this forall is the problem.
             forall :: r8 == page_monvaddr(addrspace) && WordAligned(r8)
             {
-                reveal_pageDbEntryCorresponds(); reveal_pageContentsCorresponds();
+                reveal_pageDbEntryCorresponds();
+                // reveal_pageContentsCorresponds();
+                // reveal_pageDbDispatcherCorresponds();
                 reveal_validPageDb();
+                assert pageDbCorrespondsOnly(this.m, s.d, pagenr);
+                // assume false;
+                // assert SaneMem(this.m);
+                ghost var entryWords := extractPageDbEntry(this.m, pagenr);
+                assert entryWords[BytesToWords(PAGEDB_ENTRY_ADDRSPACE())] == 
+                    page_monvaddr(s.d[pagenr].addrspace);
+                
+               
+                extractPageDbToAbstractOne(this.m, pagenr, PAGEDB_ENTRY_ADDRSPACE());
+
+                assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE();
+                assert entryWords[BytesToWords(PAGEDB_ENTRY_ADDRSPACE())] ==
+                    GlobalWord(this.m, PageDb(), r10);
+                assert GlobalWord(this.m, PageDb(), r10) == 
+                    page_monvaddr(s.d[pagenr].addrspace);
             }
             WordAlignedAdd_(r8,ADDRSPACE_STATE(),r8+ADDRSPACE_STATE());
            

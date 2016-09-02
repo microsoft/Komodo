@@ -77,17 +77,19 @@ function extractPage(s:memstate, p:PageNr): memmap
         :: var v:word := MemContents(s, m); assert isUInt32(v); v as word)
 }
 
+
 function extractPageDbEntry(s:memstate, p:PageNr): seq<word>
     requires SaneMem(s)
     ensures |extractPageDbEntry(s,p)| == BytesToWords(PAGEDB_ENTRY_SIZE())
-    ensures forall o :: WordAligned(o) && 0 <= o < PAGEDB_ENTRY_SIZE()
-        ==> GlobalWord(s, PageDb(), G_PAGEDB_ENTRY(p) + o)
-            == extractPageDbEntry(s,p)[BytesToWords(o)]
+    // ensures forall o | WordAligned(o) && 0 <= o < PAGEDB_ENTRY_SIZE() ::
+    //    GlobalWord(s, PageDb(), G_PAGEDB_ENTRY(p) + o)
+    //        == extractPageDbEntry(s,p)[BytesToWords(o)]
 {
     var fulldb := GlobalFullContents(s, PageDb());
     assert |fulldb| == BytesToWords(G_PAGEDB_SIZE());
     var entrylen := BytesToWords(PAGEDB_ENTRY_SIZE());
-    fulldb[p*entrylen..p*entrylen+entrylen]
+    //fulldb[p*entrylen..p*entrylen+entrylen]
+    fulldb[p*BytesToWords(PAGEDB_ENTRY_SIZE())..(p+1)*BytesToWords(PAGEDB_ENTRY_SIZE())]
 }
 
 predicate pageDbCorresponds(s:memstate, pagedb:PageDb)
@@ -331,4 +333,21 @@ lemma AllButOnePagePreserving(n:PageNr,s:state,r:state)
     forall (p, a:addr | validPageNr(p) && p != n && addrInPage(a, p))
         ensures MemContents(s.m, a) == MemContents(r.m, a)
         {}
+}
+
+
+lemma extractPageDbToAbstract(s:memstate, p:PageNr)
+    requires SaneMem(s)
+    ensures forall o | WordAligned(o) && 0 <= o < PAGEDB_ENTRY_SIZE() ::
+        GlobalWord(s, PageDb(), G_PAGEDB_ENTRY(p) + o)
+            == extractPageDbEntry(s,p)[BytesToWords(o)]
+{
+}
+
+lemma extractPageDbToAbstractOne(s:memstate, p:PageNr, o:int)
+    requires SaneMem(s)
+    requires WordAligned(o) && 0 <= o < PAGEDB_ENTRY_SIZE()
+    ensures GlobalWord(s, PageDb(), G_PAGEDB_ENTRY(p) + o)
+        == extractPageDbEntry(s,p)[BytesToWords(o)]
+{
 }
