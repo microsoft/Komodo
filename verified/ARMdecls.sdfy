@@ -308,9 +308,8 @@ MOVS_PCLR_TO_USERMODE_AND_CONTINUE()
     requires/ensures
         ValidState(this);
     requires 
-        mode_of_state(this) != User;
-        this.conf.spsr[mode_of_state(this)].m == User;
         ValidModeChange'(this, User);
+        spsr_of_state(this).m == User;
     ensures
         evalMOVSPCLRUC(old(this), this);
 {

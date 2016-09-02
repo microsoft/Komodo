@@ -81,6 +81,14 @@ function priv_of_mode(m:mode):priv
 function priv_of_state(s:state):priv
     { priv_of_mode(mode_of_state(s)) }
 
+function spsr_of_state(s:state): PSR
+    requires ValidState(s)
+    requires mode_of_state(s) != User
+{
+    reveal_ValidConfig();
+    s.conf.spsr[mode_of_state(s)]
+}
+
 //-----------------------------------------------------------------------------
 // Configuration Register Decoding
 //-----------------------------------------------------------------------------
@@ -118,7 +126,7 @@ function decode_sreg(s:state, sr:SReg, v:word): config
     requires (sr.cpsr? || sr.spsr?) ==> ValidModeEncoding(psr_mask_mode(v))
     ensures ValidConfig(decode_sreg(s, sr, v))
 {
-    // reveal_ValidConfig();
+    reveal_ValidConfig();
     match sr
         case ttbr0 => s.conf.(ttbr0 := decode_ttbr(v))
         case cpsr  => s.conf.(cpsr := decode_psr(v))
@@ -237,7 +245,7 @@ predicate {:opaque} ValidRegState(regs:map<ARMReg, word>)
     forall r:ARMReg :: r in regs
 }
 
-predicate ValidConfig(c:config)
+predicate {:opaque} ValidConfig(c:config)
 {
     PageAligned(c.ttbr0.ptbase) && User !in c.spsr &&
     (forall m:mode :: m != User ==> m in c.spsr )
@@ -310,7 +318,7 @@ predicate ValidRegOperand(o:operand)
 //-----------------------------------------------------------------------------
 // Globals
 //-----------------------------------------------------------------------------
-type globaldecls = map<operand, word>
+type globaldecls = map<operand, addr>
 
 predicate ValidGlobal(o:operand)
 {
@@ -319,7 +327,7 @@ predicate ValidGlobal(o:operand)
 
 predicate ValidGlobalDecls(decls:globaldecls)
 {
-    forall d :: d in decls ==> d.OSymbol? && decls[d] > 0 && WordAligned(decls[d])
+    forall d :: d in decls ==> d.OSymbol? && decls[d] != 0
 }
 
 predicate ValidGlobalOffset(g:operand, offset:word)
@@ -490,7 +498,9 @@ function WritablePagesInTable(pt:AbsPTable): set<addr>
 {
     (set i, j | 0 <= i < |pt| && pt[i].Just? && 0 <= j < |fromJust(pt[i])|
         && fromJust(pt[i])[j].Just? && fromJust(fromJust(pt[i])[j]).write
-        :: fromJust(fromJust(pt[i])[j]).phys + PhysBase())
+        :: (var pte := fromJust(fromJust(pt[i])[j]);
+          assert WellformedAbsPTE(pte);
+          pte.phys + PhysBase()))
 }
 
 function ExtractAbsL1PTable(m:memstate, vbase:addr, index:nat): Maybe<AbsPTable>
@@ -767,7 +777,6 @@ predicate ValidModeChange(s:state, v:word)
 
 predicate ValidInstruction(s:state, ins:ins)
 {   
-    // reveal_ValidConfig();
     ValidState(s) && match ins
         case ADD(dest, src1, src2) => ValidOperand(src1) &&
             ValidOperand(src2) && ValidRegOperand(dest) &&
@@ -835,9 +844,7 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidMcrMrcOperand(s, dst) &&
             ValidRegOperand(src)
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE =>
-            mode_of_state(s) != User &&
-            s.conf.spsr[mode_of_state(s)].m == User &&
-            ValidModeChange'(s, User)
+            ValidModeChange'(s, User) && spsr_of_state(s).m == User
 }
 
 predicate evalIns(ins:ins, s:state, r:state)

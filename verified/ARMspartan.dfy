@@ -84,12 +84,6 @@ function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
 //-----------------------------------------------------------------------------
 // Useful invariants preserved by instructions
 //-----------------------------------------------------------------------------
-/*predicate AlwaysInvariant(s:state, s':state)
-{
-    // valid state is maintained
-    ValidState(s) && ValidState(s')
-}*/
-
 predicate AllMemInvariant(s:state, s':state)
     requires ValidState(s) && ValidState(s')
 {

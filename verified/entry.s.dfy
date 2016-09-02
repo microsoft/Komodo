@@ -54,6 +54,7 @@ function securePageFromPhysAddr(phys:int): PageNr
 predicate validERTransitionHW(hw:state, hw':state, d:PageDb)
 {
     reveal_validPageDb();
+    reveal_ValidConfig();
     ValidState(hw) && ValidState(hw') && hw'.conf.ttbr0 == hw.conf.ttbr0
     && physPageIsSecure(hw.conf.ttbr0.ptbase / PAGESIZE())
     && nonStoppedL1(d, securePageFromPhysAddr(hw.conf.ttbr0.ptbase))
@@ -243,8 +244,9 @@ function exceptionHandled(s:SysState) : (word, word, PageDb)
 predicate bankedRegsPreserved(hw:state, hw':state)
     requires ValidState(hw) && ValidState(hw')
 {
-        reveal_ValidRegState();
-        forall m :: m != User ==>
+    reveal_ValidRegState();
+    reveal_ValidConfig();
+    forall m :: m != User ==>
         hw.conf.spsr[m] == hw'.conf.spsr[m] &&
         hw.regs[LR(m)] == hw'.regs[LR(m)] &&
         hw.regs[SP(m)] == hw'.regs[SP(m)]
@@ -258,6 +260,7 @@ predicate WSMemInvariantExceptAddrspace(hw:state, hw':state, d:PageDb)
     requires ValidState(hw)
     requires validERTransitionHW(hw, hw', d)
 {
+    reveal_ValidConfig();
     WSMemInvariantExceptAddrspaceAtPage(hw, hw', d,
         securePageFromPhysAddr(hw.conf.ttbr0.ptbase))
 }

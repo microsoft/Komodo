@@ -232,6 +232,7 @@ procedure allocate_page(
         err := sp_op_const(PAGEDB_ENTRY_SIZE());
         MUL(err,pagenr,err);
         assert err == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_TYPE();
+        assert pagedb_base == old(pagedb_base) == AddressOfGlobal(PageDb());
         LDRglobal(tmp, PageDb(), pagedb_base, err);
 
         forall :: tmp == pageDbEntryTypeVal(pagedb_in[pagenr])
