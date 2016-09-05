@@ -257,6 +257,10 @@ procedure allocate_page(
                 err := sp_op_const(KOM_ERR_ALREADY_FINAL());
             } else {
                 assert pageDbCorresponds(this.m, pagedb);
+                assert DistinctRegOperands(set(@pagenr, @as_pagenr,
+                    @pagedb_base, @tmp, @tmp2, @err), 6);
+                assert DistinctRegOperands(set(@pagenr, @tmp2, @pagedb_base,
+                    @tmp, @err), 5);
                 pagedb := allocate_page_success(pagenr, tmp2, typeval,
                                 pagedb_base, tmp, err, pagedb_in, entry);
                 err := sp_op_const(KOM_ERR_SUCCESS());
