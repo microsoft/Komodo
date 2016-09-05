@@ -5,7 +5,7 @@
 #verbatim
 lemma SameMemAndGlobalsImpliesSamePageDb(s:state, s':state, pagedb:PageDb)
     requires SaneState(s) && SaneState(s')
-     requires pageDbClosedRefs(pagedb)
+    requires validPageDb(pagedb)
     requires pageDbCorresponds(s.m, pagedb)
     requires NonStackMemPreserving(s,s')
     requires GlobalsInvariant(s,s')
@@ -30,7 +30,7 @@ procedure smc_handler(
         StackBytesRemaining(this,120);
     requires
         validPageDb(pagedb_in);
-        pageDbClosedRefs(pagedb_in);
+        // pageDbClosedRefs(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
     ensures
         NonvolatileRegPreserving(old(this),this);
