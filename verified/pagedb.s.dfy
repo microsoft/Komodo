@@ -248,13 +248,16 @@ function initialPageDb(): PageDb
 //-----------------------------------------------------------------------------
 predicate validL1PTPage(d:PageDb, p:PageNr)
 {
-    reveal_validPageDb();
     validPageDb(d) && d[p].PageDbEntryTyped? && d[p].entry.L1PTable?
+}
+
+predicate validL2PTPage(d:PageDb, p:PageNr)
+{
+    validPageDb(d) && d[p].PageDbEntryTyped? && d[p].entry.L2PTable?
 }
 
 predicate validDispatcherPage(d:PageDb, p:PageNr)
 {
-    reveal_validPageDb();
     validPageDb(d) && d[p].PageDbEntryTyped? && d[p].entry.Dispatcher?
 }
 

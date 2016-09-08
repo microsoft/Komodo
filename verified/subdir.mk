@@ -49,7 +49,7 @@ CLEAN := $(CLEAN) $(dir)/*.exe $(dir)/*.dll $(dir)/*.pdb $(dir)/*.S $(dir)/*.o $
 .DELETE_ON_ERROR:
 
 # deps for all Dafny code
-$(dir)/ARMdef.verified: $(dir)/Maybe.verified $(dir)/Seq.verified
+$(dir)/ARMdef.verified: $(dir)/Maybe.verified $(dir)/Seq.verified $(dir)/bitvectors.s.verified
 $(dir)/ARMprint.verified: $(dir)/ARMdef.verified
 $(dir)/ARMspartan.verified: $(dir)/ARMdef.verified
 $(dir)/kom_common.s.verified: $(dir)/ARMdef.verified

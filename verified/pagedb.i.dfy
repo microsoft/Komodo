@@ -71,10 +71,11 @@ function extractPage(s:memstate, p:PageNr): memmap
     ensures memContainsPage(extractPage(s,p), p)
 {
     // XXX: expanded addrInPage() to help Dafny see a bounded set
-    (map m:addr {:trigger addrInPage(m, p), MemContents(s, m)}
+    var res := (map m:addr {:trigger addrInPage(m, p), MemContents(s, m)}
         | page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE()
         // XXX: this mess seems to be needed to help Dafny see that we have a legit word
-        :: var v:word := MemContents(s, m); assert isUInt32(v); v as word)
+        :: var v:word := MemContents(s, m); assert isUInt32(v); v);
+    res
 }
 
 
@@ -173,33 +174,19 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
     // TODO: finish concrete representation of dispatcher fields
 }
 
-// TODO: refactor; some of this is a trusted spec for ARM's PTE format!
 function method ARM_L2PT_BYTES(): int { 0x400 }
 function ARM_L1PTE(paddr: word): word
     requires paddr % ARM_L2PT_BYTES() == 0
 {
-    //or32(paddr, 1) // type = 1, pxn = 0, ns = 0, domain = 0
-    paddr + 1
-}
-
-function ARM_L2PTE_NX_BITS(): int
-{
-    0x1 // XN
-}
-
-function ARM_L2PTE_RO_BITS(): int
-{
-    0x200 // AP2
+    BitwiseOr(paddr, 1) // type = 1, pxn = 0, ns = 0, domain = 0
 }
 
 function ARM_L2PTE(paddr: word, write: bool, exec: bool): word
     requires PageAligned(paddr)
 {
-    var nxbits := if exec then 0 else ARM_L2PTE_NX_BITS();
-    var robits := if write then 0 else ARM_L2PTE_RO_BITS();
-    var ptebits := ARM_L2PTE_CONST_BITS() + 0x2 /* type */ + nxbits + robits;
-    //or32(ARM_L2PTE_CONST_BITS(), or32(nxbits, robits))
-    paddr + ptebits //or32(paddr, ptebits)
+    var nxbits:bv32 := if exec then 0 else ARM_L2PTE_NX_BIT();
+    var robits:bv32 := if write then 0 else ARM_L2PTE_RO_BIT();
+    BitvecToInt(IntToBitvec(paddr) | ARM_L2PTE_CONST_BITS() | 0x2 /* type */ | nxbits | robits)
 }
 
 function mkL1Pte(e: Maybe<PageNr>, subpage:int): int

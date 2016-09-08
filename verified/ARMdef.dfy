@@ -1,5 +1,6 @@
 include "Maybe.dfy"
 include "Seq.dfy"
+include "bitvectors.s.dfy"
 
 //-----------------------------------------------------------------------------
 // Core types (for a 32-bit word-aligned machine)
@@ -118,7 +119,11 @@ function decode_scr(v:word) : SCR
 function decode_ttbr(v:word): TTBR
     ensures PageAligned(decode_ttbr(v).ptbase)
     // assuming 4k alignment, n == 2 / x == 12
-    { MaskWithSizeIsAligned(v, 0x1000); TTBR(BitwiseAnd(v, 0xffff_f000)) }
+{
+    var ptbase := BitwiseMaskHighBitsInt(v, 12);
+    assert PageAligned(ptbase) && WordAligned(ptbase);
+    TTBR(ptbase)
+}
 
 function decode_sreg(s:state, sr:SReg, v:word): config
     requires ValidConfig(s.conf)
@@ -546,8 +551,9 @@ function ExtractAbsL1PTE(pte:word): Maybe<Maybe<addr>>
     // (i.e., no other bits set)
     var typebits := BitwiseAnd(pte, 0x3);
     var lowbits := BitwiseAnd(pte, 0x3ff);
-    MaskWithSizeIsAligned(pte, 0x400);
-    var ptbase := BitwiseAnd(pte, 0xfffffc00);
+    var ptbase := BitwiseMaskHighBitsInt(pte, 10); // BitwiseAnd(pte, 0xfffffc00);
+    assert ptbase % pow2(10) == 0;
+    assert WordAligned(ptbase);
     // if the type is zero, it's an invalid entry, which is fine (maps nothing)
     if typebits == 0 then Just(Nothing)
     // otherwise, the lowbits must be 1 (it maps a page table)
@@ -579,32 +585,43 @@ function ExtractAbsL2PTable(m:memstate, vbase:addr, index:nat): Maybe<AbsL2PTabl
     Just([fromJust(pte)] + fromJust(rest))
 }
 
-function ExtractAbsL2PTE(pte:word): Maybe<Maybe<AbsPTE>>
-    ensures var r := ExtractAbsL2PTE(pte);
+function method ARM_L2PTE_NX_BIT(): bv32
+{
+    0x1 // XN
+}
+
+function method ARM_L2PTE_RO_BIT(): bv32
+{
+    0x200 // AP2
+}
+
+function ExtractAbsL2PTE(pteword:word): Maybe<Maybe<AbsPTE>>
+    ensures var r := ExtractAbsL2PTE(pteword);
         r.Just? && fromJust(r).Just? ==> WellformedAbsPTE(fromJust(fromJust(r)))
 {
-    var typebits := BitwiseAnd(pte, 0x3);
+    var pte := IntToBitvec(pteword);
+    var typebits := pte & 0x3;
     // if the type is zero, it's an invalid entry, which is fine (maps nothing)
     if typebits == 0 then Just(Nothing) else
     // large pages aren't supported
     if typebits == 1 then Nothing else
-    var lowbits := BitwiseAnd(pte, 0xfdfc);
+    var lowbits := pte & 0xfdfc;
     if lowbits != ARM_L2PTE_CONST_BITS() then Nothing else
-    var exec := BitwiseAnd(pte, 1) == 0; // !XN bit
-    var write := BitwiseAnd(pte, 0x200) == 0; // !AP2 bit
-    MaskWithSizeIsAligned(pte, 0x1000);
-    var pagebase := BitwiseAnd(pte, 0xfffff000);
+    var exec := pte & ARM_L2PTE_NX_BIT() == 0;
+    var write := pte & ARM_L2PTE_RO_BIT() == 0;
+    var pagebase := BitwiseMaskHighBitsInt(pteword, 12); // BitwiseAnd(pteword, 0xfffff000);
+    assert PageAligned(pagebase);
     if !isUInt32(pagebase + PhysBase()) then Nothing else
     Just(Just(AbsPTE(pagebase, write, exec)))
 }
 
-function ARM_L2PTE_CONST_BITS(): word
+function method ARM_L2PTE_CONST_BITS(): bv32
 {
     0x4 /* B */
-        + 0x30 /* AP0, AP1 */
-        + 0x140 /* TEX */
-        + 0x400 /* S */
-        + 0x800 /* NG */
+        | 0x30 /* AP0, AP1 */
+        | 0x140 /* TEX */
+        | 0x400 /* S */
+        | 0x800 /* NG */
 }
 
 //-----------------------------------------------------------------------------
@@ -612,30 +629,24 @@ function ARM_L2PTE_CONST_BITS(): word
 //-----------------------------------------------------------------------------
 
 function {:opaque} BitwiseXor(x:word, y:word): word
-    { (x as bv32 ^ y as bv32) as int }
+    { BitvecToInt(IntToBitvec(x) ^ IntToBitvec(y)) }
 
 function {:opaque} BitwiseAnd(x:word, y:word): word
-    { (x as bv32 & y as bv32) as int }
+    { BitvecToInt(IntToBitvec(x) & IntToBitvec(y)) }
 
 function {:opaque} BitwiseOr(x:word, y:word): word
-    { (x as bv32 | y as bv32) as int }
+    { BitvecToInt(IntToBitvec(x) | IntToBitvec(y)) }
 
 function {:opaque} BitwiseNot(x:word): word
-    { !(x as bv32) as int } // is ~ !?
+    { BitvecToInt(!(IntToBitvec(x))) } // is ~ !?
 
 function {:opaque} LeftShift(x:word, amount:word): word
     requires 0 <= amount < 32;
-    { (x as bv32 << amount) as int }
+    { BitvecToInt(IntToBitvec(x) << amount) }
 
 function {:opaque} RightShift(x:word, amount:word): word
     requires 0 <= amount < 32;
-    { (x as bv32 >> amount) as int }
-
-// FIXME! replace this (when we get around to proving it)
-lemma {:axiom} MaskWithSizeIsAligned(x:word, s:word)
-    // s must be a power of two. this is a cheesy approximation for that
-    requires s == 0x1000 || s == 0x400
-    ensures BitwiseAnd(x, 0x1_0000_0000 - s) % s == 0
+    { BitvecToInt(IntToBitvec(x) >> amount) }
 
 //-----------------------------------------------------------------------------
 // Evaluation
