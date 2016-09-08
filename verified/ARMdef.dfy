@@ -120,8 +120,7 @@ function decode_ttbr(v:word): TTBR
     ensures PageAligned(decode_ttbr(v).ptbase)
     // assuming 4k alignment, n == 2 / x == 12
 {
-    var ptbase := BitwiseMaskHighBitsInt(v, 12);
-    assert PageAligned(ptbase) && WordAligned(ptbase);
+    var ptbase := BitwiseMaskHigh(v, 12);
     TTBR(ptbase)
 }
 
@@ -446,8 +445,7 @@ function method PAGESIZE():int { 0x1000 }
 predicate PageAligned(addr:int)
     ensures PageAligned(addr) ==> WordAligned(addr)
 {
-    // FIXME: help out poor dafny
-    assume addr % 0x1000 == 0 ==> addr % 4 == 0;
+    lemma_PageAlignedImpliesWordAligned(addr);
     addr % 0x1000 == 0
 }
 
@@ -551,9 +549,8 @@ function ExtractAbsL1PTE(pte:word): Maybe<Maybe<addr>>
     // (i.e., no other bits set)
     var typebits := BitwiseAnd(pte, 0x3);
     var lowbits := BitwiseAnd(pte, 0x3ff);
-    var ptbase := BitwiseMaskHighBitsInt(pte, 10); // BitwiseAnd(pte, 0xfffffc00);
-    assert ptbase % pow2(10) == 0;
-    assert WordAligned(ptbase);
+    var ptbase := BitwiseMaskHigh(pte, 10); // BitwiseAnd(pte, 0xfffffc00);
+    assert ptbase % 0x400 == 0; // XXX: help Dafny see WordAligned
     // if the type is zero, it's an invalid entry, which is fine (maps nothing)
     if typebits == 0 then Just(Nothing)
     // otherwise, the lowbits must be 1 (it maps a page table)
@@ -599,7 +596,7 @@ function ExtractAbsL2PTE(pteword:word): Maybe<Maybe<AbsPTE>>
     ensures var r := ExtractAbsL2PTE(pteword);
         r.Just? && fromJust(r).Just? ==> WellformedAbsPTE(fromJust(fromJust(r)))
 {
-    var pte := IntToBitvec(pteword);
+    var pte := IntAsBits(pteword);
     var typebits := pte & 0x3;
     // if the type is zero, it's an invalid entry, which is fine (maps nothing)
     if typebits == 0 then Just(Nothing) else
@@ -609,7 +606,7 @@ function ExtractAbsL2PTE(pteword:word): Maybe<Maybe<AbsPTE>>
     if lowbits != ARM_L2PTE_CONST_BITS() then Nothing else
     var exec := pte & ARM_L2PTE_NX_BIT() == 0;
     var write := pte & ARM_L2PTE_RO_BIT() == 0;
-    var pagebase := BitwiseMaskHighBitsInt(pteword, 12); // BitwiseAnd(pteword, 0xfffff000);
+    var pagebase := BitwiseMaskHigh(pteword, 12); // BitwiseAnd(pteword, 0xfffff000);
     assert PageAligned(pagebase);
     if !isUInt32(pagebase + PhysBase()) then Nothing else
     Just(Just(AbsPTE(pagebase, write, exec)))
@@ -629,24 +626,24 @@ function method ARM_L2PTE_CONST_BITS(): bv32
 //-----------------------------------------------------------------------------
 
 function {:opaque} BitwiseXor(x:word, y:word): word
-    { BitvecToInt(IntToBitvec(x) ^ IntToBitvec(y)) }
+    { BitsAsInt(BitXor(IntAsBits(x), IntAsBits(y))) }
 
 function {:opaque} BitwiseAnd(x:word, y:word): word
-    { BitvecToInt(IntToBitvec(x) & IntToBitvec(y)) }
+    { BitsAsInt(BitAnd(IntAsBits(x), IntAsBits(y))) }
 
 function {:opaque} BitwiseOr(x:word, y:word): word
-    { BitvecToInt(IntToBitvec(x) | IntToBitvec(y)) }
+    { BitsAsInt(BitOr(IntAsBits(x), IntAsBits(y))) }
 
 function {:opaque} BitwiseNot(x:word): word
-    { BitvecToInt(!(IntToBitvec(x))) } // is ~ !?
+    { BitsAsInt(BitNot(IntAsBits(x))) }
 
 function {:opaque} LeftShift(x:word, amount:word): word
     requires 0 <= amount < 32;
-    { BitvecToInt(IntToBitvec(x) << amount) }
+    { BitsAsInt(IntAsBits(x) << amount) }
 
 function {:opaque} RightShift(x:word, amount:word): word
     requires 0 <= amount < 32;
-    { BitvecToInt(IntToBitvec(x) >> amount) }
+    { BitsAsInt(IntAsBits(x) >> amount) }
 
 //-----------------------------------------------------------------------------
 // Evaluation

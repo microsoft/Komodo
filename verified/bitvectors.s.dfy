@@ -1,59 +1,97 @@
-lemma {:axiom} lemma_BitvecToInt(b:bv32)
-    ensures 0 <= b as int < 0x1_0000_0000;
-    ensures (b as int) as bv32 == b;
-    ensures b == 0 <==> b as int == 0;
-
-lemma {:axiom} lemma_BitvecIntEquivalence(b:bv32, i:int)
+lemma {:axiom} lemma_BitIntEquiv(b:bv32, i:int)
     requires i == b as int || (0 <= i < 0x1_0000_0000 && b == i as bv32)
     ensures i == b as int && b == i as bv32
+    ensures i == 0 <==> b == 0
 
-lemma {:axiom} lemma_BitvecIntCasts(b:bv32)
-    ensures b == b as int as bv32
-
-lemma {:axiom} lemma_IntBitvecCasts(i:int)
-    requires 0 <= i < 0x1_0000_0000
-    ensures i == i as bv32 as int
-
-lemma {:axiom} lemma_IntToBitvec(i:int)
+function IntAsBits(i:int): bv32
     requires 0 <= i < 0x1_0000_0000;
-    ensures (i as bv32) as int == i;
-    ensures i == 0 <==> i as bv32 == 0;
-
-function IntToBitvec(i:int): bv32
-    requires 0 <= i < 0x1_0000_0000;
-    ensures i == 0 <==> IntToBitvec(i) == 0;
-    ensures IntToBitvec(i) as int == i;
+    ensures IntAsBits(i) as int == i;
+    //ensures IntAsBits(i) == i as bv32;
+    ensures i == 0 <==> IntAsBits(i) == 0;
 {
-    lemma_IntToBitvec(i); i as bv32
+    var b := i as bv32;
+    lemma_BitIntEquiv(b, i);
+    b
 }
 
-function BitvecToInt(b:bv32): int
-    ensures 0 <= BitvecToInt(b) < 0x1_0000_0000;
-    ensures b == 0 <==> BitvecToInt(b) == 0;
-    ensures BitvecToInt(b) as bv32 == b;
+function BitsAsInt(b:bv32): int
+    ensures 0 <= BitsAsInt(b) < 0x1_0000_0000;
+    ensures b == 0 <==> BitsAsInt(b) == 0;
+    ensures BitsAsInt(b) as bv32 == b;
+    //ensures BitsAsInt(b) == b as int;
     decreases b as int // XXX: workaround Dafny issue #26
 {
-    lemma_BitvecToInt(b); b as int
+    var i := b as int;
+    lemma_BitIntEquiv(b, i);
+    i
 }
 
-lemma {:axiom} lemma_BitwiseModEquiv(x:bv32, y:bv32)
+/* Z3 gets hopelessly lost thinking about bitwise operations, so we
+ * wrap them in opaque functions */
+function {:opaque} BitAnd(x:bv32, y:bv32): bv32
+{
+    x & y
+}
+
+function {:opaque} BitOr(x:bv32, y:bv32): bv32
+{
+    x | y
+}
+
+function {:opaque} BitXor(x:bv32, y:bv32): bv32
+{
+    x ^ y
+}
+
+function {:opaque} BitMod(x:bv32, y:bv32): bv32
     requires y != 0
-    ensures BitvecToInt(x % y) == BitvecToInt(x) % BitvecToInt(y);
+{
+    x % y
+}
 
-lemma {:axiom} lemma_BitwiseDivEquiv(x:bv32, y:bv32)
+function {:opaque} BitDiv(x:bv32, y:bv32): bv32
     requires y != 0
-    ensures BitvecToInt(x / y) == BitvecToInt(x) / BitvecToInt(y);
+{
+    x / y
+}
 
-lemma {:axiom} lemma_BitwiseMulEquiv(x:bv32, y:bv32)
-    ensures BitvecToInt(x * y) == BitvecToInt(x) * BitvecToInt(y);
+function {:opaque} BitMul(x:bv32, y:bv32): bv32
+{
+    x * y
+}
 
-function pow2(n:nat): nat
+function {:opaque} BitNot(x:bv32): bv32
+{
+    !x
+}
+
+lemma {:axiom} lemma_BitAddEquiv(x:bv32, y:bv32)
+    requires BitsAsInt(x) + BitsAsInt(y) < 0x1_0000_0000
+    ensures BitsAsInt(x + y) == BitsAsInt(x) + BitsAsInt(y)
+
+lemma {:axiom} lemma_BitSubEquiv(x:bv32, y:bv32)
+    requires BitsAsInt(x) - BitsAsInt(y) >= 0
+    ensures BitsAsInt(x - y) == BitsAsInt(x) - BitsAsInt(y)
+
+lemma {:axiom} lemma_BitModEquiv(x:bv32, y:bv32)
+    requires y != 0
+    ensures BitsAsInt(BitMod(x, y)) == BitsAsInt(x) % BitsAsInt(y)
+
+lemma {:axiom} lemma_BitDivEquiv(x:bv32, y:bv32)
+    requires y != 0
+    ensures BitsAsInt(BitDiv(x, y)) == BitsAsInt(x) / BitsAsInt(y)
+
+lemma {:axiom} lemma_BitMulEquiv(x:bv32, y:bv32)
+    requires BitsAsInt(x) * BitsAsInt(y) < 0x1_0000_0000
+    ensures BitsAsInt(BitMul(x, y)) == BitsAsInt(x) * BitsAsInt(y)
+
+function {:opaque} pow2(n:nat): nat
     ensures pow2(n) > 0
 {
     if n == 0 then 1 else 2 * pow2(n - 1)
 }
 
-function BitposValue'(bitpos:int): bv32
+function BitAtPos'(bitpos:int): bv32
     requires 0 <= bitpos < 32
 {
     (1 as bv32 << bitpos)
@@ -61,55 +99,117 @@ function BitposValue'(bitpos:int): bv32
 
 lemma {:axiom} lemma_BitposPowerOf2(bitpos:int)
     requires 0 <= bitpos < 32
-    ensures BitvecToInt(BitposValue'(bitpos)) == pow2(bitpos)
+    ensures BitsAsInt(BitAtPos'(bitpos)) == pow2(bitpos)
 
-function BitposValue(bitpos:int): bv32
+function BitAtPos(bitpos:int): bv32
     requires 0 <= bitpos < 32
-    ensures BitposValue(bitpos) != 0
-    ensures BitposValue(bitpos) as int == pow2(bitpos)
+    ensures BitAtPos(bitpos) != 0
+    ensures BitsAsInt(BitAtPos(bitpos)) == pow2(bitpos)
 {
-    lemma_BitposPowerOf2(bitpos); BitposValue'(bitpos)
+    lemma_BitposPowerOf2(bitpos); BitAtPos'(bitpos)
 }
 
-function BitmaskLow(bitpos:int): bv32
+function {:opaque} BitmaskLow(bitpos:int): bv32
     requires 0 <= bitpos < 32
 {
-    BitposValue(bitpos) - 1
+    BitAtPos(bitpos) - 1
 }
 
-function BitmaskHigh(bitpos:int): bv32
+function {:opaque} BitmaskHigh(bitpos:int): bv32
     requires 0 <= bitpos < 32
 {
-    !BitmaskLow(bitpos)
+    BitNot(BitmaskLow(bitpos))
 }
 
-lemma {:axiom} lemma_BitwiseMask(x:bv32, bitpos:int)
+lemma {:axiom} lemma_MulModZero(a:int, b:int)
+    requires b > 0
+    ensures (a * b) % b == 0
+/* TODO: prove this without /noNLarith flag */
+
+lemma {:axiom} lemma_DivMulLessThan(a:int, b:int)
+    requires b > 0
+    ensures (a / b) * b <= a
+/* TODO: prove this without /noNLarith flag */
+
+lemma {:axiom} lemma_Bitmask(b:bv32, bitpos:int)
     requires 0 <= bitpos < 32
-    ensures x & BitmaskLow(bitpos) == x % BitposValue(bitpos)
-    ensures x & BitmaskHigh(bitpos) == x / BitposValue(bitpos) * BitposValue(bitpos)
-    ensures (x & BitmaskHigh(bitpos)) % BitposValue(bitpos) == 0
+    ensures BitAnd(b, BitmaskLow(bitpos)) == BitMod(b, BitAtPos(bitpos))
+    ensures BitAnd(b, BitmaskHigh(bitpos))
+        == BitMul(BitDiv(b, BitAtPos(bitpos)), BitAtPos(bitpos))
 /* TODO: can't we prove this? */
 
-lemma lemma_BitwiseMaskInt(i:int, bitpos:int)
-    requires 0 <= i < 0x1_0000_0000;
+lemma lemma_BitmaskAsInt(i:int, bitpos:int)
+    requires 0 <= i < 0x1_0000_0000
     requires 0 <= bitpos < 32
-    //ensures BitvecToInt(IntToBitvec(i) & BitmaskLow(bitpos)) == i % pow2(bitpos)
-    //ensures BitvecToInt(IntToBitvec(i) & BitmaskHigh(bitpos)) == i / pow2(bitpos) * pow2(bitpos)
-    ensures BitvecToInt(IntToBitvec(i) & BitmaskHigh(bitpos)) % pow2(bitpos) == 0
+    ensures BitsAsInt(BitAnd(IntAsBits(i), BitmaskLow(bitpos))) == i % pow2(bitpos)
+    ensures BitsAsInt(BitAnd(IntAsBits(i), BitmaskHigh(bitpos))) == i / pow2(bitpos) * pow2(bitpos)
+    ensures BitsAsInt(BitAnd(IntAsBits(i), BitmaskHigh(bitpos))) % pow2(bitpos) == 0
 {
-    lemma_BitwiseMask(IntToBitvec(i), bitpos);
-    assert (IntToBitvec(i) & BitmaskHigh(bitpos)) % BitposValue(bitpos) == 0;
-    lemma_BitwiseModEquiv(IntToBitvec(i) & BitmaskHigh(bitpos), BitposValue(bitpos));
-    assert BitvecToInt(BitposValue(bitpos)) == pow2(bitpos);
+    var pb := BitAtPos(bitpos);
+    var pi := pow2(bitpos);
+    assert BitsAsInt(pb) == pi;
+    var b := IntAsBits(i);
+    lemma_Bitmask(b, bitpos);
+
+    forall ensures BitsAsInt(BitAnd(b, BitmaskLow(bitpos))) == i % pi {
+        assert BitAnd(b, BitmaskLow(bitpos)) == BitMod(b, pb);
+        lemma_BitModEquiv(b, pb);
+        calc {
+            BitsAsInt(BitMod(b, pb));
+            BitsAsInt(b) % BitsAsInt(pb);
+            i % pi;
+        }
+    }
+
+    forall ensures BitsAsInt(BitAnd(b, BitmaskHigh(bitpos))) == i / pi * pi {
+        assert BitAnd(b, BitmaskHigh(bitpos)) == BitMul(BitDiv(b, pb), pb);
+        lemma_BitDivEquiv(b, pb);
+        assert i / pi == BitsAsInt(BitDiv(b, pb));
+        lemma_DivMulLessThan(i, pi);
+        lemma_BitMulEquiv(BitDiv(b, pb), pb);
+        calc {
+            BitsAsInt(BitMul(BitDiv(b, pb), pb));
+            BitsAsInt(BitDiv(b, pb)) * BitsAsInt(pb);
+            i / pi * pi;
+        }
+    }
+
+    lemma_MulModZero(i / pi, pi);
 }
 
-function BitwiseMaskHighBitsInt(i:int, bitpos:int): int
+// useful properties of pow2
+predicate pow2_properties(n:nat)
+{
+    n >= 2 ==> pow2(n) % 4 == 0
+    && pow2(10) == 0x400
+    && pow2(12) == 0x1000
+}
+
+lemma lemma_pow2_properties(n:nat)
+    ensures pow2_properties(n)
+{
+    reveal_pow2();
+}
+
+function BitwiseMaskHigh(i:int, bitpos:int): int
     requires 0 <= i < 0x1_0000_0000;
     requires 0 <= bitpos < 32;
-    ensures 0 <= BitwiseMaskHighBitsInt(i, bitpos) < 0x1_0000_0000;
-    ensures BitwiseMaskHighBitsInt(i, bitpos) % pow2(bitpos) == 0
+    ensures 0 <= BitwiseMaskHigh(i, bitpos) < 0x1_0000_0000;
+    ensures BitwiseMaskHigh(i, bitpos) % pow2(bitpos) == 0
+    ensures pow2_properties(bitpos)
 {
-    lemma_BitwiseMaskInt(i, bitpos);
-    assert BitvecToInt(IntToBitvec(i) & BitmaskHigh(bitpos)) % pow2(bitpos) == 0;
-    BitvecToInt(IntToBitvec(i) & BitmaskHigh(bitpos))
+    lemma_BitmaskAsInt(i, bitpos);
+    lemma_pow2_properties(bitpos);
+    BitsAsInt(BitAnd(IntAsBits(i), BitmaskHigh(bitpos)))
+}
+
+// FIXME: this lemma is here only becuase it's unstable
+// when proved in the context of ARMdef.dfy
+lemma lemma_PageAlignedImpliesWordAligned(addr:int)
+    ensures addr % 0x1000 == 0 ==> addr % 4 == 0
+{
+    if addr % 0x1000 == 0 {
+        assert 0x1000 % 4 == 0;
+        assert addr % 4 == 0;
+    }
 }
