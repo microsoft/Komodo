@@ -1,7 +1,7 @@
-datatype Maybe<T> = Nothing | Just(T)
+datatype Maybe<T> = Nothing | Just(v: T)
 
 function method fromJust<T>(x: Maybe<T>): T
     requires x.Just?
 {
-    match x case Just(v) => v
+    x.v
 }
