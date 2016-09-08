@@ -71,7 +71,7 @@ predicate address_is_secure(m:addr)
 {
     (KOM_DIRECTMAP_VBASE() + SecurePhysBase()) <= m <
         (KOM_DIRECTMAP_VBASE() + SecurePhysBase() + KOM_SECURE_RESERVE())
-}        
+}
 
 //-----------------------------------------------------------------------------
 // Globals
@@ -122,9 +122,10 @@ predicate SaneMem(s:memstate)
 
 predicate SaneConstants()
 {
-    TheValidAddresses() == (
-    // our secure phys mapping must be valid
-    (set m:addr | KOM_DIRECTMAP_VBASE() + SecurePhysBase() <= m
+    PhysBase() == KOM_DIRECTMAP_VBASE()
+    && TheValidAddresses() == (
+        // our secure phys mapping must be valid
+        (set m:addr | KOM_DIRECTMAP_VBASE() + SecurePhysBase() <= m
                < KOM_DIRECTMAP_VBASE() + SecurePhysBase() + KOM_SECURE_RESERVE())
         // the stack must be mapped
         + (set m:addr | StackLimit() <= m < StackBase()))
