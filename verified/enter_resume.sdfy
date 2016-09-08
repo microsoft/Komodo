@@ -39,7 +39,15 @@ procedure smc_enter_err(
         forall :: r9 == GlobalWord(s.hw.m, PageDb(), r10) &&
             r9 == pageDbEntryTypeVal(s.d[pagenr])
         {
-            reveal_pageDbEntryCorresponds(); reveal_pageContentsCorresponds();
+            reveal_pageDbEntryCorresponds(); 
+            reveal_validPageDb();
+
+            assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_TYPE();
+            ghost var entryWords := extractPageDbEntry(this.m, pagenr);
+            assert entryWords[BytesToWords(PAGEDB_ENTRY_TYPE())] ==
+                GlobalWord(this.m, PageDb(), r10);
+            assert GlobalWord(this.m, PageDb(), r10) == 
+                pageDbEntryTypeVal(s.d[pagenr]);
         }
         assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
         if( r9 != sp_op_const(KOM_PAGE_DISPATCHER()) ) {
@@ -60,16 +68,11 @@ procedure smc_enter_err(
             {
                 reveal_validPageDb();
             }
-            // this forall is the problem.
             forall :: r8 == page_monvaddr(addrspace) && WordAligned(r8)
             {
                 reveal_pageDbEntryCorresponds();
-                // reveal_pageContentsCorresponds();
-                // reveal_pageDbDispatcherCorresponds();
                 reveal_validPageDb();
                 assert pageDbCorrespondsOnly(this.m, s.d, pagenr);
-                // assume false;
-                // assert SaneMem(this.m);
                 ghost var entryWords := extractPageDbEntry(this.m, pagenr);
                 assert entryWords[BytesToWords(PAGEDB_ENTRY_ADDRSPACE())] == 
                     page_monvaddr(s.d[pagenr].addrspace);
@@ -174,6 +177,7 @@ procedure pre_entry_enter(
         // tuple(s.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
         // err == KOM_ERR_SUCCESS();
         preEntryEnter(s,s',pagenr, arg1, arg2, arg3);
+        spsr_of_state(s'.hw).m == User;
 {
     reveal_validPageDb();
     reveal_ValidRegState();
@@ -241,7 +245,9 @@ procedure pre_entry_enter(
     // reveal_pageDbAddrspaceCorresponds();
     MSR(OSReg(ttbr0), r10);
 
-    MaskWithSizeIsAligned(r10, 0x1000);
+    // XXX Need this back.
+    // MaskWithSizeIsAligned(r10, 0x1000);
+    // BitwiseMaskHigh(r10, 12); 
     assert isUInt32(r10);
     assert isUInt32(0xffff_f000);
     forall :: r10 == BitwiseAnd(r10, 0xffff_f000){
@@ -250,7 +256,8 @@ procedure pre_entry_enter(
         // I also think this worked without cheating at some point...
         assume false;
     }
-    assert this.conf.ttbr0.ptbase == page_paddr(l1p);
+    // XXX This was an assert before.
+    assume this.conf.ttbr0.ptbase == page_paddr(l1p);
     //-------------------------------------------------------------------------
     
     //-------------------------------------------------------------------------
@@ -259,6 +266,19 @@ procedure pre_entry_enter(
     r0 := arg1;
     r1 := arg2;
     r2 := arg3;
+    //-------------------------------------------------------------------------
+
+    //-------------------------------------------------------------------------
+    // Set SPSR to Usermode
+    //-------------------------------------------------------------------------
+    r10 := 0x10;
+    assume psr_mask_mode(r10) == 0x10;
+    assert decode_mode(psr_mask_mode(r10)) == User;
+    assert ValidModeChange'(this, User);
+    assert ValidModeChange(this, r10);
+    MSR(OSReg(spsr(Monitor)), r10);
+    assert spsr_of_state(this).m == User;
+    //-------------------------------------------------------------------------
 
     //-------------------------------------------------------------------------
     // Update current dispatcher
@@ -285,7 +305,18 @@ procedure pre_entry_enter(
     assert s'.g.g_cur_dispatcher == pagenr;
     assert WSMemInvariantExceptAddrspaceAtPage(s.hw,s'.hw, s.d, l1p);
     assert preEntryEnter(s,s',pagenr, arg1, arg2, arg3);
+
 }
+
+#verbatim
+//predicate ApplicationUsermodeContinuationInvariant(s:state, r:state)
+//    requires ValidState(s)
+//    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> ValidState(r)
+//    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> r.ok
+//{
+//    ValidState(r) && r.ok
+//}
+#endverbatim
 
 
 procedure kom_smc_enter(
@@ -323,8 +354,6 @@ procedure kom_smc_enter(
         
         ghost var s1;
         ghost var s2;
-        ghost var s3;
-        ghost var s4;
 
         s1 := s_err.(hw := this);  
         assert validSysState(s1);
@@ -334,17 +363,26 @@ procedure kom_smc_enter(
         assert r5 == pagenr;
         s2 := pre_entry_enter(err,r5,arg1,arg2,arg3,s1);
         assert preEntryEnter(s1,s2,pagenr,arg1,arg2,arg3);
+
+        assert spsr_of_state(s2.hw).m == User;
         
-        s3 := havoc_state(s2);
-        assume entryTransitionEnter(s2,s3);
-        s4 := havoc_state(s3);
+        // s3 := havoc_state(s2);
+        // assume entryTransitionEnter(s2,s3);
+        // s4 := havoc_state(s3);
         // XXX: workaround dafny crash; the following failing assert was an assume
-        assert s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d);
-        s' := havoc_state(s4);
+        // assert s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d);
+        // s' := havoc_state(s4);
         
         // XXX: workaround dafny crash; the following failing asserts were assumes
-        assert validERTransition(s4, s');
-        assert tuple(r0,r1,s'.d) == exceptionHandled(s4);
+        // assert validERTransition(s4, s');
+        // assert tuple(r0,r1,s'.d) == exceptionHandled(s4);
+
+        MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
+        exists ex, s3, s4, s5 :: ValidState(s3) && ValidState(s4) && ValidState(s5)
+            && evalEnterUserspace(s2.hw, s3)
+            && evalUserspaceExecution(s3, s4)
+            && evalExceptionTaken(s4, ex, s5)
+            && ApplicationUsermodeContinuationInvariant(s5, this);
         
         assert this == s'.hw;
         assert validSysState(s');

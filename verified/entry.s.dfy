@@ -131,7 +131,6 @@ predicate preEntryEnter(s:SysState,s':SysState,
 
     s'.g.g_cur_dispatcher == dispPage &&
 
-    bankedRegsPreserved(s.hw, s'.hw) &&
     WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, l1p)
 }
 
