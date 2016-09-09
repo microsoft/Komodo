@@ -1,3 +1,5 @@
+include "nlarith.s.dfy"
+
 lemma {:axiom} lemma_BitIntEquiv(b:bv32, i:int)
     requires i == b as int || (0 <= i < 0x1_0000_0000 && b == i as bv32)
     ensures i == b as int && b == i as bv32
@@ -28,6 +30,11 @@ function BitsAsInt(b:bv32): int
 
 /* Z3 gets hopelessly lost thinking about bitwise operations, so we
  * wrap them in opaque functions */
+function {:opaque} BitAdd(x:bv32, y:bv32): bv32
+{
+    x + y
+}
+
 function {:opaque} BitAnd(x:bv32, y:bv32): bv32
 {
     x & y
@@ -67,7 +74,7 @@ function {:opaque} BitNot(x:bv32): bv32
 
 lemma {:axiom} lemma_BitAddEquiv(x:bv32, y:bv32)
     requires BitsAsInt(x) + BitsAsInt(y) < 0x1_0000_0000
-    ensures BitsAsInt(x + y) == BitsAsInt(x) + BitsAsInt(y)
+    ensures BitsAsInt(BitAdd(x, y)) == BitsAsInt(x) + BitsAsInt(y)
 
 lemma {:axiom} lemma_BitSubEquiv(x:bv32, y:bv32)
     requires BitsAsInt(x) - BitsAsInt(y) >= 0
@@ -120,16 +127,6 @@ function {:opaque} BitmaskHigh(bitpos:int): bv32
 {
     BitNot(BitmaskLow(bitpos))
 }
-
-lemma {:axiom} lemma_MulModZero(a:int, b:int)
-    requires b > 0
-    ensures (a * b) % b == 0
-/* TODO: prove this without /noNLarith flag */
-
-lemma {:axiom} lemma_DivMulLessThan(a:int, b:int)
-    requires b > 0
-    ensures (a / b) * b <= a
-/* TODO: prove this without /noNLarith flag */
 
 lemma {:axiom} lemma_Bitmask(b:bv32, bitpos:int)
     requires 0 <= bitpos < 32
@@ -201,15 +198,4 @@ function BitwiseMaskHigh(i:int, bitpos:int): int
     lemma_BitmaskAsInt(i, bitpos);
     lemma_pow2_properties(bitpos);
     BitsAsInt(BitAnd(IntAsBits(i), BitmaskHigh(bitpos)))
-}
-
-// FIXME: this lemma is here only becuase it's unstable
-// when proved in the context of ARMdef.dfy
-lemma lemma_PageAlignedImpliesWordAligned(addr:int)
-    ensures addr % 0x1000 == 0 ==> addr % 4 == 0
-{
-    if addr % 0x1000 == 0 {
-        assert 0x1000 % 4 == 0;
-        assert addr % 4 == 0;
-    }
 }

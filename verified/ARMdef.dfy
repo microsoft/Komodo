@@ -625,16 +625,16 @@ function method ARM_L2PTE_CONST_BITS(): bv32
 // Functions for bitwise operations
 //-----------------------------------------------------------------------------
 
-function {:opaque} BitwiseXor(x:word, y:word): word
+function BitwiseXor(x:word, y:word): word
     { BitsAsInt(BitXor(IntAsBits(x), IntAsBits(y))) }
 
-function {:opaque} BitwiseAnd(x:word, y:word): word
+function BitwiseAnd(x:word, y:word): word
     { BitsAsInt(BitAnd(IntAsBits(x), IntAsBits(y))) }
 
-function {:opaque} BitwiseOr(x:word, y:word): word
+function BitwiseOr(x:word, y:word): word
     { BitsAsInt(BitOr(IntAsBits(x), IntAsBits(y))) }
 
-function {:opaque} BitwiseNot(x:word): word
+function BitwiseNot(x:word): word
     { BitsAsInt(BitNot(IntAsBits(x))) }
 
 function {:opaque} LeftShift(x:word, amount:word): word

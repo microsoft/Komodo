@@ -37,11 +37,39 @@ procedure fetch_l1pte(
     reveal_pageDbL1PTableCorresponds();
     reveal_pageContentsCorresponds();
     tmp := 16;
+    assert l1index < NR_L1PTES(); // sigh.
     MUL(tmp, l1index, tmp);
     LDR(res, l1pt_va, tmp);
     assert res == MemContents(this.m, l1pteoffset(l1pt_va, l1index, 0));
     assert res == mkL1Pte(pagedb[l1pg].entry.l1pt[l1index], 0);
+    reveal BitOr;
 }
+
+#verbatim
+lemma lemma_BitOrOneIsLikePlus(i: int)
+    requires 0 <= i < 0x1_0000_0000
+    requires i % 2 == 0
+    ensures i + 1 == BitsAsInt(BitOr(IntAsBits(i), 1))
+{
+    var b := IntAsBits(i);
+    forall ensures BitAdd(b, 1) == BitOr(b, 1) {
+        lemma_BitModEquiv(b, 2);
+        assert BitMod(b, 2) == 0;
+        reveal_BitMod();
+        reveal_BitOr();
+        reveal_BitAdd();
+    }
+    lemma_BitAddEquiv(b, 1);
+}
+
+lemma lemma_ARM_L1PTE_Dual(paddr: word)
+    requires paddr % ARM_L2PT_BYTES() == 0
+    ensures ARM_L1PTE(paddr) == paddr + 1
+{
+    assert paddr % 0x400 == 0 && paddr % 2 == 0;
+    lemma_BitOrOneIsLikePlus(paddr);
+}
+#endverbatim
 
 procedure install_l1ptes(
     {:operand} l1pt_va:addr,
@@ -73,6 +101,7 @@ procedure install_l1ptes(
         pageDbCorresponds(this.m, pagedb);
 {
     pagedb := pagedb_in;
+    reveal BitOr;
 
     ghost var oldpg := extractPage(old(this).m, l1pg);
     forall :: pageDbL1PTableCorresponds(l1pg, pagedb[l1pg].entry, oldpg)
@@ -85,16 +114,19 @@ procedure install_l1ptes(
     assert forall i :: 0 <= i < NR_L1PTES() && i != l1index
         ==> newl1pt.l1pt[i] == oldl1pt.l1pt[i];
 
+    ghost var l2base := page_paddr(l2_pg);
     page_paddr_impl(l2_pg,l2_pg,tmp);
 
     tmp := 16;
     MUL(l1index, l1index, tmp);
 
-    ADD(l2_pg, l2_pg, 1);
+    ORR(l2_pg, l2_pg, 1);
+    lemma_ARM_L1PTE_Dual(l2base);
     assert l2_pg == mkL1Pte(Just(old(l2_pg)), 0);
     STR(l2_pg, l1pt_va, l1index);
 
     ADD(l1index, l1index, 4);
+    lemma_ARM_L1PTE_Dual(l2base + 1 * ARM_L2PT_BYTES());
     ADD(l2_pg, l2_pg, sp_op_const(ARM_L2PT_BYTES()));
     assert l2_pg == mkL1Pte(Just(old(l2_pg)), 1);
     STR(l2_pg, l1pt_va, l1index);
@@ -102,11 +134,13 @@ procedure install_l1ptes(
     assert RegPreservingExcept(old(this),this,set(@l1index, @l2_pg, @tmp));
 
     ADD(l1index, l1index, 4);
+    lemma_ARM_L1PTE_Dual(l2base + 2 * ARM_L2PT_BYTES());
     ADD(l2_pg, l2_pg, sp_op_const(ARM_L2PT_BYTES()));
     assert l2_pg == mkL1Pte(Just(old(l2_pg)), 2);
     STR(l2_pg, l1pt_va, l1index);
 
     ADD(l1index, l1index, 4);
+    lemma_ARM_L1PTE_Dual(l2base + 3 * ARM_L2PT_BYTES());
     ADD(l2_pg, l2_pg, sp_op_const(ARM_L2PT_BYTES()));
     assert l2_pg == mkL1Pte(Just(old(l2_pg)), 3);
     STR(l2_pg, l1pt_va, l1index);
@@ -251,6 +285,8 @@ procedure kom_smc_init_l2ptable(
         LDRglobal(r4, PageDb(), r12, r4);
 
         forall :: r4 == pageDbEntryTypeVal(pagedb[as_page]) {
+            assert extractPageDbEntry(this.m, as_page)[0] == r4;
+            // extractPageDbToAbstractOne(this.m, as_page, PAGEDB_ENTRY_TYPE());
             reveal_pageDbEntryCorresponds();
         }
 
