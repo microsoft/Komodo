@@ -6,8 +6,7 @@ include "abstate.s.dfy"
 
 predicate nonStoppedL1(d:PageDb, l1:PageNr)
 {
-    validL1PTPage(d, l1) && (validPageDbImpliesWellFormed(d);
-        !hasStoppedAddrspace(d, l1))
+    validL1PTPage(d, l1) && !hasStoppedAddrspace(d, l1)
 }
 
 predicate nonStoppedDispatcher(d:PageDb, p:PageNr)
@@ -268,11 +267,8 @@ predicate WSMemInvariantExceptAddrspaceAtPage(hw:state, hw':state,
         d:PageDb, l1p:PageNr)
     requires ValidState(hw) && ValidState(hw') && nonStoppedL1(d, l1p)
 {
-    (forall m:addr :: m in hw.m.addresses <==> m in hw'.m.addresses) &&
-    //TODO: exclude CurAddrspace??? hw.m.globals == hw'.m.globals &&
-    (forall i | i in hw.m.addresses && address_is_secure(i) && 
-        !memSWrInAddrspace(d, l1p, i) ::  
-            hw.m.addresses[i] == hw'.m.addresses[i])
+    forall a | ValidMem(a) && address_is_secure(a) && !memSWrInAddrspace(d, l1p, a) ::
+        MemContents(hw.m, a) == MemContents(hw'.m, a)
 }
 
 
@@ -298,10 +294,7 @@ predicate memSWrInAddrspace(d:PageDb, l1p:PageNr, m: addr)
 // is the page secure, writeable, and in the L2PT
 predicate pageSWrInL2PT(l2pt:seq<L2PTE>, p:PageNr)
 {
-    exists l2pte :: l2pte in l2pt && (match l2pte
-        case NoMapping => false
-        case SecureMapping(p', w, e) => w && p' == p
-        case InsecureMapping(p',w) => false)
+    exists pte :: pte in l2pt && pte.SecureMapping? && pte.page == p && pte.write
 }
 
 predicate equivalentExceptPage(d:PageDb, d':PageDb, p:PageNr)
