@@ -597,15 +597,15 @@ function ExtractAbsL2PTE(pteword:word): Maybe<Maybe<AbsPTE>>
         r.Just? && fromJust(r).Just? ==> WellformedAbsPTE(fromJust(fromJust(r)))
 {
     var pte := IntAsBits(pteword);
-    var typebits := pte & 0x3;
+    var typebits := BitAnd(pte, 0x3);
     // if the type is zero, it's an invalid entry, which is fine (maps nothing)
     if typebits == 0 then Just(Nothing) else
     // large pages aren't supported
     if typebits == 1 then Nothing else
-    var lowbits := pte & 0xfdfc;
+    var lowbits := BitAnd(pte, 0xfdfc);
     if lowbits != ARM_L2PTE_CONST_BITS() then Nothing else
-    var exec := pte & ARM_L2PTE_NX_BIT() == 0;
-    var write := pte & ARM_L2PTE_RO_BIT() == 0;
+    var exec := BitAnd(pte, ARM_L2PTE_NX_BIT()) == 0;
+    var write := BitAnd(pte, ARM_L2PTE_RO_BIT()) == 0;
     var pagebase := BitwiseMaskHigh(pteword, 12); // BitwiseAnd(pteword, 0xfffff000);
     assert PageAligned(pagebase);
     if !isUInt32(pagebase + PhysBase()) then Nothing else
