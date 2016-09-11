@@ -222,6 +222,141 @@ lemma exceptionHandledValidPageDb(s:SysState)
         assert validPageDb(d');
 }
 
+/*
+lemma enterUserspacePreservesGlobals(s:state,r:state)
+    requires ValidState(s) && evalEnterUserspace(s,r)
+    ensures  s.m.globals == r.m.globals
+{
+}
+
+lemma userspaceExecutionPreservesGlobals(s:state,r:state)
+    requires ValidState(s) && evalUserspaceExecution(s,r)
+    ensures  s.m.globals == r.m.globals
+{
+}
+
+lemma exceptionTakenPreservesGlobals(s:state, ex:exception, r:state)
+    requires ValidState(s) && evalExceptionTaken(s, ex, r)
+    ensures  s.m.globals == r.m.globals
+{
+}
+
+lemma appInvariantPreservesGlobals(s:state,r:state)
+    requires ValidState(s) &&
+        ApplicationUsermodeContinuationInvariant(s, r)
+    ensures  s.m.globals == r.m.globals
+{
+}
+
+lemma evalMOVSPCLRUCPreservesGlobals(s:state, r:state)
+    requires AppStatePred(s) && evalMOVSPCLRUC(s, r)
+    ensures  s.m.globals == r.m.globals
+{
+
+    forall ( ex, s2, s3, s4 | ValidState(s2) && ValidState(s3) && ValidState(s4)
+        && evalEnterUserspace(s, s2)
+        && evalUserspaceExecution(s2, s3)
+        && evalExceptionTaken(s3, ex, s4)
+        && ApplicationUsermodeContinuationInvariant(s4, r)
+        && r.ok )
+    ensures s.m.globals == r.m.globals
+    {
+        enterUserspacePreservesGlobals(s,s2);
+        userspaceExecutionPreservesGlobals(s2,s3);
+        exceptionTakenPreservesGlobals(s3,ex,s4);
+        appInvariantPreservesGlobals(s4,r);
+    }
+}
+*/
+
+lemma enterUserspacePreservesPageDb(d:PageDb,s:state,s':state)
+    requires SaneState(s) && SaneState(s') && validPageDb(d)
+    requires evalEnterUserspace(s, s')
+    requires pageDbCorresponds(s.m, d)
+    ensures  pageDbCorresponds(s'.m, d)
+{
+    reveal_PageDb();
+    reveal_ValidMemState();
+    reveal_pageDbEntryCorresponds();
+    reveal_pageContentsCorresponds();
+}
+
+lemma userspaceHavocPreservesPageDb(d:PageDb,s:state,s':state)
+    requires SaneState(s) && SaneState(s') && validPageDb(d)
+    requires evalUserspaceExecution(s,s')
+    requires pageDbCorresponds(s.m,  d)
+    ensures  pageDbCorresponds(s'.m, d)
+{
+    reveal_PageDb();
+    reveal_ValidMemState();
+    reveal_pageDbEntryCorresponds();
+    reveal_pageContentsCorresponds();
+
+    forall ( p | validPageNr(p) )
+        ensures pageDbEntryCorresponds(d[p], extractPageDbEntry(s'.m,p));
+        ensures pageContentsCorresponds(p, d[p], extractPage(s'.m, p));
+    {
+        assert extractPageDbEntry(s.m, p) == extractPageDbEntry(s'.m, p);
+        PageDbCorrespondsImpliesEntryCorresponds(s.m, d, p);
+        assert pageDbEntryCorresponds(d[p], extractPageDbEntry(s.m, p));
+        
+        assert extractPage(s.m, p) == extractPage(s'.m, p);
+        assert pageContentsCorresponds(p, d[p], extractPage(s.m, p));
+    }
+}
+
+lemma exceptionTakenPreservesPageDb(d:PageDb,s:state,ex:exception,s':state)
+    requires SaneState(s) && SaneState(s') && validPageDb(d)
+    requires evalExceptionTaken(s, ex, s')
+    requires pageDbCorresponds(s.m, d)
+    ensures  pageDbCorresponds(s'.m, d)
+{
+    reveal_PageDb();
+    reveal_ValidMemState();
+    reveal_pageDbEntryCorresponds();
+    reveal_pageContentsCorresponds();
+}
+
+lemma appInvariantPreservesPageDb(d:PageDb,s:state,s':state)
+    requires SaneState(s) && SaneState(s') && validPageDb(d)
+    requires ApplicationUsermodeContinuationInvariant(s, s')
+    requires pageDbCorresponds(s.m , d)
+    ensures  pageDbCorresponds(s'.m, d)
+{
+    reveal_PageDb();
+    reveal_ValidMemState();
+    reveal_pageDbEntryCorresponds();
+    reveal_pageContentsCorresponds();
+}
+
+
+lemma evalMOVSPCLRUCPreservesPageDb(d:PageDb, s:state, r:state)
+    requires SaneState(s) && SaneState(r) && validPageDb(d)
+    requires thisIsKomodo()
+    requires evalMOVSPCLRUC(s, r) && pageDbCorresponds(s.m, d)
+    ensures  pageDbCorresponds(r.m, d)
+
+{
+    reveal_PageDb();
+    reveal_ValidMemState();
+    reveal_pageDbEntryCorresponds();
+    reveal_pageContentsCorresponds();
+
+    forall ( ex, s2, s3, s4 | ValidState(s2) && ValidState(s3) && ValidState(s4)
+        && evalEnterUserspace(s, s2)
+        && evalUserspaceExecution(s2, s3)
+        && evalExceptionTaken(s3, ex, s4)
+        && ApplicationUsermodeContinuationInvariant(s4, r)
+        && r.ok )
+        ensures  pageDbCorresponds(r.m, d)
+    {
+        enterUserspacePreservesPageDb(d, s,  s2);
+        userspaceHavocPreservesPageDb(d, s2, s3); 
+        exceptionTakenPreservesPageDb(d, s3, ex, s4);
+        appInvariantPreservesPageDb(d, s4, r);
+    }
+}
+
 lemma MemInvarSubsumption(s:SysState,s':SysState,p:PageNr)
     requires validSysState(s) && validSysState(s') && nonStoppedL1(s.d, p)
     requires AllMemInvariant(s.hw,s'.hw) && s.d == s'.d

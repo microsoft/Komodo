@@ -229,10 +229,9 @@ function exceptionHandled(s:SysState) : (word, word, PageDb)
         if s.hw.conf.ex.ExIRQ? || s.hw.conf.ex.ExFIQ? then
             (KOM_ERR_INTERRUPTED(), 0, d')
         else
-            assert s.hw.conf.ex.ExAbt? || s.hw.conf.ex.ExUnd?;
+            assert s.hw.conf.ex.ExAbt? || s.hw.conf.ex.ExUnd? ||
+                s.hw.conf.ex.ExUnd?;
             (KOM_ERR_FAULT(), 0, d')
-
-    // TODO add undef exception
 }
 
 //-----------------------------------------------------------------------------

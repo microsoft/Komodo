@@ -430,11 +430,23 @@ function havocPages(pages:set<addr>, s:memmap, r:memmap): memmap
     (map m | m in s :: if BitwiseAnd(m, 0xffff_f000) in pages then r[m] else s[m])
 }
 
+// XXX: To be defined by applicaiton code. (For Komodo this is SaneMem)
+// This is used to prove that the ARMdef spec of evalMOVSPCLRUC refines
+// the relevant part of entry.s.dfy
+predicate AppStatePred(s:state)
+    ensures AppStatePred(s) ==> ValidState(s)
+
 // XXX: To be defined by application code
 predicate ApplicationUsermodeContinuationInvariant(s:state, r:state)
     requires ValidState(s)
-    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> ValidState(r)
+    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> AppStatePred(r)
     ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> r.ok
+    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==>
+        s.m.globals == r.m.globals
+    // XXX This will most likely need to be relaxed later. For now
+    // this lets us prove evalMOVSPCLRUCPreservesPageDb
+    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==>
+        s.m.addresses == r.m.addresses
 
 //-----------------------------------------------------------------------------
 // Model of page tables for userspace execution
@@ -852,6 +864,7 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidMcrMrcOperand(s, dst) &&
             ValidRegOperand(src)
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE =>
+            AppStatePred(s) &&
             ValidModeChange'(s, User) && spsr_of_state(s).m == User
 }
 
@@ -913,10 +926,10 @@ predicate evalIns(ins:ins, s:state, r:state)
 }
 
 predicate evalMOVSPCLRUC(s:state, r:state)
-    requires ValidState(s)
-    ensures  evalMOVSPCLRUC(s, r) ==> ValidState(r) && r.ok
+    requires AppStatePred(s)
+    ensures  evalMOVSPCLRUC(s, r) ==> AppStatePred(r) && r.ok
 {
-    exists ex, s2, s3, s4 :: ValidState(s2) && ValidState(s3) && ValidState(s4)
+    exists ex, s2, s3, s4 :: AppStatePred(s2) && AppStatePred(s3) && AppStatePred(s4)
         && evalEnterUserspace(s, s2)
         && evalUserspaceExecution(s2, s3)
         && evalExceptionTaken(s3, ex, s4)

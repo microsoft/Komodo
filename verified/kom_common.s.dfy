@@ -139,6 +139,13 @@ predicate SaneConstants()
     && SecurePhysBaseOp() != PageDb()
     && SecurePhysBaseOp() != CurAddrspaceOp()
     && CurAddrspaceOp() != PageDb()
+    && forall s, r | ValidState(s) :: ApplicationUsermodeContinuationInvariant(s, r)
+        <==> ( s == r)
+}
+
+predicate thisIsKomodo()
+{
+    forall s :: AppStatePred(s) <==> SaneState(s)
 }
 
 predicate SaneState(s:state)

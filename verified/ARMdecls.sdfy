@@ -306,7 +306,7 @@ MCR({:operand} dst:int, {:operand} src:int)
 procedure {:instruction Ins(MOVS_PCLR_TO_USERMODE_AND_CONTINUE)}
 MOVS_PCLR_TO_USERMODE_AND_CONTINUE()
     requires/ensures
-        ValidState(this);
+        AppStatePred(this);
     requires 
         ValidModeChange'(this, User);
         spsr_of_state(this).m == User;
