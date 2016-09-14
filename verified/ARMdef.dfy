@@ -473,9 +473,9 @@ type AbsL2PTable = seq<Maybe<AbsPTE>>
 datatype AbsPTE = AbsPTE(phys: addr, write: bool, exec: bool)
 
 function method ARM_L1PTES(): int { 1024 }
-function ARM_L1PTABLE_BYTES(): int { ARM_L1PTES() * BytesPerWord() }
+function ARM_L1PTABLE_BYTES(): int { WordsToBytes(ARM_L1PTES()) }
 function method ARM_L2PTES(): int { 256 }
-function ARM_L2PTABLE_BYTES(): int { ARM_L2PTES() * BytesPerWord() }
+function ARM_L2PTABLE_BYTES(): int { WordsToBytes(ARM_L2PTES()) }
 
 predicate WellformedAbsPTable(pt: AbsPTable)
 {
@@ -533,7 +533,7 @@ function ExtractAbsL1PTable(m:memstate, vbase:addr, index:nat): Maybe<AbsPTable>
     if index == ARM_L1PTES() then Just([]) else
     // extract L1 PTE and check its validity
     var pte' := ExtractAbsL1PTE(
-            MemContents(m, vbase + index * BytesPerWord()));
+            MemContents(m, vbase + WordsToBytes(index)));
     if pte'.Nothing? then Nothing else
     var pte := fromJust(pte');
     // extract the rest (recursive step)
@@ -585,8 +585,7 @@ function ExtractAbsL2PTable(m:memstate, vbase:addr, index:nat): Maybe<AbsL2PTabl
     // stopping condition
     if index == ARM_L2PTES() then Just([]) else
     // extract PTE and check its validity
-    var pte := ExtractAbsL2PTE(
-            MemContents(m, vbase + index * BytesPerWord()));
+    var pte := ExtractAbsL2PTE(MemContents(m, vbase + WordsToBytes(index)));
     if pte.Nothing? then Nothing else
     // extract the rest (recursive step)
     var rest := ExtractAbsL2PTable(m, vbase, index + 1);
