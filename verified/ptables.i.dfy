@@ -1,6 +1,79 @@
 include "pagedb.i.dfy"
 include "entry.s.dfy"
 
+// XXX: this is placed at the top of the file to work around timeout
+// instability when verifying it later in the file
+lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
+    requires SaneMem(s)
+    requires PhysBase() == KOM_DIRECTMAP_VBASE()
+    requires validPageDb(d)
+    requires nonStoppedL1(d, l1p)
+    requires pageDbCorresponds(s, d)
+    ensures ValidAbsL1PTable(s, page_monvaddr(l1p))
+    ensures ExtractAbsL1PTable(s, page_monvaddr(l1p)) == mkAbsPTable(d, l1p)
+{
+    var l1pt := d[l1p].entry.l1pt;
+    var l1base := page_monvaddr(l1p);
+
+    assert validL1PTable(d, l1p) by {reveal_validPageDb();}
+    lemma_memstatecontainspage(s, l1p);
+
+    assert ARM_L1PTES() == 4 * NR_L1PTES();
+
+    forall k | 0 <= k < ARM_L1PTES()
+        ensures ValidAbsL1PTEWord(MemContents(s, l1base + WordsToBytes(k)))
+        ensures ExtractAbsL1PTE(MemContents(s, l1base + WordsToBytes(k)))
+            == mkAbsL1PTE(l1pt[k / 4], k % 4)
+    {
+        assert pageDbL1PTableCorresponds(l1p, d[l1p].entry, extractPage(s, l1p))
+            by { reveal_pageContentsCorresponds(); }
+        reveal_pageDbL1PTableCorresponds();
+        lemma_l1ptesmatch(l1pt[k / 4], k % 4);
+    }
+
+    forall k | 0 <= k < ARM_L1PTES() && l1pt[k/4].Just?
+        ensures l2tablesmatch(s, l1pt[k/4].v, d[l1pt[k/4].v].entry)
+        ensures ValidAbsL2PTable(s, mkAbsL1PTE(l1pt[k/4], k%4).v + PhysBase())
+    {
+        var i := k/4;
+        var j := k%4;
+        var l1e := l1pt[i];
+        var l2p := l1e.v;
+        assert validL1PTE(d, l2p);
+        assert pageDbL2PTableCorresponds(l2p, d[l2p].entry, extractPage(s, l2p))
+            by { reveal_pageContentsCorresponds(); }
+        lemma_l2tablesmatch(s, l2p, d[l2p].entry);
+
+        assert 4 * ARM_L2PTABLE_BYTES() == PAGESIZE();
+        assert page_paddr(l2p) < SecurePhysBase() + KOM_SECURE_RESERVE();
+        assert mkAbsL1PTE(l1e, j) == Just(page_paddr(l2p) + j * ARM_L2PTABLE_BYTES());
+        calc {
+            mkAbsL1PTE(l1e, j).v + PhysBase();
+            page_paddr(l2p) + j * ARM_L2PTABLE_BYTES() + PhysBase();
+            page_monvaddr(l2p) + j * ARM_L2PTABLE_BYTES();
+        }
+    }
+
+    assert forall k | 0 <= k < ARM_L1PTES() ::
+        ValidAbsL1PTEWord(MemContents(s, l1base + WordsToBytes(k)));
+    assert ValidAbsL1PTable(s, l1base);
+
+    forall k | 0 <= k < ARM_L1PTES()
+        ensures ExtractAbsL1PTable(s, l1base)[k] == mkAbsPTable(d, l1p)[k]
+    {
+        var i := k/4;
+        var j := k%4;
+        var l1e := l1pt[i];
+        if l1e.Just? {
+            var l2p := l1e.v;
+            assert validL1PTE(d, l2p);
+            assert l2tablesmatch(s, l2p, d[l2p].entry);
+        } else {
+            assert mkAbsPTable(d, l1p)[k] == Nothing;
+        }
+    }
+}
+
 function mkAbsPTE(pte: L2PTE): Maybe<AbsPTE>
     requires PhysBase() == KOM_DIRECTMAP_VBASE()
     ensures WellformedAbsPTE(mkAbsPTE(pte))
@@ -191,77 +264,6 @@ function mkAbsPTable(d:PageDb, l1:PageNr): AbsPTable
     var l1pt := d[l1].entry.l1pt;
     var fn := imap l1e:Maybe<PageNr> | l1e in l1pt :: mkAbsPTable'(d, l1e);
     SeqConcat4(IMapSeqToSeq(l1pt, fn))
-}
-
-lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
-    requires SaneMem(s)
-    requires PhysBase() == KOM_DIRECTMAP_VBASE()
-    requires validPageDb(d)
-    requires nonStoppedL1(d, l1p)
-    requires pageDbCorresponds(s, d)
-    ensures ValidAbsL1PTable(s, page_monvaddr(l1p))
-    ensures ExtractAbsL1PTable(s, page_monvaddr(l1p)) == mkAbsPTable(d, l1p)
-{
-    var l1pt := d[l1p].entry.l1pt;
-    var l1base := page_monvaddr(l1p);
-
-    assert validL1PTable(d, l1p) by {reveal_validPageDb();}
-    lemma_memstatecontainspage(s, l1p);
-
-    assert ARM_L1PTES() == 4 * NR_L1PTES();
-
-    forall k | 0 <= k < ARM_L1PTES()
-        ensures ValidAbsL1PTEWord(MemContents(s, l1base + WordsToBytes(k)))
-        ensures ExtractAbsL1PTE(MemContents(s, l1base + WordsToBytes(k)))
-            == mkAbsL1PTE(l1pt[k / 4], k % 4)
-    {
-        assert pageDbL1PTableCorresponds(l1p, d[l1p].entry, extractPage(s, l1p))
-            by { reveal_pageContentsCorresponds(); }
-        reveal_pageDbL1PTableCorresponds();
-        lemma_l1ptesmatch(l1pt[k / 4], k % 4);
-    }
-
-    forall k | 0 <= k < ARM_L1PTES() && l1pt[k/4].Just?
-        ensures l2tablesmatch(s, l1pt[k/4].v, d[l1pt[k/4].v].entry)
-        ensures ValidAbsL2PTable(s, mkAbsL1PTE(l1pt[k/4], k%4).v + PhysBase())
-    {
-        var i := k/4;
-        var j := k%4;
-        var l1e := l1pt[i];
-        var l2p := l1e.v;
-        assert validL1PTE(d, l2p);
-        assert pageDbL2PTableCorresponds(l2p, d[l2p].entry, extractPage(s, l2p))
-            by { reveal_pageContentsCorresponds(); }
-        lemma_l2tablesmatch(s, l2p, d[l2p].entry);
-
-        assert 4 * ARM_L2PTABLE_BYTES() == PAGESIZE();
-        assert page_paddr(l2p) < SecurePhysBase() + KOM_SECURE_RESERVE();
-        assert mkAbsL1PTE(l1e, j) == Just(page_paddr(l2p) + j * ARM_L2PTABLE_BYTES());
-        calc {
-            mkAbsL1PTE(l1e, j).v + PhysBase();
-            page_paddr(l2p) + j * ARM_L2PTABLE_BYTES() + PhysBase();
-            page_monvaddr(l2p) + j * ARM_L2PTABLE_BYTES();
-        }
-    }
-
-    assert forall k | 0 <= k < ARM_L1PTES() ::
-        ValidAbsL1PTEWord(MemContents(s, l1base + WordsToBytes(k)));
-    assert ValidAbsL1PTable(s, l1base);
-
-    forall k | 0 <= k < ARM_L1PTES()
-        ensures ExtractAbsL1PTable(s, l1base)[k] == mkAbsPTable(d, l1p)[k]
-    {
-        var i := k/4;
-        var j := k%4;
-        var l1e := l1pt[i];
-        if l1e.Just? {
-            var l2p := l1e.v;
-            assert validL1PTE(d, l2p);
-            assert l2tablesmatch(s, l2p, d[l2p].entry);
-        } else {
-            assert mkAbsPTable(d, l1p)[k] == Nothing;
-        }
-    }
 }
 
 lemma UserExecutionMemInvariant(s:state, s':state, d:PageDb, l1:PageNr)
