@@ -35,3 +35,12 @@ function {:opaque} IMapSeqToSeq<T,U>(s:seq<T>, func:imap<T,U>) : seq<U>
     if |s| == 0 then []
     else [func[s[0]]] + IMapSeqToSeq(s[1..], func)
 }
+
+function SeqOfNumbersInRightExclusiveRange(a:int, b:int):seq<int>
+    requires a <= b;
+    ensures |SeqOfNumbersInRightExclusiveRange(a, b)| == b-a;
+    ensures forall i | 0 <= i < b-a :: SeqOfNumbersInRightExclusiveRange(a, b)[i] == a + i
+    decreases b-a;
+{
+    if a == b then [] else [a] + SeqOfNumbersInRightExclusiveRange(a+1, b)
+}

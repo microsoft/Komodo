@@ -177,12 +177,14 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
 function method ARM_L2PT_BYTES(): int { 0x400 }
 function ARM_L1PTE(paddr: word): word
     requires paddr % ARM_L2PT_BYTES() == 0
+    //ensures ValidAbsL1PTEWord(ARM_L1PTE(paddr))
 {
     BitwiseOr(paddr, 1) // type = 1, pxn = 0, ns = 0, domain = 0
 }
 
 function ARM_L2PTE(paddr: word, write: bool, exec: bool): word
     requires PageAligned(paddr)
+    //ensures ValidAbsL2PTEWord(ARM_L2PTE(paddr, write, exec))
 {
     var nxbits:bv32 := if exec then 0 else ARM_L2PTE_NX_BIT();
     var robits:bv32 := if write then 0 else ARM_L2PTE_RO_BIT();
@@ -191,6 +193,7 @@ function ARM_L2PTE(paddr: word, write: bool, exec: bool): word
 
 function mkL1Pte(e: Maybe<PageNr>, subpage:int): int
     requires 0 <= subpage < 4
+    //ensures ValidAbsL1PTEWord(mkL1Pte(e, subpage))
 {
     match e
         case Nothing => 0
@@ -217,6 +220,7 @@ predicate {:opaque} pageDbL1PTableCorresponds(p:PageNr, e:PageDbEntryTyped,
 }
 
 function mkL2Pte(pte: L2PTE): word
+    //ensures ValidAbsL2PTEWord(mkL2Pte(pte))
 {
     match pte
         case SecureMapping(pg, w, x) => ARM_L2PTE(page_paddr(pg), w, x)

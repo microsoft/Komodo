@@ -485,13 +485,12 @@ predicate WellformedAbsPTable(pt: AbsPTable)
 
 predicate WellformedAbsL2PTable(pt: AbsL2PTable)
 {
-    |pt| == ARM_L2PTES() &&
-        forall i :: 0 <= i < |pt| && pt[i].Just? ==> WellformedAbsPTE(fromJust(pt[i]))
+    |pt| == ARM_L2PTES() && forall i :: 0 <= i < |pt| ==> WellformedAbsPTE(pt[i])
 }
 
-predicate WellformedAbsPTE(pte: AbsPTE)
+predicate WellformedAbsPTE(pte: Maybe<AbsPTE>)
 {
-    PageAligned(pte.phys) && isUInt32(pte.phys + PhysBase())
+    pte.Just? ==> PageAligned(pte.v.phys) && isUInt32(pte.v.phys + PhysBase())
 }
 
 function ExtractAbsPageTable(s:state): Maybe<AbsPTable>
@@ -499,10 +498,9 @@ function ExtractAbsPageTable(s:state): Maybe<AbsPTable>
     ensures var r := ExtractAbsPageTable(s);
         r.Just? ==> WellformedAbsPTable(fromJust(r))
 {
-    // reveal_ValidConfig();
-    var vbase:int := s.conf.ttbr0.ptbase + PhysBase();
-    if ValidMemRange(vbase, vbase + ARM_L1PTABLE_BYTES()) then
-        ExtractAbsL1PTable(s.m, vbase, 0)
+    var vbase := s.conf.ttbr0.ptbase + PhysBase();
+    if ValidAbsL1PTable(s.m, vbase) then
+        Just(ExtractAbsL1PTable(s.m, vbase))
     else
         Nothing
 }
@@ -511,86 +509,76 @@ function WritablePagesInTable(pt:AbsPTable): set<addr>
     requires WellformedAbsPTable(pt)
     ensures forall m:addr :: m in WritablePagesInTable(pt) ==> PageAligned(m)
 {
-    (set i, j | 0 <= i < |pt| && pt[i].Just? && 0 <= j < |fromJust(pt[i])|
-        && fromJust(pt[i])[j].Just? && fromJust(fromJust(pt[i])[j]).write
-        :: (var pte := fromJust(fromJust(pt[i])[j]);
-          assert WellformedAbsPTE(pte);
-          pte.phys + PhysBase()))
+    (set i, j | 0 <= i < |pt| && pt[i].Just? && 0 <= j < |pt[i].v|
+        && pt[i].v[j].Just? && pt[i].v[j].v.write
+        :: (assert WellformedAbsPTE(pt[i].v[j]);
+          pt[i].v[j].v.phys + PhysBase()))
 }
 
-function ExtractAbsL1PTable(m:memstate, vbase:addr, index:nat): Maybe<AbsPTable>
+predicate ValidAbsL1PTable(m:memstate, vbase:int)
     requires ValidMemState(m)
-    requires WordAligned(vbase)
-        && ValidMemRange(vbase, vbase + ARM_L1PTABLE_BYTES())
-    requires 0 <= index <= ARM_L1PTES()
-    ensures var r := ExtractAbsL1PTable(m, vbase, index);
-        r.Just? ==> |fromJust(r)| == ARM_L1PTES() - index
-            && forall i :: 0 <= i < |fromJust(r)| && fromJust(r)[i].Just?
-                ==> WellformedAbsL2PTable(fromJust(fromJust(r)[i]))
-    decreases ARM_L1PTES() - index
 {
-    // stopping condition
-    if index == ARM_L1PTES() then Just([]) else
-    // extract L1 PTE and check its validity
-    var pte' := ExtractAbsL1PTE(
-            MemContents(m, vbase + WordsToBytes(index)));
-    if pte'.Nothing? then Nothing else
-    var pte := fromJust(pte');
-    // extract the rest (recursive step)
-    var rest := ExtractAbsL1PTable(m, vbase, index + 1);
-    if rest.Nothing? then Nothing else
-    if pte.Nothing? then
-        Just([Nothing] + fromJust(rest))
-    else
-        // check validity of mem pointed to by L1 PTE
-        var l2vbase := fromJust(pte) + PhysBase();
-        if !ValidMemRange(l2vbase, l2vbase + ARM_L2PTABLE_BYTES()) then Nothing
-        else
-            // extract L2 table that it points to, and check its validity
-            var l2table := ExtractAbsL2PTable(m, l2vbase, 0);
-            if l2table.Nothing? then Nothing
-            else Just([l2table] + fromJust(rest))
+    WordAligned(vbase) && ValidMemRange(vbase, vbase + ARM_L1PTABLE_BYTES())
+    // all L1 PTEs are valid, and all non-zero PTEs point to valid L2 tables
+    && forall i | 0 <= i < ARM_L1PTES() :: (
+        var ptew := MemContents(m, vbase + WordsToBytes(i));
+        ValidAbsL1PTEWord(ptew) &&
+            var ptem := ExtractAbsL1PTE(ptew);
+            ptem.Just? ==> isUInt32(ptem.v + PhysBase()) && ValidAbsL2PTable(m, ptem.v + PhysBase()))
+}
+
+function ExtractAbsL1PTable(m:memstate, vbase:addr): AbsPTable
+    requires ValidMemState(m)
+    requires ValidAbsL1PTable(m, vbase)
+    ensures WellformedAbsPTable(ExtractAbsL1PTable(m, vbase))
+{
+    var f := imap i | 0 <= i < ARM_L1PTES() :: (
+        var pte := ExtractAbsL1PTE(MemContents(m, vbase + WordsToBytes(i)));
+        if pte.Nothing? then Nothing else Just(ExtractAbsL2PTable(m, pte.v + PhysBase()))
+        );
+    var indices := SeqOfNumbersInRightExclusiveRange(0, ARM_L1PTES());
+    IMapSeqToSeq(indices, f)
 }
 
 /* ARM ref B3.5.1 short descriptor format for first-level page table */
-function ExtractAbsL1PTE(pte:word): Maybe<Maybe<addr>>
-    ensures var r := ExtractAbsL1PTE(pte);
-        r.Just? && fromJust(r).Just? ==> WordAligned(fromJust(fromJust(r)))
+predicate ValidAbsL1PTEWord(pte:word)
 {
+    var typebits := BitwiseAnd(pte, 0x3);
+    var lowbits := BitwiseAnd(pte, 0x3fc);
     // for now, we just consider secure L1 tables in domain zero
     // (i.e., no other bits set)
-    var typebits := BitwiseAnd(pte, 0x3);
-    var lowbits := BitwiseAnd(pte, 0x3ff);
-    var ptbase := BitwiseMaskHigh(pte, 10); // BitwiseAnd(pte, 0xfffffc00);
-    assert ptbase % 0x400 == 0; // XXX: help Dafny see WordAligned
-    // if the type is zero, it's an invalid entry, which is fine (maps nothing)
-    if typebits == 0 then Just(Nothing)
-    // otherwise, the lowbits must be 1 (it maps a page table)
-    else if lowbits == 1 then Just(Just(ptbase))
-    // anything else is invalid
-    else Nothing
+    typebits == 0 || (typebits == 1 && lowbits == 0)
 }
 
-function ExtractAbsL2PTable(m:memstate, vbase:addr, index:nat): Maybe<AbsL2PTable>
-    requires ValidMemState(m)
-    requires WordAligned(vbase)
-        && ValidMemRange(vbase, vbase + ARM_L2PTABLE_BYTES())
-    requires 0 <= index <= ARM_L2PTES()
-    ensures var r := ExtractAbsL2PTable(m, vbase, index);
-        r.Just? ==> |fromJust(r)| == ARM_L2PTES() - index
-            && forall i :: 0 <= i < |fromJust(r)| && fromJust(r)[i].Just?
-                ==> WellformedAbsPTE(fromJust(fromJust(r)[i]))
-    decreases ARM_L2PTES() - index
+function ExtractAbsL1PTE(pte:word): Maybe<addr>
+    requires ValidAbsL1PTEWord(pte)
+    ensures var r := ExtractAbsL1PTE(pte); r.Just? ==> WordAligned(r.v)
 {
-    // stopping condition
-    if index == ARM_L2PTES() then Just([]) else
-    // extract PTE and check its validity
-    var pte := ExtractAbsL2PTE(MemContents(m, vbase + WordsToBytes(index)));
-    if pte.Nothing? then Nothing else
-    // extract the rest (recursive step)
-    var rest := ExtractAbsL2PTable(m, vbase, index + 1);
-    if rest.Nothing? then Nothing else
-    Just([fromJust(pte)] + fromJust(rest))
+    var typebits := BitwiseAnd(pte, 0x3);
+    // if the type is zero, it's an invalid entry, which is fine (maps nothing)
+    if typebits == 0 then Nothing else
+    // otherwise, it must map a page table
+    var ptbase := BitwiseMaskHigh(pte, 10); // BitwiseAnd(pte, 0xfffffc00);
+    assert ptbase % 0x400 == 0; // XXX: help Dafny see WordAligned
+    Just(ptbase)
+}
+
+predicate ValidAbsL2PTable(m:memstate, vbase:addr)
+    requires ValidMemState(m)
+{
+    WordAligned(vbase)
+        && ValidMemRange(vbase, vbase + ARM_L2PTABLE_BYTES())
+        && forall i | 0 <= i < ARM_L2PTES() :: ValidAbsL2PTEWord(MemContents(m, vbase + WordsToBytes(i)))
+}
+
+function ExtractAbsL2PTable(m:memstate, vbase:addr): AbsL2PTable
+    requires ValidMemState(m)
+    requires ValidAbsL2PTable(m, vbase)
+    ensures WellformedAbsL2PTable(ExtractAbsL2PTable(m, vbase))
+{
+    var f := imap i | 0 <= i < ARM_L2PTES() :: ExtractAbsL2PTE(MemContents(m, vbase + WordsToBytes(i)));
+    var indices := SeqOfNumbersInRightExclusiveRange(0, ARM_L2PTES());
+    IMapSeqToSeq(indices, f)
 }
 
 function method ARM_L2PTE_NX_BIT(): bv32
@@ -603,24 +591,27 @@ function method ARM_L2PTE_RO_BIT(): bv32
     0x200 // AP2
 }
 
-function ExtractAbsL2PTE(pteword:word): Maybe<Maybe<AbsPTE>>
-    ensures var r := ExtractAbsL2PTE(pteword);
-        r.Just? && fromJust(r).Just? ==> WellformedAbsPTE(fromJust(fromJust(r)))
+predicate ValidAbsL2PTEWord(pteword:word)
 {
     var pte := IntAsBits(pteword);
     var typebits := BitAnd(pte, 0x3);
-    // if the type is zero, it's an invalid entry, which is fine (maps nothing)
-    if typebits == 0 then Just(Nothing) else
-    // large pages aren't supported
-    if typebits == 1 then Nothing else
     var lowbits := BitAnd(pte, 0xfdfc);
-    if lowbits != ARM_L2PTE_CONST_BITS() then Nothing else
+    var pagebase := BitwiseMaskHigh(pteword, 12);
+    typebits != 1 && lowbits == ARM_L2PTE_CONST_BITS() && isUInt32(pagebase + PhysBase())
+}
+
+function ExtractAbsL2PTE(pteword:word): Maybe<AbsPTE>
+    requires ValidAbsL2PTEWord(pteword)
+    ensures WellformedAbsPTE(ExtractAbsL2PTE(pteword))
+{
+    var pte := IntAsBits(pteword);
+    var typebits := BitAnd(pte, 0x3);
     var exec := BitAnd(pte, ARM_L2PTE_NX_BIT()) == 0;
     var write := BitAnd(pte, ARM_L2PTE_RO_BIT()) == 0;
     var pagebase := BitwiseMaskHigh(pteword, 12); // BitwiseAnd(pteword, 0xfffff000);
     assert PageAligned(pagebase);
-    if !isUInt32(pagebase + PhysBase()) then Nothing else
-    Just(Just(AbsPTE(pagebase, write, exec)))
+    // if the type is zero, it's an invalid entry, which is fine (maps nothing)
+    if typebits == 0 then Nothing else Just(AbsPTE(pagebase, write, exec))
 }
 
 function method ARM_L2PTE_CONST_BITS(): bv32

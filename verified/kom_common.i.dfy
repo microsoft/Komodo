@@ -91,6 +91,7 @@ predicate NonStackMemPreserving(s:state, r:state)
 function page_paddr(p: PageNr): addr
     requires validPageNr(p)
     ensures PageAligned(page_paddr(p))
+    ensures SecurePhysBase() <= page_paddr(p) < SecurePhysBase() + KOM_SECURE_RESERVE()
 {
     assert PageAligned(PAGESIZE());
     SecurePhysBase() + p * PAGESIZE()
