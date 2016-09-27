@@ -156,30 +156,29 @@ lemma lemma_l2tablesmatch(s:memstate, p:PageNr, e:PageDbEntryTyped)
     }
 }
 
-function mkAbsPTable'(d:PageDb, l1:PageNr, idx:int): AbsPTable
+// concat a sequence of sequences, where all the subsequences have length 4
+function {:opaque} SeqConcat4<T>(s:seq<seq<T>>): seq<T>
+    requires forall i | 0 <= i < |s| :: |s[i]| == 4
+    ensures |SeqConcat4<T>(s)| == 4 * |s|
+    ensures forall i | 0 <= i < 4 * |s| :: SeqConcat4<T>(s)[i] == s[i / 4][i % 4]
+{
+    if |s| == 0 then []
+    else s[0] + SeqConcat4(s[1..])
+}
+
+function mkAbsPTable'(d:PageDb, l1e:Maybe<PageNr>): seq<Maybe<AbsL2PTable>>
     requires PhysBase() == KOM_DIRECTMAP_VBASE()
     requires validPageDb(d)
-    requires nonStoppedL1(d, l1)
-    requires 0 <= idx <= NR_L1PTES()
-    decreases NR_L1PTES() - idx
-    ensures var r := mkAbsPTable'(d, l1, idx);
-        |r| == (NR_L1PTES() - idx) * 4
-        && forall i :: 0 <= i < |r| && r[i].Just? ==> WellformedAbsL2PTable(fromJust(r[i]))
+    requires l1e.Just? ==> d[l1e.v].PageDbEntryTyped? && d[l1e.v].entry.L2PTable?
+        && wellFormedPageDbEntryTyped(d[l1e.v].entry)
+    ensures var r := mkAbsPTable'(d, l1e);
+        |r| == 4 && forall i :: 0 <= i < |r| && r[i].Just? ==> WellformedAbsL2PTable(r[i].v)
 {
-    if idx == NR_L1PTES() then [] else
-        var l2e := d[l1].entry.l1pt[idx];
-        var first :=
-            if l2e.Nothing?
-            then [Nothing, Nothing, Nothing, Nothing]
-            else
-                assert validL1PTable(d, l1) by { reveal_validPageDb(); }
-                var e' := d[fromJust(l2e)];
-                assert e'.PageDbEntryTyped?;
-                var e := e'.entry;
-                assert e.L2PTable? && wellFormedPageDbEntryTyped(e);
-                [Just(mkAbsL2PTable(e, 0)), Just(mkAbsL2PTable(e, 1)),
-                 Just(mkAbsL2PTable(e, 2)), Just(mkAbsL2PTable(e, 3))];
-        first + mkAbsPTable'(d, l1, idx + 1)
+    if l1e.Nothing? then [Nothing, Nothing, Nothing, Nothing]
+    else
+        var e := d[l1e.v].entry;
+        [Just(mkAbsL2PTable(e, 0)), Just(mkAbsL2PTable(e, 1)),
+         Just(mkAbsL2PTable(e, 2)), Just(mkAbsL2PTable(e, 3))]
 }
 
 function mkAbsPTable(d:PageDb, l1:PageNr): AbsPTable
@@ -188,7 +187,10 @@ function mkAbsPTable(d:PageDb, l1:PageNr): AbsPTable
     requires nonStoppedL1(d, l1)
     ensures WellformedAbsPTable(mkAbsPTable(d, l1))
 {
-    mkAbsPTable'(d, l1, 0)
+    assert validL1PTable(d, l1) by { reveal_validPageDb(); }
+    var l1pt := d[l1].entry.l1pt;
+    var fn := imap l1e:Maybe<PageNr> | l1e in l1pt :: mkAbsPTable'(d, l1e);
+    SeqConcat4(IMapSeqToSeq(l1pt, fn))
 }
 
 lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
@@ -206,39 +208,60 @@ lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
     assert validL1PTable(d, l1p) by {reveal_validPageDb();}
     lemma_memstatecontainspage(s, l1p);
 
-    assert pageDbL1PTableCorresponds(l1p, d[l1p].entry, extractPage(s, l1p)) by { reveal_pageContentsCorresponds(); }
-    reveal_pageDbL1PTableCorresponds();
-
     assert ARM_L1PTES() == 4 * NR_L1PTES();
 
-    forall i, j | 0 <= i < NR_L1PTES() && 0 <= j < 4
-        ensures ValidAbsL1PTEWord(MemContents(s, l1base + WordsToBytes(i * 4 + j)))
-        ensures ExtractAbsL1PTE(MemContents(s, l1base + WordsToBytes(i * 4 + j))) == mkAbsL1PTE(l1pt[i], j) {
-        var ptew := MemContents(s, l1pteoffset(l1base, i, j));
-        lemma_l1ptesmatch(l1pt[i], j);
+    forall k | 0 <= k < ARM_L1PTES()
+        ensures ValidAbsL1PTEWord(MemContents(s, l1base + WordsToBytes(k)))
+        ensures ExtractAbsL1PTE(MemContents(s, l1base + WordsToBytes(k)))
+            == mkAbsL1PTE(l1pt[k / 4], k % 4)
+    {
+        assert pageDbL1PTableCorresponds(l1p, d[l1p].entry, extractPage(s, l1p))
+            by { reveal_pageContentsCorresponds(); }
+        reveal_pageDbL1PTableCorresponds();
+        lemma_l1ptesmatch(l1pt[k / 4], k % 4);
     }
 
-    forall i | 0 <= i < NR_L1PTES()
-        ensures l1pt[i].Just? ==> l2tablesmatch(s, l1pt[i].v, d[l1pt[i].v].entry)
+    forall k | 0 <= k < ARM_L1PTES() && l1pt[k/4].Just?
+        ensures l2tablesmatch(s, l1pt[k/4].v, d[l1pt[k/4].v].entry)
+        ensures ValidAbsL2PTable(s, mkAbsL1PTE(l1pt[k/4], k%4).v + PhysBase())
     {
+        var i := k/4;
+        var j := k%4;
+        var l1e := l1pt[i];
+        var l2p := l1e.v;
+        assert validL1PTE(d, l2p);
+        assert pageDbL2PTableCorresponds(l2p, d[l2p].entry, extractPage(s, l2p))
+            by { reveal_pageContentsCorresponds(); }
+        lemma_l2tablesmatch(s, l2p, d[l2p].entry);
+
+        assert 4 * ARM_L2PTABLE_BYTES() == PAGESIZE();
+        assert page_paddr(l2p) < SecurePhysBase() + KOM_SECURE_RESERVE();
+        assert mkAbsL1PTE(l1e, j) == Just(page_paddr(l2p) + j * ARM_L2PTABLE_BYTES());
+        calc {
+            mkAbsL1PTE(l1e, j).v + PhysBase();
+            page_paddr(l2p) + j * ARM_L2PTABLE_BYTES() + PhysBase();
+            page_monvaddr(l2p) + j * ARM_L2PTABLE_BYTES();
+        }
+    }
+
+    assert forall k | 0 <= k < ARM_L1PTES() ::
+        ValidAbsL1PTEWord(MemContents(s, l1base + WordsToBytes(k)));
+    assert ValidAbsL1PTable(s, l1base);
+
+    forall k | 0 <= k < ARM_L1PTES()
+        ensures ExtractAbsL1PTable(s, l1base)[k] == mkAbsPTable(d, l1p)[k]
+    {
+        var i := k/4;
+        var j := k%4;
         var l1e := l1pt[i];
         if l1e.Just? {
             var l2p := l1e.v;
             assert validL1PTE(d, l2p);
-            assert pageDbL2PTableCorresponds(l2p, d[l2p].entry, extractPage(s, l2p)) by { reveal_pageContentsCorresponds(); }
-            lemma_l2tablesmatch(s, l2p, d[l2p].entry);
+            assert l2tablesmatch(s, l2p, d[l2p].entry);
+        } else {
+            assert mkAbsPTable(d, l1p)[k] == Nothing;
         }
     }
-
-    assume false; // TODO!
-
-    assert 4 * ARM_L2PT_BYTES() == PAGESIZE();
-
-    assert forall i | 0 <= i < NR_L1PTES() && l1pt[i].Just?
-        :: page_paddr(l1pt[i].v) < SecurePhysBase() + KOM_SECURE_RESERVE();
-
-    assert forall i, j | 0 <= i < NR_L1PTES() && 0 <= j < 4 && l1pt[i].Just?
-        :: ValidAbsL2PTable(s, mkAbsL1PTE(l1pt[i], j).v + PhysBase());
 }
 
 lemma UserExecutionMemInvariant(s:state, s':state, d:PageDb, l1:PageNr)
