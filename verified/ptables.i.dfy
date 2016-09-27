@@ -26,7 +26,7 @@ function mkAbsL1PTE(e: Maybe<PageNr>, subpage:int): Maybe<addr>
     match e
         case Nothing => Nothing
         case Just(pgNr) =>
-            Just(page_paddr(pgNr) + subpage * ARM_L2PT_BYTES())
+            Just(page_paddr(pgNr) + subpage * ARM_L2PTABLE_BYTES())
 }
 
 lemma {:axiom} lemma_l2ptesmatch(pte: L2PTE)

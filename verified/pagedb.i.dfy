@@ -174,9 +174,8 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
     // TODO: finish concrete representation of dispatcher fields
 }
 
-function method ARM_L2PT_BYTES(): int { 0x400 }
 function ARM_L1PTE(paddr: word): word
-    requires paddr % ARM_L2PT_BYTES() == 0
+    requires paddr % ARM_L2PTABLE_BYTES() == 0
     //ensures ValidAbsL1PTEWord(ARM_L1PTE(paddr))
 {
     BitwiseOr(paddr, 1) // type = 1, pxn = 0, ns = 0, domain = 0
@@ -198,8 +197,8 @@ function mkL1Pte(e: Maybe<PageNr>, subpage:int): int
     match e
         case Nothing => 0
         case Just(pgNr) =>
-            assert ARM_L2PT_BYTES() == 0x400; // grumble
-            ARM_L1PTE(page_paddr(pgNr) + subpage * ARM_L2PT_BYTES())
+            assert ARM_L2PTABLE_BYTES() == 0x400; // grumble
+            ARM_L1PTE(page_paddr(pgNr) + subpage * ARM_L2PTABLE_BYTES())
 }
 
 function l1pteoffset(base: addr, i: int, j: int): addr

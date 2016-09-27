@@ -63,7 +63,7 @@ lemma lemma_BitOrOneIsLikePlus(i: int)
 }
 
 lemma lemma_ARM_L1PTE_Dual(paddr: word)
-    requires paddr % ARM_L2PT_BYTES() == 0
+    requires paddr % ARM_L2PTABLE_BYTES() == 0
     ensures ARM_L1PTE(paddr) == paddr + 1
 {
     assert paddr % 0x400 == 0 && paddr % 2 == 0;
@@ -126,22 +126,22 @@ procedure install_l1ptes(
     STR(l2_pg, l1pt_va, l1index);
 
     ADD(l1index, l1index, 4);
-    lemma_ARM_L1PTE_Dual(l2base + 1 * ARM_L2PT_BYTES());
-    ADD(l2_pg, l2_pg, sp_op_const(ARM_L2PT_BYTES()));
+    lemma_ARM_L1PTE_Dual(l2base + 1 * ARM_L2PTABLE_BYTES());
+    ADD(l2_pg, l2_pg, sp_op_const(ARM_L2PTABLE_BYTES()));
     assert l2_pg == mkL1Pte(Just(old(l2_pg)), 1);
     STR(l2_pg, l1pt_va, l1index);
 
     assert RegPreservingExcept(old(this),this,set(@l1index, @l2_pg, @tmp));
 
     ADD(l1index, l1index, 4);
-    lemma_ARM_L1PTE_Dual(l2base + 2 * ARM_L2PT_BYTES());
-    ADD(l2_pg, l2_pg, sp_op_const(ARM_L2PT_BYTES()));
+    lemma_ARM_L1PTE_Dual(l2base + 2 * ARM_L2PTABLE_BYTES());
+    ADD(l2_pg, l2_pg, sp_op_const(ARM_L2PTABLE_BYTES()));
     assert l2_pg == mkL1Pte(Just(old(l2_pg)), 2);
     STR(l2_pg, l1pt_va, l1index);
 
     ADD(l1index, l1index, 4);
-    lemma_ARM_L1PTE_Dual(l2base + 3 * ARM_L2PT_BYTES());
-    ADD(l2_pg, l2_pg, sp_op_const(ARM_L2PT_BYTES()));
+    lemma_ARM_L1PTE_Dual(l2base + 3 * ARM_L2PTABLE_BYTES());
+    ADD(l2_pg, l2_pg, sp_op_const(ARM_L2PTABLE_BYTES()));
     assert l2_pg == mkL1Pte(Just(old(l2_pg)), 3);
     STR(l2_pg, l1pt_va, l1index);
 

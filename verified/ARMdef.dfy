@@ -473,9 +473,13 @@ type AbsL2PTable = seq<Maybe<AbsPTE>>
 datatype AbsPTE = AbsPTE(phys: addr, write: bool, exec: bool)
 
 function method ARM_L1PTES(): int { 1024 }
-function ARM_L1PTABLE_BYTES(): int { WordsToBytes(ARM_L1PTES()) }
+function method ARM_L1PTABLE_BYTES(): int
+    ensures ARM_L1PTABLE_BYTES() == WordsToBytes(ARM_L1PTES())
+{ 0x1000 }
 function method ARM_L2PTES(): int { 256 }
-function ARM_L2PTABLE_BYTES(): int { WordsToBytes(ARM_L2PTES()) }
+function method ARM_L2PTABLE_BYTES(): int
+    ensures ARM_L2PTABLE_BYTES() == WordsToBytes(ARM_L2PTES())
+{ 0x400 }
 
 predicate WellformedAbsPTable(pt: AbsPTable)
 {
