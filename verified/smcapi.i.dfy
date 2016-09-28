@@ -309,23 +309,34 @@ lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: word,
         
         var pageDbA := allocatePage(pageDbIn, page,
             addrspacePage, DataPage).0;
-       
-        forall() ensures validPageDbEntryTyped(pageDbOut, addrspacePage){
-            var a := addrspacePage;
-            assert pageDbOut[a].entry.refcount == pageDbA[a].entry.refcount;
-            assert addrspaceRefs(pageDbOut, a) == addrspaceRefs(pageDbA, a);
-        }
 
-        forall( n | validPageNr(n)
-            && pageDbOut[n].PageDbEntryTyped?
-            && n != page && n != addrspacePage)
+        forall( n | validPageNr(n) && n != page
+            && pageDbOut[n].PageDbEntryTyped?)
             ensures validPageDbEntryTyped(pageDbOut, n);
         {
             if( pageDbOut[n].entry.Addrspace? ){
                 assert pageDbOut[n].entry.refcount == pageDbA[n].entry.refcount;
                 assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbA, n);
-            } else {
-                // trivial
+            } else if (pageDbOut[n].entry.L2PTable?) {
+                var addrspace := pageDbIn[addrspacePage].entry;
+                var l1 := pageDbIn[addrspace.l1ptnr].entry;
+                var l1pte := fromJust(l1.l1pt[mapping.l1index]);
+                var l2pt := pageDbOut[n].entry.l2pt;
+                if (n == l1pte) {
+                    forall i | 0 <= i < |l2pt|
+                        ensures validL2PTE(pageDbOut, addrspacePage, l2pt[i])
+                    {
+                        if (i == mapping.l2index) {
+                            assert validL2PTE(pageDbOut, addrspacePage, l2pt[i]);
+                        } else {
+                            assert validL2PTable(pageDbIn, n);
+                            assert validL2PTE(pageDbIn, addrspacePage, l2pt[i]);
+                            assert l2pt[i] == pageDbIn[n].entry.l2pt[i];
+                            assert validL2PTE(pageDbOut, addrspacePage, l2pt[i]);
+                        }
+                    }
+                    assert validL2PTable(pageDbOut, n);
+                }
             }
         }
     }
@@ -345,20 +356,32 @@ lemma mapInsecurePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word,
 
     if( err != KOM_ERR_SUCCESS() ){
     } else {        
-        forall() ensures validPageDbEntryTyped(pageDbOut, addrspacePage){
-            var a := addrspacePage;
-            assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
-            assert addrspaceRefs(pageDbOut, a) == addrspaceRefs(pageDbIn, a);
-        }
-
-        forall( n | validPageNr(n) && n != addrspacePage)
-            ensures validPageDbEntry(pageDbOut, n);
+        forall( n | validPageNr(n) && pageDbOut[n].PageDbEntryTyped?)
+            ensures validPageDbEntryTyped(pageDbOut, n);
         {
-            if( pageDbOut[n].PageDbEntryTyped? && pageDbOut[n].entry.Addrspace? ){
+            if( pageDbOut[n].entry.Addrspace? ){
                 assert pageDbOut[n].entry.refcount == pageDbIn[n].entry.refcount;
                 assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
-            } else {
-                // trivial
+            } else if (pageDbOut[n].entry.L2PTable?) {
+                var addrspace := pageDbIn[addrspacePage].entry;
+                var l1 := pageDbIn[addrspace.l1ptnr].entry;
+                var l1pte := fromJust(l1.l1pt[mapping.l1index]);
+                var l2pt := pageDbOut[n].entry.l2pt;
+                if (n == l1pte) {
+                    forall i | 0 <= i < |l2pt|
+                        ensures validL2PTE(pageDbOut, addrspacePage, l2pt[i])
+                    {
+                        if (i == mapping.l2index) {
+                            assert validL2PTE(pageDbOut, addrspacePage, l2pt[i]);
+                        } else {
+                            assert validL2PTable(pageDbIn, n);
+                            assert validL2PTE(pageDbIn, addrspacePage, l2pt[i]);
+                            assert l2pt[i] == pageDbIn[n].entry.l2pt[i];
+                            assert validL2PTE(pageDbOut, addrspacePage, l2pt[i]);
+                        }
+                    }
+                    assert validL2PTable(pageDbOut, n);
+                }
             }
         }
     }

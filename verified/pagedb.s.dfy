@@ -27,6 +27,17 @@ predicate validInsecurePageNr(p: int)
     0 <= p < KOM_PHYSMEM_LIMIT() / PAGESIZE()
 }
 
+predicate physPageIsInsecureRam(physPage: int)
+{
+    physPage * PAGESIZE() < SecurePhysBase()
+}
+
+predicate physPageIsSecure(physPage: int)
+{
+    var paddr := physPage * PAGESIZE();
+    SecurePhysBase() <= paddr < SecurePhysBase() + KOM_SECURE_RESERVE()
+}
+
 datatype PageDbEntryTyped
     = Addrspace(l1ptnr: PageNr, refcount: nat, state: AddrspaceState)
     | Dispatcher(entrypoint:int, entered:bool, ctxt:DispatcherContext)
@@ -220,19 +231,23 @@ predicate validL2PTable(d: PageDb, n: PageNr)
     requires d[n].PageDbEntryTyped? && d[n].entry.L2PTable?
 {
     var a := d[n].addrspace;
-    stoppedAddrspace(d[a]) || (
-        forall pte :: pte in d[n].entry.l2pt && pte.SecureMapping? ==> (
-        // Not needed when addrspace is stopped 
-        // each secure entry is a valid data page belonging to this address space
-            var pg := pte.page;
-            d[pg].PageDbEntryTyped? && d[pg].addrspace == a && validL2PTE(d, pg))
-    )
+    stoppedAddrspace(d[a]) ||
+        // Not needed when addrspace is stopped: valid PTEs
+        forall pte | pte in d[n].entry.l2pt :: validL2PTE(d, a, pte)
 }
 
-predicate validL2PTE(d: PageDb, pte: PageNr)
+predicate validL2PTE(d: PageDb, addrspace: PageNr, pte: L2PTE)
     requires wellFormedPageDb(d)
 {
-    d[pte].PageDbEntryTyped? && d[pte].entry.DataPage?
+    match pte
+        // each secure entry is a valid data page belonging to this address space
+        case SecureMapping(pg, w, x)
+            => d[pg].PageDbEntryTyped? && d[pg].addrspace == addrspace
+                && d[pg].PageDbEntryTyped? && d[pg].entry.DataPage?
+        // each insecure entry points to non-secure RAM
+        case InsecureMapping(pg, w)
+            => physPageIsInsecureRam(pg)
+        case NoMapping => true
 }
 
 /*

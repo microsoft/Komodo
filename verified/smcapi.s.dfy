@@ -6,17 +6,6 @@ predicate pageIsFree(d:PageDb, pg:PageNr)
     pg in d && d[pg].PageDbEntryFree?
 }
 
-predicate physPageIsInsecureRam(physPage: int)
-{
-    physPage * PAGESIZE() < SecurePhysBase()
-}
-
-predicate physPageIsSecure(physPage: int)
-{
-    var paddr := physPage * PAGESIZE();
-    SecurePhysBase() <= paddr < SecurePhysBase() + KOM_SECURE_RESERVE()
-}
-
 predicate l1indexInUse(d: PageDb, a: PageNr, l1index: int)
     requires validPageDb(d)
     requires isAddrspace(d, a)
@@ -48,6 +37,7 @@ function updateL2Pte(pageDbIn: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
     requires isAddrspace(pageDbIn, a)
     requires isValidMappingTarget(pageDbIn, a, mapping) == KOM_ERR_SUCCESS()
     requires pageDbIn[a].entry.state.InitState?
+    requires validL2PTE(pageDbIn, a, l2e)
 {
     reveal_validPageDb();
     var addrspace := pageDbIn[a].entry;
@@ -56,7 +46,6 @@ function updateL2Pte(pageDbIn: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
     var l1pte := fromJust(l1.l1pt[mapping.l1index]);
     var l2pt := pageDbIn[l1pte].entry.l2pt;
     pageDbIn[ l1pte := PageDbEntryTyped(a, L2PTable(l2pt[mapping.l2index := l2e])) ]
-
 }
 
 function isValidMappingTarget(d: PageDb, a: PageNr, mapping: Mapping)
@@ -283,8 +272,7 @@ function smc_mapInsecure(pageDbIn: PageDb, addrspacePage: word,
     else
         var err := isValidMappingTarget(pageDbIn, addrspacePage, mapping);
         if( err != KOM_ERR_SUCCESS() ) then (pageDbIn, err)
-        else if(physPage >= KOM_PHYSMEM_LIMIT() / PAGESIZE()
-            || physPageIsSecure(physPage) ) then
+        else if(!physPageIsInsecureRam(physPage)) then
             (pageDbIn, KOM_ERR_INVALID_PAGENO())
         else
             assert validInsecurePageNr(physPage);
