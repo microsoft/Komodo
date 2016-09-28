@@ -286,6 +286,42 @@ function mkAbsPTable(d:PageDb, l1:PageNr): AbsPTable
     SeqConcat4(IMapSeqToSeq(l1pt, fn))
 }
 
+lemma lemma_PageAlignedAdd(x:int, y:int)
+    requires x % 0x1000 == y % 0x1000 == 0
+    ensures (x + y) % 0x1000 == 0
+{
+    // sigh. why do I need a lemma to prove this??
+}
+
+lemma lemma_WritablePages(d:PageDb, l1p:PageNr, pagebase:addr)
+    requires PhysBase() == KOM_DIRECTMAP_VBASE()
+    requires validPageDb(d)
+    requires nonStoppedL1(d, l1p)
+    requires PageAligned(pagebase) && address_is_secure(pagebase)
+    requires pagebase in WritablePagesInTable(mkAbsPTable(d, l1p))
+    ensures pageSWrInAddrspace(d, l1p, monvaddr_page(pagebase))
+{
+    assert validL1PTable(d, l1p) by { reveal_validPageDb(); }
+    var abspt := mkAbsPTable(d, l1p);
+    var l1pt := d[l1p].entry.l1pt;
+    var i, j :| 0 <= i < ARM_L1PTES() && 0 <= j < ARM_L2PTES()
+        && abspt[i].Just? && abspt[i].v[j].Just? && abspt[i].v[j].v.write
+        && pagebase == abspt[i].v[j].v.phys + PhysBase();
+    var p := monvaddr_page(pagebase);
+    assert p == (abspt[i].v[j].v.phys - SecurePhysBase()) / PAGESIZE();
+    var n := i / 4;
+    assert l1pt[n].Just?;
+    var l2p := l1pt[n].v;
+    assert d[l2p].PageDbEntryTyped? && d[l2p].entry.L2PTable?
+        && wellFormedPageDbEntry(d[l2p]) && validL2PTable(d, l2p)
+        by { reveal_validPageDb(); }
+    var l2pt := d[l2p].entry.l2pt;
+    var pte := l2pt[(i%4)*ARM_L2PTES() + j];
+    assert validL2PTE(d, d[l2p].addrspace, pte);
+    assert mkAbsPTE(pte) == abspt[i].v[j];
+    assert pte.SecureMapping? && pte.write;
+}
+
 lemma UserExecutionMemInvariant(s:state, s':state, d:PageDb, l1:PageNr)
     requires ValidState(s) && SaneMem(s.m)
     requires evalUserspaceExecution(s, s')
@@ -295,6 +331,31 @@ lemma UserExecutionMemInvariant(s:state, s':state, d:PageDb, l1:PageNr)
     requires s.conf.ttbr0.ptbase == page_paddr(l1)
     ensures WSMemInvariantExceptAddrspaceAtPage(s, s', d, l1)
 {
+    var abspt := mkAbsPTable(d, l1);
     lemma_ptablesmatch(s.m, d, l1);
-    assume false; // TODO
+    assert ExtractAbsPageTable(s) == Just(abspt);
+    assert forall a | ValidMem(a)
+        && BitwiseMaskHigh(a, 12) !in WritablePagesInTable(abspt)
+        :: MemContents(s'.m, a) == MemContents(s.m, a);
+    forall a | ValidMem(a) && address_is_secure(a)
+        && BitwiseMaskHigh(a, 12) in WritablePagesInTable(abspt)
+        ensures memSWrInAddrspace(d, l1, a)
+    {
+        // sigh. there's a surprising amount of cruft here to prove
+        // that the page base is secure and on the same page as 'a'
+        var pagebase := BitwiseMaskHigh(a, 12);
+        var securebase := KOM_DIRECTMAP_VBASE() + SecurePhysBase();
+        assert PageAligned(pagebase);
+        assert pagebase == a / PAGESIZE() * PAGESIZE();
+        lemma_PageAlignedAdd(KOM_DIRECTMAP_VBASE(), SecurePhysBase());
+        assert PageAligned(securebase);
+        assert pagebase == a - a % PAGESIZE();
+        if (a / 0x1000 == securebase / 0x1000) {
+            assert pagebase / 0x1000 == securebase / 0x1000;
+        }
+        assert securebase <= pagebase <= a;
+        assert address_is_secure(pagebase);
+
+        lemma_WritablePages(d, l1, pagebase);
+    }
 }
