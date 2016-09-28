@@ -279,7 +279,6 @@ predicate pageSWrInAddrspace(d:PageDb, l1p:PageNr, p:PageNr)
     reveal_validPageDb();
     !hasStoppedAddrspace(d, l1p) && 
     var l1pt := d[l1p].entry.l1pt;
-    l1p == p || Just(p) in l1pt ||
     exists p' :: Just(p') in l1pt && assert validL1PTE(d, p'); pageSWrInL2PT(d[p'].entry.l2pt,p)
 }
 
