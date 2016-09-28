@@ -97,14 +97,16 @@ function page_paddr(p: PageNr): addr
     SecurePhysBase() + p * PAGESIZE()
 }
 
-function page_monvaddr(pagenr:PageNr): addr
-    requires validPageNr(pagenr)
-    ensures PageAligned(page_monvaddr(pagenr))
+function page_monvaddr(p:PageNr): addr
+    requires validPageNr(p)
+    ensures PageAligned(page_monvaddr(p))
+    ensures KOM_DIRECTMAP_VBASE() + SecurePhysBase() <= page_monvaddr(p)
+            < KOM_DIRECTMAP_VBASE() + SecurePhysBase() + KOM_SECURE_RESERVE()
 {
-    assert pagenr < KOM_SECURE_NPAGES();
-    var pa := page_paddr(pagenr);
+    assert p < KOM_SECURE_NPAGES();
+    var pa := page_paddr(p);
     assert pa < SecurePhysBase() + KOM_SECURE_RESERVE();
-    page_paddr(pagenr) + KOM_DIRECTMAP_VBASE()
+    pa + KOM_DIRECTMAP_VBASE()
 }
 
 function monvaddr_page(mva:addr): PageNr
