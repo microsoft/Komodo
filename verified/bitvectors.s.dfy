@@ -192,6 +192,7 @@ function BitwiseMaskHigh(i:int, bitpos:int): int
     requires 0 <= i < 0x1_0000_0000;
     requires 0 <= bitpos < 32;
     ensures 0 <= BitwiseMaskHigh(i, bitpos) < 0x1_0000_0000;
+    ensures BitwiseMaskHigh(i, bitpos) == i / pow2(bitpos) * pow2(bitpos)
     ensures BitwiseMaskHigh(i, bitpos) % pow2(bitpos) == 0
     ensures pow2_properties(bitpos)
 {

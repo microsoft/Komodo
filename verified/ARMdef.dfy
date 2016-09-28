@@ -424,7 +424,7 @@ predicate evalUserspaceExecution(s:state, r:state)
     var pt := ExtractAbsPageTable(s);
     pt.Just? &&
     var pages := WritablePagesInTable(fromJust(pt));
-    ValidState(r) && (forall m:addr :: m in s.m.addresses <==> m in r.m.addresses) &&
+    ValidState(r) &&
     // havoc writable pages and user regs, and take some steps
     r == s.(m := s.m.(addresses := havocPages(pages, s.m.addresses, r.m.addresses)),
             regs := r.regs,
@@ -435,9 +435,10 @@ predicate evalUserspaceExecution(s:state, r:state)
 }
 
 function havocPages(pages:set<addr>, s:memmap, r:memmap): memmap
-    requires forall m :: m in s <==> m in r
+    requires forall a :: ValidMem(a) == (a in s) == (a in r)
 {
-    (map m | m in s :: if BitwiseAnd(m, 0xffff_f000) in pages then r[m] else s[m])
+    // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
+    (map a | ValidMem(a) && a in TheValidAddresses() :: if BitwiseMaskHigh(a, 12) in pages then r[a] else s[a])
 }
 
 // XXX: To be defined by applicaiton code. (For Komodo this is SaneMem)
@@ -468,7 +469,7 @@ predicate PageAligned(addr:int)
     ensures PageAligned(addr) ==> WordAligned(addr)
 {
     lemma_PageAlignedImpliesWordAligned(addr);
-    addr % 0x1000 == 0
+    addr % PAGESIZE() == 0
 }
 
 // We model a trivial memory map (for our own code and page tables)
