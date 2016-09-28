@@ -107,6 +107,15 @@ function page_monvaddr(pagenr:PageNr): addr
     page_paddr(pagenr) + KOM_DIRECTMAP_VBASE()
 }
 
+function monvaddr_page(mva:addr): PageNr
+    requires PageAligned(mva)
+    requires address_is_secure(mva)
+    ensures validPageNr(monvaddr_page(mva))
+    ensures page_monvaddr(monvaddr_page(mva)) == mva
+{
+    (mva - KOM_DIRECTMAP_VBASE() - SecurePhysBase()) / PAGESIZE()
+}
+
 // workarounds for Spartan's lack of Dafny language features
 function specPageDb(t: (PageDb, int)): PageDb { t.0 }
 function specErr(t: (PageDb, int)): int { t.1 }
