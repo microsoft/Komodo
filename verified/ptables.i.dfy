@@ -32,7 +32,7 @@ lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
     }
 
     forall k | 0 <= k < ARM_L1PTES() && l1pt[k/4].Just?
-        ensures l2tablesmatch(s, l1pt[k/4].v, d[l1pt[k/4].v].entry)
+        ensures l2tablesmatch_opaque(s, l1pt[k/4].v, d[l1pt[k/4].v].entry)
         ensures ValidAbsL2PTable(s, mkAbsL1PTE(l1pt[k/4], k%4).v + PhysBase())
     {
         var i := k/4;
@@ -43,6 +43,7 @@ lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
         assert pageDbL2PTableCorresponds(l2p, d[l2p].entry, extractPage(s, l2p))
             by { reveal_pageContentsCorresponds(); }
         lemma_l2tablesmatch(s, l2p, d[l2p].entry);
+        reveal_l2tablesmatch_opaque();
 
         assert 4 * ARM_L2PTABLE_BYTES() == PAGESIZE();
         assert page_paddr(l2p) < SecurePhysBase() + KOM_SECURE_RESERVE();
@@ -61,14 +62,25 @@ lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
     forall k | 0 <= k < ARM_L1PTES()
         ensures ExtractAbsL1PTable(s, l1base)[k] == mkAbsPTable(d, l1p)[k]
     {
-        var i := k/4;
-        var j := k%4;
+        var i := k / 4;
+        var j := k % 4;
         var l1e := l1pt[i];
+        var absl1pte := ExtractAbsL1PTE(MemContents(s, l1base + WordsToBytes(k)));
+        assert absl1pte == mkAbsL1PTE(l1e, j);
         if l1e.Just? {
             var l2p := l1e.v;
             assert validL1PTE(d, l2p);
-            assert l2tablesmatch(s, l2p, d[l2p].entry);
+            assert l2tablesmatch(s, l2p, d[l2p].entry)
+                by {reveal_l2tablesmatch_opaque();}
+            assert absl1pte.Just?;
+            calc {
+                ExtractAbsL1PTable(s, l1base)[k];
+                Just(ExtractAbsL2PTable(s, absl1pte.v + PhysBase()));
+                Just(mkAbsL2PTable(d[l2p].entry, j));
+                mkAbsPTable(d, l1p)[k];
+            }
         } else {
+            assert mkAbsL1PTE(l1e, j) == Nothing;
             assert mkAbsPTable(d, l1p)[k] == Nothing;
         }
     }
@@ -183,6 +195,14 @@ predicate l2tablesmatch(s:memstate, p:PageNr, e:PageDbEntryTyped)
     && forall i | 0 <= i < 4 ::
         ValidAbsL2PTable(s, vbase + i * ARM_L2PTABLE_BYTES())
         && ExtractAbsL2PTable(s, vbase + i * ARM_L2PTABLE_BYTES()) == mkAbsL2PTable(e, i)
+}
+
+predicate {:opaque} l2tablesmatch_opaque(s:memstate, p:PageNr, e:PageDbEntryTyped)
+    requires PhysBase() == KOM_DIRECTMAP_VBASE()
+    requires ValidMemState(s)
+    requires e.L2PTable? && wellFormedPageDbEntryTyped(e)
+{
+    l2tablesmatch(s, p, e)
 }
 
 lemma lemma_l2tablesmatch(s:memstate, p:PageNr, e:PageDbEntryTyped)
