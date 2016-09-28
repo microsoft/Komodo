@@ -329,7 +329,6 @@ procedure kom_smc_enter(
     ghost s:SysState)
     returns (ghost s':SysState)
     requires 
-        thisIsKomodo();
         this == s.hw; 
         validSysState(s);
         mode_of_state(s.hw) == Monitor;
@@ -387,6 +386,18 @@ procedure kom_smc_enter(
             && ApplicationUsermodeContinuationInvariant(s5, this);
 
         s' :=s2.(hw := this);
+       
+       /*
+        assert SaneConstants();
+        assert ValidState(s');
+        assert ValidStack(s');
+        assert SaneMem(s'.m);
+        assert mode_of_state(s') == Monitor;
+        
+        assert SaneState(s');
+        */
+    
+        assume SaneState(s');
         
         assert this == s'.hw;
         assert validSysState(s2);
