@@ -1,19 +1,12 @@
 include "kom_common.s.dfy"
 include "pagedb.s.dfy"
 
-
-predicate physPageInvalid(physPage: word)
-{
-    physPage != 0 && !(physPageIsRam(physPage)
-        && !physPageIsSecure(physPage))
-}
-
 predicate pageIsFree(d:PageDb, pg:PageNr)
 {
     pg in d && d[pg].PageDbEntryFree?
 }
 
-predicate physPageIsRam(physPage: int)
+predicate physPageIsInsecureRam(physPage: int)
 {
     physPage * PAGESIZE() < SecurePhysBase()
 }
@@ -21,8 +14,7 @@ predicate physPageIsRam(physPage: int)
 predicate physPageIsSecure(physPage: int)
 {
     var paddr := physPage * PAGESIZE();
-    SecurePhysBase() <= paddr < SecurePhysBase() +
-        KOM_SECURE_NPAGES() * PAGESIZE()
+    SecurePhysBase() <= paddr < SecurePhysBase() + KOM_SECURE_RESERVE()
 }
 
 predicate l1indexInUse(d: PageDb, a: PageNr, l1index: int)
@@ -265,10 +257,9 @@ function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,
         var err := isValidMappingTarget(pageDbIn, addrspacePage, mapping);
         if( err != KOM_ERR_SUCCESS() ) then (pageDbIn, err)
         else 
-            // I'm not actually sure if this makes sense. I don't know
-            // that physPage is actually modeling a physical page here...
-            // address translation isn't modeled here at all.
-            if( physPageInvalid(physPage) ) then
+            // Check physPage (which is optionally used to populate
+            // the initial contents of the secure page) for validity
+            if (physPage != 0 && !physPageIsInsecureRam(physPage)) then
                 (pageDbIn, KOM_ERR_INVALID_PAGENO())
             else
                 var ap_ret := allocatePage(pageDbIn, page,
