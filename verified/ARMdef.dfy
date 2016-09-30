@@ -16,10 +16,10 @@ lemma lemma_PageAlignedImpliesWordAligned(addr:int)
 // Core types (for a 32-bit word-aligned machine)
 //-----------------------------------------------------------------------------
 predicate isUInt32(i:int) { 0 <= i < 0x1_0000_0000 }
-function BytesPerWord() : int { 4 }
+function  BytesPerWord() : int { 4 }
 predicate WordAligned(i:int) { i % 4 == 0 }
-function WordsToBytes(w:int) : int { 4 * w }
-function BytesToWords(b:int) : int requires WordAligned(b) { b / 4 }
+function  WordsToBytes(w:int) : int { 4 * w }
+function  BytesToWords(b:int) : int requires WordAligned(b) { b / 4 }
 
 type word = x | isUInt32(x)
 type addr = x | isUInt32(x) && WordAligned(x)
@@ -415,7 +415,7 @@ predicate evalEnterUserspace(s:state, r:state)
 predicate evalUserspaceExecution(s:state, r:state)
     requires ValidState(s)
     ensures  evalUserspaceExecution(s, r) ==> ValidState(r) && mode_of_state(r) == User
-    // ensures  evalUserspaceExecution(s, r) ==> AlwaysInvariant(s, r)
+        && (forall m:addr :: m in s.m.addresses <==> m in r.m.addresses)
 {
     reveal_ValidMemState();
     reveal_ValidRegState();
@@ -441,16 +441,10 @@ function havocPages(pages:set<addr>, s:memmap, r:memmap): memmap
     (map a | ValidMem(a) && a in TheValidAddresses() :: if BitwiseMaskHigh(a, 12) in pages then r[a] else s[a])
 }
 
-// XXX: To be defined by applicaiton code. (For Komodo this is SaneMem)
-// This is used to prove that the ARMdef spec of evalMOVSPCLRUC refines
-// the relevant part of entry.s.dfy
-predicate AppStatePred(s:state)
-    ensures AppStatePred(s) ==> ValidState(s)
-
 // XXX: To be defined by application code
 predicate ApplicationUsermodeContinuationInvariant(s:state, r:state)
     requires ValidState(s)
-    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> AppStatePred(r)
+    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> ValidState(r)
     ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> r.ok
     ensures  ApplicationUsermodeContinuationInvariant(s, r) ==>
         s.m.globals == r.m.globals
@@ -869,7 +863,7 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidMcrMrcOperand(s, dst) &&
             ValidRegOperand(src)
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE =>
-            AppStatePred(s) &&
+            ValidState(s) &&
             ValidModeChange'(s, User) && spsr_of_state(s).m == User
 }
 
@@ -931,10 +925,10 @@ predicate evalIns(ins:ins, s:state, r:state)
 }
 
 predicate evalMOVSPCLRUC(s:state, r:state)
-    requires AppStatePred(s)
-    ensures  evalMOVSPCLRUC(s, r) ==> AppStatePred(r) && r.ok
+    requires ValidState(s)
+    ensures  evalMOVSPCLRUC(s, r) ==> ValidState(r) && r.ok
 {
-    exists ex, s2, s3, s4 :: AppStatePred(s2) && AppStatePred(s3) && AppStatePred(s4)
+    exists ex, s2, s3, s4 :: ValidState(s2) && ValidState(s3) && ValidState(s4)
         && evalEnterUserspace(s, s2)
         && evalUserspaceExecution(s2, s3)
         && evalExceptionTaken(s3, ex, s4)

@@ -70,6 +70,7 @@ function extractPage(s:memstate, p:PageNr): memmap
     requires SaneMem(s)
     ensures memContainsPage(extractPage(s,p), p)
 {
+    reveal_ValidMemState();
     // XXX: expanded addrInPage() to help Dafny see a bounded set
     var res := (map m:addr {:trigger addrInPage(m, p), MemContents(s, m)}
         | page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE()

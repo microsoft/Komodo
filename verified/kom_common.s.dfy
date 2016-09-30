@@ -143,11 +143,6 @@ predicate SaneConstants()
         <==> ( s == r)
 }
 
-predicate thisIsKomodo()
-{
-    forall s :: AppStatePred(s) <==> SaneState(s)
-}
-
 predicate SaneState(s:state)
 {
     SaneConstants() && ValidState(s) && ValidStack(s) && SaneMem(s.m) && mode_of_state(s) == Monitor
