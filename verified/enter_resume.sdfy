@@ -1,3 +1,10 @@
+#verbatim
+predicate validSysState'(s:SysState)
+{
+    validSysState(s) && pageDbCorresponds(s.hw.m, s.d)
+}
+#endverbatim
+
 procedure smc_enter_err(
     {:register OReg(R0)} pagenr:int,
     {:register OReg(R1)} arg1:int,
@@ -9,11 +16,11 @@ procedure smc_enter_err(
     requires 
         this == s.hw;
         SaneState(this);
-        validSysState(s);
+        validSysState'(s);
     ensures
         this == s'.hw; 
         SaneState(this);
-        validSysState(s');
+        validSysState'(s');
         RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
     ensures
         tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
@@ -142,11 +149,11 @@ procedure havoc_state(ghost s:SysState)
     returns (ghost s':SysState)
     requires
         this == s.hw;
-        validSysState(s);
+        validSysState'(s);
         SaneState(s.hw);
     ensures
         this == s'.hw;
-        validSysState(s');
+        validSysState'(s');
         SaneState(s'.hw);
 {
     s' := s;
@@ -163,7 +170,7 @@ procedure pre_entry_enter(
     requires
         this == s.hw;
         mode_of_state(s.hw) == Monitor;
-        validSysState(s);
+        validSysState'(s);
         SaneState(s.hw);
         isUInt32(arg1) && isUInt32(arg2) && isUInt32(arg3);
         specErr(smc_enter_premium(s.d, pagenr, arg1, arg2, arg3)) == 
@@ -171,7 +178,7 @@ procedure pre_entry_enter(
         err == KOM_ERR_SUCCESS();
     ensures
         this == s'.hw;
-        validSysState(s');
+        validSysState'(s');
         SaneState(s'.hw);
         //RegPreservingExcept(old(this),this,set(@));
         // tuple(s.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
@@ -288,7 +295,7 @@ procedure pre_entry_enter(
 
     s' := s.(g := s.g.(g_cur_dispatcher := pagenr)).(hw := this);
     assert this == s'.hw;
-    forall :: validSysState(s')
+    forall :: validSysState'(s')
     {
         assert s.d == s'.d;
         assert s'.hw.m.addresses == s.hw.m.addresses;
@@ -331,12 +338,12 @@ procedure kom_smc_enter(
     requires 
         thisIsKomodo();
         this == s.hw; 
-        validSysState(s);
+        validSysState'(s);
         mode_of_state(s.hw) == Monitor;
         SaneState(s.hw);
     ensures
         this == s'.hw;
-        validSysState(s');
+        validSysState'(s');
         tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
         validEnter(s,s',pagenr,arg1,arg2,arg3);
 {
@@ -348,7 +355,7 @@ procedure kom_smc_enter(
     if(err != sp_op_const(KOM_ERR_SUCCESS()) ) {
         val := sp_op_const(0);
         s' := s_err.(hw := this);
-        assert validSysState(s');
+        assert validSysState'(s');
         assert tuple(s'.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
         assert err != KOM_ERR_SUCCESS();
     } else {
@@ -357,7 +364,7 @@ procedure kom_smc_enter(
         ghost var s2;
 
         s1 := s_err.(hw := this);  
-        assert validSysState(s1);
+        assert validSysState'(s1);
         assert this == s1.hw;
         assert SaneState(s1.hw);
         
@@ -389,10 +396,10 @@ procedure kom_smc_enter(
         s' :=s2.(hw := this);
         
         assert this == s'.hw;
-        assert validSysState(s2);
+        assert validSysState'(s2);
         assert s2.d == s'.d;
         evalMOVSPCLRUCPreservesPageDb(s2.d, s2.hw, s'.hw);
-        assert validSysState(s');
+        assert validSysState'(s');
         assert tuple(s'.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
 
         // Proving this part is suspiciously easy...

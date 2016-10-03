@@ -56,11 +56,6 @@ function method KOM_ADDRSPACE_STOPPED():int { 2 }
 //
 //-----------------------------------------------------------------------------
 
-predicate addrInPage(m:addr, p:PageNr)
-{
-    page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE()
-}
-
 predicate memContainsPage(page: memmap, p:PageNr)
 {
     forall m:addr :: addrInPage(m,p) ==> m in page

@@ -77,27 +77,6 @@ predicate NonStackMemPreserving(s:state, r:state)
 // Common functions
 //-----------------------------------------------------------------------------
 
-function page_paddr(p: PageNr): addr
-    requires validPageNr(p)
-    ensures PageAligned(page_paddr(p))
-    ensures SecurePhysBase() <= page_paddr(p) < SecurePhysBase() + KOM_SECURE_RESERVE()
-{
-    assert PageAligned(PAGESIZE());
-    SecurePhysBase() + p * PAGESIZE()
-}
-
-function page_monvaddr(p:PageNr): addr
-    requires validPageNr(p)
-    ensures PageAligned(page_monvaddr(p))
-    ensures KOM_DIRECTMAP_VBASE() + SecurePhysBase() <= page_monvaddr(p)
-            < KOM_DIRECTMAP_VBASE() + SecurePhysBase() + KOM_SECURE_RESERVE()
-{
-    assert p < KOM_SECURE_NPAGES();
-    var pa := page_paddr(p);
-    assert pa < SecurePhysBase() + KOM_SECURE_RESERVE();
-    pa + KOM_DIRECTMAP_VBASE()
-}
-
 function monvaddr_page(mva:addr): PageNr
     requires PageAligned(mva)
     requires address_is_secure(mva)

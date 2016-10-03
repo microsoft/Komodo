@@ -1,4 +1,5 @@
 include "entry.s.dfy"
+include "pagedb.i.dfy"
 
 /*
 predicate weakEquiv(d:PageDb,d':PageDb)
