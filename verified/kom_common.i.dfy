@@ -45,28 +45,17 @@ predicate RegPreservingExcept(s:state, r:state, trashed:set<operand>)
 predicate NonvolatileRegPreserving(s:state, r:state)
     requires ValidState(s) && ValidState(r);
 {
-        OperandContents(s, OReg(R4)) ==
-            OperandContents(r, OReg(R4))
-        &&  OperandContents(s, OReg(R5)) ==
-            OperandContents(r, OReg(R5))
-        &&  OperandContents(s, OReg(R6)) ==
-            OperandContents(r, OReg(R6))
-        &&  OperandContents(s, OReg(R7)) ==
-            OperandContents(r, OReg(R7))
-        &&  OperandContents(s, OReg(R8)) ==
-            OperandContents(r, OReg(R8))
-        &&  OperandContents(s, OReg(R9)) ==
-            OperandContents(r, OReg(R9))
-        &&  OperandContents(s, OReg(R10)) ==
-            OperandContents(r, OReg(R10))
-        &&  OperandContents(s, OReg(R11)) ==
-            OperandContents(r, OReg(R11))
-        &&  OperandContents(s, OReg(R12)) ==
-            OperandContents(r, OReg(R12))
-        &&  OperandContents(s, OSP) ==
-            OperandContents(r, OSP)
-        &&  OperandContents(s, OLR) ==
-            OperandContents(r, OLR)
+    OperandContents(s, OReg(R4)) == OperandContents(r, OReg(R4))
+    && OperandContents(s, OReg(R5)) == OperandContents(r, OReg(R5))
+    && OperandContents(s, OReg(R6)) == OperandContents(r, OReg(R6))
+    && OperandContents(s, OReg(R7)) == OperandContents(r, OReg(R7))
+    && OperandContents(s, OReg(R8)) == OperandContents(r, OReg(R8))
+    && OperandContents(s, OReg(R9)) == OperandContents(r, OReg(R9))
+    && OperandContents(s, OReg(R10)) == OperandContents(r, OReg(R10))
+    && OperandContents(s, OReg(R11)) == OperandContents(r, OReg(R11))
+    && OperandContents(s, OReg(R12)) == OperandContents(r, OReg(R12))
+    && OperandContents(s, OSP) == OperandContents(r, OSP)
+    && OperandContents(s, OLR) == OperandContents(r, OLR)
 }
 
 predicate MemPreservingExcept(s:state, r:state, base:int, limit:int)
@@ -87,27 +76,6 @@ predicate NonStackMemPreserving(s:state, r:state)
 //-----------------------------------------------------------------------------
 // Common functions
 //-----------------------------------------------------------------------------
-
-function page_paddr(p: PageNr): addr
-    requires validPageNr(p)
-    ensures PageAligned(page_paddr(p))
-    ensures SecurePhysBase() <= page_paddr(p) < SecurePhysBase() + KOM_SECURE_RESERVE()
-{
-    assert PageAligned(PAGESIZE());
-    SecurePhysBase() + p * PAGESIZE()
-}
-
-function page_monvaddr(p:PageNr): addr
-    requires validPageNr(p)
-    ensures PageAligned(page_monvaddr(p))
-    ensures KOM_DIRECTMAP_VBASE() + SecurePhysBase() <= page_monvaddr(p)
-            < KOM_DIRECTMAP_VBASE() + SecurePhysBase() + KOM_SECURE_RESERVE()
-{
-    assert p < KOM_SECURE_NPAGES();
-    var pa := page_paddr(p);
-    assert pa < SecurePhysBase() + KOM_SECURE_RESERVE();
-    pa + KOM_DIRECTMAP_VBASE()
-}
 
 function monvaddr_page(mva:addr): PageNr
     requires PageAligned(mva)

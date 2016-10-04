@@ -414,8 +414,8 @@ predicate evalEnterUserspace(s:state, r:state)
 
 predicate evalUserspaceExecution(s:state, r:state)
     requires ValidState(s)
-    ensures  evalUserspaceExecution(s, r) ==> ValidState(r) && mode_of_state(r) == User
-        && (forall m:addr :: m in s.m.addresses <==> m in r.m.addresses)
+    ensures  evalUserspaceExecution(s, r) ==>
+        ValidState(r) && mode_of_state(r) == User;
 {
     reveal_ValidMemState();
     reveal_ValidRegState();

@@ -38,7 +38,6 @@ predicate validERTransition(s:SysState, s':SysState)
     && page_paddr(l1pOfDispatcher(s'.d, sd')) == s'.hw.conf.ttbr0.ptbase
     && WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d,
         l1pOfDispatcher(s.d, sd)))
-
 }
 
 function securePageFromPhysAddr(phys:int): PageNr
@@ -87,7 +86,8 @@ predicate validEnter(s:SysState,s':SysState,
         && entryTransitionEnter(s2, s3)
         && s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d)
         && validERTransition(s4, s')
-        && (s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
+        && (assert mode_of_state(s4.hw) != User;
+           s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
             exceptionHandled(s4))
 }
 
@@ -121,11 +121,6 @@ predicate preEntryEnter(s:SysState,s':SysState,
     validSysState(s') &&  s.d == s'.d &&
     s'.hw.conf.ttbr0.ptbase == page_paddr(l1p) &&
     s'.hw.conf.scr.ns == Secure &&
-// =======
-//    s'.hw.conf.ttbr0.ptbase == page_paddr(l1p) &&
-//    s'.hw.conf.cpsr.m  == User && s'.hw.conf.scr.ns == Secure &&
-// >>>>>>> armdefuser_local
-    
     s'.hw.regs[R0] == a1 && s'.hw.regs[R1] == a2 && s'.hw.regs[R2] == a3 &&
 
     s'.g.g_cur_dispatcher == dispPage &&
@@ -196,11 +191,13 @@ predicate userspaceExecution(hw:state, hw':state, d:PageDb)
     /*ensures (exists s, s' :: validSysState(s) && validSysState(s') &&
         s.d == s'.d && userspaceExecution(s.hw, s'.hw, d)) ==> false */
     requires ValidState(hw) && mode_of_state(hw) == User
+    ensures userspaceExecution(hw, hw', d) ==> mode_of_state(hw') != User
 {
     validERTransitionHW(hw, hw', d)
     && exists s, ex :: evalUserspaceExecution(hw, s)
     && evalExceptionTaken(s, ex, hw')
-    && WSMemInvariantExceptAddrspace(hw, hw', d)
+    // frownyface about this assert -> :(
+    && (assert mode_of_state(hw') != User; WSMemInvariantExceptAddrspace(hw, hw', d))
     && hw.conf.excount + 1 == hw'.conf.excount
     && hw.conf.exstep == hw'.steps
 }

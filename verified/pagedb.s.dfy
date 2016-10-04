@@ -27,6 +27,31 @@ predicate validInsecurePageNr(p: int)
     0 <= p < KOM_PHYSMEM_LIMIT() / PAGESIZE()
 }
 
+function page_paddr(p: PageNr): addr
+    requires validPageNr(p)
+    ensures PageAligned(page_paddr(p))
+    ensures SecurePhysBase() <= page_paddr(p) < SecurePhysBase() + KOM_SECURE_RESERVE()
+{
+    assert PageAligned(PAGESIZE());
+    SecurePhysBase() + p * PAGESIZE()
+}
+
+function page_monvaddr(p: PageNr): addr
+    requires validPageNr(p)
+    ensures PageAligned(page_monvaddr(p))
+    ensures address_is_secure(page_monvaddr(p))
+{
+    assert p < KOM_SECURE_NPAGES();
+    var pa := page_paddr(p);
+    assert pa < SecurePhysBase() + KOM_SECURE_RESERVE();
+    pa + KOM_DIRECTMAP_VBASE()
+}
+
+predicate addrInPage(m:addr, p:PageNr)
+{
+    page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE()
+}
+
 predicate physPageIsInsecureRam(physPage: int)
 {
     physPage * PAGESIZE() < SecurePhysBase()
