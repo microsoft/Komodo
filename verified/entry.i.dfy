@@ -60,8 +60,8 @@ lemma nonWriteablePagesAreSafeFromHavoc(m:addr,s:state,s':state)
         pt.Just? && var pages := WritablePagesInTable(fromJust(pt));
         BitwiseMaskHigh(m, 12) !in pages
     requires m in s.m.addresses
-    ensures reveal_ValidMemState();
-        s'.m.addresses[m] == s.m.addresses[m]
+    ensures (reveal_ValidMemState();
+        s'.m.addresses[m] == s.m.addresses[m])
 {
     reveal_ValidMemState();
     reveal_ValidRegState();
