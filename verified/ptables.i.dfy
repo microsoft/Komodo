@@ -304,7 +304,6 @@ function mkAbsPTable(d:PageDb, l1:PageNr): AbsPTable
     SeqConcat4(IMapSeqToSeq(l1pt, fn))
 }
 
-<<<<<<< HEAD
 lemma lemma_PageAlignedAdd(x:int, y:int)
     requires x % 0x1000 == y % 0x1000 == 0
     ensures (x + y) % 0x1000 == 0
@@ -360,9 +359,9 @@ lemma UserExecutionMemInvariant(s:state, s':state, d:PageDb, l1:PageNr)
         && BitwiseMaskHigh(a, 12) in WritablePagesInTable(abspt)
         ensures memSWrInAddrspace(d, l1, a)
     {
-        // sigh. there's a surprising amount of cruft here to prove
-        // that the page base is secure and on the same page as 'a'
+
         var pagebase := BitwiseMaskHigh(a, 12);
+        /* 
         var securebase := KOM_DIRECTMAP_VBASE() + SecurePhysBase();
         assert PageAligned(pagebase);
         assert pagebase == a / PAGESIZE() * PAGESIZE();
@@ -374,7 +373,32 @@ lemma UserExecutionMemInvariant(s:state, s':state, d:PageDb, l1:PageNr)
         }
         assert securebase <= pagebase <= a;
         assert address_is_secure(pagebase);
-
+        */
+        
+        lemma_bitMaskAddrInPage(a, pagebase, l1);
         lemma_WritablePages(d, l1, pagebase);
     }
 }
+
+lemma lemma_bitMaskAddrInPage(a:addr, pagebase:addr, p:PageNr)
+    requires address_is_secure(a);
+    requires pagebase == BitwiseMaskHigh(a, 12);
+    ensures addrInPage(a, p) <==> addrInPage(pagebase, p);
+    ensures PageAligned(pagebase) && address_is_secure(pagebase)
+{
+    // sigh. there's a surprising amount of cruft here to prove
+    // that the page base is secure and on the same page as 'a'
+    var pagebase := BitwiseMaskHigh(a, 12);
+    var securebase := KOM_DIRECTMAP_VBASE() + SecurePhysBase();
+    assert PageAligned(pagebase);
+    assert pagebase == a / PAGESIZE() * PAGESIZE();
+    lemma_PageAlignedAdd(KOM_DIRECTMAP_VBASE(), SecurePhysBase());
+    assert PageAligned(securebase);
+    assert pagebase == a - a % PAGESIZE();
+    if (a / 0x1000 == securebase / 0x1000) {
+        assert pagebase / 0x1000 == securebase / 0x1000;
+    }
+    assert securebase <= pagebase <= a;
+    assert address_is_secure(pagebase);
+}
+

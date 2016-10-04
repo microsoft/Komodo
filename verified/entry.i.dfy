@@ -40,88 +40,6 @@ lemma exceptionHandledValidPageDb(s:SysState)
         assert validPageDb(d');
 }
 
-/*
-lemma eqAddressesSameExtraction(m:memstate, m':memstate)
-    requires SaneMem(m) && SaneMem(m')
-    requires m.addresses == m'.addresses
-    ensures  secPagesPreserved(m, m')
-{
-}
-
-lemma secAddressesImplSecPagesPres(m:memstate,m':memstate)
-    requires SaneMem(m) && SaneMem(m')
-    requires secAddressesPreserved(m, m')
-    ensures  secPagesPreserved(m, m')
-{
-}
-
-lemma enterUserspacePreservesGlobals(s:state,r:state)
-    requires ValidState(s) && evalEnterUserspace(s,r)
-    ensures  s.m.globals == r.m.globals
-    ensures  s.m.addresses == r.m.addresses
-{
-    reveal_ValidMemState();
-}
-
-lemma userspaceExecutionPreservesGlobals(s:state,r:state)
-    requires ValidState(s) && evalUserspaceExecution(s,r)
-    ensures  s.m.globals == r.m.globals
-    ensures  s.m.addresses == r.m.addresses
-{
-    reveal_ValidMemState();
-    assume false;
-}
-
-lemma exceptionTakenPreservesGlobals(s:state, ex:exception, r:state)
-    requires ValidState(s) && evalExceptionTaken(s, ex, r)
-    ensures  s.m.globals == r.m.globals
-    ensures  s.m.addresses == r.m.addresses
-{
-    reveal_ValidMemState();
-}
-
-lemma appInvariantPreservesGlobals(s:state,r:state)
-    requires ValidState(s) &&
-        ApplicationUsermodeContinuationInvariant(s, r)
-    ensures  s.m.globals == r.m.globals
-    ensures  s.m.addresses == r.m.addresses
-{
-    reveal_ValidMemState();
-}
-
-lemma evalMOVSPCLRUCPreservesGlobals(s:state, r:state)
-    requires ValidState(s)
-    requires SaneMem(s.m) && SaneMem(r.m) && evalMOVSPCLRUC(s, r)
-    ensures  s.m.globals == r.m.globals
-    ensures secPagesPreserved(s.m, r.m)
-{
-
-    reveal_ValidMemState();
-    forall ( ex, s2, s3, s4 | ValidState(s2) && ValidState(s3) && ValidState(s4)
-        && evalEnterUserspace(s, s2)
-        && evalUserspaceExecution(s2, s3)
-        && evalExceptionTaken(s3, ex, s4)
-        && ApplicationUsermodeContinuationInvariant(s4, r)
-        && r.ok )
-    ensures s.m.globals == r.m.globals
-    ensures secPagesPreserved(s.m, r.m)
-    {
-        enterUserspacePreservesGlobals(s,s2);
-        userspaceExecutionPreservesGlobals(s2,s3);
-        exceptionTakenPreservesGlobals(s3,ex,s4);
-        appInvariantPreservesGlobals(s4,r);
-        assert s.m.addresses == r.m.addresses;
-        eqAddressesSameExtraction(s.m, r.m);
-    }
-}
-*/
-
-predicate secPagesPreserved(m:memstate,m':memstate)
-{
-    SaneMem(m) && SaneMem(m') &&
-    forall p | validPageNr(p) :: extractPage(m, p) == extractPage(m', p)
-}
-
 lemma enterUserspacePreservesPageDb(d:PageDb,s:state,s':state)
     requires SaneMem(s.m) && SaneMem(s'.m) && validPageDb(d)
         && ValidState(s) && ValidState(s')
@@ -135,12 +53,12 @@ lemma enterUserspacePreservesPageDb(d:PageDb,s:state,s':state)
     reveal_pageContentsCorresponds();
 }
 
-lemma nonWriteablePagesAreSafe(m:addr,s:state,s':state)
+lemma nonWriteablePagesAreSafeFromHavoc(m:addr,s:state,s':state)
     requires ValidState(s) && ValidState(s')
     requires evalUserspaceExecution(s, s')
     requires var pt := ExtractAbsPageTable(s);
         pt.Just? && var pages := WritablePagesInTable(fromJust(pt));
-        BitwiseAnd(m, 0xffff_f000) !in pages
+        BitwiseMaskHigh(m, 12) !in pages
     requires m in s.m.addresses
     ensures s'.m.addresses[m] == s.m.addresses[m]
 {
@@ -153,15 +71,19 @@ lemma nonWriteablePagesAreSafe(m:addr,s:state,s':state)
     assert havocPages(pages, s.m.addresses, s'.m.addresses)[m] == s.m.addresses[m];
 }
 
-lemma onlyDataPagesAreWritable(p:PageNr,a:addr,d:PageDb,s:state, s':state)
+lemma onlyDataPagesAreWritable(p:PageNr,a:addr,d:PageDb,s:state, s':state,
+    l1:PageNr)
     requires PhysBase() == KOM_DIRECTMAP_VBASE()
     requires ValidState(s) && ValidState(s') && evalUserspaceExecution(s,s')
     requires validPageDb(d) && d[p].PageDbEntryTyped? && !d[p].entry.DataPage?
+    requires SaneMem(s.m) && pageDbCorresponds(s.m, d);
     requires WordAligned(a)
     requires addrInPage(a, p)
+    requires s.conf.ttbr0.ptbase == page_paddr(l1);
+    requires nonStoppedL1(d, l1);
     ensures var pt := ExtractAbsPageTable(s);
         pt.Just? && var pages := WritablePagesInTable(fromJust(pt));
-        BitwiseAnd(a, 0xffff_f000) !in pages
+        BitwiseMaskHigh(a, 12) !in pages
 {
     reveal_validPageDb();
 
@@ -169,31 +91,29 @@ lemma onlyDataPagesAreWritable(p:PageNr,a:addr,d:PageDb,s:state, s':state)
     assert pt.Just?;
     var pages := WritablePagesInTable(fromJust(pt));
     var vbase := s.conf.ttbr0.ptbase + PhysBase();
-    assume address_is_secure(vbase);
-    assume PageAligned(vbase);
+    var pagebase := BitwiseMaskHigh(a, 12);
+
     assert ExtractAbsL1PTable(s.m, vbase) == fromJust(pt);
-    var l1p := monvaddr_page(vbase);
-    assume BitwiseAnd(a,0xffff_f000) in pages <==> a in pages;
-    assume nonStoppedL1(d,l1p);
-    assume fromJust(pt) == mkAbsPTable(d, l1p);
-    assume WritablePagesInTable(fromJust(pt)) ==
-        WritablePagesInTable(mkAbsPTable(d, l1p));
+
+    assert fromJust(pt) == mkAbsPTable(d, l1) by 
+    {
+        lemma_ptablesmatch(s.m, d, l1);    
+    }
+    assert WritablePagesInTable(fromJust(pt)) ==
+        WritablePagesInTable(mkAbsPTable(d, l1));
     
-    
-    forall( a':addr, p':PageNr | a' in WritablePagesInTable(fromJust(pt)) &&
+    forall( a':addr, p':PageNr | 
+        var pagebase' := BitwiseMaskHigh(a', 12);
+        pagebase' in WritablePagesInTable(fromJust(pt)) &&
         addrInPage(a',p') )
         ensures d[p'].PageDbEntryTyped? && d[p'].entry.DataPage?
     {
-        lemma_writablePagesAreDataPages(p', a', d, l1p);
-    }
-    /*
-    assert a in pages ==>
-        d[p].PageDbEntryTyped? && d[p].entry.DataPage? by
-        {
-            assume a in pages <==> a in WritablePagesInTable(mkAbsPTable(d, l1p));
-            lemma_writablePagesAreDataPages(p, a, d, l1p);
+        var pagebase' := BitwiseMaskHigh(a', 12);
+        assert addrInPage(a', p') <==> addrInPage(pagebase', p') by {
+            lemma_bitMaskAddrInPage(a', pagebase', p');
         }
-    */
+        lemma_writablePagesAreDataPages(p', pagebase', d, l1);
+    }
 }
 
 lemma lemma_writablePagesAreDataPages(p:PageNr,a:addr,d:PageDb,l1p:PageNr)
@@ -211,11 +131,13 @@ lemma lemma_writablePagesAreDataPages(p:PageNr,a:addr,d:PageDb,l1p:PageNr)
     lemma_WritablePages(d, l1p, a);
 }
 
-lemma userspaceExecutionPreservesPageDb(d:PageDb,s:state,s':state)
+lemma userspaceExecutionPreservesPageDb(d:PageDb,s:state,s':state, l1:PageNr)
     requires SaneMem(s.m) && SaneMem(s'.m) && validPageDb(d)
         && ValidState(s) && ValidState(s')
     requires evalUserspaceExecution(s,s')
     requires pageDbCorresponds(s.m,  d)
+    requires s.conf.ttbr0.ptbase == page_paddr(l1);
+    requires nonStoppedL1(d, l1);
     ensures  pageDbCorresponds(s'.m, d)
 {
     reveal_PageDb();
@@ -236,25 +158,6 @@ lemma userspaceExecutionPreservesPageDb(d:PageDb,s:state,s':state)
     var pt := ExtractAbsPageTable(s);
     assert pt.Just?;
 
-    /*
-    assert pt == mkAbsPTable(d, s.conf.ttbr0.ptbase + PhysBase()) by
-    {
-        var vbase := s.conf.ttbr0.ptbase + PhysBase();
-        assert ValidAbsL1PTable(s.m, vbase);
-        lemma_ptablesMatch(s, d, vbase);
-    }
-    */
-
-
-    /*
-    forall( a | a in WritablePagesInTable(fromJust(pt)) )
-        ensures  forall p | addrInPage(a, p) ::
-            d[p].PageDbEntryTyped? && d[p].entry.DataPage?
-    {
-        assume false;
-    }
-    */
-
     forall ( p | validPageNr(p) && d[p].PageDbEntryTyped? && 
         !d[p].entry.DataPage? )
         ensures pageContentsCorresponds(p, d[p], extractPage(s'.m, p));
@@ -265,9 +168,13 @@ lemma userspaceExecutionPreservesPageDb(d:PageDb,s:state,s':state)
                var pt := ExtractAbsPageTable(s);
                assert pt.Just?;
                var pages := WritablePagesInTable(fromJust(pt));
-               onlyDataPagesAreWritable(p, a, d, s, s');
-               assert BitwiseAnd(a, 0xffff_f000) !in pages;
-               nonWriteablePagesAreSafe(a, s, s'); 
+
+               onlyDataPagesAreWritable(p, a, d, s, s', l1);
+               assert BitwiseMaskHigh(a, 12) !in pages;
+               nonWriteablePagesAreSafeFromHavoc(a, s, s'); 
+
+               assert s'.m.addresses[a] == s.m.addresses[a];
+
             }
         assert extractPage(s.m, p) == extractPage(s'.m, p);
         assert pageContentsCorresponds(p, d[p], extractPage(s.m, p));
@@ -301,10 +208,12 @@ lemma appInvariantPreservesPageDb(d:PageDb,s:state,s':state)
 }
 
 
-lemma evalMOVSPCLRUCPreservesPageDb(d:PageDb, s:state, r:state)
+lemma evalMOVSPCLRUCPreservesPageDb(d:PageDb, s:state, r:state, l1:PageNr)
     requires ValidState(s) && ValidState(r)
     requires SaneMem(s.m) && SaneMem(r.m) && validPageDb(d)
     requires evalMOVSPCLRUC(s, r) && pageDbCorresponds(s.m, d)
+    requires s.conf.ttbr0.ptbase == page_paddr(l1);
+    requires nonStoppedL1(d, l1);
     ensures  pageDbCorresponds(r.m, d)
 
 {
@@ -322,7 +231,7 @@ lemma evalMOVSPCLRUCPreservesPageDb(d:PageDb, s:state, r:state)
         ensures  pageDbCorresponds(r.m, d)
     {
         enterUserspacePreservesPageDb(d, s,  s2);
-        userspaceExecutionPreservesPageDb(d, s2, s3); 
+        userspaceExecutionPreservesPageDb(d, s2, s3, l1); 
         exceptionTakenPreservesPageDb(d, s3, ex, s4);
         appInvariantPreservesPageDb(d, s4, r);
     }
