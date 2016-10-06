@@ -446,12 +446,12 @@ predicate ApplicationUsermodeContinuationInvariant(s:state, r:state)
     requires ValidState(s)
     ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> ValidState(r)
     ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> r.ok
-    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==>
-        s.m.globals == r.m.globals
+   //  ensures  ApplicationUsermodeContinuationInvariant(s, r) ==>
+   //     s.m.globals == r.m.globals
     // XXX This will most likely need to be relaxed later. For now
     // this lets us prove evalMOVSPCLRUCPreservesPageDb
-    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==>
-        s.m.addresses == r.m.addresses
+   // ensures  ApplicationUsermodeContinuationInvariant(s, r) ==>
+   //     s.m.addresses == r.m.addresses
 
 //-----------------------------------------------------------------------------
 // Model of page tables for userspace execution

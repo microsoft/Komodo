@@ -56,7 +56,7 @@ predicate validERTransitionHW(hw:state, hw':state, d:PageDb)
     ValidState(hw) && ValidState(hw') && hw'.conf.ttbr0 == hw.conf.ttbr0
     && physPageIsSecure(hw.conf.ttbr0.ptbase / PAGESIZE())
     && nonStoppedL1(d, securePageFromPhysAddr(hw.conf.ttbr0.ptbase))
-    && bankedRegsPreserved(hw, hw')
+    //&& bankedRegsPreserved(hw, hw')
 }
 
 predicate validSysStates(sset:set<SysState>) { forall s :: s in sset ==> validSysState(s) }
@@ -81,14 +81,15 @@ predicate validEnter(s:SysState,s':SysState,
     // s4 == s5 except not in exceptional state in s4
     // s6 == s7 except branch has happened
     
-    (exists s2, s3, s4 :: validSysStates({s2,s3,s4})
+    ((exists s2, s3, s4 :: validSysStates({s2,s3,s4})
         && preEntryEnter(s,s2,dispPage,a1,a2,a3)
         && entryTransitionEnter(s2, s3)
         && s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d)
         && validERTransition(s4, s')
-        && (assert mode_of_state(s4.hw) != User;
-           s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
+        && mode_of_state(s4.hw) != User
+        && (s'.hw.regs[R0], s'.hw.regs[R1], s'.d)==
             exceptionHandled(s4))
+    && bankedRegsPreserved(s.hw, s'.hw))
 }
 
 /*
@@ -105,7 +106,13 @@ predicate preEntryEnter(s:SysState,s':SysState,
     dispPage:PageNr,a1:word,a2:word,a3:word)
     requires validSysState(s)
     requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KOM_ERR_SUCCESS()
-    // ensures  nonStoppedL1(s.d, l1pOfDispatcher(s.d, dispPage));
+    //ensures  nonStoppedL1(s'.d, l1pOfDispatcher(s'.d, dispPage));
+    ensures preEntryEnter(s,s',dispPage,a1,a2,a3) ==>
+        PageAligned(s'.hw.conf.ttbr0.ptbase) &&
+        SecurePhysBase() <= s'.hw.conf.ttbr0.ptbase < SecurePhysBase() +
+            KOM_SECURE_NPAGES() * PAGESIZE()
+    ensures preEntryEnter(s,s',dispPage,a1,a2,a3) ==>
+        nonStoppedL1(s'.d, securePageFromPhysAddr(s'.hw.conf.ttbr0.ptbase));
     // ensures (validSysState(s) && validSysState(s') && 
     // preEntryEnter(s,s',dispPage,a1,a2,a3)) ==>false
 {
@@ -197,9 +204,10 @@ predicate userspaceExecution(hw:state, hw':state, d:PageDb)
     && exists s, ex :: evalUserspaceExecution(hw, s)
     && evalExceptionTaken(s, ex, hw')
     // frownyface about this assert -> :(
-    && (assert mode_of_state(hw') != User; WSMemInvariantExceptAddrspace(hw, hw', d))
+    && WSMemInvariantExceptAddrspace(hw, hw', d)
     && hw.conf.excount + 1 == hw'.conf.excount
-    && hw.conf.exstep == hw'.steps
+    && hw'.conf.exstep == hw'.steps
+    && mode_of_state(hw') != User
 }
 
 //-----------------------------------------------------------------------------

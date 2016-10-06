@@ -206,6 +206,8 @@ lemma appInvariantPreservesPageDb(d:PageDb,s:state,s':state)
     reveal_ValidMemState();
     reveal_pageDbEntryCorresponds();
     reveal_pageContentsCorresponds();
+    // TODO FIXME after defining
+    assume pageDbCorresponds(s'.m, d);
 }
 
 

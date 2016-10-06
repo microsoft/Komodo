@@ -139,8 +139,8 @@ predicate SaneConstants()
     && SecurePhysBaseOp() != PageDb()
     && SecurePhysBaseOp() != CurAddrspaceOp()
     && CurAddrspaceOp() != PageDb()
-    && forall s, r | ValidState(s) :: ApplicationUsermodeContinuationInvariant(s, r)
-        <==> ( s == r)
+    // && forall s, r | ValidState(s) :: ApplicationUsermodeContinuationInvariant(s, r)
+    //     <==> ( s == r)
 }
 
 predicate SaneState(s:state)

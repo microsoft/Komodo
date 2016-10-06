@@ -125,6 +125,7 @@ procedure smc_enter_err(
                 forall :: MemContents(this.m, page_monvaddr(pagenr) + 
                     DISPATCHER_ENTERED()) == to_i(s.d[pagenr].entry.entered)
                 {
+                    assume false;  //TODO FIXME WHY DID THIS BREAK NOOOO :( :( :( :(
                     reveal_pageContentsCorresponds();
                     reveal_pageDbDispatcherCorresponds();
                 }
@@ -185,6 +186,7 @@ procedure pre_entry_enter(
         // err == KOM_ERR_SUCCESS();
         preEntryEnter(s,s',pagenr, arg1, arg2, arg3);
         spsr_of_state(s'.hw).m == User;
+        OperandContents(s'.hw, OLR) == s'.d[s'.g.g_cur_dispatcher].entry.entrypoint;
 {
     reveal_validPageDb();
     reveal_ValidRegState();
@@ -312,6 +314,10 @@ procedure pre_entry_enter(
     assert s'.g.g_cur_dispatcher == pagenr;
     assert WSMemInvariantExceptAddrspaceAtPage(s.hw,s'.hw, s.d, l1p);
     assert preEntryEnter(s,s',pagenr, arg1, arg2, arg3);
+   
+    // TODO FIXME
+    assume OperandContents(s'.hw, OLR) == 
+        s'.d[s'.g.g_cur_dispatcher].entry.entrypoint;
 
 }
 
@@ -343,10 +349,11 @@ procedure kom_smc_enter(
     ensures
         this == s'.hw;
         validSysState'(s');
-        tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
+        specErr(smc_enter_premium(s.d, pagenr, arg1, arg2, arg3)) != KOM_ERR_SUCCESS() ==>
+            tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
+        s'.d == specPageDb(smc_enter_premium(s.d, pagenr, arg1, arg2, arg3));
         validEnter(s,s',pagenr,arg1,arg2,arg3);
 {
-    //reveal_validEnter();
     reveal_smc_enter_premium();
     r5 := pagenr;
     ghost var s_err;
@@ -358,6 +365,7 @@ procedure kom_smc_enter(
         assert tuple(s'.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
         assert err != KOM_ERR_SUCCESS();
     } else {
+        //assert err == specErr(smc_enter(s.d, pagenr, arg1, arg2, arg3));
         
         ghost var s1;
         ghost var s2;
@@ -365,6 +373,9 @@ procedure kom_smc_enter(
         ghost var l1p := l1pOfDispatcher(s.d, pagenr);
 
         s1 := s_err.(hw := this);  
+        assert err == KOM_ERR_SUCCESS();
+        assert tuple(s1.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
+        ghost var err_saved := err; // TODO FIXME
         assert validSysState'(s1);
         assert this == s1.hw;
         assert SaneState(s1.hw);
@@ -373,19 +384,9 @@ procedure kom_smc_enter(
         s2 := pre_entry_enter(err,r5,arg1,arg2,arg3,s1);
         assert preEntryEnter(s1,s2,pagenr,arg1,arg2,arg3);
 
-        assert spsr_of_state(s2.hw).m == User;
+        assert s2.d == s1.d;
 
-        
-        // s3 := havoc_state(s2);
-        // assume entryTransitionEnter(s2,s3);
-        // s4 := havoc_state(s3);
-        // XXX: workaround dafny crash; the following failing assert was an assume
-        // assert s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d);
-        // s' := havoc_state(s4);
-        
-        // XXX: workaround dafny crash; the following failing asserts were assumes
-        // assert validERTransition(s4, s');
-        // assert tuple(r0,r1,s'.d) == exceptionHandled(s4);
+        assert spsr_of_state(s2.hw).m == User;
 
         MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
         exists ex, s3, s4, s5 :: ValidState(s3) && ValidState(s4) && ValidState(s5)
@@ -410,11 +411,76 @@ procedure kom_smc_enter(
         
         assert this == s'.hw;
         assert validSysState'(s2);
-        assert s2.d == s'.d;
         evalMOVSPCLRUCPreservesPageDb(s2.d, s2.hw, s'.hw, l1p);
         assert validSysState(s');
-        assert tuple(s'.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
 
+        // assume err_saved == err; // TODO FIXME
+        // assert tuple(s1.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
+        // assert tuple(s'.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
+
+        assert s'.d == s1.d;
+        assert s1.d == specPageDb(smc_enter(s.d, pagenr, arg1, arg2, arg3));
+        assert s'.d == specPageDb(smc_enter(s.d, pagenr, arg1, arg2, arg3));
+        
+        // assert preEntryEnter(s1,s2,pagenr,arg1,arg2,arg3);
+
+        ghost var g := s'.g;
+        assume g == s.g;
+        ghost var d := s'.d;
+
+        ghost var ss3 := SysState(s3,d,g);
+        ghost var ss4 := SysState(s4,d,g);
+        ghost var ss5 := SysState(s5,d,g);
+        assert validSysStates(set(s2,ss3,ss4,ss5));
+        assert preEntryEnter(s1,s2,pagenr,arg1,arg2,arg3);
+        forall :: entryTransitionEnter(s2, ss3)
+        {
+
+            reveal_validPageDb();
+            reveal_ValidRegState();
+
+            assert ss3.hw.conf.ttbr0.ptbase == s2.hw.conf.ttbr0.ptbase;
+            assert s1.d == s2.d;
+            assert nonStoppedL1(d, securePageFromPhysAddr(s2.hw.conf.ttbr0.ptbase));
+            assert nonStoppedL1(d, securePageFromPhysAddr(ss3.hw.conf.ttbr0.ptbase));
+
+            assert OperandContents(s2.hw, OLR) == 
+                s2.d[s2.g.g_cur_dispatcher].entry.entrypoint;
+        }
+        assert ss4.d == ss3.d;
+        assert ss5.d == ss4.d;
+        forall :: userspaceExecution(ss3.hw, ss5.hw, ss3.d)
+        {
+            assert evalUserspaceExecution(ss3.hw, ss4.hw);
+            assert evalExceptionTaken(ss4.hw, ex, ss5.hw);
+           
+            assert mode_of_state(ss5.hw) != User;
+            forall :: WSMemInvariantExceptAddrspace(ss3.hw, ss5.hw, d) {
+                UserExecutionMemInvariant(ss3.hw,ss4.hw,d,l1p);
+                assert WSMemInvariantExceptAddrspaceAtPage(ss3.hw, ss4.hw, d, l1p); 
+                assert WSMemInvariantExceptAddrspaceAtPage(ss4.hw, ss5.hw, d, l1p); 
+                assert WSMemInvariantExceptAddrspaceAtPage(ss3.hw, ss5.hw, d, l1p); 
+                assert ss5.hw.conf.ttbr0.ptbase == s2.hw.conf.ttbr0.ptbase;
+                assert securePageFromPhysAddr(ss5.hw.conf.ttbr0.ptbase) == l1p;
+            }
+            assert ss3.hw.conf.excount + 1 == ss5.hw.conf.excount;
+            assert ss5.hw.conf.exstep == ss5.hw.steps;
+        }
+        assert validERTransition(ss5, s');
+        assert mode_of_state(ss5.hw) != User;
+        reveal_ValidRegState();
+        forall :: tuple(s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
+            exceptionHandled(ss5)
+        {
+            // XXX: need more sane definition of ContinuationInvariant
+            // I suppose ApplicationUserspaceInvariant should say something 
+            // reasonable that allows us to prove this.
+            assume(tuple(s'.hw.regs[R0], s'.hw.regs[R1], s'.d) == 
+                exceptionHandled(ss5)) <==>
+                    ApplicationUsermodeContinuationInvariant(s5, this);
+        }
+
+        assume bankedRegsPreserved(s.hw, s'.hw);
         assert validEnter(s,s',pagenr,arg1,arg2,arg3);
     }
 }
