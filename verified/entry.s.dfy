@@ -61,6 +61,13 @@ predicate validERTransitionHW(hw:state, hw':state, d:PageDb)
 
 predicate validSysStates(sset:set<SysState>) { forall s :: s in sset ==> validSysState(s) }
 
+// This is just here to make verification easier. It allows irrelevant state 
+// (i.e. some regs) to be changed while checking for error conditions.
+predicate errCheck(s:SysState, s':SysState)
+{
+   validSysState(s) && validSysState(s') && s.d == s'.d
+}
+
 predicate validEnter(s:SysState,s':SysState,
     dispPage:word,a1:word,a2:word,a3:word)
     requires validSysState(s)
@@ -68,7 +75,10 @@ predicate validEnter(s:SysState,s':SysState,
 {
     reveal_ValidRegState();
     smc_enter(s.d, dispPage, a1, a2, a3).1 != KOM_ERR_SUCCESS() ||
-    
+   
+
+    /////// These comments are no longer true. States were added, removed,
+    ////// and changed.
     // s1 (s)  : State on entry to the monitor
     // s2      : prior to MOVSPCLR that transitions to userspace
     // s3      : post MOVS State just before start of userspace execution
@@ -81,8 +91,9 @@ predicate validEnter(s:SysState,s':SysState,
     // s4 == s5 except not in exceptional state in s4
     // s6 == s7 except branch has happened
     
-    ((exists s2, s3, s4 :: validSysStates({s2,s3,s4})
-        && preEntryEnter(s,s2,dispPage,a1,a2,a3)
+    ((exists serr, s2, s3, s4 :: validSysStates({serr,s2,s3,s4})
+        && errCheck(s, serr)
+        && preEntryEnter(serr,s2,dispPage,a1,a2,a3)
         && entryTransitionEnter(s2, s3)
         && s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d)
         && validERTransition(s4, s')
