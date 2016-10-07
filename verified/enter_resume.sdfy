@@ -121,7 +121,6 @@ procedure smc_enter_err(
                 forall :: MemContents(this.m, page_monvaddr(pagenr) + 
                     DISPATCHER_ENTERED()) == to_i(s.d[pagenr].entry.entered)
                 {
-                    assume false;  //TODO FIXME WHY DID THIS BREAK NOOOO :( :( :( :(
                     reveal_pageContentsCorresponds();
                     reveal_pageDbDispatcherCorresponds();
                 }
@@ -262,7 +261,7 @@ procedure pre_entry_enter(
         assume false;
     }
     // XXX This was an assert before.
-    assume this.conf.ttbr0.ptbase == page_paddr(l1p);
+    assert this.conf.ttbr0.ptbase == page_paddr(l1p);
     //-------------------------------------------------------------------------
     
     //-------------------------------------------------------------------------
@@ -284,6 +283,25 @@ procedure pre_entry_enter(
     MSR(OSReg(spsr(Monitor)), r10);
     assert spsr_of_state(this).m == User;
     //-------------------------------------------------------------------------
+    
+    //-------------------------------------------------------------------------
+    // Load entrypoint into OLR
+    //-------------------------------------------------------------------------
+    page_monvaddr_impl(r10,pagenr,r11);
+    LDR(r11,r10,sp_op_const(DISPATCHER_ENTRYPOINT()));
+    forall :: r11 == d[pagenr].entry.entrypoint
+    {
+        assert pageDbCorrespondsOnly(this.m,d,pagenr);
+        assert validDispatcherPage(d,pagenr);
+        reveal_pageContentsCorresponds();
+        assert pageContentsCorresponds(pagenr,d[pagenr],
+            extractPage(this.m,pagenr));
+        reveal_pageDbDispatcherCorresponds();
+    }
+    
+    lr := r11;
+    assert OperandContents(this, OLR) ==
+        d[pagenr].entry.entrypoint;
 
     //-------------------------------------------------------------------------
     // Update current dispatcher
@@ -312,7 +330,7 @@ procedure pre_entry_enter(
     assert preEntryEnter(s,s',pagenr, arg1, arg2, arg3);
     
     // TODO this is not actually implemented yet
-    assume OperandContents(s'.hw, OLR) == 
+    assert OperandContents(s'.hw, OLR) == 
         s'.d[s'.g.g_cur_dispatcher].entry.entrypoint;
 
 }
