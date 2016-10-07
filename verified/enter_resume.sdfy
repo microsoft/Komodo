@@ -472,17 +472,16 @@ procedure kom_smc_enter(
         reveal_ValidRegState();
         forall :: tuple(s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
             exceptionHandled(ss5)
+            && validExceptionTransition(ss5,s',ss5.d)
             && validSysState'(s')
         {
             assert AUCIdef();
             assert validSysState(ss5);
             assert ApplicationUsermodeContinuationInvariant(ss5.hw, s'.hw);
-            assert validERTransition(ss5, s') &&
-                mode_of_state(ss5.hw) != User &&
-                tuple(s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
-                    exceptionHandled_premium(ss5) &&
-                    validSysState(s');
-
+            assert validExceptionTransition(ss5,s',ss5.d);
+            assert mode_of_state(ss5.hw) != User;
+            assert tuple(s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
+                    exceptionHandled_premium(ss5);
             assert validSysState'(s');
         }
 
@@ -497,7 +496,7 @@ procedure kom_smc_enter(
         assert entryTransitionEnter(s2, ss3);
         assert ss5.d == ss3.d;
         assert userspaceExecution(ss3.hw, ss5.hw, ss3.d);
-        assert validERTransition(ss5, s');
+        assert validExceptionTransition(ss5, s',ss5.d);
         assert mode_of_state(ss5.hw) != User;
 
         assert validEnter(s,s',pagenr,arg1,arg2,arg3);

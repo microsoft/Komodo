@@ -24,13 +24,17 @@ predicate AUCIdef_inner(s:state, r:state)
 predicate AUCIdef()
 {
     reveal_ValidRegState();
+    // It needed to be separated out like this to prove 
+    // validExceptionTransition
+    (forall s:SysState, r:SysState | validSysState(s) &&
+        ApplicationUsermodeContinuationInvariant(s.hw, r.hw) ::
+            validExceptionTransition(s, r, s.d)) &&
     forall s:SysState, r:SysState | validSysState(s) &&
         ApplicationUsermodeContinuationInvariant(s.hw, r.hw) ::
-            validERTransition(s, r) &&
             mode_of_state(s.hw) != User &&
+            validSysState'(r) &&
             (r.hw.regs[R0], r.hw.regs[R1], r.d) ==
-                exceptionHandled_premium(s) &&
-            validSysState'(r)
+                exceptionHandled_premium(s)
 
 }
 

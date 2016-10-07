@@ -3,6 +3,7 @@ include "ARMdef.dfy"
 include "pagedb.s.dfy"
 include "smcapi.s.dfy"
 include "abstate.s.dfy"
+include "pagedb.i.dfy"
 
 predicate nonStoppedL1(d:PageDb, l1:PageNr)
 {
@@ -74,6 +75,7 @@ predicate validEnter(s:SysState,s':SysState,
     // requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KOM_ERR_SUCCESS()
 {
     reveal_ValidRegState();
+    reveal_validExceptionTransition();
     smc_enter(s.d, dispPage, a1, a2, a3).1 != KOM_ERR_SUCCESS() ||
    
 
@@ -96,8 +98,8 @@ predicate validEnter(s:SysState,s':SysState,
         && preEntryEnter(serr,s2,dispPage,a1,a2,a3)
         && entryTransitionEnter(s2, s3)
         && s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d)
-        && validERTransition(s4, s')
         && mode_of_state(s4.hw) != User
+        && validExceptionTransition(s4, s', s4.d)
         && (s'.hw.regs[R0], s'.hw.regs[R1], s'.d)==
             exceptionHandled(s4))
     && bankedRegsPreserved(s.hw, s'.hw))
@@ -248,6 +250,31 @@ function exceptionHandled(s:SysState) : (word, word, PageDb)
             assert s.hw.conf.ex.ExAbt? || s.hw.conf.ex.ExUnd? ||
                 s.hw.conf.ex.ExUnd?;
             (KOM_ERR_FAULT(), 0, d')
+}
+
+predicate {:opaque} validExceptionTransition(s:SysState, s':SysState, d:PageDb)
+    ensures validExceptionTransition(s,s',d) ==>
+        validSysState(s) && validSysState(s')
+{
+    reveal_validPageDb();
+    reveal_ValidRegState();
+    reveal_ValidMemState();
+    validSysState(s) && validSysState(s') &&
+    (var sd := s.g.g_cur_dispatcher;
+    var sd' := s'.g.g_cur_dispatcher;
+    validERTransitionHW(s.hw, s'.hw, s.d) && sd == sd'
+    && equivalentExceptPage(s.d, s'.d, sd) 
+    && nonStoppedDispatcher(s.d, sd) && nonStoppedDispatcher(s'.d, sd')
+    && page_paddr(l1pOfDispatcher(s.d, sd))  == s.hw.conf.ttbr0.ptbase
+    && page_paddr(l1pOfDispatcher(s'.d, sd')) == s'.hw.conf.ttbr0.ptbase  
+    && (forall g | ValidGlobal(g) && g != PageDb() ::
+        GlobalFullContents(s.hw.m, g) == GlobalFullContents(s'.hw.m, g))
+    && (forall p:PageNr | p != sd ::
+        extractPageDbEntry(s.hw.m, p) == extractPageDbEntry(s'.hw.m, p))
+    && (forall a:addr | a in TheValidAddresses() && !(StackLimit() <= a < StackBase()) && 
+        !(addrInPage(a,sd)) :: s.hw.m.addresses[a] == s'.hw.m.addresses[a])
+    && mode_of_state(s.hw) != User 
+    && mode_of_state(s'.hw) == Monitor)
 }
 
 //-----------------------------------------------------------------------------
