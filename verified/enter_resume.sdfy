@@ -16,10 +16,7 @@ procedure smc_enter_err(
         validSysState'(s');
         RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
     ensures
-        forall m :: m != User ==>
-            s.hw.regs[LR(m)] == s'.hw.regs[LR(m)] &&
-            s.hw.regs[SP(m)] == s'.hw.regs[SP(m)];
-        s.hw.sregs[spsr(Monitor)] == s'.hw.sregs[spsr(Monitor)];
+        bankedRegsPreserved(s.hw,s'.hw);
         tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
 {
     reveal_smc_enter_premium();
@@ -584,7 +581,16 @@ procedure kom_smc_enter(
             assert tuple(s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
                     exceptionHandled_premium(ss5);
             reveal_validExceptionTransition();
-            assume validExceptionTransition(ss5,s',ss5.d);
+            assert validExceptionTransition(ss5,pre_unstash,ss5.d);
+
+
+            forall :: validExceptionTransition(ss5,s',ss5.d)
+            {
+                assume false;
+                reveal_validPageDb();
+                reveal_ValidRegState();
+                reveal_ValidMemState();
+            }
         }
 
         forall :: bankedRegsPreserved(s.hw, s'.hw)

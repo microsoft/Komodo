@@ -285,6 +285,7 @@ predicate bankedRegsPreserved(hw:state, hw':state)
     requires ValidState(hw) && ValidState(hw')
 {
     reveal_ValidRegState();
+    reveal_ValidSRegState();
     reveal_ValidConfig();
     // It would probably be better if we had a lemma that proved that these 
     // were the same thing... but for now both seem equally trustworth, so 

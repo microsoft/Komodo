@@ -10,10 +10,15 @@ procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:
         @pagenr != @tmp;
         @phys != OSP;
         @tmp != OSP;
+        @pagenr != OSP;
+        @phys != OLR;
+        @tmp != OLR;
+        @pagenr != OLR;
         validPageNr(pagenr);
     ensures
         AllMemInvariant(old(this),this);
         RegPreservingExcept(old(this), this, set(@phys, @tmp));
+        bankedRegsPreserved(old(this), this);
         phys == page_paddr(old(pagenr));
         isUInt32(phys);
 {
@@ -40,10 +45,15 @@ procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out
         @virt != @tmp;
         @virt != OSP;
         @tmp != OSP;
+        @pagenr != OSP;
+        @virt != OLR;
+        @tmp != OLR;
+        @pagenr != OLR;
         validPageNr(pagenr);
     ensures
         AllMemInvariant(old(this),this);
         RegPreservingExcept(old(this), this, set(@virt, @tmp));
+        bankedRegsPreserved(old(this), this);
         virt == page_monvaddr(old(pagenr));
         isUInt32(virt);
 {
