@@ -294,8 +294,12 @@ MRS({:operand} dst:int, {:operand} src:int)
 
 #verbatim
 predicate is_psr(o:sp_operand)
-{ // true if cpsr or spsr
-    o.OSReg? && (o.sr.cpsr? || o.sr.spsr?)
+{ // true if cpsr
+    o.OSReg? && o.sr.cpsr?
+}
+predicate is_spsr(o:sp_operand)
+{
+    o.OSReg? && o.sr.spsr?
 }
 #endverbatim
 
@@ -308,6 +312,7 @@ MSR({:operand} dst:int, {:operand} src:int)
         ValidSpecialOperand(this, @dst);
         !ValidMcrMrcOperand(this, @dst);
         is_psr(@dst) ==> ValidModeChange(this, src);
+        is_spsr(@dst) ==> ValidModeEncoding(psr_mask_mode(src));
     ensures
         evalSRegUpdate(old(this), @dst, old(src), this);
         AllMemInvariant(old(this), this);

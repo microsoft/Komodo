@@ -1,4 +1,4 @@
-DAFNYFLAGS = /timeLimit:60 /trace
+DAFNYFLAGS = /timeLimit:80 /trace
 SPARTANFLAGS = #-assumeUpdates 1
 
 # top-level target

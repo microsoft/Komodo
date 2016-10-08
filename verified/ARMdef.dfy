@@ -275,6 +275,8 @@ predicate {:opaque} ValidConfig(c:config)
 predicate {:opaque} ValidSRegState(sregs:map<SReg, word>)
 {
     (forall m:mode {:trigger spsr(m)} :: m != User ==> spsr(m) in sregs)
+    && (forall m:mode {:trigger spsr(m)} :: m != User ==>
+        ValidModeEncoding(psr_mask_mode(sregs[spsr(m)])))
     && spsr(User) !in sregs
     && ttbr0 in sregs && scr in sregs && cpsr in sregs
     && ValidModeEncoding(psr_mask_mode(sregs[cpsr]))
@@ -872,7 +874,9 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidRegOperand(src) && 
             ValidSpecialOperand(s, dst) && 
             !ValidMcrMrcOperand(s, dst) &&
-            (dst.sr.cpsr? || dst.sr.spsr? ==>
+            (dst.sr.spsr? ==>
+                ValidModeEncoding(psr_mask_mode(OperandContents(s, src)))) &&
+            (dst.sr.cpsr? ==>
                 ValidModeChange(s, OperandContents(s, src)))
         case MRC(dst, src) =>
             ValidMcrMrcOperand(s, src) &&

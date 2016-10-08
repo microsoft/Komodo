@@ -170,9 +170,105 @@ procedure stash_banked_regs(ghost s:SysState)
         s'.g.g_lrs[Monitor] == old(lr_mon);
 
         s'.g.g_psrs[Monitor] == old(spsr_mon);
+        ValidModeEncoding(psr_mask_mode(s'.g.g_psrs[Monitor]));
         s'.d == s.d;
 {
-    assume false;
+    //-------------------------------------------------------------------------
+    // SPs
+    //------------------------------------------------------------------------ 
+    LDRglobaladdr(r12, SavedSPs());
+    MOVB(r11, sp_fiq);
+    assert r11 == old(sp_fiq);
+    STRglobal(r11, SavedSPs(), r12, 4);
+
+    LDRglobaladdr(r12, SavedSPs());
+    MOVB(r11, sp_irq);
+    assert r11 == old(sp_irq);
+    STRglobal(r11, SavedSPs(), r12, 8);
+
+    LDRglobaladdr(r12, SavedSPs());
+    MOVB(r11, sp_svc);
+    assert r11 == old(sp_svc);
+    STRglobal(r11, SavedSPs(), r12, 12);
+
+    LDRglobaladdr(r12, SavedSPs());
+    MOVB(r11, sp_abt);
+    assert r11 == old(sp_abt);
+    STRglobal(r11, SavedSPs(), r12, 16);
+
+    LDRglobaladdr(r12, SavedSPs());
+    MOVB(r11, sp_und);
+    assert r11 == old(sp_und);
+    STRglobal(r11, SavedSPs(), r12, 20);
+
+    LDRglobaladdr(r12, SavedSPs());
+    MOVB(r11, sp_mon);
+    assert r11 == old(sp_mon);
+    STRglobal(r11, SavedSPs(), r12, 24);
+
+    //------------------------------------------------------------------------ 
+    // LRs
+    //------------------------------------------------------------------------ 
+    LDRglobaladdr(r12, SavedLRs());
+    MOVB(r11, lr_fiq);
+    assert r11 == old(lr_fiq);
+    STRglobal(r11, SavedLRs(), r12, 4);
+
+    LDRglobaladdr(r12, SavedLRs());
+    MOVB(r11, lr_irq);
+    assert r11 == old(lr_irq);
+    STRglobal(r11, SavedLRs(), r12, 8);
+
+    LDRglobaladdr(r12, SavedLRs());
+    MOVB(r11, lr_svc);
+    assert r11 == old(lr_svc);
+    STRglobal(r11, SavedLRs(), r12, 12);
+
+    LDRglobaladdr(r12, SavedLRs());
+    MOVB(r11, lr_abt);
+    assert r11 == old(lr_abt);
+    STRglobal(r11, SavedLRs(), r12, 16);
+
+    LDRglobaladdr(r12, SavedLRs());
+    MOVB(r11, lr_und);
+    assert r11 == old(lr_und);
+    STRglobal(r11, SavedLRs(), r12, 20);
+
+    LDRglobaladdr(r12, SavedLRs());
+    MOVB(r11, lr_mon);
+    assert r11 == old(lr_mon);
+    STRglobal(r11, SavedLRs(), r12, 24);
+
+    //------------------------------------------------------------------------ 
+    // Monitor Mode SPSR
+    //------------------------------------------------------------------------ 
+    LDRglobaladdr(r12, SavedPSRs());
+    MRS(r11,spsr_mon);
+    assert r11 == old(spsr_mon);
+    STRglobal(r11, SavedPSRs(), r12, 24);
+    
+    // Not sure what the Spartan syntax for simultaneous substitutions is or if 
+    // it exists. In Dafny you can just write 
+    // s.g.(g_sps := sps', g_psrs :=  psrs')
+    ghost var sps' := s.g.g_sps[ FIQ := old(sp_fiq) ][ IRQ := old(sp_irq) ][
+        Supervisor := old(sp_svc)][ Abort := old(sp_abt) ][
+        Undefined := old(sp_und) ][ Monitor := old(sp_mon) ];
+    ghost var lrs' := s.g.g_lrs[ FIQ := old(lr_fiq) ][ IRQ := old(lr_irq) ][
+        Supervisor := old(lr_svc)][ Abort := old(lr_abt) ][
+        Undefined := old(lr_und) ][ Monitor := old(lr_mon) ];
+    ghost var psrs' := s.g.g_psrs[ Monitor := old(spsr_mon) ];
+    ghost var g' := s.g.(g_sps := sps').(g_lrs := lrs').(g_psrs := psrs');
+    s' := s.(g := g').(hw := this);
+
+    forall :: ValidModeEncoding(psr_mask_mode(s'.g.g_psrs[Monitor]))
+    {
+        reveal_ValidSRegState();
+    }
+
+    forall :: validSysState'(s')
+    {
+        globalUnmodifiedImpliesCorrespondingPreserved(s.d, s.hw.m, s'.hw.m);
+    }
 }
 
 procedure unstash_banked_regs(ghost s:SysState)
@@ -181,11 +277,12 @@ procedure unstash_banked_regs(ghost s:SysState)
         this == s.hw;
         validSysState'(s);
         mode_of_state(s.hw) == Monitor;
+        ValidModeEncoding(psr_mask_mode(s.g.g_psrs[Monitor]));
     ensures
         this == s'.hw;
         validSysState'(s');
         mode_of_state(s'.hw) == Monitor;
-        RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8));
+
         sp_fiq == s.g.g_sps[FIQ];
         sp_irq == s.g.g_sps[IRQ];
         sp_svc == s.g.g_sps[Supervisor];
@@ -206,8 +303,90 @@ procedure unstash_banked_regs(ghost s:SysState)
         s'.g == s.g;
         s'.hw.m.addresses == s.hw.m.addresses;
         s'.hw.conf.ttbr0 == s.hw.conf.ttbr0;
+        r0 == old(r0);
+        r1 == old(r1);
 {
-    assume false;
+    //-------------------------------------------------------------------------
+    // SPs
+    //------------------------------------------------------------------------ 
+    LDRglobaladdr(r12, SavedSPs());
+    LDRglobal(r11, SavedSPs(), r12, 4);
+    MOVB(sp_fiq, r11);
+    assert sp_fiq == s.g.g_sps[FIQ];
+
+    LDRglobaladdr(r12, SavedSPs());
+    LDRglobal(r11, SavedSPs(), r12, 8);
+    MOVB(sp_irq, r11);
+    assert sp_irq== s.g.g_sps[IRQ];
+
+    LDRglobaladdr(r12, SavedSPs());
+    LDRglobal(r11, SavedSPs(), r12, 12);
+    MOVB(sp_svc, r11);
+    assert sp_svc== s.g.g_sps[Supervisor];
+
+    LDRglobaladdr(r12, SavedSPs());
+    LDRglobal(r11, SavedSPs(), r12, 16);
+    MOVB(sp_abt, r11);
+    assert sp_abt == s.g.g_sps[Abort];
+
+    LDRglobaladdr(r12, SavedSPs());
+    LDRglobal(r11, SavedSPs(), r12, 20);
+    MOVB(sp_und, r11);
+    assert sp_und== s.g.g_sps[Undefined];
+
+    LDRglobaladdr(r12, SavedSPs());
+    LDRglobal(r11, SavedSPs(), r12, 24);
+    MOVB(sp_mon, r11);
+    assert sp_mon== s.g.g_sps[Monitor];
+
+    //-------------------------------------------------------------------------
+    // LRs
+    //------------------------------------------------------------------------ 
+    LDRglobaladdr(r12, SavedLRs());
+    LDRglobal(r11, SavedLRs(), r12, 4);
+    MOVB(lr_fiq, r11);
+    assert lr_fiq == s.g.g_lrs[FIQ];
+
+    LDRglobaladdr(r12, SavedLRs());
+    LDRglobal(r11, SavedLRs(), r12, 8);
+    MOVB(lr_irq, r11);
+    assert lr_irq== s.g.g_lrs[IRQ];
+
+    LDRglobaladdr(r12, SavedLRs());
+    LDRglobal(r11, SavedLRs(), r12, 12);
+    MOVB(lr_svc, r11);
+    assert lr_svc== s.g.g_lrs[Supervisor];
+
+    LDRglobaladdr(r12, SavedLRs());
+    LDRglobal(r11, SavedLRs(), r12, 16);
+    MOVB(lr_abt, r11);
+    assert lr_abt == s.g.g_lrs[Abort];
+
+    LDRglobaladdr(r12, SavedLRs());
+    LDRglobal(r11, SavedLRs(), r12, 20);
+    MOVB(lr_und, r11);
+    assert lr_und== s.g.g_lrs[Undefined];
+
+    LDRglobaladdr(r12, SavedLRs());
+    LDRglobal(r11, SavedLRs(), r12, 24);
+    MOVB(lr_mon, r11);
+    assert lr_mon== s.g.g_lrs[Monitor];
+
+    //------------------------------------------------------------------------ 
+    // Monitor Mode SPSR
+    //------------------------------------------------------------------------ 
+    LDRglobaladdr(r12, SavedPSRs());
+    LDRglobal(r11, SavedPSRs(), r12, 24);
+    MSR(spsr_mon,r11);
+    assert spsr_mon == s.g.g_psrs[Monitor];
+
+    s' := s.(hw := this);
+
+    forall :: validSysState'(s')
+    {
+        globalUnmodifiedImpliesCorrespondingPreserved(s.d, s.hw.m, s'.hw.m);
+    }
+
 }
 
 procedure pre_entry_enter(
@@ -346,6 +525,8 @@ procedure pre_entry_enter(
     // Load entrypoint into OLR
     //-------------------------------------------------------------------------
     page_monvaddr_impl(r10,pagenr,r11);
+    assert DISPATCHER_ENTRYPOINT() == 4;
+    assert ValidMem(r10 + DISPATCHER_ENTRYPOINT());
     LDR(r11,r10,sp_op_const(DISPATCHER_ENTRYPOINT()));
     forall :: r11 == d[pagenr].entry.entrypoint
     {
