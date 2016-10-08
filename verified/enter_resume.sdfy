@@ -582,15 +582,7 @@ procedure kom_smc_enter(
                     exceptionHandled_premium(ss5);
             reveal_validExceptionTransition();
             assert validExceptionTransition(ss5,pre_unstash,ss5.d);
-
-
-            forall :: validExceptionTransition(ss5,s',ss5.d)
-            {
-                assume false;
-                reveal_validPageDb();
-                reveal_ValidRegState();
-                reveal_ValidMemState();
-            }
+            assert validExceptionTransition(ss5,s',ss5.d);
         }
 
         forall :: bankedRegsPreserved(s.hw, s'.hw)

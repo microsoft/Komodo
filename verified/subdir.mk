@@ -73,7 +73,7 @@ ARMdecls_dep-dfy = ARMspartan
 $(dir)/ARMdecls.verified: $(call mkdeps,ARMdecls)
 
 kom_utils_dep-sdfy = ARMdecls
-kom_utils_dep-dfy = ARMspartan kom_common.i entry.s
+kom_utils_dep-dfy = ARMspartan kom_common.i kom_common.s
 $(dir)/kom_utils.verified: $(call mkdeps,kom_utils)
 
 allocate_page_dep-sdfy = ARMdecls kom_utils

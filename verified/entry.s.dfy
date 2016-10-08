@@ -269,45 +269,12 @@ predicate {:opaque} validExceptionTransition(s:SysState, s':SysState, d:PageDb)
     && page_paddr(l1pOfDispatcher(s'.d, sd')) == s'.hw.conf.ttbr0.ptbase  
     // && (forall g | ValidGlobal(g) && g != PageDb() ::
     //    GlobalFullContents(s.hw.m, g) == GlobalFullContents(s'.hw.m, g))
-    && (forall p:PageNr | p != sd ::
-        extractPageDbEntry(s.hw.m, p) == extractPageDbEntry(s'.hw.m, p))
+    && (forall p:PageNr | p != sd :: s.d[p] == s'.d[p])
+        //extractPageDbEntry(s.hw.m, p) == extractPageDbEntry(s'.hw.m, p))
     && (forall a:addr | a in TheValidAddresses() && !(StackLimit() <= a < StackBase()) && 
         !(addrInPage(a,sd)) :: s.hw.m.addresses[a] == s'.hw.m.addresses[a])
     && mode_of_state(s.hw) != User 
     && mode_of_state(s'.hw) == Monitor)
-}
-
-//-----------------------------------------------------------------------------
-// Userspace Execution
-//-----------------------------------------------------------------------------
-
-predicate bankedRegsPreserved(hw:state, hw':state)
-    requires ValidState(hw) && ValidState(hw')
-{
-    reveal_ValidRegState();
-    reveal_ValidSRegState();
-    reveal_ValidConfig();
-    // It would probably be better if we had a lemma that proved that these 
-    // were the same thing... but for now both seem equally trustworth, so 
-    // let's use the one that's easier to prove
-    // hw.conf.spsr[Monitor] == hw'.conf.spsr[Monitor] &&
-    hw.sregs[spsr(Monitor)] == hw'.sregs[spsr(Monitor)] &&
-
-    // Sadly this has to be unrolled
-    hw.regs[LR(FIQ)] == hw'.regs[LR(FIQ)] &&
-    hw.regs[LR(IRQ)] == hw'.regs[LR(IRQ)] &&
-    hw.regs[LR(Supervisor)] == hw'.regs[LR(Supervisor)] &&
-    hw.regs[LR(Abort)] == hw'.regs[LR(Abort)] &&
-    hw.regs[LR(Undefined)] == hw'.regs[LR(Undefined)] &&
-    hw.regs[LR(Monitor)] == hw'.regs[LR(Monitor)] &&
-
-    hw.regs[SP(FIQ)] == hw'.regs[SP(FIQ)] &&
-    hw.regs[SP(IRQ)] == hw'.regs[SP(IRQ)] &&
-    hw.regs[SP(Supervisor)] == hw'.regs[SP(Supervisor)] &&
-    hw.regs[SP(Abort)] == hw'.regs[SP(Abort)] &&
-    hw.regs[SP(Undefined)] == hw'.regs[SP(Undefined)] &&
-    hw.regs[SP(Monitor)] == hw'.regs[SP(Monitor)]
-
 }
 
 // All writeable and secure memory addresses except the ones in the active l1

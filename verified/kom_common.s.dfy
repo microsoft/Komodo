@@ -166,3 +166,34 @@ predicate SaneState(s:state)
 {
     SaneConstants() && ValidState(s) && ValidStack(s) && SaneMem(s.m) && mode_of_state(s) == Monitor
 }
+
+
+
+predicate bankedRegsPreserved(hw:state, hw':state)
+    requires ValidState(hw) && ValidState(hw')
+{
+    reveal_ValidRegState();
+    reveal_ValidSRegState();
+    reveal_ValidConfig();
+    // It would probably be better if we had a lemma that proved that these 
+    // were the same thing... but for now both seem equally trustworth, so 
+    // let's use the one that's easier to prove
+    // hw.conf.spsr[Monitor] == hw'.conf.spsr[Monitor] &&
+    hw.sregs[spsr(Monitor)] == hw'.sregs[spsr(Monitor)] &&
+
+    // Sadly this has to be unrolled
+    hw.regs[LR(FIQ)] == hw'.regs[LR(FIQ)] &&
+    hw.regs[LR(IRQ)] == hw'.regs[LR(IRQ)] &&
+    hw.regs[LR(Supervisor)] == hw'.regs[LR(Supervisor)] &&
+    hw.regs[LR(Abort)] == hw'.regs[LR(Abort)] &&
+    hw.regs[LR(Undefined)] == hw'.regs[LR(Undefined)] &&
+    hw.regs[LR(Monitor)] == hw'.regs[LR(Monitor)] &&
+
+    hw.regs[SP(FIQ)] == hw'.regs[SP(FIQ)] &&
+    hw.regs[SP(IRQ)] == hw'.regs[SP(IRQ)] &&
+    hw.regs[SP(Supervisor)] == hw'.regs[SP(Supervisor)] &&
+    hw.regs[SP(Abort)] == hw'.regs[SP(Abort)] &&
+    hw.regs[SP(Undefined)] == hw'.regs[SP(Undefined)] &&
+    hw.regs[SP(Monitor)] == hw'.regs[SP(Monitor)]
+
+}
