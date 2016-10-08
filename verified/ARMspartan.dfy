@@ -26,8 +26,12 @@ predicate{:opaque} sp_eval(c:code, s:state, r:state)
 
 function sp_eval_op(s:state, o:operand): word
     requires ValidState(s)
-    requires ValidOperand(o)
-    { OperandContents(s, o) }
+    requires o.OSReg? ==> ValidSpecialOperand(s, o)
+    requires !o.OSReg? ==> ValidOperand(o) || ValidBankedRegOperand(s, o)
+    {   
+        if(o.OSReg?) then SpecialOperandContents(s, o)
+        else OperandContents(s,o)
+    }
 
 function sp_eval_op_addr(s:state, o:operand): word
     requires ValidState(s)
@@ -36,7 +40,8 @@ function sp_eval_op_addr(s:state, o:operand): word
 
 predicate sp_eq_ops(s1:sp_state, s2:sp_state, o:operand)
 {
-    ValidState(s1) && ValidState(s2) && ValidOperand(o)
+    ValidState(s1) && ValidState(s2) && (ValidOperand(o) || 
+        (ValidBankedRegOperand(s1, o) && ValidBankedRegOperand(s2,o)))
         && sp_eval_op(s1, o) == sp_eval_op(s2, o)
 }
 

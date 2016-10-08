@@ -15,6 +15,30 @@ var{:register OReg(R12)} r12:int;
 var{:register OSP} sp:int;
 var{:register OLR} lr:int;
 
+var{:register OReg(SP(User))}       sp_usr:int;
+var{:register OReg(SP(FIQ))}        sp_fiq:int;
+var{:register OReg(SP(IRQ))}        sp_irq:int;
+var{:register OReg(SP(Supervisor))} sp_svc:int;
+var{:register OReg(SP(Abort))}      sp_abt:int;
+var{:register OReg(SP(Undefined))}  sp_und:int;
+var{:register OReg(SP(Monitor))}    sp_mon:int;
+
+var{:register OReg(LR(User))}       lr_usr:int;
+var{:register OReg(LR(FIQ))}        lr_fiq:int;
+var{:register OReg(LR(IRQ))}        lr_irq:int;
+var{:register OReg(LR(Supervisor))} lr_svc:int;
+var{:register OReg(LR(Abort))}      lr_abt:int;
+var{:register OReg(LR(Undefined))}  lr_und:int;
+var{:register OReg(LR(Monitor))}    lr_mon:int;
+
+var{:register OSReg(spsr(FIQ))}        spsr_fiq:int;
+var{:register OSReg(spsr(IRQ))}        spsr_irq:int;
+var{:register OSReg(spsr(Supervisor))} spsr_svc:int;
+var{:register OSReg(spsr(Abort))}      spsr_abt:int;
+var{:register OSReg(spsr(Undefined))}  spsr_und:int;
+var{:register OSReg(spsr(Monitor))}    spsr_mon:int;
+
+
 procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
 
 function{:operand} sp_op_const(n:word):operand
@@ -195,6 +219,22 @@ MOV(out{:operand} dst:int, {:operand} src:int)
     requires
         ValidOperand(@src);
         ValidRegOperand(@dst);
+    ensures
+        evalUpdate(old(this), @dst, old(src), this);
+        SRegsInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
+{
+    reveal_sp_eval();
+}
+
+procedure {:instruction Ins(MOVB(dst, src))}
+MOVB(out{:operand} dst:int, {:operand} src:int)
+    requires/ensures
+        ValidState(this);
+        priv_of_state(this) == PL1;
+    requires
+        ValidOperand(@src) || ValidBankedRegOperand(this,@src);
+        ValidRegOperand(@dst) || ValidBankedRegOperand(this,@dst);
     ensures
         evalUpdate(old(this), @dst, old(src), this);
         SRegsInvariant(old(this), this);

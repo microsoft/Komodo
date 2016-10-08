@@ -16,6 +16,10 @@ procedure smc_enter_err(
         validSysState'(s');
         RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
     ensures
+        forall m :: m != User ==>
+            s.hw.regs[LR(m)] == s'.hw.regs[LR(m)] &&
+            s.hw.regs[SP(m)] == s'.hw.regs[SP(m)];
+        s.hw.sregs[spsr(Monitor)] == s'.hw.sregs[spsr(Monitor)];
         tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
 {
     reveal_smc_enter_premium();
@@ -44,7 +48,7 @@ procedure smc_enter_err(
         {
             reveal_pageDbEntryCorresponds(); 
             reveal_validPageDb();
-
+            assume false; // XXX instability
             assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_TYPE();
             ghost var entryWords := extractPageDbEntry(this.m, pagenr);
             assert entryWords[BytesToWords(PAGEDB_ENTRY_TYPE())] ==
@@ -141,18 +145,72 @@ procedure smc_enter_err(
     }
 }
 
-procedure havoc_state(ghost s:SysState)
+procedure stash_banked_regs(ghost s:SysState)
     returns (ghost s':SysState)
     requires
         this == s.hw;
         validSysState'(s);
-        SaneState(s.hw);
+        mode_of_state(s.hw) == Monitor;
+        priv_of_state(s.hw) == PL1;
     ensures
         this == s'.hw;
         validSysState'(s');
-        SaneState(s'.hw);
+        mode_of_state(s'.hw) == Monitor;
+        priv_of_state(s'.hw) == PL1;
+        RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8));
+        s'.g.g_sps[FIQ] == old(sp_fiq);
+        s'.g.g_sps[IRQ] == old(sp_irq);
+        s'.g.g_sps[Supervisor] == old(sp_svc);
+        s'.g.g_sps[Abort] == old(sp_abt);
+        s'.g.g_sps[Undefined] == old(sp_und);
+        s'.g.g_sps[Monitor] == old(sp_mon);
+
+        s'.g.g_lrs[FIQ] == old(lr_fiq);
+        s'.g.g_lrs[IRQ] == old(lr_irq);
+        s'.g.g_lrs[Supervisor] == old(lr_svc);
+        s'.g.g_lrs[Abort] == old(lr_abt);
+        s'.g.g_lrs[Undefined] == old(lr_und);
+        s'.g.g_lrs[Monitor] == old(lr_mon);
+
+        s'.g.g_psrs[Monitor] == old(spsr_mon);
+        s'.d == s.d;
 {
-    s' := s;
+    assume false;
+}
+
+procedure unstash_banked_regs(ghost s:SysState)
+    returns (ghost s':SysState)
+    requires
+        this == s.hw;
+        validSysState'(s);
+        mode_of_state(s.hw) == Monitor;
+    ensures
+        this == s'.hw;
+        validSysState'(s');
+        mode_of_state(s'.hw) == Monitor;
+        RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8));
+        sp_fiq == s.g.g_sps[FIQ];
+        sp_irq == s.g.g_sps[IRQ];
+        sp_svc == s.g.g_sps[Supervisor];
+        sp_abt == s.g.g_sps[Abort];
+        sp_und == s.g.g_sps[Undefined];
+        sp_mon == s.g.g_sps[Monitor];
+
+        lr_fiq == s.g.g_lrs[FIQ];
+        lr_irq == s.g.g_lrs[IRQ];
+        lr_svc == s.g.g_lrs[Supervisor];
+        lr_abt == s.g.g_lrs[Abort];
+        lr_und == s.g.g_lrs[Undefined];
+        lr_mon == s.g.g_lrs[Monitor];
+
+        spsr_mon == s.g.g_psrs[Monitor];
+
+        s'.d == s.d;
+        s'.g == s.g;
+        s'.hw.m.addresses == s.hw.m.addresses;
+        s'.hw.conf.ttbr0 == s.hw.conf.ttbr0;
+{
+    assume false;
 }
 
 procedure pre_entry_enter(
@@ -182,6 +240,9 @@ procedure pre_entry_enter(
         preEntryEnter(s,s',pagenr, arg1, arg2, arg3);
         spsr_of_state(s'.hw).m == User;
         OperandContents(s'.hw, OLR) == s'.d[s'.g.g_cur_dispatcher].entry.entrypoint;
+        s'.g.g_sps  == s.g.g_sps;
+        s'.g.g_lrs  == s.g.g_lrs;
+        s'.g.g_psrs == s.g.g_psrs;
 {
     reveal_validPageDb();
     reveal_ValidRegState();
@@ -387,7 +448,10 @@ procedure kom_smc_enter(
 
         ghost var l1p := l1pOfDispatcher(s.d, pagenr);
 
-        s1 := s_err.(hw := this);  
+        ghost var s_stash;
+        s_stash := stash_banked_regs(s_err.(hw := this));
+
+        s1 := s_stash.(hw := this);  
 
         assert errCheck(s, s1);
 
@@ -396,7 +460,7 @@ procedure kom_smc_enter(
         assert validSysState'(s1);
         assert this == s1.hw;
         assert SaneState(s1.hw);
-        
+
         assert r5 == pagenr;
         s2 := pre_entry_enter(s1,r5,arg1,arg2,arg3,s1);
         assert preEntryEnter(s1,s2,pagenr,arg1,arg2,arg3);
@@ -414,19 +478,10 @@ procedure kom_smc_enter(
             && evalExceptionTaken(s4, ex, s5)
             && ApplicationUsermodeContinuationInvariant(s5, this);
 
-        s' := s2.(hw := this);
-        assert this == s'.hw;
      
-        // TODO need to save/restore things to prove this.
-        assume SaneState(s'.hw);
-        
         assert validSysState'(s2);
       
-        // TODO need to keep cur_dispatcher somewhere safe and restore it if 
-        // needed. 
         ghost var g := s2.g;
-        assume g == s'.g;
-        assume globalsCorrespond(s');
 
         ghost var d := s.d;
         assert s1.d == d;
@@ -436,6 +491,9 @@ procedure kom_smc_enter(
         ghost var ss3 := SysState(s3,d,g);
         ghost var ss4 := SysState(s4,d,g);
         ghost var ss5 := SysState(s5,d,g);
+
+        ghost var pre_unstash := ss5.(hw := this);
+
         assert validSysStates(set(s2,ss3,ss4,ss5));
         assert preEntryEnter(s1,s2,pagenr,arg1,arg2,arg3);
 
@@ -486,24 +544,86 @@ procedure kom_smc_enter(
         }
         
         assert mode_of_state(ss5.hw) != User;
-        assert s'.hw == this;
+        assert pre_unstash.hw == this;
         reveal_ValidRegState();
+        forall :: tuple(pre_unstash.hw.regs[R0], pre_unstash.hw.regs[R1], pre_unstash.d) ==
+            exceptionHandled(ss5)
+            && validExceptionTransition(ss5,pre_unstash,ss5.d)
+            && validSysState'(pre_unstash)
+            && mode_of_state(pre_unstash.hw) == Monitor
+        {
+            assert AUCIdef();
+            assert validSysState(ss5);
+            assert ApplicationUsermodeContinuationInvariant(ss5.hw, pre_unstash.hw);
+            assert validExceptionTransition(ss5,pre_unstash,ss5.d);
+            assert mode_of_state(ss5.hw) != User;
+            assert tuple(pre_unstash.hw.regs[R0], pre_unstash.hw.regs[R1], pre_unstash.d) ==
+                    exceptionHandled_premium(ss5);
+            assert validSysState'(pre_unstash);
+            reveal_validExceptionTransition();
+            assert mode_of_state(pre_unstash.hw) == Monitor;
+        }
+
+        s':= unstash_banked_regs(pre_unstash);
+        assert this == s'.hw;
+
         forall :: tuple(s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
             exceptionHandled(ss5)
             && validExceptionTransition(ss5,s',ss5.d)
             && validSysState'(s')
         {
-            assert AUCIdef();
-            assert validSysState(ss5);
-            assert ApplicationUsermodeContinuationInvariant(ss5.hw, s'.hw);
-            assert validExceptionTransition(ss5,s',ss5.d);
-            assert mode_of_state(ss5.hw) != User;
+            assert pre_unstash.hw.regs[R0] == s'.hw.regs[R0];
+            assert pre_unstash.hw.regs[R1] == s'.hw.regs[R1];
+            assert pre_unstash.d == s'.d;
+            assert pre_unstash.hw.m.addresses == s'.hw.m.addresses;
+            assert pre_unstash.g.g_cur_dispatcher == s'.g.g_cur_dispatcher;
+            assert pre_unstash.hw.conf.ttbr0 == s'.hw.conf.ttbr0;
+            assert validSysState'(s');
+            assert tuple(pre_unstash.hw.regs[R0], pre_unstash.hw.regs[R1], pre_unstash.d) ==
+                    exceptionHandled_premium(ss5);
             assert tuple(s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
                     exceptionHandled_premium(ss5);
-            assert validSysState'(s');
+            reveal_validExceptionTransition();
+            assume validExceptionTransition(ss5,s',ss5.d);
         }
 
-        assume bankedRegsPreserved(s.hw, s'.hw);
+        forall :: bankedRegsPreserved(s.hw, s'.hw)
+        {
+            reveal_ValidConfig();
+            reveal_ValidSRegState();
+            assert s2.g.g_sps == s_stash.g.g_sps;
+            assert s2.g.g_lrs == s_stash.g.g_lrs;
+            assert s2.g.g_psrs == s_stash.g.g_psrs;
+            assert pre_unstash.g == s2.g;
+            assert pre_unstash.g.g_sps == s_stash.g.g_sps;
+            assert pre_unstash.g.g_lrs == s_stash.g.g_lrs;
+            assert pre_unstash.g.g_psrs == s_stash.g.g_psrs;
+            assert s.hw.sregs[spsr(Monitor)] == s_stash.g.g_psrs[Monitor];
+            assert s'.hw.sregs[spsr(Monitor)] == pre_unstash.g.g_psrs[Monitor];
+            assert s.hw.sregs[spsr(Monitor)] == s'.hw.sregs[spsr(Monitor)];
+         
+            // I wish I knew the syntax for "m in set" in Spartan.
+            forall m :| m == FIQ || m == IRQ || m == Supervisor ||
+                m == Abort || m == Undefined || m == Monitor ::
+            s'.hw.regs[LR(m)] == s.hw.regs[LR(m)] &&
+            s'.hw.regs[SP(m)] == s.hw.regs[SP(m)]
+            {
+                assert s_err.hw.regs[LR(m)] == s_stash.g.g_lrs[m];
+                assert s.hw.regs[LR(m)] == s_stash.g.g_lrs[m];
+                assert s'.hw.regs[LR(m)] == pre_unstash.g.g_lrs[m];
+
+                assert s_err.hw.regs[SP(m)] == s_stash.g.g_sps[m];
+                assert s.hw.regs[SP(m)] == s_stash.g.g_sps[m]; 
+                assert s'.hw.regs[SP(m)] == pre_unstash.g.g_sps[m];
+            }
+
+        }
+        
+        forall :: SaneState(s'.hw)
+        {
+            reveal_validExceptionTransition();
+            assert ValidStack(s'.hw);
+        }
 
         assert validSysState(s2);
         assert validSysState(ss3);

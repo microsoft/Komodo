@@ -81,9 +81,12 @@ function method PAGEDB_ENTRY_SIZE():int { 8 }
 function method G_PAGEDB_SIZE():int
     { KOM_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE() }
 
-function method {:opaque} CurAddrspaceOp(): operand { OSymbol("g_cur_addrspace") }
+function method {:opaque} SavedSPs(): operand { OSymbol("g_saved_sps") }
+function method {:opaque} SavedLRs(): operand { OSymbol("g_saved_lrs") }
+function method {:opaque} SavedPSRs(): operand { OSymbol("g_saved_psrs") }
 function method {:opaque} PageDb(): operand { OSymbol("g_pagedb") }
 function method {:opaque} SecurePhysBaseOp(): operand { OSymbol("g_secure_physbase") }
+function method {:opaque} CurAddrspaceOp(): operand { OSymbol("g_cur_addrspace") }
 
 // the phys base is unknown, but never changes
 function {:axiom} SecurePhysBase(): addr
@@ -94,8 +97,12 @@ function method KomGlobalDecls(): globaldecls
     ensures ValidGlobalDecls(KomGlobalDecls());
 {
     reveal_PageDb(); reveal_SecurePhysBaseOp(); reveal_CurAddrspaceOp();
+    reveal_SavedSPs(); reveal_SavedLRs(); reveal_SavedPSRs();
     map[SecurePhysBaseOp() := 4, //BytesPerWord() 
-        CurAddrspaceOp() := 4,  //BytesPerWord()
+        CurAddrspaceOp() := 4,   //BytesPerWord()
+        SavedSPs() := 28,        //BytesPerWord() * number of modes
+        SavedLRs() := 28,        //BytesPerWord() * number of modes
+        SavedPSRs() := 28,        //BytesPerWord() * number of modes
         PageDb() := G_PAGEDB_SIZE()]
 }
 
@@ -139,6 +146,18 @@ predicate SaneConstants()
     && SecurePhysBaseOp() != PageDb()
     && SecurePhysBaseOp() != CurAddrspaceOp()
     && CurAddrspaceOp() != PageDb()
+    && SavedSPs() != SavedLRs()
+    && SavedSPs() != SecurePhysBaseOp()
+    && SavedSPs() != PageDb()
+    && SavedSPs() != CurAddrspaceOp()
+    && SavedSPs() != SavedPSRs()
+    && SavedLRs() != SecurePhysBaseOp()
+    && SavedLRs() != PageDb()
+    && SavedLRs() != CurAddrspaceOp()
+    && SavedLRs() != SavedPSRs()
+    && SavedPSRs() != SecurePhysBaseOp()
+    && SavedPSRs() != CurAddrspaceOp()
+    && SavedPSRs() != PageDb()
     // && forall s, r | ValidState(s) :: ApplicationUsermodeContinuationInvariant(s, r)
     //     <==> ( s == r)
 }
