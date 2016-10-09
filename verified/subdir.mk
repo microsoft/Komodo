@@ -92,11 +92,15 @@ init_l2ptable_dep-sdfy = ARMdecls kom_utils allocate_page
 init_l2ptable_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/init_l2ptable.verified: $(call mkdeps,init_l2ptable)
 
-enter_resume_dep-sdfy = ARMdecls kom_utils
-enter_resume_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
-$(dir)/enter_resume.verified: $(call mkdeps,enter_resume)
+enter_dep-sdfy = ARMdecls kom_utils
+enter_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
+$(dir)/enter.verified: $(call mkdeps,enter)
+
+resume_dep-sdfy = ARMdecls kom_utils enter
+resume_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i 
+$(dir)/resume.verified: $(call mkdeps,resume)
 
 smc_handler_dep-sdfy = ARMdecls kom_utils init_addrspace init_dispatcher \
-    init_l2ptable enter_resume
+    init_l2ptable enter resume
 smc_handler_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/smc_handler.verified: $(call mkdeps,smc_handler)

@@ -78,21 +78,6 @@ predicate validEnter(s:SysState,s':SysState,
     reveal_validExceptionTransition();
     smc_enter(s.d, dispPage, a1, a2, a3).1 != KOM_ERR_SUCCESS() ||
    
-
-    /////// These comments are no longer true. States were added, removed,
-    ////// and changed.
-    // s1 (s)  : State on entry to the monitor
-    // s2      : prior to MOVSPCLR that transitions to userspace
-    // s3      : post MOVS State just before start of userspace execution
-    // s4      : Exceptional state where handler must be called
-    // s5      : State at start of exception handler
-    // s6      : State at start of transition back to smc_handler
-    // s7      : State on re-entry to smc_handler
-    // s8 (s') : State at the end of the monitor call/
-    
-    // s4 == s5 except not in exceptional state in s4
-    // s6 == s7 except branch has happened
-    
     ((exists serr, s2, s3, s4 :: validSysStates({serr,s2,s3,s4})
         && errCheck(s, serr)
         && preEntryEnter(serr,s2,dispPage,a1,a2,a3)
@@ -105,29 +90,36 @@ predicate validEnter(s:SysState,s':SysState,
     && bankedRegsPreserved(s.hw, s'.hw))
 }
 
-/*
-predicate validResume(s:SysState,s':SysState,dispPage:PageNr)
+predicate validResume(s:SysState,s':SysState,dispPage:word)
     requires validSysState(s)
 {
      
+    reveal_ValidRegState();
+    reveal_validExceptionTransition();
     smc_resume(s.d, dispPage).1 != KOM_ERR_SUCCESS() ||
-        ... state transitions
+   
+    ((exists serr, s2, s3, s4 :: validSysStates({serr,s2,s3,s4})
+        && errCheck(s, serr)
+        && preEntryResume(serr,s2,dispPage)
+        && entryTransitionEnter(s2, s3)
+        && s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d)
+        && mode_of_state(s4.hw) != User
+        && validExceptionTransition(s4, s', s4.d)
+        && (s'.hw.regs[R0], s'.hw.regs[R1], s'.d)==
+            exceptionHandled(s4))
+    && bankedRegsPreserved(s.hw, s'.hw))
 }
-*/
 
 predicate preEntryEnter(s:SysState,s':SysState,
     dispPage:PageNr,a1:word,a2:word,a3:word)
     requires validSysState(s)
     requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KOM_ERR_SUCCESS()
-    //ensures  nonStoppedL1(s'.d, l1pOfDispatcher(s'.d, dispPage));
     ensures preEntryEnter(s,s',dispPage,a1,a2,a3) ==>
         PageAligned(s'.hw.conf.ttbr0.ptbase) &&
         SecurePhysBase() <= s'.hw.conf.ttbr0.ptbase < SecurePhysBase() +
             KOM_SECURE_NPAGES() * PAGESIZE()
     ensures preEntryEnter(s,s',dispPage,a1,a2,a3) ==>
         nonStoppedL1(s'.d, securePageFromPhysAddr(s'.hw.conf.ttbr0.ptbase));
-    // ensures (validSysState(s) && validSysState(s') && 
-    // preEntryEnter(s,s',dispPage,a1,a2,a3)) ==>false
 {
     reveal_validPageDb();
     reveal_ValidRegState();
@@ -148,17 +140,23 @@ predicate preEntryEnter(s:SysState,s':SysState,
     WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, l1p)
 }
 
-/*
 predicate preEntryResume(s:SysState, s':SysState, dispPage:PageNr)
     requires validSysState(s)
     requires smc_resume(s.d, dispPage).1 == KOM_ERR_SUCCESS()
+    ensures preEntryResume(s,s',dispPage) ==>
+        PageAligned(s'.hw.conf.ttbr0.ptbase) &&
+        SecurePhysBase() <= s'.hw.conf.ttbr0.ptbase < SecurePhysBase() +
+            KOM_SECURE_NPAGES() * PAGESIZE()
+    ensures preEntryResume(s,s',dispPage) ==>
+        nonStoppedL1(s'.d, securePageFromPhysAddr(s'.hw.conf.ttbr0.ptbase));
 {
     reveal_validPageDb();
     var disp := s.d[dispPage].entry;
+    var l1p := l1pOfDispatcher(s.d, dispPage);
     
-    validSysState(s') && // s'.d == s.d &&
-    s'.hw.conf.ttbr0 == l1pOfDispatcher(s.d, dispPage) &&
-    s'.hw.conf.cpsr.m  == User && s'.hw.conf.scr.ns == Secure &&
+    validSysState(s') && s'.d == s.d &&
+    s'.hw.conf.ttbr0.ptbase == page_paddr(l1p) && //l1pOfDispatcher(s.d, dispPage) &&
+    s'.hw.conf.scr.ns == Secure &&
 
     s'.g.g_cur_dispatcher == dispPage &&
    
@@ -178,14 +176,12 @@ predicate preEntryResume(s:SysState, s':SysState, dispPage:PageNr)
         [SP(Monitor)    := s.hw.regs[SP(Monitor)]]) &&
     
     (reveal_ValidSRegState();
-    s'.hw.sregs[cpsr] == disp.ctxt.cpsr &&
-    s'.hw.conf.cpsr == decode_psr(disp.ctxt.cpsr)) &&
+    s'.hw.sregs[cpsr] == disp.ctxt.cpsr) &&
+    //s'.hw.conf.cpsr == decode_psr(disp.ctxt.cpsr)) &&
     
-    bankedRegsPreserved(s, s') &&
-    WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, d, l1pOfDispatcher(s.d, dispPage))
+    WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, l1p)
 
 }
-*/
 
 predicate entryTransitionEnter(s:SysState,s':SysState)
     // ensures (validSysState(s) && validSysState(s') && entryTransitionEnter(s,s')) ==>false

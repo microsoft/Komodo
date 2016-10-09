@@ -1,8 +1,10 @@
+// smc_enter_premium and smc_resume premium are almost the same
 procedure smc_enter_err(
     {:register OReg(R0)} pagenr:int,
     {:register OReg(R1)} arg1:int,
     {:register OReg(R2)} arg2:int,
     {:register OReg(R3)} arg3:int,
+    {:register OReg(R4)} is_resume:int,
     out {:register OReg(R0)} err:int,
     ghost s:SysState)
     returns (ghost s':SysState)
@@ -17,9 +19,13 @@ procedure smc_enter_err(
         RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
     ensures
         bankedRegsPreserved(s.hw,s'.hw);
-        tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
+        old(is_resume) != 1 ==>
+            tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
+        old(is_resume) == 1 ==>
+            tuple(s'.d, err) == smc_resume_premium(s.d, pagenr);
 {
     reveal_smc_enter_premium();
+    reveal_smc_resume_premium();
     if (pagenr >= sp_op_const(KOM_SECURE_NPAGES())) {
         assert !validPageNr(pagenr);
         
@@ -130,13 +136,29 @@ procedure smc_enter_err(
                 assert r9 == 1 ==> s.d[pagenr].entry.entered;
                 assert r9 != 1 ==> !(s.d[pagenr].entry.entered);
                 assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
-                if( r9 == 1 ) {
-                    err := sp_op_const(KOM_ERR_ALREADY_ENTERED());
-                    s' := s.(hw := this);
+              
+                // TODO make this part less ugly when you are less tired.
+                if( is_resume == 1 ) {
+                    // smc_resume
+                    if( r9 != 1 ) {
+                        err := sp_op_const(KOM_ERR_NOT_ENTERED());
+                        s' := s.(hw := this);
+                    } else {
+                        err := sp_op_const(KOM_ERR_SUCCESS());
+                        s' := s.(hw := this);
+                    }
                 } else {
-                    err := sp_op_const(KOM_ERR_SUCCESS());
-                    s' := s.(hw := this);
+                    // smc_enter
+                    if( r9 == 1 ) {
+                        err := sp_op_const(KOM_ERR_ALREADY_ENTERED());
+                        s' := s.(hw := this);
+                    } else {
+                        err := sp_op_const(KOM_ERR_SUCCESS());
+                        s' := s.(hw := this);
+                    }
                 }
+
+
             }
         }
     }
@@ -433,7 +455,7 @@ procedure pre_entry_enter(
     // Dafny/Spartan are unlikely to enjoy bit vector math
     
     r10 := 0;
-    MCR(OSReg(scr), r12);
+    MCR(OSReg(scr), r10);
     forall :: this.conf.scr.ns == Secure
     {
         //FIXME
@@ -486,18 +508,11 @@ procedure pre_entry_enter(
     // reveal_pageDbAddrspaceCorresponds();
     MSR(OSReg(ttbr0), r10);
 
-    // XXX Need this back.
-    // MaskWithSizeIsAligned(r10, 0x1000);
-    // BitwiseMaskHigh(r10, 12); 
     assert isUInt32(r10);
     assert isUInt32(0xffff_f000);
     forall :: r10 == BitwiseAnd(r10, 0xffff_f000){
-        // XXX TODO FIXME.
-        // I'm not sure if we're dealing with bitvector stuff yet.
-        // I also think this worked without cheating at some point...
         assume false;
     }
-    // XXX This was an assert before.
     assert this.conf.ttbr0.ptbase == page_paddr(l1p);
     //-------------------------------------------------------------------------
     
@@ -568,23 +583,14 @@ procedure pre_entry_enter(
     assert WSMemInvariantExceptAddrspaceAtPage(s.hw,s'.hw, s.d, l1p);
     assert preEntryEnter(s,s',pagenr, arg1, arg2, arg3);
     
-    // TODO this is not actually implemented yet
     assert OperandContents(s'.hw, OLR) == 
         s'.d[s'.g.g_cur_dispatcher].entry.entrypoint;
-
 }
 
-#verbatim
-//predicate ApplicationUsermodeContinuationInvariant(s:state, r:state)
-//    requires ValidState(s)
-//    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> ValidState(r)
-//    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> r.ok
-//{
-//    ValidState(r) && r.ok
-//}
-#endverbatim
 
-
+// TODO this has a very high goop-to-code ratio. Refactor the goop into lemmas 
+// so that the lemmas can be called in smc_enter and smc_resume instead of 
+// just moving the goop around.
 procedure kom_smc_enter(
     {:register OReg(R0)} pagenr:int,
     {:register OReg(R1)} arg1:int,
@@ -611,7 +617,8 @@ procedure kom_smc_enter(
     reveal_smc_enter_premium();
     r5 := pagenr;
     ghost var s_err;
-    s_err := smc_enter_err(@r0,@r1,@r2,@r3,@r0,s.(hw := this));
+    r4 := 0; // do an error check for enter, not resume
+    s_err := smc_enter_err(@r0,@r1,@r2,@r3,@r4,@r0,s.(hw := this));
     if(err != sp_op_const(KOM_ERR_SUCCESS()) ) {
         val := sp_op_const(0);
         s' := s_err.(hw := this);

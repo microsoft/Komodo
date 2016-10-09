@@ -82,7 +82,11 @@ function {:opaque} smc_enter_premium(pageDbIn: PageDb, dispPage: word, arg1: wor
 function {:opaque} smc_resume_premium(pageDbIn: PageDb, dispPage: word)
     : (PageDb, word)
     requires validPageDb(pageDbIn) 
-    ensures validPageDb(smc_resume_premium(pageDbIn, dispPage).0)
+    ensures smc_resume_premium(pageDbIn,dispPage) ==
+        smc_resume(pageDbIn,dispPage)
+    ensures  var db:= smc_resume_premium(pageDbIn, dispPage).0;
+        var err := smc_resume_premium(pageDbIn, dispPage).1;
+        validPageDb(db) && (err == KOM_ERR_SUCCESS() ==> validDispatcherPage(pageDbIn, dispPage))
 {
     resumePreservesPageDbValidity(pageDbIn, dispPage);
     smc_resume(pageDbIn, dispPage)
