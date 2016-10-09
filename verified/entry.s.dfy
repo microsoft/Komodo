@@ -161,19 +161,17 @@ predicate preEntryResume(s:SysState, s':SysState, dispPage:PageNr)
     s'.g.g_cur_dispatcher == dispPage &&
    
     (reveal_ValidRegState(); 
-    s'.hw.regs == disp.ctxt.regs
-        [LR(FIQ)        := s.hw.regs[LR(FIQ)]]
-        [LR(IRQ)        := s.hw.regs[LR(IRQ)]]
-        [LR(Supervisor) := s.hw.regs[LR(Supervisor)]]
-        [LR(Abort)      := s.hw.regs[LR(Abort)]]
-        [LR(Undefined)  := s.hw.regs[LR(Undefined)]]
-        [LR(Monitor)    := s.hw.regs[LR(Monitor)]]
-        [SP(FIQ)        := s.hw.regs[SP(FIQ)]]
-        [SP(IRQ)        := s.hw.regs[SP(IRQ)]]
-        [SP(Supervisor) := s.hw.regs[SP(Supervisor)]]
-        [SP(Abort)      := s.hw.regs[SP(Abort)]]
-        [SP(Undefined)  := s.hw.regs[SP(Undefined)]]
-        [SP(Monitor)    := s.hw.regs[SP(Monitor)]]) &&
+    s'.hw.regs[R4] == disp.ctxt.regs[R4] &&
+    s'.hw.regs[R5] == disp.ctxt.regs[R5] &&
+    s'.hw.regs[R6] == disp.ctxt.regs[R6] &&
+    s'.hw.regs[R7] == disp.ctxt.regs[R7] &&
+    s'.hw.regs[R8] == disp.ctxt.regs[R8] &&
+    s'.hw.regs[R9] == disp.ctxt.regs[R9] &&
+    s'.hw.regs[R10] == disp.ctxt.regs[R10] &&
+    s'.hw.regs[R11] == disp.ctxt.regs[R11] &&
+    s'.hw.regs[R11] == disp.ctxt.regs[R12] &&
+    s'.hw.regs[LR(User)] == disp.ctxt.regs[LR(User)] &&
+    s'.hw.regs[SP(User)] == disp.ctxt.regs[SP(User)]) &&
     
     (reveal_ValidSRegState();
     s'.hw.sregs[cpsr] == disp.ctxt.cpsr) &&
