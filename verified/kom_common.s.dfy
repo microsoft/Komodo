@@ -164,7 +164,11 @@ predicate SaneConstants()
 
 predicate SaneState(s:state)
 {
-    SaneConstants() && ValidState(s) && ValidStack(s) && SaneMem(s.m) && mode_of_state(s) == Monitor
+    SaneConstants()
+    && ValidState(s) 
+    && ValidStack(s)
+    && SaneMem(s.m)
+    && mode_of_state(s) == Monitor
 }
 
 

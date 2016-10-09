@@ -169,7 +169,7 @@ predicate preEntryResume(s:SysState, s':SysState, dispPage:PageNr)
     s'.hw.regs[R9] == disp.ctxt.regs[R9] &&
     s'.hw.regs[R10] == disp.ctxt.regs[R10] &&
     s'.hw.regs[R11] == disp.ctxt.regs[R11] &&
-    s'.hw.regs[R11] == disp.ctxt.regs[R12] &&
+    s'.hw.regs[R12] == disp.ctxt.regs[R12] &&
     s'.hw.regs[LR(User)] == disp.ctxt.regs[LR(User)] &&
     s'.hw.regs[SP(User)] == disp.ctxt.regs[SP(User)]) &&
     
