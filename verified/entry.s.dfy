@@ -101,7 +101,7 @@ predicate validResume(s:SysState,s':SysState,dispPage:word)
     ((exists serr, s2, s3, s4 :: validSysStates({serr,s2,s3,s4})
         && errCheck(s, serr)
         && preEntryResume(serr,s2,dispPage)
-        && entryTransitionEnter(s2, s3)
+        && entryTransitionResume(s2, s3)
         && s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d)
         && mode_of_state(s4.hw) != User
         && validExceptionTransition(s4, s', s4.d)

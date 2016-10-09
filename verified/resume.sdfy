@@ -246,19 +246,19 @@ procedure kom_smc_resume(
 
         assert errCheck(s, s1);
 
-        assert err == KOM_ERR_SUCCESS();
-        assert tuple(s1.d, err) == smc_resume(s.d, pagenr);
-        assert validSysState'(s1);
-        assert this == s1.hw;
-        assert SaneState(s1.hw);
+        //assert err == KOM_ERR_SUCCESS();
+        //assert tuple(s1.d, err) == smc_resume(s.d, pagenr);
+        //assert validSysState'(s1);
+        //assert this == s1.hw;
+        //assert SaneState(s1.hw);
 
         assert r5 == pagenr;
         s2 := pre_entry_resume(err,r5,s1);
         assert preEntryResume(s1,s2,pagenr);
-        assert OperandContents(s.hw, OLR) ==
-            s2.d[s2.g.g_cur_dispatcher].entry.ctxt.pc;
+        //assert OperandContents(s.hw, OLR) ==
+        //    s2.d[s2.g.g_cur_dispatcher].entry.ctxt.pc;
 
-        assert s2.d == s1.d;
+        //assert s2.d == s1.d;
 
         assert spsr_of_state(s2.hw).m == User;
 
@@ -274,8 +274,8 @@ procedure kom_smc_resume(
         ghost var g := s2.g;
 
         ghost var d := s.d;
-        assert s1.d == d;
-        assert s2.d == d;
+        //assert s1.d == d;
+        //assert s2.d == d;
         assert s1.d == specPageDb(smc_resume(s.d, pagenr));
 
         ghost var ss3 := SysState(s3,d,g);
@@ -287,20 +287,26 @@ procedure kom_smc_resume(
         assert validSysStates(set(s2,ss3,ss4,ss5));
         assert preEntryResume(s1,s2,pagenr);
 
-        forall :: entryTransitionEnter(s2, ss3)
+        forall :: entryTransitionResume(s2, ss3)
             && validSysState'(ss3)
         {
 
             reveal_validPageDb();
             reveal_ValidRegState();
-
+            assert validSysState'(s1);
+            assert s1.d == d;
+            assert s2.d == d;
+            assert ss3.d == d;
             assert ss3.hw.conf.ttbr0.ptbase == s2.hw.conf.ttbr0.ptbase;
-            assert s1.d == s2.d;
             assert nonStoppedL1(d, securePageFromPhysAddr(s2.hw.conf.ttbr0.ptbase));
             assert nonStoppedL1(d, securePageFromPhysAddr(ss3.hw.conf.ttbr0.ptbase));
 
             assert OperandContents(s2.hw, OLR) == 
                 s2.d[s2.g.g_cur_dispatcher].entry.ctxt.pc;
+
+            assert validSysState'(s2);
+            assert validSysState'(ss3);
+            assert entryTransitionResume(s2, ss3);
         }
 
         assert ss4.d == ss3.d;
@@ -321,12 +327,12 @@ procedure kom_smc_resume(
                 assert ss5.hw.conf.ttbr0.ptbase == s2.hw.conf.ttbr0.ptbase;
                 assert securePageFromPhysAddr(ss5.hw.conf.ttbr0.ptbase) == l1p;
             }
-            assert ss4.hw.conf.excount + 1 == ss5.hw.conf.excount;
-            assert ss3.hw.conf.excount == ss4.hw.conf.excount;
-            assert ss3.hw.conf.excount + 1 == ss5.hw.conf.excount;
-            assert ss5.hw.conf.exstep == ss4.hw.steps;
-            assert ss5.hw.steps == ss4.hw.steps;
-            assert ss5.hw.conf.exstep == ss5.hw.steps;
+            //assert ss4.hw.conf.excount + 1 == ss5.hw.conf.excount;
+            //assert ss3.hw.conf.excount == ss4.hw.conf.excount;
+            //assert ss3.hw.conf.excount + 1 == ss5.hw.conf.excount;
+            //assert ss5.hw.conf.exstep == ss4.hw.steps;
+            //assert ss5.hw.steps == ss4.hw.steps;
+            //assert ss5.hw.conf.exstep == ss5.hw.steps;
             userspaceExecutionPreservesPageDb(d,ss3.hw,ss4.hw,l1p);
             exceptionTakenPreservesPageDb(d,ss4.hw,ex,ss5.hw);
             assert validSysState'(ss4);
@@ -369,13 +375,13 @@ procedure kom_smc_resume(
             assert pre_unstash.g.g_cur_dispatcher == s'.g.g_cur_dispatcher;
             assert pre_unstash.hw.conf.ttbr0 == s'.hw.conf.ttbr0;
             assert validSysState'(s');
-            assert tuple(pre_unstash.hw.regs[R0], pre_unstash.hw.regs[R1], pre_unstash.d) ==
-                    exceptionHandled_premium(ss5);
-            assert tuple(s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
-                    exceptionHandled_premium(ss5);
+            //assert tuple(pre_unstash.hw.regs[R0], pre_unstash.hw.regs[R1], pre_unstash.d) ==
+            //        exceptionHandled_premium(ss5);
+            //assert tuple(s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
+            //        exceptionHandled_premium(ss5);
             reveal_validExceptionTransition();
-            assert validExceptionTransition(ss5,pre_unstash,ss5.d);
-            assert validExceptionTransition(ss5,s',ss5.d);
+            //assert validExceptionTransition(ss5,pre_unstash,ss5.d);
+            //assert validExceptionTransition(ss5,s',ss5.d);
         }
 
         forall :: bankedRegsPreserved(s.hw, s'.hw)
@@ -416,13 +422,10 @@ procedure kom_smc_resume(
             assert ValidStack(s'.hw);
         }
 
-        assert validSysState(s2);
-        assert validSysState(ss3);
-        assert validSysState(ss5);
         assert validSysStates(set(s1,s2,ss3,ss5));
         assert errCheck(s, s1);
         assert preEntryResume(s1, s2, pagenr);
-        assert entryTransitionEnter(s2, ss3);
+        assert entryTransitionResume(s2, ss3);
         assert ss5.d == ss3.d;
         assert userspaceExecution(ss3.hw, ss5.hw, ss3.d);
         assert validExceptionTransition(ss5, s',ss5.d);
