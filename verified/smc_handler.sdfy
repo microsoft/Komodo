@@ -57,6 +57,14 @@ procedure smc_handler(
         pagedb := kom_smc_init_dispatcher(arg1, arg2, arg3, err, pagedb);
     } else if(callno == sp_op_const(KOM_SMC_INIT_L2PTABLE())) {
         pagedb := kom_smc_init_l2ptable(arg1, arg2, arg3, err, pagedb);
+    } else if(callno == sp_op_const(KOM_SMC_ENTER())) {
+        // TODO add implemented monitor call. Need to figure out the systate 
+        // thing.
+        pagedb := pagedb
+    } else if(callno == sp_op_const(KOM_SMC_INIT_RESUME())) {
+        // TODO add implemented monitor call. Need to figure out the systate 
+        // thing.
+        pagedb := pagedb
     }
 
     ghost var prePopThis := this;

@@ -205,11 +205,33 @@ function allocatePage(pageDbIn: PageDb, securePage: word,
     requires validAddrspacePage(pageDbIn, addrspacePage)
     requires allocatePageEntryValid(entry)
     ensures  validPageDb(allocatePage(pageDbIn, securePage, addrspacePage, entry).0);
+    ensures  allocatePage(pageDbIn, securePage, addrspacePage, entry).1 == 
+        KOM_ERR_SUCCESS() ==> validPageNr(securePage);
 {
     reveal_validPageDb();
     allocatePagePreservesPageDBValidity(pageDbIn, securePage, addrspacePage, entry);
     allocatePage_inner(pageDbIn, securePage, addrspacePage, entry)
 }
+
+lemma lemma_allocatePage_preservesMappingGoodness(
+    pageDbIn:PageDb,securePage:word,
+    addrspacePage:PageNr,entry:PageDbEntryTyped,pageDbOut:PageDb,err:word,
+    abs_mapping:Mapping)
+    requires validPageDb(pageDbIn)
+    requires validAddrspacePage(pageDbIn, addrspacePage)
+    requires allocatePageEntryValid(entry)
+    requires (pageDbOut, err) == allocatePage(pageDbIn,securePage,
+        addrspacePage,entry)
+    requires isValidMappingTarget(pageDbIn,addrspacePage,abs_mapping) ==
+        KOM_ERR_SUCCESS();
+    ensures isValidMappingTarget(pageDbOut,addrspacePage,abs_mapping) ==
+        KOM_ERR_SUCCESS();
+    ensures validPageDb(pageDbOut)
+{
+    reveal_validPageDb();
+    assume false;
+}
+
 
 function smc_remove(pageDbIn: PageDb, page: word)
     : (PageDb, word) // PageDbOut, KOM_ERR

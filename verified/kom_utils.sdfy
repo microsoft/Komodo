@@ -16,6 +16,7 @@ procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:
         @pagenr != OLR;
         validPageNr(pagenr);
     ensures
+        GlobalsInvariant(old(this),this);
         AllMemInvariant(old(this),this);
         RegPreservingExcept(old(this), this, set(@phys, @tmp));
         bankedRegsPreserved(old(this), this);
@@ -51,6 +52,7 @@ procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out
         @pagenr != OLR;
         validPageNr(pagenr);
     ensures
+        GlobalsInvariant(old(this),this);
         AllMemInvariant(old(this),this);
         RegPreservingExcept(old(this), this, set(@virt, @tmp));
         bankedRegsPreserved(old(this), this);

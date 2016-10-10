@@ -42,6 +42,15 @@ predicate RegPreservingExcept(s:state, r:state, trashed:set<operand>)
     && SRegsInvariant(s, r)
 }
 
+predicate GlobalsPreservingExcept(s:state, r:state, trashed:set<operand>)
+    requires ValidState(s) && ValidState(r);
+    requires forall o :: o in trashed ==> ValidGlobal(o);
+{
+    reveal_ValidMemState();
+    forall glob | glob !in trashed && ValidGlobal(glob) ::
+        s.m.globals[glob] == r.m.globals[glob]
+}
+
 predicate NonvolatileRegPreserving(s:state, r:state)
     requires ValidState(s) && ValidState(r);
 {

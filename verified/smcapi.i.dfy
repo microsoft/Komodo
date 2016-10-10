@@ -43,6 +43,8 @@ function {:opaque} smc_mapSecure_premium(pageDbIn: PageDb, page: word,
     addrspacePage: word, mapping: Mapping, physPage: word) : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_mapSecure_premium(pageDbIn, page, addrspacePage, mapping, physPage).0)
+    ensures  smc_mapSecure_premium(pageDbIn, page, addrspacePage, mapping, physPage) ==
+        smc_mapSecure(pageDbIn, page, addrspacePage, mapping, physPage);
 {
     mapSecurePreservesPageDBValidity(pageDbIn, page, addrspacePage, mapping, physPage);
     smc_mapSecure(pageDbIn, page, addrspacePage, mapping, physPage)

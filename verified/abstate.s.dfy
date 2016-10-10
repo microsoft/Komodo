@@ -18,6 +18,12 @@ predicate validSysState(s:SysState)
     validGlobs(s.d, s.g) && globalsCorrespond(s)
 }
 
+predicate almostValidSysState(s:SysState)
+{
+    ValidState(s.hw) && SaneMem(s.hw.m) && validPageDb(s.d) &&
+    mostGlobalsCorrespond(s)
+}
+
 predicate globalsCorrespond(s:SysState)
     requires ValidState(s.hw) && SaneMem(s.hw.m)
 {
@@ -49,3 +55,32 @@ predicate globalsCorrespond(s:SysState)
     && GlobalFullContents(s.hw.m, SavedPSRs())[6] == s.g.g_psrs[Monitor]
 }
 
+predicate mostGlobalsCorrespond(s:SysState)
+    requires ValidState(s.hw) && SaneMem(s.hw.m)
+{
+    (forall m :: m in s.g.g_sps && m in s.g.g_lrs && m in s.g.g_psrs)
+
+    && GlobalFullContents(s.hw.m, SavedSPs())[0] == s.g.g_sps[User]
+    && GlobalFullContents(s.hw.m, SavedSPs())[1] == s.g.g_sps[FIQ]
+    && GlobalFullContents(s.hw.m, SavedSPs())[2] == s.g.g_sps[IRQ]
+    && GlobalFullContents(s.hw.m, SavedSPs())[3] == s.g.g_sps[Supervisor]
+    && GlobalFullContents(s.hw.m, SavedSPs())[4] == s.g.g_sps[Abort]
+    && GlobalFullContents(s.hw.m, SavedSPs())[5] == s.g.g_sps[Undefined]
+    && GlobalFullContents(s.hw.m, SavedSPs())[6] == s.g.g_sps[Monitor]
+
+    && GlobalFullContents(s.hw.m, SavedLRs())[0] == s.g.g_lrs[User]
+    && GlobalFullContents(s.hw.m, SavedLRs())[1] == s.g.g_lrs[FIQ]
+    && GlobalFullContents(s.hw.m, SavedLRs())[2] == s.g.g_lrs[IRQ]
+    && GlobalFullContents(s.hw.m, SavedLRs())[3] == s.g.g_lrs[Supervisor]
+    && GlobalFullContents(s.hw.m, SavedLRs())[4] == s.g.g_lrs[Abort]
+    && GlobalFullContents(s.hw.m, SavedLRs())[5] == s.g.g_lrs[Undefined]
+    && GlobalFullContents(s.hw.m, SavedLRs())[6] == s.g.g_lrs[Monitor]
+
+    && GlobalFullContents(s.hw.m, SavedPSRs())[0] == s.g.g_psrs[User]
+    && GlobalFullContents(s.hw.m, SavedPSRs())[1] == s.g.g_psrs[FIQ]
+    && GlobalFullContents(s.hw.m, SavedPSRs())[2] == s.g.g_psrs[IRQ]
+    && GlobalFullContents(s.hw.m, SavedPSRs())[3] == s.g.g_psrs[Supervisor]
+    && GlobalFullContents(s.hw.m, SavedPSRs())[4] == s.g.g_psrs[Abort]
+    && GlobalFullContents(s.hw.m, SavedPSRs())[5] == s.g.g_psrs[Undefined]
+    && GlobalFullContents(s.hw.m, SavedPSRs())[6] == s.g.g_psrs[Monitor]
+}
