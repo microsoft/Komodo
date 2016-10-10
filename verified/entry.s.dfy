@@ -174,7 +174,7 @@ predicate preEntryResume(s:SysState, s':SysState, dispPage:PageNr)
     s'.hw.regs[SP(User)] == disp.ctxt.regs[SP(User)]) &&
     
     (reveal_ValidSRegState();
-    s'.hw.sregs[cpsr] == disp.ctxt.cpsr) &&
+    s'.hw.sregs[spsr(Monitor)] == disp.ctxt.cpsr) &&
     //s'.hw.conf.cpsr == decode_psr(disp.ctxt.cpsr)) &&
     
     WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, l1p)
@@ -223,6 +223,13 @@ predicate userspaceExecution(hw:state, hw':state, d:PageDb)
 function exceptionHandled(s:SysState) : (word, word, PageDb)
     requires validSysState(s)
     requires mode_of_state(s.hw) != User
+    // This should be true since the exception is taken from user mode
+    requires 
+        (reveal_ValidSRegState();
+        decode_mode'(psr_mask_mode(
+        s.hw.sregs[spsr(mode_of_state(s.hw))])) == Just(User))
+    ensures var (r0,r1,d') := exceptionHandled(s);
+        wellFormedPageDb(d')
 {
     reveal_validPageDb();
     reveal_ValidSRegState();
@@ -235,9 +242,14 @@ function exceptionHandled(s:SysState) : (word, word, PageDb)
         var p := s.g.g_cur_dispatcher;
         var pc := OperandContents(s.hw, OLR);
         var psr := s.hw.sregs[spsr(mode_of_state(s.hw))];
-        var disp' := s.d[p].entry.(entered:=true,
-            ctxt:= DispatcherContext(s.hw.regs, psr, pc));
+        assert decode_mode'(psr_mask_mode(psr)) == Just(User);
+        var ctxt' := DispatcherContext(s.hw.regs, pc, psr);
+        assert decode_mode'(psr_mask_mode(ctxt'.cpsr)) == Just(User);
+        assert validDispatcherContext(ctxt');
+        var disp' := s.d[p].entry.(entered:=true, ctxt:=ctxt');
         var d' := s.d[ p := s.d[p].(entry := disp') ];
+        assert wellFormedPageDbEntry(s.d[p].(entry := disp'));
+        assert wellFormedPageDb(d');
         if s.hw.conf.ex.ExIRQ? || s.hw.conf.ex.ExFIQ? then
             (KOM_ERR_INTERRUPTED(), 0, d')
         else

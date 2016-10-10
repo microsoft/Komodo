@@ -24,6 +24,7 @@ predicate AUCIdef_inner(s:state, r:state)
 predicate AUCIdef()
 {
     reveal_ValidRegState();
+    reveal_ValidSRegState();
     // It needed to be separated out like this to prove 
     // validExceptionTransition
     (forall s:SysState, r:SysState | validSysState(s) &&
@@ -33,6 +34,8 @@ predicate AUCIdef()
         ApplicationUsermodeContinuationInvariant(s.hw, r.hw) ::
             mode_of_state(s.hw) != User &&
             validSysState'(r) &&
+            decode_mode'(psr_mask_mode(
+                s.hw.sregs[spsr(mode_of_state(s.hw))])) == Just(User) &&
             (r.hw.regs[R0], r.hw.regs[R1], r.d) ==
                 exceptionHandled_premium(s)
 
@@ -41,6 +44,10 @@ predicate AUCIdef()
 function exceptionHandled_premium(s:SysState) : (int, int, PageDb)
     requires validSysState(s)
     requires mode_of_state(s.hw) != User
+    requires 
+        (reveal_ValidSRegState();
+        decode_mode'(psr_mask_mode(
+        s.hw.sregs[spsr(mode_of_state(s.hw))])) == Just(User))
     ensures var (r0,r1,d) := exceptionHandled_premium(s);
         validPageDb(d)
 {
@@ -51,6 +58,10 @@ function exceptionHandled_premium(s:SysState) : (int, int, PageDb)
 lemma exceptionHandledValidPageDb(s:SysState) 
     requires validSysState(s)
     requires mode_of_state(s.hw) != User
+    requires 
+        (reveal_ValidSRegState();
+        decode_mode'(psr_mask_mode(
+        s.hw.sregs[spsr(mode_of_state(s.hw))])) == Just(User))
     ensures var (r0,r1,d) := exceptionHandled(s);
         validPageDb(d)
 {
@@ -58,8 +69,10 @@ lemma exceptionHandledValidPageDb(s:SysState)
    reveal_ValidSRegState();
    reveal_ValidRegState();
    var (r0,r1,d') := exceptionHandled(s);
-        var p := s.g.g_cur_dispatcher;
-        assert validPageDbEntry(d', p);
+
+   var p := s.g.g_cur_dispatcher;
+
+   assert validPageDbEntry(d', p);
        
         forall( p' | validPageNr(p') && d'[p'].PageDbEntryTyped? && p'!=p )
             ensures validPageDbEntry(d', p');

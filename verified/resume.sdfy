@@ -97,18 +97,6 @@ procedure pre_entry_resume(
     //-------------------------------------------------------------------------
 
     //-------------------------------------------------------------------------
-    // Set SPSR to Usermode
-    //-------------------------------------------------------------------------
-    r10 := 0x10;
-    assume psr_mask_mode(r10) == 0x10;
-    assert decode_mode(psr_mask_mode(r10)) == User;
-    assert ValidModeChange'(this, User);
-    assert ValidModeChange(this, r10);
-    MSR(OSReg(spsr(Monitor)), r10);
-    assert spsr_of_state(this).m == User;
-    //-------------------------------------------------------------------------
-
-    //-------------------------------------------------------------------------
     // Load pc from context into OLR
     //-------------------------------------------------------------------------
     page_monvaddr_impl(r10,pagenr,r11);
@@ -134,15 +122,8 @@ procedure pre_entry_resume(
 
 
     //-------------------------------------------------------------------------
-    // Restore context
+    // Restore SPSR
     //-------------------------------------------------------------------------
-    // TODO need to require that the mode in the saved CPSR is Monitor 
-    // somewhere. Alternatively, we can force the mode to monitor and then 
-    // require that the restored context is the same as whatever is saved 
-    // except that the mode is monitor.
-    assume ValidModeEncoding(psr_mask_mode(d[pagenr].entry.ctxt.cpsr));
-    assume decode_psr(d[pagenr].entry.ctxt.cpsr).m == Monitor;
-
     LDR(r11,r10,sp_op_const(DISP_CTXT_PSR()));
     forall :: r11 == d[pagenr].entry.ctxt.cpsr
     {
@@ -154,14 +135,35 @@ procedure pre_entry_resume(
             extractPage(this.m,pagenr));
         reveal_pageDbDispatcherCorresponds();
     }
-    MSR(OSReg(cpsr),r11);
-    assert this.sregs[cpsr] == d[pagenr].entry.ctxt.cpsr;
-    
+    MSR(OSReg(spsr(Monitor)),r11);
+    assert this.sregs[spsr(Monitor)] == d[pagenr].entry.ctxt.cpsr;
+    forall :: spsr_of_state(this).m == User
+    {
+        reveal_validPageDb();
+        assert validDispatcherContext(d[pagenr].entry.ctxt);
+    }
+
+    //-------------------------------------------------------------------------
+    // Set SPSR to Usermode
+    //-------------------------------------------------------------------------
+    // TODO properly clear 5 LSBs and set to rx10
+    // r10 := 0x10;
+    //assume psr_mask_mode(r10) == 0x10;
+    //assert decode_mode(psr_mask_mode(r10)) == User;
+    //assert ValidModeChange'(this, User);
+    //assert ValidModeChange(this, r10);
+    //MSR(OSReg(spsr(Monitor)), r10);
+    //assert spsr_of_state(this).m == User;
+    //-------------------------------------------------------------------------
+
+    //-------------------------------------------------------------------------
+    // Restore context
+    //-------------------------------------------------------------------------
     ghost var disp := d[pagenr].entry;
    
     // Just a helpful reminder
-    assert OperandContents(this, OLR) ==
-        d[pagenr].entry.ctxt.pc;
+    // assert OperandContents(this, OLR) ==
+    //    d[pagenr].entry.ctxt.pc;
  
     r3 := r10;
     r1 := pagenr;
@@ -280,8 +282,6 @@ procedure pre_entry_resume(
     s'.hw.regs[LR(User)] == disp.ctxt.regs[LR(User)] &&
     s'.hw.regs[SP(User)] == disp.ctxt.regs[SP(User)];
    
-    assert s'.hw.sregs[cpsr] == disp.ctxt.cpsr;
-    
     assert WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, l1p);
 }
 

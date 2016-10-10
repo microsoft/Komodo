@@ -1,4 +1,4 @@
-DAFNYFLAGS = /timeLimit:80 /trace #/proc:Impl*pre__entry__resume*
+DAFNYFLAGS = /timeLimit:80 /trace #/proc:*exceptionHandled*
 SPARTANFLAGS = #-assumeUpdates 1
 
 # top-level target

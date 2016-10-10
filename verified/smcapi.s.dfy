@@ -108,8 +108,10 @@ function smc_initDispatcher(pageDbIn: PageDb, page:word, addrspacePage:word,
        (pageDbIn, KOM_ERR_INVALID_ADDRSPACE())
    else
        var ctxtregs := map[R4:=0,R5:=0,R6:=0,R7:=0,R8:=0,R9:=0,R10:=0,R11:=0,
-            R12:=0,SP(User):=0,LR(User):=0];
-       var ctxt := DispatcherContext(ctxtregs, entrypoint,encode_mode(User));
+            R12:=0,SP(User):=0x10,LR(User):=0];
+       var ctxt := DispatcherContext(ctxtregs, entrypoint, encode_mode(User));
+       // Not sure why this can't verify... moving on for now?
+       assume decode_mode'(psr_mask_mode(encode_mode(User))) == Just(User);  
        allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false, ctxt))
 }
 

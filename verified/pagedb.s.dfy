@@ -122,6 +122,7 @@ predicate validDispatcherContext(dc:DispatcherContext)
     R4 in dc.regs && R5  in dc.regs && R6  in dc.regs && R7  in dc.regs
     && R8  in dc.regs && R9  in dc.regs && R10 in dc.regs && R11 in dc.regs
     && R12 in dc.regs && LR(User) in dc.regs && SP(User) in dc.regs
+    && decode_mode'(psr_mask_mode(dc.cpsr)) == Just(User)
 }
 
 predicate pageDbEntriesValid(d:PageDb)
