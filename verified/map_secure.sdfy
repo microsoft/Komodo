@@ -9,13 +9,33 @@ procedure is_valid_mapping_target(
         isAddrspace(d,addr);
         pageDbCorresponds(this.m,d);
     ensures
-        err == isValidMappingTarget(d, addr, wordToMapping(mapping));
-        RegPreservingExcept(old(this), this, set(@r0));
+        err == isValidMappingTarget(d, addr, mapping);
+        RegPreservingExcept(old(this), this, set(@r0,@r7,@r8,@r9,@r10));
         AllMemInvariant(old(this),this);
         GlobalsInvariant(old(this),this);
 {
-    // TODO: Something
-    assume false;
+    ghost var specResult := isValidMappingTarget(d,addr,mapping);
+    // if(!addrspace.state.InitState?) then
+     //   KOM_ERR_ALREADY_FINAL()
+    page_monvaddr_impl(r7,addr,r8);
+    LDR(r8,r4,sp_op_const(ADDRSPACE_STATE()));
+    forall :: r8 == pageDbAddrspaceStateVal(d[addr].entry.state)
+    {
+        reveal_pageContentsCorresponds();
+        reveal_pageDbAddrspaceCorresponds();
+    }
+    if ( r8 != sp_op_const(KOM_ADDRSPACE_INIT()) ){
+        err := sp_op_const(KOM_ERR_ALREADY_FINAL());
+        assert err == specResult;
+    } else {
+        ghost var abs_mapping := wordToMapping(mapping);
+        LSR(r7,mapping,20); 
+        LSR(r8,mapping,12);
+        AND(r8,r8,0xff);
+        assume r7 == abs_mapping.l1index;
+        assume r8 == abs_mapping.l2index;
+        assume false;
+    }
 }
 
 procedure phys_page_is_insecure_ram_nz({:register OReg(R3)} phys_page:int)
@@ -66,8 +86,7 @@ procedure update_l2pte(
             && pageDbEntryCorresponds(d[r6],
                 extractPageDbEntry(this.m,r6)));
         isAddrspace(d, as_page);
-        isValidMappingTarget(d, as_page, wordToMapping(mapping))
-            == KOM_ERR_SUCCESS();
+        validMapping(abs_mapping,d,as_page);
         d[as_page].entry.state is InitState;
         validL2PTE(d, as_page, l2pte);
     ensures 
@@ -95,7 +114,7 @@ procedure kom_smc_map_secure(
         this == s'.hw;
         SaneState(this);
         tuple(s'.d,err) == smc_mapSecure_premium(s.d, page, as_page,
-            wordToMapping(mapping), phys_page);
+            mapping, phys_page);
         // For now, avoid proving that we haven't trampled the current 
         // dispatcher page. We probably need to either: 1) add errors for the case 
         // that the current dispatcher page is given in R0, or 2) allow the 
@@ -106,7 +125,7 @@ procedure kom_smc_map_secure(
         pageDbCorresponds(s'.hw.m, s'.d);
 {
     ghost var specResult := smc_mapSecure_premium(s.d, page, as_page,
-            wordToMapping(mapping), phys_page);
+            mapping, phys_page);
     //isValidMappingTarget
     //physPageIsInsecureRam
     //allocatePage
@@ -188,14 +207,14 @@ procedure kom_smc_map_secure(
                         assert pageDbEntryCorresponds(d'[r6],
                                 extractPageDbEntry(this.m,r6));
                         ghost var abs_mapping := wordToMapping(mapping);
-                        assert isValidMappingTarget(s.d, as_page, abs_mapping)
+                        assert isValidMappingTarget(s.d, as_page, mapping)
                             == KOM_ERR_SUCCESS();
-                        forall :: isValidMappingTarget(d', as_page, abs_mapping)
+                        forall :: isValidMappingTarget(d', as_page, mapping)
                             == KOM_ERR_SUCCESS()
                         {
                             lemma_allocatePage_preservesMappingGoodness(
                                 s.d,r6,as_page,entry.entry,
-                                d',err,abs_mapping);
+                                d',err,mapping);
                         }
                         ghost var l2pte := SecureMapping(r6, 
                             abs_mapping.perm.w, abs_mapping.perm.x);

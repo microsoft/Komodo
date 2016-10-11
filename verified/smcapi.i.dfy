@@ -40,7 +40,7 @@ function {:opaque} smc_remove_premium(pageDbIn: PageDb, page: word)
 }
 
 function {:opaque} smc_mapSecure_premium(pageDbIn: PageDb, page: word,
-    addrspacePage: word, mapping: Mapping, physPage: word) : (PageDb, word) // PageDbOut, KOM_ERR
+    addrspacePage: word, mapping: word, physPage: word) : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_mapSecure_premium(pageDbIn, page, addrspacePage, mapping, physPage).0)
     ensures  smc_mapSecure_premium(pageDbIn, page, addrspacePage, mapping, physPage) ==
@@ -51,7 +51,7 @@ function {:opaque} smc_mapSecure_premium(pageDbIn: PageDb, page: word,
 }
 
 function {:opaque} smc_mapInsecure_premium(pageDbIn: PageDb, addrspacePage: word,
-    physPage: word, mapping : Mapping) : (PageDb, word)
+    physPage: word, mapping : word) : (PageDb, word)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_mapInsecure_premium(pageDbIn, addrspacePage, physPage, mapping).0)
 {
@@ -298,16 +298,17 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: word)
 }
 
 lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: word,
-    addrspacePage: word, mapping: Mapping, physPage: word)
+    addrspacePage: word, map_word: word, physPage: word)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_mapSecure(pageDbIn, page, addrspacePage,
-        mapping, physPage).0)
+        map_word, physPage).0)
 {
     reveal_validPageDb();
+    var mapping := wordToMapping(map_word);
     var pageDbOut := smc_mapSecure(
-        pageDbIn, page, addrspacePage, mapping, physPage).0;
+        pageDbIn, page, addrspacePage, map_word, physPage).0;
     var err := smc_mapSecure(
-        pageDbIn, page, addrspacePage, mapping, physPage).1;
+        pageDbIn, page, addrspacePage, map_word, physPage).1;
 
     if( err != KOM_ERR_SUCCESS() ){
     } else {
@@ -350,15 +351,17 @@ lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: word,
 }
 
 lemma mapInsecurePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word,
-    physPage: word, mapping : Mapping)
+    physPage: word, map_word: word)
     requires validPageDb(pageDbIn)
-    ensures  validPageDb(smc_mapInsecure(pageDbIn, addrspacePage, physPage, mapping).0)
+    ensures  validPageDb(smc_mapInsecure(pageDbIn, addrspacePage, physPage, 
+        map_word).0)
 {
     reveal_validPageDb();
+    var mapping := wordToMapping(map_word);
     var pageDbOut := smc_mapInsecure(
-        pageDbIn, addrspacePage, physPage, mapping).0;
+        pageDbIn, addrspacePage, physPage, map_word).0;
     var err := smc_mapInsecure(
-        pageDbIn, addrspacePage, physPage, mapping).1;
+        pageDbIn, addrspacePage, physPage, map_word).1;
 
     if( err != KOM_ERR_SUCCESS() ){
     } else {        
@@ -512,6 +515,25 @@ lemma stopPreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word)
     }
 }
 
+lemma lemma_allocatePage_preservesMappingGoodness(
+    pageDbIn:PageDb,securePage:word,
+    addrspacePage:PageNr,entry:PageDbEntryTyped,pageDbOut:PageDb,err:word,
+    abs_mapping:word)
+    requires validPageDb(pageDbIn)
+    requires validAddrspacePage(pageDbIn, addrspacePage)
+    requires allocatePageEntryValid(entry)
+    requires (pageDbOut, err) == allocatePage(pageDbIn,securePage,
+        addrspacePage,entry)
+    requires isValidMappingTarget(pageDbIn,addrspacePage,abs_mapping) ==
+        KOM_ERR_SUCCESS();
+    ensures isValidMappingTarget(pageDbOut,addrspacePage,abs_mapping) ==
+        KOM_ERR_SUCCESS();
+    ensures validPageDb(pageDbOut)
+{
+    reveal_validPageDb();
+}
+
+
 lemma smchandlerPreservesPageDbValidity(pageDbIn: PageDb, callno: word, arg1: word,
     arg2: word, arg3: word, arg4: word)
     requires validPageDb(pageDbIn)
@@ -524,9 +546,9 @@ lemma smchandlerPreservesPageDbValidity(pageDbIn: PageDb, callno: word, arg1: wo
     } else if(callno == KOM_SMC_INIT_L2PTABLE()) {
         initL2PTablePreservesPageDBValidity(pageDbIn, arg1, arg2, arg3);
     } else if(callno == KOM_SMC_MAP_SECURE()) {
-        mapSecurePreservesPageDBValidity(pageDbIn, arg1, arg2, wordToMapping(arg3), arg4);
+        mapSecurePreservesPageDBValidity(pageDbIn, arg1, arg2, arg3, arg4);
     } else if(callno == KOM_SMC_MAP_INSECURE()) {
-        mapInsecurePreservesPageDbValidity(pageDbIn, arg1, arg2, wordToMapping(arg3));
+        mapInsecurePreservesPageDbValidity(pageDbIn, arg1, arg2, arg3);
     } else if(callno == KOM_SMC_REMOVE()) {
         removePreservesPageDBValidity(pageDbIn, arg1);
     } else if(callno == KOM_SMC_FINALISE()) {

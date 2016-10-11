@@ -72,6 +72,12 @@ predicate address_is_secure(m:addr)
     (KOM_DIRECTMAP_VBASE() + SecurePhysBase()) <= m <
         (KOM_DIRECTMAP_VBASE() + SecurePhysBase() + KOM_SECURE_RESERVE())
 }
+//-----------------------------------------------------------------------------
+//  Memory Mapping Config Args
+//-----------------------------------------------------------------------------
+function method KOM_MAPPING_R():int     { 1 }
+function method KOM_MAPPING_W():int     { 2 }
+function method KOM_MAPPING_X():int     { 4 }
 
 //-----------------------------------------------------------------------------
 // Globals

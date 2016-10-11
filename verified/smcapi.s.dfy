@@ -22,20 +22,47 @@ predicate l1indexInUse(d: PageDb, a: PageNr, l1index: int)
 //=============================================================================
 // Mapping
 //=============================================================================
-datatype Mapping = Mapping(l1index: PageNr, l2index: PageNr, perm: Perm)
+datatype Mapping = Mapping(l1index: word, l2index: word, perm: Perm)
 datatype Perm = Perm(r: bool, w: bool, x: bool)
 
-function {:opaque} wordToMapping(arg: word): Mapping
+predicate validMapping(m:Mapping,d:PageDb,a:PageNr)
 {
-    // TODO!
-    Mapping(1,1,Perm(false,false,false))
+    reveal_validPageDb();
+    validPageDb(d) && isAddrspace(d,a) && validAddrspace(d,a) 
+    && validPageNr(m.l1index) && 0 <= m.l1index < NR_L1PTES()
+    && validPageNr(m.l2index) && 0 <= m.l2index < NR_L2PTES()
+    && (var addrspace := d[a].entry;
+        addrspace.state == InitState &&
+        (var l1 := d[addrspace.l1ptnr].entry;
+        l1.l1pt[m.l1index].Just?))
+}
+
+// Keep all your bits hidden!
+function {:opaque} l1indexFromMapping(arg:word) : word
+    { RightShift(arg,20) }
+
+function {:opaque} l2indexFromMapping(arg:word) : word
+    { BitwiseAnd(RightShift(arg,12),0xff) }
+
+function {:opaque} permFromMapping(arg:word) : Perm
+{
+    Perm(BitwiseAnd(arg,KOM_MAPPING_R()) == 1,
+        BitwiseAnd(arg,KOM_MAPPING_W()) == 1,
+        BitwiseAnd(arg,KOM_MAPPING_X()) == 1)
+}
+
+function wordToMapping(arg:word) : Mapping
+{
+    Mapping(l1indexFromMapping(arg),l2indexFromMapping(arg),
+        permFromMapping(arg))
 }
 
 function updateL2Pte(pageDbIn: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
     : PageDb 
     requires validPageDb(pageDbIn)
     requires isAddrspace(pageDbIn, a)
-    requires isValidMappingTarget(pageDbIn, a, mapping) == KOM_ERR_SUCCESS()
+    requires validMapping(mapping,pageDbIn,a)
+    //requires isValidMappingTarget(pageDbIn, a, mapping) == KOM_ERR_SUCCESS()
     requires pageDbIn[a].entry.state.InitState?
     requires validL2PTE(pageDbIn, a, l2e)
 {
@@ -48,25 +75,34 @@ function updateL2Pte(pageDbIn: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
     pageDbIn[ l1pte := PageDbEntryTyped(a, L2PTable(l2pt[mapping.l2index := l2e])) ]
 }
 
-function isValidMappingTarget(d: PageDb, a: PageNr, mapping: Mapping)
+function isValidMappingTarget(d: PageDb, a: PageNr, mapping: word)
     : int // KOM_ERROR
     requires validPageDb(d)
     requires isAddrspace(d, a)
+    ensures  isValidMappingTarget(d,a,mapping) == KOM_ERR_SUCCESS() ==>
+        validMapping(wordToMapping(mapping),d,a)
 {
     reveal_validPageDb();
     var addrspace := d[a].entry;
+    var l1index := l1indexFromMapping(mapping);
+    var l2index := l2indexFromMapping(mapping);
+    var perm := permFromMapping(mapping);
     if(!addrspace.state.InitState?) then
         KOM_ERR_ALREADY_FINAL()
-    else if(!mapping.perm.r) then KOM_ERR_INVALID_MAPPING()
-    else if(!(0 <= mapping.l1index < NR_L1PTES())
-        || !(0 <= mapping.l2index < NR_L2PTES()) ) then
+    else if(!validPageNr(l1indexFromMapping(mapping)) ||
+        !validPageNr(l2indexFromMapping(mapping))) then
         KOM_ERR_INVALID_MAPPING()
-    else
-        assert validAddrspace(d, a);
-        var l1 := d[addrspace.l1ptnr].entry;
-        var l1pte := l1.l1pt[mapping.l1index];
-        if(l1pte.Nothing?) then KOM_ERR_INVALID_MAPPING()
-        else KOM_ERR_SUCCESS()
+    else 
+        if(!perm.r) then KOM_ERR_INVALID_MAPPING()
+        else if(!(0 <= l1index < NR_L1PTES())
+            || !(0 <= l2index < NR_L2PTES()) ) then
+            KOM_ERR_INVALID_MAPPING()
+        else
+            assert validAddrspace(d, a);
+            var l1 := d[addrspace.l1ptnr].entry;
+            var l1pte := l1.l1pt[l1index];
+            if(l1pte.Nothing?) then KOM_ERR_INVALID_MAPPING()
+            else KOM_ERR_SUCCESS()
 }
 
 //============================================================================
@@ -213,25 +249,6 @@ function allocatePage(pageDbIn: PageDb, securePage: word,
     allocatePage_inner(pageDbIn, securePage, addrspacePage, entry)
 }
 
-lemma lemma_allocatePage_preservesMappingGoodness(
-    pageDbIn:PageDb,securePage:word,
-    addrspacePage:PageNr,entry:PageDbEntryTyped,pageDbOut:PageDb,err:word,
-    abs_mapping:Mapping)
-    requires validPageDb(pageDbIn)
-    requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires allocatePageEntryValid(entry)
-    requires (pageDbOut, err) == allocatePage(pageDbIn,securePage,
-        addrspacePage,entry)
-    requires isValidMappingTarget(pageDbIn,addrspacePage,abs_mapping) ==
-        KOM_ERR_SUCCESS();
-    ensures isValidMappingTarget(pageDbOut,addrspacePage,abs_mapping) ==
-        KOM_ERR_SUCCESS();
-    ensures validPageDb(pageDbOut)
-{
-    reveal_validPageDb();
-    assume false;
-}
-
 
 function smc_remove(pageDbIn: PageDb, page: word)
     : (PageDb, word) // PageDbOut, KOM_ERR
@@ -262,7 +279,7 @@ function smc_remove(pageDbIn: PageDb, page: word)
 }
 
 function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,
-    mapping: Mapping, physPage: word) : (PageDb, word) // PageDbOut, KOM_ERR
+    mapping: word, physPage: word) : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
 {
     reveal_validPageDb();
@@ -272,6 +289,7 @@ function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,
         var err := isValidMappingTarget(pageDbIn, addrspacePage, mapping);
         if( err != KOM_ERR_SUCCESS() ) then (pageDbIn, err)
         else 
+            var abs_mapping := wordToMapping(mapping);
             // Check physPage (which is optionally used to populate
             // the initial contents of the secure page) for validity
             if (physPage != 0 && !physPageIsInsecureRam(physPage)) then
@@ -283,13 +301,13 @@ function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,
                 var errA := ap_ret.1;
                 if(errA != KOM_ERR_SUCCESS()) then (pageDbIn, errA)
                 else
-                    var l2pte := SecureMapping(page, mapping.perm.w, mapping.perm.x);
-                    var pageDbOut := updateL2Pte(pageDbA, addrspacePage, mapping, l2pte);
+                    var l2pte := SecureMapping(page, abs_mapping.perm.w, abs_mapping.perm.x);
+                    var pageDbOut := updateL2Pte(pageDbA, addrspacePage, abs_mapping, l2pte);
                     (pageDbOut, KOM_ERR_SUCCESS())
 }
 
 function smc_mapInsecure(pageDbIn: PageDb, addrspacePage: word,
-    physPage: word, mapping : Mapping) : (PageDb, word)
+    physPage: word, mapping : word) : (PageDb, word)
     requires validPageDb(pageDbIn)
 {
     reveal_validPageDb();
@@ -301,9 +319,10 @@ function smc_mapInsecure(pageDbIn: PageDb, addrspacePage: word,
         else if(!physPageIsInsecureRam(physPage)) then
             (pageDbIn, KOM_ERR_INVALID_PAGENO())
         else
+            var abs_mapping := wordToMapping(mapping);
             assert validInsecurePageNr(physPage);
-            var l2pte := InsecureMapping( physPage,  mapping.perm.w);
-            var pageDbOut := updateL2Pte(pageDbIn, addrspacePage, mapping, l2pte);
+            var l2pte := InsecureMapping( physPage,  abs_mapping.perm.w);
+            var pageDbOut := updateL2Pte(pageDbIn, addrspacePage, abs_mapping, l2pte);
             (pageDbOut, KOM_ERR_SUCCESS())
 }
 
@@ -394,10 +413,10 @@ function smchandler(pageDbIn: PageDb, callno: word, arg1: word, arg2: word,
         var ret := smc_initL2PTable(pageDbIn, arg1, arg2, arg3);
         (ret.0, ret.1, 0)
     else if(callno == KOM_SMC_MAP_SECURE()) then
-        var ret := smc_mapSecure(pageDbIn, arg1, arg2, wordToMapping(arg3), arg4);
+        var ret := smc_mapSecure(pageDbIn, arg1, arg2, arg3, arg4);
         (ret.0, ret.1, 0)
     else if(callno == KOM_SMC_MAP_INSECURE()) then
-        var ret := smc_mapInsecure(pageDbIn, arg1, arg2, wordToMapping(arg3));
+        var ret := smc_mapInsecure(pageDbIn, arg1, arg2, arg3);
         (ret.0, ret.1, 0)
     else if(callno == KOM_SMC_REMOVE()) then
         var ret := smc_remove(pageDbIn, arg1);
