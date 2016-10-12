@@ -95,7 +95,7 @@ function method {:opaque} SecurePhysBaseOp(): operand { OSymbol("g_secure_physba
 function method {:opaque} CurAddrspaceOp(): operand { OSymbol("g_cur_addrspace") }
 
 // the phys base is unknown, but never changes
-function {:axiom} SecurePhysBase(): addr
+function method {:axiom} SecurePhysBase(): addr
     ensures 0 < SecurePhysBase() <= KOM_PHYSMEM_LIMIT() - KOM_SECURE_RESERVE();
     ensures PageAligned(SecurePhysBase());
 

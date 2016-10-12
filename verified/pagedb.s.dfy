@@ -15,7 +15,7 @@ function sp_eval_op_PageNr(s:state, o:operand): word
     { OperandContents(s,o) }
 
 function method NR_L1PTES(): int { 256 }
-function NR_L2PTES(): int { 1024 }
+function method NR_L2PTES(): int { 1024 }
 
 predicate validPageNr(p: int)
 {

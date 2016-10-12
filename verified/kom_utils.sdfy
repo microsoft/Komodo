@@ -34,6 +34,42 @@ procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:
     ADD(phys, phys, tmp);
 }
 
+procedure paddr_page_impl(out {:operand} pagenr:int, {:operand} phys:int, out {:operand} tmp:int)
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidRegOperand(@phys);
+        ValidRegOperand(@pagenr);
+        ValidRegOperand(@tmp);
+        // NB: @phys == @pagenr is supported
+        @phys != @tmp;
+        @pagenr != @tmp;
+        @phys != OSP;
+        @tmp != OSP;
+        @pagenr != OSP;
+        @phys != OLR;
+        @tmp != OLR;
+        @pagenr != OLR;
+        isUInt32(phys);
+        PageAligned(phys);
+        SecurePhysBase() <= phys < SecurePhysBase() + KOM_SECURE_RESERVE();
+    ensures
+        GlobalsInvariant(old(this),this);
+        AllMemInvariant(old(this),this);
+        RegPreservingExcept(old(this), this, set(@pagenr, @tmp));
+        bankedRegsPreserved(old(this), this);
+        pagenr == paddr_page(old(phys));
+        validPageNr(pagenr);
+{
+    LDRglobaladdr(tmp, SecurePhysBaseOp());
+    LDRglobal(tmp, SecurePhysBaseOp(), tmp, 0);
+    assert WordAligned(tmp);
+    SUB(pagenr,phys,tmp);
+    
+    tmp := sp_op_const(PAGESIZE());
+    UDIV(pagenr,pagenr,tmp);
+}
+
 procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out {:operand} tmp:int)
     requires/ensures
         SaneState(this);
@@ -62,6 +98,7 @@ procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out
     page_paddr_impl(virt, pagenr, tmp);
     ADD(virt, virt, sp_op_const(KOM_DIRECTMAP_VBASE()));
 }
+
 
 procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand} size:int)
     requires/ensures

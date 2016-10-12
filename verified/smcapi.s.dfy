@@ -57,22 +57,23 @@ function wordToMapping(arg:word) : Mapping
         permFromMapping(arg))
 }
 
-function updateL2Pte(pageDbIn: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
+function updateL2Pte(d: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
     : PageDb 
-    requires validPageDb(pageDbIn)
-    requires isAddrspace(pageDbIn, a)
-    requires validMapping(mapping,pageDbIn,a)
-    //requires isValidMappingTarget(pageDbIn, a, mapping) == KOM_ERR_SUCCESS()
-    requires pageDbIn[a].entry.state.InitState?
-    requires validL2PTE(pageDbIn, a, l2e)
+    requires validPageDb(d)
+    requires isAddrspace(d, a)
+    requires validMapping(mapping,d,a)
+    //requires isValidMappingTarget(d, a, mapping) == KOM_ERR_SUCCESS()
+    requires d[a].entry.state.InitState?
+    requires validL2PTE(d, a, l2e)
 {
     reveal_validPageDb();
-    var addrspace := pageDbIn[a].entry;
-    assert validAddrspace(pageDbIn, a);
-    var l1 := pageDbIn[addrspace.l1ptnr].entry;
+    var addrspace := d[a].entry;
+    assert validAddrspace(d, a);
+    var l1 := d[addrspace.l1ptnr].entry;
     var l1pte := fromJust(l1.l1pt[mapping.l1index]);
-    var l2pt := pageDbIn[l1pte].entry.l2pt;
-    pageDbIn[ l1pte := PageDbEntryTyped(a, L2PTable(l2pt[mapping.l2index := l2e])) ]
+    var l2pt := d[l1pte].entry.l2pt;
+    d[ l1pte := d[l1pte].( entry := d[l1pte].entry.( l2pt := 
+        l2pt[mapping.l2index := l2e] ))]
 }
 
 function isValidMappingTarget(d: PageDb, a: PageNr, mapping: word)

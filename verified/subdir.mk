@@ -92,7 +92,7 @@ init_l2ptable_dep-sdfy = ARMdecls kom_utils allocate_page
 init_l2ptable_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/init_l2ptable.verified: $(call mkdeps,init_l2ptable)
 
-map_secure_dep-sdfy = ARMdecls kom_utils allocate_page
+map_secure_dep-sdfy = ARMdecls kom_utils allocate_page init_l2ptable
 map_secure_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
 $(dir)/map_secure.verified: $(call mkdeps,map_secure)
 
