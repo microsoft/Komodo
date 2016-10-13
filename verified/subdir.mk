@@ -1,4 +1,4 @@
-DAFNYFLAGS = /timeLimit:60 /trace
+DAFNYFLAGS = /timeLimit:60 /trace $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
 SPARTANFLAGS = #-assumeUpdates 1
 
 # top-level target
@@ -24,14 +24,14 @@ mkincs-nodir = $(call mkdfyincs,$(1),) $(call mksdfyincs,$(1),)
 %.verified %.log: %.sdfy %.gen.dfy
 	/bin/bash -c "$(SPARTAN) $(SPARTANFLAGS) $(call mkincs-dir,$*) $< \
 	-dafnyDirect $(DAFNYFLAGS) /noNLarith /compile:0 | tee $*.log; exit \$${PIPESTATUS[0]}"
-	@grep -q "^Dafny program verifier finished with [^0][0-9]* verified, 0 errors$$" $*.log && touch $*.verified
+	@grep -q "^Dafny program verifier finished with [^0][0-9]* verified, 0 errors$$" $*.log $(if $(DAFNYPROC),,&& touch $*.verified)
 	@$(RM) $*.log
 
 %.verified: %.dfy
-	$(DAFNY) $(DAFNYFLAGS) /noNLarith /compile:0 $< && touch $@
+	$(DAFNY) $(DAFNYFLAGS) /noNLarith /compile:0 $< $(if $(DAFNYPROC),,&& touch $@)
 
 $(dir)/nlarith.s.verified: $(dir)/nlarith.s.dfy
-	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< && touch $@
+	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< $(if $(DAFNYPROC),,&& touch $@)
 
 %.exe: %.i.dfy %.i.verified
 	$(DAFNY) $(DAFNYFLAGS) /noVerify /compile:2 /out:$@ $<
