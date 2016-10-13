@@ -1,14 +1,15 @@
 include "nlarith.s.dfy"
 
+/* Z3 gets hopelessly lost thinking about bitwise operations, so we
+ * wrap them in opaque functions */
+
 lemma {:axiom} lemma_BitIntEquiv(b:bv32, i:int)
     requires i == b as int || (0 <= i < 0x1_0000_0000 && b == i as bv32)
     ensures i == b as int && b == i as bv32
     ensures i == 0 <==> b == 0
 
-function IntAsBits(i:int): bv32
+function {:opaque} IntAsBits(i:int): bv32
     requires 0 <= i < 0x1_0000_0000;
-    ensures IntAsBits(i) as int == i;
-    //ensures IntAsBits(i) == i as bv32;
     ensures i == 0 <==> IntAsBits(i) == 0;
 {
     var b := i as bv32;
@@ -16,20 +17,33 @@ function IntAsBits(i:int): bv32
     b
 }
 
-function BitsAsInt(b:bv32): int
-    ensures 0 <= BitsAsInt(b) < 0x1_0000_0000;
-    ensures b == 0 <==> BitsAsInt(b) == 0;
-    ensures BitsAsInt(b) as bv32 == b;
-    //ensures BitsAsInt(b) == b as int;
-    decreases b as int // XXX: workaround Dafny issue #26
+function BitsAsInt'(b:bv32): int
 {
-    var i := b as int;
-    lemma_BitIntEquiv(b, i);
-    i
+    b as int
 }
 
-/* Z3 gets hopelessly lost thinking about bitwise operations, so we
- * wrap them in opaque functions */
+lemma lemma_BitsAsInt'(b:bv32)
+    ensures 0 <= BitsAsInt'(b) < 0x1_0000_0000
+    ensures BitsAsInt'(b) as bv32 == b
+    ensures b == 0 <==> BitsAsInt'(b) == 0
+{
+    calc {
+        BitsAsInt'(b) as bv32;
+        b as int as bv32;
+        {lemma_BitIntEquiv(b, b as int);}
+        b;
+    }
+}
+
+function {:opaque} BitsAsInt(b:bv32): int
+    ensures 0 <= BitsAsInt(b) < 0x1_0000_0000;
+    ensures b == 0 <==> BitsAsInt(b) == 0;
+    decreases b as int // XXX: workaround Dafny issues #26 / #39
+{
+    lemma_BitsAsInt'(b);
+    BitsAsInt'(b)
+}
+
 function {:opaque} BitAdd(x:bv32, y:bv32): bv32
 {
     x + y
@@ -70,6 +84,18 @@ function {:opaque} BitMul(x:bv32, y:bv32): bv32
 function {:opaque} BitNot(x:bv32): bv32
 {
     !x
+}
+
+function {:opaque} BitShiftLeft(x:bv32, amount:int): bv32
+    requires 0 <= amount < 32;
+{
+    x << amount
+}
+
+function {:opaque} BitShiftRight(x:bv32, amount:int): bv32
+    requires 0 <= amount < 32;
+{
+    x >> amount
 }
 
 lemma {:axiom} lemma_BitAddEquiv(x:bv32, y:bv32)
@@ -151,6 +177,7 @@ lemma lemma_BitmaskAsInt(i:int, bitpos:int)
     forall ensures BitsAsInt(BitAnd(b, BitmaskLow(bitpos))) == i % pi {
         assert BitAnd(b, BitmaskLow(bitpos)) == BitMod(b, pb);
         lemma_BitModEquiv(b, pb);
+        reveal_BitsAsInt();
         calc {
             BitsAsInt(BitMod(b, pb));
             BitsAsInt(b) % BitsAsInt(pb);
@@ -161,6 +188,7 @@ lemma lemma_BitmaskAsInt(i:int, bitpos:int)
     forall ensures BitsAsInt(BitAnd(b, BitmaskHigh(bitpos))) == i / pi * pi {
         assert BitAnd(b, BitmaskHigh(bitpos)) == BitMul(BitDiv(b, pb), pb);
         lemma_BitDivEquiv(b, pb);
+        reveal_BitsAsInt();
         assert i / pi == BitsAsInt(BitDiv(b, pb));
         lemma_DivMulLessThan(i, pi);
         lemma_BitMulEquiv(BitDiv(b, pb), pb);
@@ -188,7 +216,7 @@ lemma lemma_pow2_properties(n:nat)
     reveal_pow2();
 }
 
-function BitwiseMaskHigh(i:int, bitpos:int): int
+function {:opaque} BitwiseMaskHigh(i:int, bitpos:int): int
     requires 0 <= i < 0x1_0000_0000;
     requires 0 <= bitpos < 32;
     ensures 0 <= BitwiseMaskHigh(i, bitpos) < 0x1_0000_0000;

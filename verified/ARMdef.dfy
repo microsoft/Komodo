@@ -1,16 +1,7 @@
 include "Maybe.dfy"
 include "Seq.dfy"
 include "bitvectors.s.dfy"
-
-// FIXME: this lemma is here because it's very unstable elsewhere
-lemma lemma_PageAlignedImpliesWordAligned(addr:int)
-    ensures addr % 0x1000 == 0 ==> addr % 4 == 0
-{
-    if addr % 0x1000 == 0 {
-        assert 0x1000 % 4 == 0;
-        assert addr % 4 == 0;
-    }
-}
+include "alignment.s.dfy"
 
 //-----------------------------------------------------------------------------
 // Core types (for a 32-bit word-aligned machine)
@@ -438,7 +429,7 @@ function havocPages(pages:set<addr>, s:memmap, r:memmap): memmap
     requires forall a :: ValidMem(a) == (a in s) == (a in r)
 {
     // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
-    (map a | ValidMem(a) && a in TheValidAddresses() :: if BitwiseMaskHigh(a, 12) in pages then r[a] else s[a])
+    (map a:addr | ValidMem(a) && a in TheValidAddresses() :: if BitwiseMaskHigh(a, 12) in pages then r[a] else s[a])
 }
 
 // XXX: To be defined by application code
@@ -533,7 +524,9 @@ predicate ValidAbsL1PTable(m:memstate, vbase:int)
         var ptew := MemContents(m, vbase + WordsToBytes(i));
         ValidAbsL1PTEWord(ptew) &&
             var ptem := ExtractAbsL1PTE(ptew);
-            ptem.Just? ==> isUInt32(ptem.v + PhysBase()) && ValidAbsL2PTable(m, ptem.v + PhysBase()))
+            ptem.Just? ==> (
+                var l2ptr:int := ptem.v + PhysBase();
+                isUInt32(l2ptr) && WordAligned(l2ptr) && ValidAbsL2PTable(m, l2ptr)))
 }
 
 function ExtractAbsL1PTable(m:memstate, vbase:addr): AbsPTable
@@ -568,7 +561,7 @@ function ExtractAbsL1PTE(pte:word): Maybe<addr>
     if typebits == 0 then Nothing else
     // otherwise, it must map a page table
     var ptbase := BitwiseMaskHigh(pte, 10); // BitwiseAnd(pte, 0xfffffc00);
-    assert ptbase % 0x400 == 0; // XXX: help Dafny see WordAligned
+    lemma_1KAlignedImpliesWordAligned(ptbase); // XXX: help Dafny see WordAligned
     Just(ptbase)
 }
 
@@ -648,13 +641,13 @@ function BitwiseOr(x:word, y:word): word
 function BitwiseNot(x:word): word
     { BitsAsInt(BitNot(IntAsBits(x))) }
 
-function {:opaque} LeftShift(x:word, amount:word): word
+function LeftShift(x:word, amount:word): word
     requires 0 <= amount < 32;
-    { BitsAsInt(IntAsBits(x) << amount) }
+    { BitsAsInt(BitShiftLeft(IntAsBits(x), amount)) }
 
-function {:opaque} RightShift(x:word, amount:word): word
+function RightShift(x:word, amount:word): word
     requires 0 <= amount < 32;
-    { BitsAsInt(IntAsBits(x) >> amount) }
+    { BitsAsInt(BitShiftRight(IntAsBits(x), amount)) }
 
 //-----------------------------------------------------------------------------
 // Evaluation
