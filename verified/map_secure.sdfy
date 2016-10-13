@@ -63,13 +63,14 @@ procedure is_valid_mapping_target(
 
                     LDRglobaladdr(r10,PageDb());
                     r9 := sp_op_const(PAGEDB_ENTRY_SIZE());
-                    assert PAGEDB_ENTRY_SIZE() == 8;
-                    assert addr < KOM_SECURE_NPAGES();
-                    assert KOM_SECURE_NPAGES() == 256;
                     /// GGGRRRAAAAAAAAAAArgglebarglebarglebarlge
-                    assume isUInt32(PAGEDB_ENTRY_SIZE());
-                    assume isUInt32(KOM_SECURE_NPAGES()); 
-                    assume isUInt32(8 * 256);
+                    //assert PAGEDB_ENTRY_SIZE() == 8;
+                    //assert addr < KOM_SECURE_NPAGES();
+                    //assert KOM_SECURE_NPAGES() == 256;
+                    //assume isUInt32(PAGEDB_ENTRY_SIZE());
+                    //assume isUInt32(KOM_SECURE_NPAGES()); 
+                    //assume isUInt32(8 * 256);
+                    assume isUInt32(addr * r9);
                     MUL(r9,addr,r9);
                     assert r9 == G_PAGEDB_ENTRY(addr) + PAGEDB_ENTRY_TYPE();
                     LDRglobal(r9,PageDb(),r10,r9);
@@ -140,6 +141,66 @@ procedure phys_page_is_insecure_ram_nz({:register OReg(R3)} phys_page:int)
     }
 }
 
+#verbatim
+function method ARM_L2PTE_CONST_INT():word
+    { ARM_L2PTE_CONST_BITS() as word }
+function method ARM_L2PTE_NX_INT():word
+    { ARM_L2PTE_NX_BIT() as word }
+function method ARM_L2PTE_RO_INT():word
+    { ARM_L2PTE_RO_BIT() as word }
+#endverbatim
+
+procedure arm_l2pte(
+    {:operand } pg:int,
+    {:operand} w:int,
+    {:operand} x:int,
+    out {:operand} res:int
+)
+    requires/ensures
+        SaneState(this);
+    requires
+        @pg != OSP && @w != OSP && @x != OSP;
+        @pg != OLR && @w != OLR && @x != OLR;
+        DistinctRegOperands(set(@pg,@x,@w),3);
+        PageAligned(pg);
+        w == 0 || w == 1;
+        x == 0 || x == 1;
+    ensures
+        RegPreservingExcept(old(this),this,set(@res));
+        AllMemInvariant(old(this),this);
+        GlobalsInvariant(old(this),this);
+        res == ARM_L2PTE(old(pg),old(w==1),old(x==1));
+{
+    ghost var exec  := x == 1;
+    ghost var write := w == 1;
+    ghost var nxbits := if exec  then 0 else ARM_L2PTE_NX_INT();
+    ghost var robits := if write then 0 else ARM_L2PTE_RO_INT();
+    assert ARM_L2PTE_NX_BIT() == 1;
+    assert ARM_L2PTE_RO_BIT() == 0x200;
+    assume x == nxbits;
+    LSL(res,w,10);
+    assume res == robits;
+    ORR(res,res,pg);
+    ORR(res,res,sp_op_const(ARM_L2PTE_CONST_INT()));
+    ORR(res,res,0x2);
+    ORR(res,res,x);
+    assume false;
+}
+
+#verbatim
+lemma {:axiom} lemma_extract_kom_mapping_w(mapping:word,v:word)
+    requires v == BitwiseAnd(mapping,KOM_MAPPING_W())
+    ensures  v == 1 <==> wordToMapping(mapping).perm.w
+    ensures  v == 0 <==> !wordToMapping(mapping).perm.w
+    ensures  v == 0 || v == 1
+
+lemma {:axiom} lemma_extract_kom_mapping_x(mapping:word,v:word)
+    requires v == BitwiseAnd(mapping,KOM_MAPPING_X())
+    ensures  v == 1 <==> wordToMapping(mapping).perm.x
+    ensures  v == 0 <==> !wordToMapping(mapping).perm.x
+    ensures  v == 0 || v == 1
+#endverbatim
+
 procedure update_l2pte(
     {:register OReg(R1)} as_page:int,
     {:register OReg(R2)} mapping:int,
@@ -154,7 +215,10 @@ procedure update_l2pte(
     requires 
         validPageDb(d) && wellFormedPageDb(d);
         abs_mapping == wordToMapping(mapping);
-        l2pte is SecureMapping ==> (l2pte.page == r6
+        l2pte is SecureMapping;
+        (l2pte.page == r6
+            && abs_mapping.perm.x == l2pte.exec
+            && abs_mapping.perm.w == l2pte.write
             && pageDbCorrespondsExcluding(this.m,d,r6)
             && pageDbEntryCorresponds(d[r6],
                 extractPageDbEntry(this.m,r6)));
@@ -163,7 +227,7 @@ procedure update_l2pte(
         d[as_page].entry.state is InitState;
         validL2PTE(d, as_page, l2pte);
         l1pte == mkL1Pte(d[d[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
-        pageDbCorresponds(this.m,d); 
+        PageAligned(page);
     ensures 
         validPageDb(d');
         d' == updateL2Pte(d, as_page, abs_mapping, l2pte);
@@ -197,14 +261,35 @@ procedure update_l2pte(
 
     LSR(r8,mapping,12);
     assume r8 == abs_mapping.l2index;
-    // Seems like it could be easier to prove this way some day
+    // Seems like it could be easier to prove this way rather than shifting in 
+    // one ins some day
     LSL(r8,r8,2);
     assume r8 == WordsToBytes(abs_mapping.l2index);
     assume ValidMem(r12 + r8);
     assert addrInPage(r12 + r8, l1pte_abs);
 
     // TODO actually mkL2Pte
-    assume r6 == mkL2Pte(l2pte);
+    assert l2pte is SecureMapping;
+        
+    AND(r4,mapping,sp_op_const(KOM_MAPPING_W()));
+    AND(r5,mapping,sp_op_const(KOM_MAPPING_X()));
+    lemma_extract_kom_mapping_w(mapping,r4);
+    lemma_extract_kom_mapping_x(mapping,r5);
+
+    page_paddr_impl(r7,r6,r11);
+    assert r7 == page_paddr(old(page));
+
+    arm_l2pte(r7,r4,r5,r6);
+    //assert r6 == ARM_L2PTE(page_paddr(old(page)),r4==1,r5==1);
+
+    forall :: r6 == mkL2Pte(l2pte)
+    {
+        assert l2pte is SecureMapping;
+        assert old(page) == l2pte.page;
+        assert r6 == ARM_L2PTE(page_paddr(old(page)),r4==1,r5==1);
+        assert r6 == ARM_L2PTE(page_paddr(l2pte.page),
+            l2pte.write,l2pte.exec);
+    }
     
     STR(r6,r12,r8);
 
@@ -242,7 +327,7 @@ procedure update_l2pte(
         d'[l1pte_abs].entry is L2PTable;
 
     forall :: pageDbCorrespondsExcluding(this.m, d', l1pte_abs) 
-    {
+    {   
         forall i :| validPageNr(i) && i != l1pte_abs ::
             extractPage(this.m, i) == extractPage(old(this.m), i){}
 

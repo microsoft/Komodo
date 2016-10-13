@@ -21,8 +21,6 @@ procedure fetch_l1pte(
     requires/ensures
         SaneState(this);
     requires
-        // Not sure why this fails when OSP and OLR are placed in the distinct 
-        // set and the counter is updated appropriately, but...
         @l1pt_va != OSP && @l1index != OSP && @tmp != OSP && @res != OSP;
         @l1pt_va != OLR && @l1index != OLR && @tmp != OLR && @res != OLR;
         DistinctRegOperands(set(@l1pt_va, @l1index, @tmp, @res), 4);
