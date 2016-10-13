@@ -1,4 +1,4 @@
-DAFNYFLAGS = /timeLimit:70 /trace 
+DAFNYFLAGS = /timeLimit:90 /trace #/proc:Impl*update__l2pte*
 SPARTANFLAGS = #-assumeUpdates 1
 
 # top-level target

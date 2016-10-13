@@ -122,6 +122,16 @@ predicate pageDbCorrespondsExcluding(s:memstate, pagedb:PageDb, modifiedPage:Pag
             && pageContentsCorresponds(p, pagedb[p], extractPage(s, p)))
 }
 
+predicate pageDbCorrespondsExcludingSet(s:memstate, pagedb:PageDb, 
+    trashed:set<PageNr>)
+    requires SaneMem(s)
+    requires wellFormedPageDb(pagedb)
+{
+    forall p {:trigger validPageNr(p)} | validPageNr(p) && p !in trashed  ::
+        (pageDbEntryCorresponds(pagedb[p], extractPageDbEntry(s, p))
+            && pageContentsCorresponds(p, pagedb[p], extractPage(s, p)))
+}
+
 predicate pageDbCorrespondsOnly(s:memstate, pagedb:PageDb, p:PageNr)
     requires SaneMem(s)
     requires wellFormedPageDb(pagedb)
@@ -362,3 +372,12 @@ lemma extractPageDbToAbstractOne(s:memstate, p:PageNr, o:int)
         == extractPageDbEntry(s,p)[BytesToWords(o)]
 {
 }
+
+/*
+lemma allOnlyCorrespondImpliesCorresponds(s:memstate,d:PageDb)
+    requires SaneMem(s)
+    ensures pageDbCorresponds(s,d)
+{
+    reveal_pageDbEntryCorresponds
+}
+*/
