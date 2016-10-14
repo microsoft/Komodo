@@ -76,7 +76,7 @@ procedure init_addrspace_mem(
     ghost var l1pg := extractPage(this.m, old(l1pt_page));
     ghost var emptyptes := SeqRepeat(NR_L1PTES(), Nothing);
     // XXX: FIXME: workaround dafny bug #40
-    assume initL1PTEntry(addrspace_page).entry == L1PTable(emptyptes);
+    //assume initL1PTEntry(addrspace_page).entry == L1PTable(emptyptes);
     forall :: pageDbL1PTableCorresponds(l1pt_page, L1PTable(emptyptes), l1pg)
     {
         reveal_pageDbL1PTableCorresponds();
@@ -266,6 +266,7 @@ procedure kom_smc_init_addrspace(
             assert r5 == G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_TYPE();
             LDRglobal(r0, PageDb(), r12, r5);
             assert pageDbEntryCorresponds(pagedb[l1pt_page], extractPageDbEntry(this.m, l1pt_page));
+            extractPageDbToAbstractOne(this.m, l1pt_page, PAGEDB_ENTRY_TYPE());
             assert r0 == GlobalWord(this.m, PageDb(), r5) == pageDbEntryTypeVal(pagedb[l1pt_page]);
             if (r0 == sp_op_const(KOM_PAGE_FREE())) {
                 assert pageIsFree(pagedb, l1pt_page);
