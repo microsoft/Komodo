@@ -106,5 +106,5 @@ $(dir)/resume.verified: $(call mkdeps,resume)
 
 smc_handler_dep-sdfy = ARMdecls kom_utils init_addrspace init_dispatcher \
     init_l2ptable enter resume map_secure
-smc_handler_dep-dfy = ARMspartan kom_common.i pagedb.i smc api.i
+smc_handler_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/smc_handler.verified: $(call mkdeps,smc_handler)
