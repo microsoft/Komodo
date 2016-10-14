@@ -22,6 +22,7 @@ procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:
         bankedRegsPreserved(old(this), this);
         phys == page_paddr(old(pagenr));
         isUInt32(phys);
+        PageAligned(phys);
 {
     tmp := sp_op_const(PAGESIZE());
     MUL(phys,pagenr,tmp);

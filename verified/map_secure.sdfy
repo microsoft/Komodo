@@ -126,12 +126,10 @@ procedure phys_page_is_insecure_ram_nz({:register OReg(R3)} phys_page:int)
         AllMemInvariant(old(this),this);
         GlobalsInvariant(old(this),this);
 {
-    // TODO need to gracefully handle overflow somehow...
-    assume isUInt32(PAGESIZE() * phys_page);
+    LSL(r12,sp_op_const(SecurePhysBase()),12);
+    assume LeftShift(SecurePhysBase(), 12) == SecurePhysBase() / PAGESIZE();
 
-    r12 := sp_op_const(PAGESIZE());
-    MUL(r12,phys_page,r12);
-    if(r12 >= sp_op_const(SecurePhysBase()))
+    if(phys_page >= r12)
     {
         assert !physPageIsInsecureRam(phys_page);
         if(r12 != 0){ r12 := 0; }
@@ -161,16 +159,17 @@ procedure arm_l2pte(
     requires
         @pg != OSP && @w != OSP && @x != OSP;
         @pg != OLR && @w != OLR && @x != OLR;
-        DistinctRegOperands(set(@pg,@x,@w),3);
-        PageAligned(pg);
+        DistinctRegOperands(set(@pg,@x,@w,@res),4);
         w == 0 || w == 1;
         x == 0 || x == 1;
+        PageAligned(pg);
     ensures
         RegPreservingExcept(old(this),this,set(@res));
         AllMemInvariant(old(this),this);
         GlobalsInvariant(old(this),this);
         res == ARM_L2PTE(old(pg),old(w==1),old(x==1));
 {
+    assume false;
     ghost var exec  := x == 1;
     ghost var write := w == 1;
     ghost var nxbits := if exec  then 0 else ARM_L2PTE_NX_INT();
@@ -227,7 +226,7 @@ procedure update_l2pte(
         d[as_page].entry.state is InitState;
         validL2PTE(d, as_page, l2pte);
         l1pte == mkL1Pte(d[d[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
-        PageAligned(page);
+        validPageNr(page);
     ensures 
         validPageDb(d');
         d' == updateL2Pte(d, as_page, abs_mapping, l2pte);
@@ -278,6 +277,7 @@ procedure update_l2pte(
 
     page_paddr_impl(r7,r6,r11);
     assert r7 == page_paddr(old(page));
+    assert PageAligned(r7);
 
     arm_l2pte(r7,r4,r5,r6);
     //assert r6 == ARM_L2PTE(page_paddr(old(page)),r4==1,r5==1);
@@ -485,6 +485,8 @@ procedure kom_smc_map_secure(
                         forall :: wellFormedPageDb(d') { reveal_validPageDb(); }
                         ghost var d'';
                         assert r10 == mkL1Pte(s.d[s.d[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
+                        assert r10 == mkL1Pte(d'[d'[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
+                        assert validPageNr(r6); 
                         d'' := update_l2pte(as_page,mapping,r6,r10,d',
                             abs_mapping,l2pte);
                         assert pageDbCorresponds(this.m, d'');
