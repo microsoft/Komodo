@@ -54,6 +54,8 @@ function {:opaque} smc_mapInsecure_premium(pageDbIn: PageDb, addrspacePage: word
     physPage: word, mapping : word) : (PageDb, word)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_mapInsecure_premium(pageDbIn, addrspacePage, physPage, mapping).0)
+    ensures smc_mapInsecure_premium(pageDbIn, addrspacePage, physPage, mapping) ==
+        smc_mapInsecure(pageDbIn, addrspacePage, physPage, mapping) 
 {
     mapInsecurePreservesPageDbValidity(pageDbIn, addrspacePage, physPage, mapping);
     smc_mapInsecure(pageDbIn, addrspacePage, physPage, mapping)

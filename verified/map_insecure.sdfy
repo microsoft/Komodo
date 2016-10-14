@@ -1,0 +1,179 @@
+procedure mkl2pte_insecure(
+    {:register OReg(R2)} mapping:int,
+    inout {:register OReg(R6)} page:int,
+    ghost abs_mapping:Mapping,
+    ghost l2pte:L2PTE
+)
+    requires/ensures
+        SaneState(this);
+    requires
+        abs_mapping == wordToMapping(mapping);
+        l2pte is InsecureMapping;
+        (l2pte.insecurePage == page
+            && abs_mapping.perm.w == l2pte.insecureWrite);
+        validInsecurePageNr(page);
+    ensures
+        page == mkL2Pte(l2pte);
+        RegPreservingExcept(old(this),this,set(@r6,@r7,@r11,@r4,@r5));
+        AllMemInvariant(old(this),this);
+        GlobalsInvariant(old(this),this);
+        
+{
+    AND(r4,mapping,sp_op_const(KOM_MAPPING_W()));
+    lemma_extract_kom_mapping_w(mapping,r4);
+
+    assert validInsecurePageNr(page);
+    assert PAGESIZE() == 0x1000;
+    // isUInt32(r6 * pagesize) should be provable from above 2;
+    assume isUInt32(r6 * PAGESIZE());
+    r5 := sp_op_const(PAGESIZE());
+    MUL(r7,r6,r5);
+    assert PageAligned(r7);
+
+    r5 := 0; // because it has to be a RegOperand 
+    arm_l2pte(r7,r4,r5,r6);
+}
+
+procedure phys_page_is_insecure_ram({:register OReg(R3)} phys_page:int)
+    returns({:register OReg(R12)} ret:int)
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidRegOperand(@phys_page);
+        ValidRegOperand(@r12);
+    ensures 
+        r12 == 0 <==> !physPageIsInsecureRam(phys_page);
+        RegPreservingExcept(old(this), this, set(@r12)); // TODO FIXME
+        AllMemInvariant(old(this),this);
+        GlobalsInvariant(old(this),this);
+        r12 != 0 ==> validInsecurePageNr(phys_page);
+{
+    LSL(r12,sp_op_const(SecurePhysBase()),12);
+    assume LeftShift(SecurePhysBase(), 12) == SecurePhysBase() / PAGESIZE();
+
+    if(phys_page >= r12)
+    {
+        assert !physPageIsInsecureRam(phys_page);
+        r12 := 0;
+    } else {
+        forall :: validInsecurePageNr(phys_page) {
+            assert SecurePhysBase() < KOM_PHYSMEM_LIMIT();
+            assert SecurePhysBase() / PAGESIZE() <
+                KOM_PHYSMEM_LIMIT() / PAGESIZE();
+        }
+        r12 := 1;
+    }
+}
+
+procedure kom_smc_map_insecure(
+    {:register OReg(R1)} as_page:int,
+    {:register OReg(R2)} mapping:int,
+    {:register OReg(R3)} phys_page:int,
+    out {:register OReg(R0)} err:int,
+    ghost s:SysState)
+    returns (ghost s':SysState)
+    requires
+        this == s.hw;
+        SaneState(this);
+        validSysState'(s);
+    ensures
+        this == s'.hw;
+        SaneState(this);
+        tuple(s'.d,err) == smc_mapInsecure_premium(s.d, as_page, phys_page, 
+        mapping);
+        // For now, avoid proving that we haven't trampled the current 
+        // dispatcher page. We probably need to either: 1) add errors for the 
+        // case that the current dispatcher page is given in R0, or 2) allow 
+        // the current dispatcher to either be a valid dispatcher or free and 
+        // only explicitly require it to be non-free on a resume. In the second 
+        // case, we need to probably add an error for the case where its free
+        almostValidSysState(s');
+        pageDbCorresponds(s'.hw.m, s'.d);
+{
+    ghost var specResult := smc_mapInsecure_premium(s.d, as_page,
+            phys_page, mapping);
+
+    //if(!isAddrspace(pageDbIn, addrspacePage)) then
+    //    (pageDbIn, KOM_ERR_INVALID_ADDRSPACE())
+    if (as_page >= sp_op_const(KOM_SECURE_NPAGES())) {
+        err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE());
+        s' := s.(hw:=this);
+    } else {
+        LDRglobaladdr(r12, PageDb());
+        assert sp_eval_op_addr(this, @r12) == AddressOfGlobal(PageDb());
+        assert validPageNr(as_page);
+        r0 := sp_op_const(PAGEDB_ENTRY_SIZE());
+        MUL(r4,as_page,r0);
+        assert r4 == G_PAGEDB_ENTRY(as_page) + PAGEDB_ENTRY_TYPE();
+        LDRglobal(r0, PageDb(), r12, r4);
+
+        forall :: r0 == pageDbEntryTypeVal(s.d[as_page]) {
+            reveal_pageDbEntryCorresponds();
+        }
+
+        if (r0 != sp_op_const(KOM_PAGE_ADDRSPACE())) {
+            assert !isAddrspace(s.d, as_page);
+            err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE());
+            assert !isAddrspace(s.d, as_page) ==> specErr(specResult) == 
+                KOM_ERR_INVALID_ADDRSPACE();
+            assert err == specErr(specResult);
+            s' := s.(hw:=this);
+            forall :: validSysState'(s')
+                    { reveal_validPageDb(); }
+        } else {
+            r5 := as_page;
+            err:= is_valid_mapping_target(as_page,mapping,r9,s.d);
+            if( err != sp_op_const(KOM_ERR_SUCCESS()) ) {
+            assert err == specErr(specResult);
+                s' := s.(hw:=this);
+                forall :: validSysState'(s')
+                    { reveal_validPageDb(); }
+            } else {
+
+                r1 := r5;
+                assert as_page == old(as_page);
+                assert r1 == old(as_page);
+                r12 := phys_page_is_insecure_ram(phys_page);
+                if(r12 == 0) {
+                    err := sp_op_const(KOM_ERR_INVALID_PAGENO());
+                    assert err == specErr(specResult);
+                    s' := s.(hw:=this);
+                    forall :: validSysState'(s')
+                        { reveal_validPageDb(); }
+                } else {
+                    ghost var d';
+                    ghost var entry := PageDbEntryTyped(as_page, DataPage); 
+                    assert entry.addrspace == as_page;
+                    assert validAddrspacePage(s.d, entry.addrspace);
+                    assert r1 == old(as_page);
+                    LDRglobaladdr(r12, PageDb());
+                    d' := s.d;
+                    
+                    assert validInsecurePageNr(phys_page);
+                    ghost var abs_mapping := wordToMapping(mapping);
+                    ghost var l2pte := InsecureMapping(phys_page, 
+                        abs_mapping.perm.w);
+
+                    assert validL2PTE(d', as_page, l2pte);
+                    forall :: wellFormedPageDb(d') { reveal_validPageDb(); }
+                    ghost var d'';
+                    r6 := phys_page;
+                    mkl2pte_insecure(mapping, r6, abs_mapping, l2pte);
+                    assert r10 == mkL1Pte(s.d[s.d[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
+                    assert r10 == mkL1Pte(d'[d'[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
+                    d'' := update_l2pte(as_page,mapping,r6,r10,d',
+                        abs_mapping,l2pte);
+                    assert pageDbCorresponds(this.m, d'');
+                    assert d'' == updateL2Pte(d', as_page, abs_mapping, l2pte);
+                    err := sp_op_const(KOM_ERR_SUCCESS());
+                    s' := s.(d:=d'').(hw:=this);
+                    assert pageDbCorresponds(s'.hw.m,s'.d);
+                    assert err == specErr(specResult);
+                    assert s'.d == specPageDb(specResult);
+                    assert almostValidSysState(s');
+                }
+            }
+        }
+    }
+}
+
