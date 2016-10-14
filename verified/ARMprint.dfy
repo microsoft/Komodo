@@ -81,7 +81,6 @@ method printOperand(o:operand)
         }
         case OSP => print("sp");
         case OLR => print("lr");
-        // case OMem(x) => not_impl();
         case OSymbol(sym) => print "="; print(sym);
 }
 
