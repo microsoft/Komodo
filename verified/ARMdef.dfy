@@ -213,7 +213,7 @@ datatype ins =
     // TODO: reinstate | CPSID_IAF(mod:operand)
     | MRS(dstMRS:operand, srcMRS: operand)
     | MSR(dstMSR:operand, srcMSR: operand)
-    // Only accesses to SCR are supported
+    // Accesses to banked regs and SCR are supported
     // (See armv7a ref manual B4.1.129 "Accessing the SCR")
     | MRC(dstMRC:operand,srcMRC:operand)
     | MCR(dstMCR:operand,srcMCR:operand)
@@ -221,10 +221,6 @@ datatype ins =
     // Only the special case where rd is pc
     // (See armv7a ref manual A8.8.105 and B9.3.20)
     | MOVS_PCLR_TO_USERMODE_AND_CONTINUE
-    // For accessing the banked reg of a specific mode when priv is sufficient
-    // This is a special instruction to avoid making ValidOperand 
-    // state-dependent and requiring a massive rewrite
-    | MOVB(dstMOVB:operand,srcMOVB:operand)
 
 //-----------------------------------------------------------------------------
 // Code Representation
@@ -857,17 +853,17 @@ predicate ValidInstruction(s:state, ins:ins)
         case MOV(dst, src) => ValidRegOperand(dst) &&
             ValidOperand(src)
         case MRS(dst, src) =>
-            ValidSpecialOperand(s, src) &&
-            !ValidMcrMrcOperand(s, src) &&
-            ValidRegOperand(dst) 
+            priv_of_state(s) == PL1 && ValidRegOperand(dst)
+            && ((ValidSpecialOperand(s, src) && !ValidMcrMrcOperand(s, src))
+                || ValidBankedRegOperand(s,src))
         case MSR(dst, src) =>
-            ValidRegOperand(src) && 
-            ValidSpecialOperand(s, dst) && 
-            !ValidMcrMrcOperand(s, dst) &&
-            (dst.sr.spsr? ==>
-                ValidModeEncoding(psr_mask_mode(OperandContents(s, src)))) &&
-            (dst.sr.cpsr? ==>
-                ValidModeChange(s, OperandContents(s, src)))
+            priv_of_state(s) == PL1 && ValidRegOperand(src)
+            && ((ValidSpecialOperand(s, dst) && !ValidMcrMrcOperand(s, dst) &&
+                (dst.sr.spsr? ==>
+                    ValidModeEncoding(psr_mask_mode(OperandContents(s, src)))) &&
+                (dst.sr.cpsr? ==>
+                    ValidModeChange(s, OperandContents(s, src))))
+                || ValidBankedRegOperand(s,dst))
         case MRC(dst, src) =>
             ValidMcrMrcOperand(s, src) &&
             ValidRegOperand(dst) 
@@ -877,9 +873,6 @@ predicate ValidInstruction(s:state, ins:ins)
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE =>
             ValidState(s) &&
             ValidModeChange'(s, User) && spsr_of_state(s).m == User
-        case MOVB(dst, src) => priv_of_state(s) == PL1 &&
-            (ValidRegOperand(dst) || ValidBankedRegOperand(s,dst)) &&
-            (ValidOperand(src) || ValidBankedRegOperand(s,src))
 }
 
 predicate evalIns(ins:ins, s:state, r:state)
@@ -932,12 +925,14 @@ predicate evalIns(ins:ins, s:state, r:state)
         case MOV(dst, src) => evalUpdate(s, dst,
             OperandContents(s, src),
             r)
-        case MRS(dst, src) => evalUpdate(s, dst, SpecialOperandContents(s, src), r)
-        case MSR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r)
+        case MRS(dst, src) =>
+            evalUpdate(s, dst, if src.OSReg? then SpecialOperandContents(s, src) else OperandContents(s,src), r)
+        case MSR(dst, src) =>
+            if dst.OSReg? then evalSRegUpdate(s, dst, OperandContents(s, src), r)
+            else evalUpdate(s,dst,OperandContents(s,src),r)
         case MRC(dst, src) => evalUpdate(s, dst, SpecialOperandContents(s, OSReg(scr)), r)
         case MCR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r)
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE => evalMOVSPCLRUC(s, r)
-        case MOVB(dst,src) => evalUpdate(s,dst,OperandContents(s,src),r)
 }
 
 predicate evalMOVSPCLRUC(s:state, r:state)

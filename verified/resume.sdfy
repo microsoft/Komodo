@@ -194,12 +194,12 @@ procedure pre_entry_resume(
     forall :: ValidMem(r3 + DISP_CTXT_LR())
         { reveal_validPageDb(); assert DISP_CTXT_LR() == 16; }
     LDR(r2,r3,sp_op_const(DISP_CTXT_LR()));
-    MOVB(lr_usr,r2);  
+    MSR(lr_usr,r2);
 
     forall :: ValidMem(r3 + DISP_CTXT_SP())
         { reveal_validPageDb(); assert DISP_CTXT_SP() == 20; }
     LDR(r2,r3,sp_op_const(DISP_CTXT_SP()));
-    MOVB(sp_usr,r2);  
+    MSR(sp_usr,r2);
 
     forall :: this.regs[R4] == disp.ctxt.regs[R4] &&
         this.regs[R5] == disp.ctxt.regs[R5] &&

@@ -227,22 +227,6 @@ MOV(out{:operand} dst:int, {:operand} src:int)
     reveal_sp_eval();
 }
 
-procedure {:instruction Ins(MOVB(dst, src))}
-MOVB(out{:operand} dst:int, {:operand} src:int)
-    requires/ensures
-        ValidState(this);
-        priv_of_state(this) == PL1;
-    requires
-        ValidOperand(@src) || ValidBankedRegOperand(this,@src);
-        ValidRegOperand(@dst) || ValidBankedRegOperand(this,@dst);
-    ensures
-        evalUpdate(old(this), @dst, old(src), this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
-{
-    reveal_sp_eval();
-}
-
 procedure {:instruction Ins(LDR(rd, base, ofs))}
 LDR(out{:operand} rd:int, {:operand} base:int, {:operand} ofs:int)
     requires/ensures
@@ -281,11 +265,12 @@ procedure {:instruction Ins(MRS(dst, src))}
 MRS({:operand} dst:int, {:operand} src:int)
     requires/ensures
         ValidState(this);
-        ValidSpecialOperand(this, @src);
-        !ValidMcrMrcOperand(this, @src);
+    requires
+        priv_of_state(this) == PL1;
         ValidRegOperand(@dst);
+        ValidSpecialOperand(this, @src) && !ValidMcrMrcOperand(this, @src) || ValidBankedRegOperand(this, @src);
     ensures
-        evalUpdate(old(this), @dst, SpecialOperandContents(old(this), @src), this);
+        evalUpdate(old(this), @dst, if @src is OSReg then SpecialOperandContents(old(this), @src) else old(src), this);
         SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
@@ -307,14 +292,15 @@ procedure {:instruction Ins(MSR(dst, src))}
 MSR({:operand} dst:int, {:operand} src:int)
     requires/ensures
         ValidState(this);
-        ValidRegOperand(@src);
     requires
-        ValidSpecialOperand(this, @dst);
-        !ValidMcrMrcOperand(this, @dst);
+        priv_of_state(this) == PL1;
+        ValidRegOperand(@src);
+        ValidSpecialOperand(this, @dst) && !ValidMcrMrcOperand(this, @dst) || ValidBankedRegOperand(this, @dst);
         is_psr(@dst) ==> ValidModeChange(this, src);
         is_spsr(@dst) ==> ValidModeEncoding(psr_mask_mode(src));
     ensures
-        evalSRegUpdate(old(this), @dst, old(src), this);
+        if @dst is OSReg then evalSRegUpdate(old(this), @dst, old(src), this)
+            else evalUpdate(old(this), @dst, old(src), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();

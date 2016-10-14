@@ -70,8 +70,8 @@ method printOperand(o:operand)
             case R10 => print("r10");
             case R11 => print("r11");
             case R12 => print("r12");
-            case SP(m) => print("XXX-badreg-bankedSP");
-            case LR(m) => print("XXX-badreg-bankedLR");
+            case SP(m) => print("sp_"); printMode(m);
+            case LR(m) => print("lr_"); printMode(m);
         }
         case OSReg(r)   => {match r
            case ttbr0   => print("ttbr0");
