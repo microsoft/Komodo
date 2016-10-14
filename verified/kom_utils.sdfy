@@ -97,6 +97,7 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
         STR(val, base, 0);
         assert forall p :: ValidMem(p) && p != base
             ==> MemContents(prevThis.m, p) == MemContents(this.m, p);
+        assert WordAligned(base + 4);
         ADD(base, base, 4);
     }
 }
