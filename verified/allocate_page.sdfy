@@ -52,7 +52,7 @@ procedure addrspace_incref(
         as_va == page_monvaddr(pagenr);
         pageDbCorresponds(this.m, pagedb_in);
     ensures
-        GlobalsInvariant(old(this),this);
+        GlobalsPreservingExcept(old(this),this,set(PageDb()));
         StackPreserving(old(this),this);
         MemPreservingExcept(old(this),this, as_va, as_va + PAGESIZE());
         RegPreservingExcept(old(this),this, set(@tmp));
@@ -126,6 +126,7 @@ procedure allocate_page_success(
         validPageNr(pagenr) && pageIsFree(pagedb_in, pagenr);
         pagedb_in[entry.addrspace].entry.state == InitState;
     ensures
+        GlobalsPreservingExcept(old(this),this,set(PageDb()));
         StackPreserving(old(this),this);
         RegPreservingExcept(old(this),this, set(@tmp, @tmp2));
         pagedb == specPageDb(allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry));
@@ -140,6 +141,7 @@ procedure allocate_page_success(
     // increment AS refcount
     ghost var pagedb_incref;
     pagedb_incref := addrspace_incref(as_va, tmp, pagedb_in, entry.addrspace);
+    assert GlobalsPreservingExcept(old(this),this,set(PageDb()));
     AllocatePageImpliesIncrefAddrspace(pagedb_in, pagenr, entry.addrspace, entry.entry);
     assert pagedb_incref[entry.addrspace] == pagedb[entry.addrspace];
     assert pageDbCorrespondsOnly(this.m, pagedb, entry.addrspace);
@@ -199,6 +201,8 @@ procedure allocate_page(
     requires/ensures
         SaneState(this);
     requires
+        @tmp2 != OLR && @tmp != OLR && @as_pagenr != OLR && @err != OLR;
+        @tmp2 != OSP && @tmp != OSP && @as_pagenr != OSP && @err != OSP;
         DistinctRegOperands(set(@pagenr, @as_pagenr, @pagedb_base, @tmp, @tmp2, @err), 6);
         ValidOperand(@typeval) && @typeval is OConst;
         pagedb_base == AddressOfGlobal(PageDb());
@@ -210,6 +214,7 @@ procedure allocate_page(
         as_pagenr == entry.addrspace;
         pageDbCorresponds(this.m, pagedb_in);
     ensures
+        GlobalsPreservingExcept(old(this),this,set(PageDb()));
         StackPreserving(old(this),this);
         RegPreservingExcept(old(this),this, set(@tmp, @tmp2, @err));
         tuple(pagedb, err)

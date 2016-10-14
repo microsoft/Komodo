@@ -1,9 +1,53 @@
 include "entry.s.dfy"
 include "ptables.i.dfy"
+include "abstate.s.dfy"
+
+predicate validSysState'(s:SysState)
+{
+    validSysState(s) && pageDbCorresponds(s.hw.m, s.d)
+}
+
+/*
+predicate AUCIdef_inner(s:state, r:state)
+    requires ValidState(s) 
+{
+    reveal_ValidRegState();
+    SaneMem(s.m) && SaneMem(r.m) &&
+    exists ss : SysState :: ss.hw == s && validSysState'(ss)
+    && exists rr : SysState :: rr.hw == r && validSysState'(rr) && 
+        mode_of_state(ss.hw) != User
+    && (rr.hw.regs[R0], rr.hw.regs[R1], rr.d) ==
+            exceptionHandled_premium(ss)
+}
+*/
+
+predicate AUCIdef()
+{
+    reveal_ValidRegState();
+    reveal_ValidSRegState();
+    // It needed to be separated out like this to prove 
+    // validExceptionTransition
+    (forall s:SysState, r:SysState | validSysState(s) &&
+        ApplicationUsermodeContinuationInvariant(s.hw, r.hw) ::
+            validExceptionTransition(s, r, s.d)) &&
+    forall s:SysState, r:SysState | validSysState(s) &&
+        ApplicationUsermodeContinuationInvariant(s.hw, r.hw) ::
+            mode_of_state(s.hw) != User &&
+            validSysState'(r) &&
+            decode_mode'(psr_mask_mode(
+                s.hw.sregs[spsr(mode_of_state(s.hw))])) == Just(User) &&
+            (r.hw.regs[R0], r.hw.regs[R1], r.d) ==
+                exceptionHandled_premium(s)
+
+}
 
 function exceptionHandled_premium(s:SysState) : (int, int, PageDb)
     requires validSysState(s)
     requires mode_of_state(s.hw) != User
+    requires 
+        (reveal_ValidSRegState();
+        decode_mode'(psr_mask_mode(
+        s.hw.sregs[spsr(mode_of_state(s.hw))])) == Just(User))
     ensures var (r0,r1,d) := exceptionHandled_premium(s);
         validPageDb(d)
 {
@@ -14,6 +58,10 @@ function exceptionHandled_premium(s:SysState) : (int, int, PageDb)
 lemma exceptionHandledValidPageDb(s:SysState) 
     requires validSysState(s)
     requires mode_of_state(s.hw) != User
+    requires 
+        (reveal_ValidSRegState();
+        decode_mode'(psr_mask_mode(
+        s.hw.sregs[spsr(mode_of_state(s.hw))])) == Just(User))
     ensures var (r0,r1,d) := exceptionHandled(s);
         validPageDb(d)
 {
@@ -21,8 +69,10 @@ lemma exceptionHandledValidPageDb(s:SysState)
    reveal_ValidSRegState();
    reveal_ValidRegState();
    var (r0,r1,d') := exceptionHandled(s);
-        var p := s.g.g_cur_dispatcher;
-        assert validPageDbEntry(d', p);
+
+   var p := s.g.g_cur_dispatcher;
+
+   assert validPageDbEntry(d', p);
        
         forall( p' | validPageNr(p') && d'[p'].PageDbEntryTyped? && p'!=p )
             ensures validPageDbEntry(d', p');
@@ -53,7 +103,7 @@ lemma enterUserspacePreservesPageDb(d:PageDb,s:state,s':state)
     reveal_pageContentsCorresponds();
 }
 
-lemma nonWriteablePagesAreSafeFromHavoc(m:addr,s:state,s':state)
+lemma nonWritablePagesAreSafeFromHavoc(m:addr,s:state,s':state)
     requires ValidState(s) && ValidState(s')
     requires evalUserspaceExecution(s, s')
     requires var pt := ExtractAbsPageTable(s);
@@ -172,7 +222,7 @@ lemma userspaceExecutionPreservesPageDb(d:PageDb,s:state,s':state, l1:PageNr)
 
                onlyDataPagesAreWritable(p, a, d, s, s', l1);
                assert BitwiseMaskHigh(a, 12) !in pages;
-               nonWriteablePagesAreSafeFromHavoc(a, s, s'); 
+               nonWritablePagesAreSafeFromHavoc(a, s, s'); 
 
                assert s'.m.addresses[a] == s.m.addresses[a];
 
@@ -195,28 +245,35 @@ lemma exceptionTakenPreservesPageDb(d:PageDb,s:state,ex:exception,s':state)
     reveal_pageContentsCorresponds();
 }
 
+// This is actually not true
+
+/*
 lemma appInvariantPreservesPageDb(d:PageDb,s:state,s':state)
     requires SaneMem(s.m) && SaneMem(s'.m) && validPageDb(d)
         && ValidState(s) && ValidState(s')
     requires ApplicationUsermodeContinuationInvariant(s, s')
     requires pageDbCorresponds(s.m , d)
+    requires AUCIdef();
     ensures  pageDbCorresponds(s'.m, d)
 {
     reveal_PageDb();
     reveal_ValidMemState();
     reveal_pageDbEntryCorresponds();
     reveal_pageContentsCorresponds();
+    // TODO FIXME after defining
 }
+*/
 
 
-lemma evalMOVSPCLRUCPreservesPageDb(d:PageDb, s:state, r:state, l1:PageNr)
+// This is actually not true!
+/*
+lemma evalMOVSPCLRUCPreservesPageDb(d:PageDb, d':PageDb, s:state, r:state, l1:PageNr)
     requires ValidState(s) && ValidState(r)
     requires SaneMem(s.m) && SaneMem(r.m) && validPageDb(d)
     requires evalMOVSPCLRUC(s, r) && pageDbCorresponds(s.m, d)
     requires s.conf.ttbr0.ptbase == page_paddr(l1);
     requires nonStoppedL1(d, l1);
-    ensures  pageDbCorresponds(r.m, d)
-
+    requires AUCIdef()
 {
     reveal_PageDb();
     reveal_ValidMemState();
@@ -237,4 +294,5 @@ lemma evalMOVSPCLRUCPreservesPageDb(d:PageDb, s:state, r:state, l1:PageNr)
         appInvariantPreservesPageDb(d, s4, r);
     }
 }
+*/
 

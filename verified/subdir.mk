@@ -1,4 +1,4 @@
-DAFNYFLAGS = /timeLimit:60 /trace $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
+DAFNYFLAGS = /timeLimit:90 /trace $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
 SPARTANFLAGS = #-assumeUpdates 1
 
 # top-level target
@@ -73,7 +73,7 @@ ARMdecls_dep-dfy = ARMspartan
 $(dir)/ARMdecls.verified: $(call mkdeps,ARMdecls)
 
 kom_utils_dep-sdfy = ARMdecls
-kom_utils_dep-dfy = ARMspartan kom_common.i
+kom_utils_dep-dfy = ARMspartan kom_common.i kom_common.s
 $(dir)/kom_utils.verified: $(call mkdeps,kom_utils)
 
 allocate_page_dep-sdfy = ARMdecls kom_utils
@@ -92,11 +92,19 @@ init_l2ptable_dep-sdfy = ARMdecls kom_utils allocate_page
 init_l2ptable_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/init_l2ptable.verified: $(call mkdeps,init_l2ptable)
 
-enter_resume_dep-sdfy = ARMdecls kom_utils
-enter_resume_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
-$(dir)/enter_resume.verified: $(call mkdeps,enter_resume)
+map_secure_dep-sdfy = ARMdecls kom_utils allocate_page init_l2ptable
+map_secure_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
+$(dir)/map_secure.verified: $(call mkdeps,map_secure)
+
+enter_dep-sdfy = ARMdecls kom_utils
+enter_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
+$(dir)/enter.verified: $(call mkdeps,enter)
+
+resume_dep-sdfy = ARMdecls kom_utils enter
+resume_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i 
+$(dir)/resume.verified: $(call mkdeps,resume)
 
 smc_handler_dep-sdfy = ARMdecls kom_utils init_addrspace init_dispatcher \
-    init_l2ptable enter_resume
-smc_handler_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
+    init_l2ptable enter resume map_secure
+smc_handler_dep-dfy = ARMspartan kom_common.i pagedb.i smc api.i
 $(dir)/smc_handler.verified: $(call mkdeps,smc_handler)

@@ -42,6 +42,15 @@ predicate RegPreservingExcept(s:state, r:state, trashed:set<operand>)
     && SRegsInvariant(s, r)
 }
 
+predicate GlobalsPreservingExcept(s:state, r:state, trashed:set<operand>)
+    requires ValidState(s) && ValidState(r);
+    requires forall o :: o in trashed ==> ValidGlobal(o);
+{
+    reveal_ValidMemState();
+    forall glob | glob !in trashed && ValidGlobal(glob) ::
+        s.m.globals[glob] == r.m.globals[glob]
+}
+
 predicate NonvolatileRegPreserving(s:state, r:state)
     requires ValidState(s) && ValidState(r);
 {
@@ -85,6 +94,16 @@ function monvaddr_page(mva:addr): PageNr
 {
     (mva - KOM_DIRECTMAP_VBASE() - SecurePhysBase()) / PAGESIZE()
 }
+
+function paddr_page(p:addr): PageNr
+    requires PageAligned(p)
+    requires SecurePhysBase() <= p < SecurePhysBase() + KOM_SECURE_RESERVE()
+    ensures validPageNr(paddr_page(p))
+    ensures page_paddr(paddr_page(p)) == p
+{
+    (p - SecurePhysBase()) / PAGESIZE()
+}
+
 
 // workarounds for Spartan's lack of Dafny language features
 function specPageDb(t: (PageDb, int)): PageDb { t.0 }

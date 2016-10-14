@@ -72,6 +72,12 @@ predicate address_is_secure(m:addr)
     (KOM_DIRECTMAP_VBASE() + SecurePhysBase()) <= m <
         (KOM_DIRECTMAP_VBASE() + SecurePhysBase() + KOM_SECURE_RESERVE())
 }
+//-----------------------------------------------------------------------------
+//  Memory Mapping Config Args
+//-----------------------------------------------------------------------------
+function method KOM_MAPPING_R():int     { 1 }
+function method KOM_MAPPING_W():int     { 2 }
+function method KOM_MAPPING_X():int     { 4 }
 
 //-----------------------------------------------------------------------------
 // Globals
@@ -81,12 +87,15 @@ function method PAGEDB_ENTRY_SIZE():int { 8 }
 function method G_PAGEDB_SIZE():int
     { KOM_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE() }
 
-function method {:opaque} CurAddrspaceOp(): operand { OSymbol("g_cur_addrspace") }
+function method {:opaque} SavedSPs(): operand { OSymbol("g_saved_sps") }
+function method {:opaque} SavedLRs(): operand { OSymbol("g_saved_lrs") }
+function method {:opaque} SavedPSRs(): operand { OSymbol("g_saved_psrs") }
 function method {:opaque} PageDb(): operand { OSymbol("g_pagedb") }
 function method {:opaque} SecurePhysBaseOp(): operand { OSymbol("g_secure_physbase") }
+function method {:opaque} CurAddrspaceOp(): operand { OSymbol("g_cur_addrspace") }
 
 // the phys base is unknown, but never changes
-function {:axiom} SecurePhysBase(): addr
+function method {:axiom} SecurePhysBase(): addr
     ensures 0 < SecurePhysBase() <= KOM_PHYSMEM_LIMIT() - KOM_SECURE_RESERVE();
     ensures PageAligned(SecurePhysBase());
 
@@ -94,8 +103,12 @@ function method KomGlobalDecls(): globaldecls
     ensures ValidGlobalDecls(KomGlobalDecls());
 {
     reveal_PageDb(); reveal_SecurePhysBaseOp(); reveal_CurAddrspaceOp();
+    reveal_SavedSPs(); reveal_SavedLRs(); reveal_SavedPSRs();
     map[SecurePhysBaseOp() := 4, //BytesPerWord() 
-        CurAddrspaceOp() := 4,  //BytesPerWord()
+        CurAddrspaceOp() := 4,   //BytesPerWord()
+        SavedSPs() := 28,        //BytesPerWord() * number of modes
+        SavedLRs() := 28,        //BytesPerWord() * number of modes
+        SavedPSRs() := 28,        //BytesPerWord() * number of modes
         PageDb() := G_PAGEDB_SIZE()]
 }
 
@@ -139,11 +152,58 @@ predicate SaneConstants()
     && SecurePhysBaseOp() != PageDb()
     && SecurePhysBaseOp() != CurAddrspaceOp()
     && CurAddrspaceOp() != PageDb()
-    && forall s, r | ValidState(s) :: ApplicationUsermodeContinuationInvariant(s, r)
-        <==> ( s == r)
+    && SavedSPs() != SavedLRs()
+    && SavedSPs() != SecurePhysBaseOp()
+    && SavedSPs() != PageDb()
+    && SavedSPs() != CurAddrspaceOp()
+    && SavedSPs() != SavedPSRs()
+    && SavedLRs() != SecurePhysBaseOp()
+    && SavedLRs() != PageDb()
+    && SavedLRs() != CurAddrspaceOp()
+    && SavedLRs() != SavedPSRs()
+    && SavedPSRs() != SecurePhysBaseOp()
+    && SavedPSRs() != CurAddrspaceOp()
+    && SavedPSRs() != PageDb()
+    // && forall s, r | ValidState(s) :: ApplicationUsermodeContinuationInvariant(s, r)
+    //     <==> ( s == r)
 }
 
 predicate SaneState(s:state)
 {
-    SaneConstants() && ValidState(s) && ValidStack(s) && SaneMem(s.m) && mode_of_state(s) == Monitor
+    SaneConstants()
+    && ValidState(s) 
+    && ValidStack(s)
+    && SaneMem(s.m)
+    && mode_of_state(s) == Monitor
+}
+
+
+
+predicate bankedRegsPreserved(hw:state, hw':state)
+    requires ValidState(hw) && ValidState(hw')
+{
+    reveal_ValidRegState();
+    reveal_ValidSRegState();
+    reveal_ValidConfig();
+    // It would probably be better if we had a lemma that proved that these 
+    // were the same thing... but for now both seem equally trustworth, so 
+    // let's use the one that's easier to prove
+    // hw.conf.spsr[Monitor] == hw'.conf.spsr[Monitor] &&
+    hw.sregs[spsr(Monitor)] == hw'.sregs[spsr(Monitor)] &&
+
+    // Sadly this has to be unrolled
+    hw.regs[LR(FIQ)] == hw'.regs[LR(FIQ)] &&
+    hw.regs[LR(IRQ)] == hw'.regs[LR(IRQ)] &&
+    hw.regs[LR(Supervisor)] == hw'.regs[LR(Supervisor)] &&
+    hw.regs[LR(Abort)] == hw'.regs[LR(Abort)] &&
+    hw.regs[LR(Undefined)] == hw'.regs[LR(Undefined)] &&
+    hw.regs[LR(Monitor)] == hw'.regs[LR(Monitor)] &&
+
+    hw.regs[SP(FIQ)] == hw'.regs[SP(FIQ)] &&
+    hw.regs[SP(IRQ)] == hw'.regs[SP(IRQ)] &&
+    hw.regs[SP(Supervisor)] == hw'.regs[SP(Supervisor)] &&
+    hw.regs[SP(Abort)] == hw'.regs[SP(Abort)] &&
+    hw.regs[SP(Undefined)] == hw'.regs[SP(Undefined)] &&
+    hw.regs[SP(Monitor)] == hw'.regs[SP(Monitor)]
+
 }

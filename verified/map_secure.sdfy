@@ -1,0 +1,506 @@
+procedure is_valid_mapping_target(
+    {:register OReg(R1)} addr:int,
+    {:register OReg(R2)} mapping:int,
+    out {:register OReg(R10)} l1pte:int,
+    ghost d:PageDb)
+    returns ({:register OReg(R0)} err:int)
+    requires/ensures
+        SaneState(this);
+        validPageDb(d);
+        isAddrspace(d,addr);
+        pageDbCorresponds(this.m,d);
+    ensures
+        err == isValidMappingTarget(d, addr, mapping);
+        RegPreservingExcept(old(this), this, set(@r0,@r7,@r8,@r9,@r10));
+        AllMemInvariant(old(this),this);
+        GlobalsInvariant(old(this),this);
+        err == KOM_ERR_SUCCESS() ==>(
+            validAddrspacePage(d,addr) && 
+            l1pte == mkL1Pte(d[d[addr].entry.l1ptnr].entry.l1pt[
+                wordToMapping(mapping).l1index], 0) );
+{
+    ghost var specResult := isValidMappingTarget(d,addr,mapping);
+    // if(!addrspace.state.InitState?) then
+     //   KOM_ERR_ALREADY_FINAL()
+    page_monvaddr_impl(r7,addr,r8);
+    LDR(r8,r7,sp_op_const(ADDRSPACE_STATE()));
+    forall :: r8 == pageDbAddrspaceStateVal(d[addr].entry.state)
+    {
+        reveal_pageContentsCorresponds();
+        reveal_pageDbAddrspaceCorresponds();
+    }
+    if ( r8 != sp_op_const(KOM_ADDRSPACE_INIT()) ){
+        err := sp_op_const(KOM_ERR_ALREADY_FINAL());
+        assert err == specResult;
+    } else {
+        ghost var abs_mapping := wordToMapping(mapping);
+        LSR(r7,mapping,20); 
+        LSR(r8,mapping,12);
+        AND(r8,r8,0xff);
+        assume r7 == abs_mapping.l1index;
+        assume r8 == abs_mapping.l2index;
+        if(r7 >= sp_op_const(KOM_SECURE_NPAGES())){
+            err := sp_op_const(KOM_ERR_INVALID_MAPPING());
+            assert err == specResult;
+        } else if(r8 >= sp_op_const(KOM_SECURE_NPAGES())){
+            err := sp_op_const(KOM_ERR_INVALID_MAPPING());
+            assert err == specResult;
+        } else {
+            //if(!perm.r) then KOM_ERR_INVALID_MAPPING()
+            AND(r9,mapping,sp_op_const(KOM_MAPPING_R()));
+            assume r9 == 1 <==> abs_mapping.perm.r;
+            if(r9 != 1){
+                err := sp_op_const(KOM_ERR_INVALID_MAPPING());
+                assert err == specResult;
+            } else {
+                if(r7 >= sp_op_const(NR_L1PTES())){
+                    err := sp_op_const(KOM_ERR_INVALID_MAPPING());
+                    assert err == specResult;
+                } else if (r8 >= sp_op_const(NR_L2PTES())) {
+                    err := sp_op_const(KOM_ERR_INVALID_MAPPING());
+                    assert err == specResult;
+                } else {
+
+                    LDRglobaladdr(r10,PageDb());
+                    r9 := sp_op_const(PAGEDB_ENTRY_SIZE());
+                    /// GGGRRRAAAAAAAAAAArgglebarglebarglebarlge
+                    //assert PAGEDB_ENTRY_SIZE() == 8;
+                    //assert addr < KOM_SECURE_NPAGES();
+                    //assert KOM_SECURE_NPAGES() == 256;
+                    //assume isUInt32(PAGEDB_ENTRY_SIZE());
+                    //assume isUInt32(KOM_SECURE_NPAGES()); 
+                    //assume isUInt32(8 * 256);
+                    assume isUInt32(addr * r9);
+                    MUL(r9,addr,r9);
+                    assert r9 == G_PAGEDB_ENTRY(addr) + PAGEDB_ENTRY_TYPE();
+                    LDRglobal(r9,PageDb(),r10,r9);
+                    forall :: validAddrspacePage(d, addr) {
+                        assert isAddrspace(d, addr);
+                    }
+
+                    page_monvaddr_impl(r8,addr,r10);
+
+                    LDR(r9,r8,sp_op_const(ADDRSPACE_L1PT())); 
+
+                    ghost var l1p := d[addr].entry.l1ptnr;
+                    forall :: validL1PTPage(d,l1p)
+                    { 
+                        assert validAddrspacePage(d, addr);
+                        reveal_validPageDb();
+                    
+                    }
+                    forall :: r9 == page_monvaddr(l1p)
+                    {
+                        assert pageDbCorrespondsOnly(this.m, d, addr);
+                        assert validAddrspacePage(d, addr);
+                        reveal_pageContentsCorresponds();
+                        assert pageContentsCorresponds(addr, d[addr],
+                            extractPage(this.m, addr));
+                        reveal_pageDbAddrspaceCorresponds();
+                    }
+                    
+                    assert r7 == abs_mapping.l1index;
+                    ghost var l1index := r7;
+                    fetch_l1pte(r9,r7,r8,r10,d,l1p);
+                    assert r10 == 0 <==> d[l1p].entry.l1pt[l1index] == Nothing;
+
+                    if( r10 == 0 ) { err := sp_op_const(KOM_ERR_INVALID_MAPPING()); }
+                    else { err := sp_op_const(KOM_ERR_SUCCESS()); }
+
+                }
+            }
+        }
+    }
+}
+
+procedure phys_page_is_insecure_ram_nz({:register OReg(R3)} phys_page:int)
+    returns({:register OReg(R12)} ret:int)
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidRegOperand(@phys_page);
+        ValidRegOperand(@r12);
+    ensures 
+        r12 == 0 <==> phys_page != 0 && !physPageIsInsecureRam(phys_page);
+        RegPreservingExcept(old(this), this, set(@r12)); // TODO FIXME
+        AllMemInvariant(old(this),this);
+        GlobalsInvariant(old(this),this);
+{
+    LSL(r12,sp_op_const(SecurePhysBase()),12);
+    assume LeftShift(SecurePhysBase(), 12) == SecurePhysBase() / PAGESIZE();
+
+    if(phys_page >= r12)
+    {
+        assert !physPageIsInsecureRam(phys_page);
+        if(r12 != 0){ r12 := 0; }
+        else { r12 := 1; }
+    } else {
+        r12 := 1;
+    }
+}
+
+#verbatim
+function method ARM_L2PTE_CONST_INT():word
+    { ARM_L2PTE_CONST_BITS() as word }
+function method ARM_L2PTE_NX_INT():word
+    { ARM_L2PTE_NX_BIT() as word }
+function method ARM_L2PTE_RO_INT():word
+    { ARM_L2PTE_RO_BIT() as word }
+#endverbatim
+
+procedure arm_l2pte(
+    {:operand } pg:int,
+    {:operand} w:int,
+    {:operand} x:int,
+    out {:operand} res:int
+)
+    requires/ensures
+        SaneState(this);
+    requires
+        @pg != OSP && @w != OSP && @x != OSP;
+        @pg != OLR && @w != OLR && @x != OLR;
+        DistinctRegOperands(set(@pg,@x,@w,@res),4);
+        w == 0 || w == 1;
+        x == 0 || x == 1;
+        PageAligned(pg);
+    ensures
+        RegPreservingExcept(old(this),this,set(@res));
+        AllMemInvariant(old(this),this);
+        GlobalsInvariant(old(this),this);
+        res == ARM_L2PTE(old(pg),old(w==1),old(x==1));
+{
+    assume false;
+    ghost var exec  := x == 1;
+    ghost var write := w == 1;
+    ghost var nxbits := if exec  then 0 else ARM_L2PTE_NX_INT();
+    ghost var robits := if write then 0 else ARM_L2PTE_RO_INT();
+    assert ARM_L2PTE_NX_BIT() == 1;
+    assert ARM_L2PTE_RO_BIT() == 0x200;
+    assume x == nxbits;
+    LSL(res,w,10);
+    assume res == robits;
+    ORR(res,res,pg);
+    ORR(res,res,sp_op_const(ARM_L2PTE_CONST_INT()));
+    ORR(res,res,0x2);
+    ORR(res,res,x);
+    assume false;
+}
+
+#verbatim
+lemma {:axiom} lemma_extract_kom_mapping_w(mapping:word,v:word)
+    requires v == BitwiseAnd(mapping,KOM_MAPPING_W())
+    ensures  v == 1 <==> wordToMapping(mapping).perm.w
+    ensures  v == 0 <==> !wordToMapping(mapping).perm.w
+    ensures  v == 0 || v == 1
+
+lemma {:axiom} lemma_extract_kom_mapping_x(mapping:word,v:word)
+    requires v == BitwiseAnd(mapping,KOM_MAPPING_X())
+    ensures  v == 1 <==> wordToMapping(mapping).perm.x
+    ensures  v == 0 <==> !wordToMapping(mapping).perm.x
+    ensures  v == 0 || v == 1
+#endverbatim
+
+procedure update_l2pte(
+    {:register OReg(R1)} as_page:int,
+    {:register OReg(R2)} mapping:int,
+    {:register OReg(R6)} page:int,
+    {:register OReg(R10)} l1pte:int,
+    ghost d:PageDb,
+    ghost abs_mapping:Mapping,
+    ghost l2pte:L2PTE
+)   returns (ghost d':PageDb)
+    requires/ensures
+        SaneState(this);
+    requires 
+        validPageDb(d) && wellFormedPageDb(d);
+        abs_mapping == wordToMapping(mapping);
+        l2pte is SecureMapping;
+        (l2pte.page == r6
+            && abs_mapping.perm.x == l2pte.exec
+            && abs_mapping.perm.w == l2pte.write
+            && pageDbCorrespondsExcluding(this.m,d,r6)
+            && pageDbEntryCorresponds(d[r6],
+                extractPageDbEntry(this.m,r6)));
+        isAddrspace(d, as_page);
+        validMapping(abs_mapping,d,as_page);
+        d[as_page].entry.state is InitState;
+        validL2PTE(d, as_page, l2pte);
+        l1pte == mkL1Pte(d[d[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
+        validPageNr(page);
+    ensures 
+        validPageDb(d');
+        d' == updateL2Pte(d, as_page, abs_mapping, l2pte);
+        pageDbCorresponds(this.m,d');
+        GlobalsPreservingExcept(old(this),this,set(PageDb()));
+{
+
+    reveal_validPageDb();
+    //reveal_pageDbEntryCorresponds();
+    //reveal_pageContentsCorresponds();
+    //reveal_pageDbL1PTableCorresponds();
+    //reveal_pageDbL2PTableCorresponds();
+    ghost var a := as_page;
+    ghost var addrspace := d[a].entry;
+    assert validAddrspace(d, a);
+    ghost var l1 := d[addrspace.l1ptnr].entry;
+    ghost var l1pte_abs := fromJust(l1.l1pt[abs_mapping.l1index]);
+    ghost var l2pt := d[l1pte_abs].entry.l2pt;
+    ghost var l2pt' := l2pt[ abs_mapping.l2index := l2pte ];
+    d' := updateL2Pte(d, as_page, abs_mapping, l2pte);
+   
+    assert l1pte == ARM_L1PTE(page_paddr(l1pte_abs));
+    lemma_ARM_L1PTE_Dual(page_paddr(l1pte_abs));
+    SUB(r12,l1pte,1);
+    assert r12 == page_paddr(l1pte_abs);
+    // assert SecurePhysBase() <= page_paddr(l1pte_abs) < SecurePhysBase() + KOM_SECURE_RESERVE();
+    // assert SecurePhysBase() <= r12 < SecurePhysBase() + KOM_SECURE_RESERVE();
+    paddr_page_impl(r11,r12,r9);
+    page_monvaddr_impl(r12,r11,r9);
+    assert r12 == page_monvaddr(l1pte_abs);
+
+    LSR(r8,mapping,12);
+    assume r8 == abs_mapping.l2index;
+    // Seems like it could be easier to prove this way rather than shifting in 
+    // one ins some day
+    LSL(r8,r8,2);
+    assume r8 == WordsToBytes(abs_mapping.l2index);
+    assume ValidMem(r12 + r8);
+    assert addrInPage(r12 + r8, l1pte_abs);
+
+    // TODO actually mkL2Pte
+    assert l2pte is SecureMapping;
+        
+    AND(r4,mapping,sp_op_const(KOM_MAPPING_W()));
+    AND(r5,mapping,sp_op_const(KOM_MAPPING_X()));
+    lemma_extract_kom_mapping_w(mapping,r4);
+    lemma_extract_kom_mapping_x(mapping,r5);
+
+    page_paddr_impl(r7,r6,r11);
+    assert r7 == page_paddr(old(page));
+    assert PageAligned(r7);
+
+    arm_l2pte(r7,r4,r5,r6);
+    //assert r6 == ARM_L2PTE(page_paddr(old(page)),r4==1,r5==1);
+
+    forall :: r6 == mkL2Pte(l2pte)
+    {
+        assert l2pte is SecureMapping;
+        assert old(page) == l2pte.page;
+        assert r6 == ARM_L2PTE(page_paddr(old(page)),r4==1,r5==1);
+        assert r6 == ARM_L2PTE(page_paddr(l2pte.page),
+            l2pte.write,l2pte.exec);
+    }
+    
+    STR(r6,r12,r8);
+
+    forall :: pageDbCorrespondsOnly(this.m, d', l1pte_abs)
+    {
+        reveal_pageDbEntryCorresponds();
+        reveal_pageContentsCorresponds();
+        ghost var p := l1pte_abs;
+        assert pageDbEntryCorresponds(d'[p], extractPageDbEntry(this.m, p));
+        forall :: pageDbL2PTableCorresponds(p,
+            d'[p].entry, extractPage(this.m, p))
+        {
+            reveal_pageDbL2PTableCorresponds();
+            ghost var base := page_monvaddr(p);
+            ghost var mem_page := extractPage(this.m, p);
+            forall i :| 0 <= i < NR_L2PTES() && i != abs_mapping.l2index
+                :: mem_page[base+WordsToBytes(i)] == mkL2Pte(d'[p].entry.l2pt[i])
+            {
+                assert base + WordsToBytes(i) !=
+                    page_monvaddr(l1pte_abs) + 
+                    WordsToBytes(abs_mapping.l2index);
+                assert extractPage(this.m, p)[base+WordsToBytes(i)] ==
+                    extractPage(old(this.m), p)[base+WordsToBytes(i)];
+                assert pageDbCorrespondsOnly(old(this.m), d, p);
+            }
+            ghost var j := abs_mapping.l2index;
+            forall :: mem_page[base+WordsToBytes(j)] == mkL2Pte(d'[p].entry.l2pt[j])
+            {
+            }
+        }
+        assert pageContentsCorresponds(p, d'[p], extractPage(this.m, p));
+    }
+
+    assert d'[l1pte_abs] is PageDbEntryTyped &&
+        d'[l1pte_abs].entry is L2PTable;
+
+    forall :: pageDbCorrespondsExcluding(this.m, d', l1pte_abs) 
+    {   
+        forall i :| validPageNr(i) && i != l1pte_abs ::
+            extractPage(this.m, i) == extractPage(old(this.m), i){}
+
+        forall i :| validPageNr(i) && i != l1pte_abs && d'[i] is PageDbEntryTyped ::
+            pageDbEntryCorresponds(d'[i], extractPageDbEntry(this.m, i))
+        {
+            reveal_pageDbEntryCorresponds();
+            assert d[i] == d'[i];
+            assert extractPageDbEntry(this.m, i) == 
+                extractPageDbEntry(old(this.m), i);
+            assert pageDbEntryCorresponds(d[i], extractPageDbEntry(old(this.m), i));
+            assert pageDbEntryCorresponds(d'[i], extractPageDbEntry(this.m,i));
+        }
+        forall i :| validPageNr(i) && i != l1pte_abs && d'[i] is PageDbEntryTyped ::
+            pageContentsCorresponds(i, d'[i], extractPage(this.m, i))
+        {
+            reveal_pageContentsCorresponds();
+            assert d[i] == d'[i];
+            assert extractPage(this.m, i) == extractPage(old(this.m), i);
+            assert pageContentsCorresponds(i, d[i], extractPage(old(this.m),i));
+            assert pageContentsCorresponds(i, d'[i], extractPage(this.m,i));
+        }
+    }
+    assert pageDbCorresponds(this.m, d');
+
+    assert d' == updateL2Pte(d,as_page,abs_mapping,l2pte);
+    lemma_updateL2PtePreservesPageDb(d,a,abs_mapping,l2pte);
+}
+
+
+
+procedure kom_smc_map_secure(
+    {:register OReg(R0)} page:int,
+    {:register OReg(R1)} as_page:int,
+    {:register OReg(R2)} mapping:int,
+    {:register OReg(R3)} phys_page:int,
+    out {:register OReg(R0)} err:int,
+    ghost s:SysState)
+    returns (ghost s':SysState)
+    requires
+        this == s.hw;
+        SaneState(this);
+        validSysState'(s);
+    ensures
+        this == s'.hw;
+        SaneState(this);
+        tuple(s'.d,err) == smc_mapSecure_premium(s.d, page, as_page,
+            mapping, phys_page);
+        // For now, avoid proving that we haven't trampled the current 
+        // dispatcher page. We probably need to either: 1) add errors for the case 
+        // that the current dispatcher page is given in R0, or 2) allow the 
+        // current dispatcher to either be a valid dispatcher or free and only 
+        // explicitly require it to be non-free on a resume. In the second 
+        // case, we need to probably add an error for the case where its free
+        almostValidSysState(s');
+        pageDbCorresponds(s'.hw.m, s'.d);
+{
+    ghost var specResult := smc_mapSecure_premium(s.d, page, as_page,
+            mapping, phys_page);
+    //isValidMappingTarget
+    //physPageIsInsecureRam
+    //allocatePage
+    //SecureMapping
+
+    r6 := page;
+    //if(!isAddrspace(pageDbIn, addrspacePage)) then
+    //    (pageDbIn, KOM_ERR_INVALID_ADDRSPACE())
+    if (as_page >= sp_op_const(KOM_SECURE_NPAGES())) {
+        err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE());
+        s' := s.(hw:=this);
+    } else {
+        LDRglobaladdr(r12, PageDb());
+        assert sp_eval_op_addr(this, @r12) == AddressOfGlobal(PageDb());
+        assert validPageNr(as_page);
+        err := sp_op_const(PAGEDB_ENTRY_SIZE());
+        MUL(r4,as_page,r0);
+        assert r4 == G_PAGEDB_ENTRY(as_page) + PAGEDB_ENTRY_TYPE();
+        LDRglobal(r0, PageDb(), r12, r4);
+
+        forall :: r0 == pageDbEntryTypeVal(s.d[as_page]) {
+            reveal_pageDbEntryCorresponds();
+        }
+
+        if (r0 != sp_op_const(KOM_PAGE_ADDRSPACE())) {
+            assert !isAddrspace(s.d, as_page);
+            err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE());
+            assert !isAddrspace(s.d, as_page) ==> specErr(specResult) == 
+                KOM_ERR_INVALID_ADDRSPACE();
+            assert err == specErr(specResult);
+            s' := s.(hw:=this);
+            forall :: validSysState'(s')
+                    { reveal_validPageDb(); }
+        } else {
+            r5 := as_page;
+            err:= is_valid_mapping_target(as_page,mapping,r9,s.d);
+            if( err != sp_op_const(KOM_ERR_SUCCESS()) ) {
+            assert err == specErr(specResult);
+                s' := s.(hw:=this);
+                forall :: validSysState'(s')
+                    { reveal_validPageDb(); }
+            } else {
+
+                r1 := r5;
+                assert as_page == old(as_page);
+                assert r1 == old(as_page);
+                r12 := phys_page_is_insecure_ram_nz(phys_page);
+                if(r12 == 0) {
+                    err := sp_op_const(KOM_ERR_INVALID_PAGENO());
+                    assert err == specErr(specResult);
+                    s' := s.(hw:=this);
+                    forall :: validSysState'(s')
+                        { reveal_validPageDb(); }
+                } else {
+                    ghost var d';
+                    ghost var entry := PageDbEntryTyped(as_page, DataPage); 
+                    assert entry.addrspace == as_page;
+                    assert validAddrspacePage(s.d, entry.addrspace);
+                    assert r1 == old(as_page);
+                    LDRglobaladdr(r12, PageDb());
+                    assert r6 == old(page);
+                    d' := allocate_page(r6,as_page,
+                        sp_op_const(KOM_PAGE_DATA()),
+                        r12,r11,r9,err,s.d,entry);
+                    assert err == KOM_ERR_SUCCESS() ==>
+                        (pageDbCorrespondsExcluding(this.m, d', r6)
+                        && pageDbEntryCorresponds(d'[r6],extractPageDbEntry(this.m, r6)));
+                    if( err != sp_op_const(KOM_ERR_SUCCESS()) ){
+                        s' := s.(d:=d').(hw:=this);
+                        assert err == specErr(specResult);
+                        assert s'.d == specPageDb(specResult);
+                        assert pageDbCorresponds(s'.hw.m,s'.d);
+                        assert validSysState'(s');
+                    } else {
+                        assert r6 == old(page);
+                        assert as_page == old(as_page);
+                        assert validPageNr(r6);
+                        assert err == KOM_ERR_SUCCESS();
+                        assert pageDbCorrespondsExcluding(this.m,d',r6);
+                        assert pageDbEntryCorresponds(d'[r6],
+                                extractPageDbEntry(this.m,r6));
+                        ghost var abs_mapping := wordToMapping(mapping);
+                        assert isValidMappingTarget(s.d, as_page, mapping)
+                            == KOM_ERR_SUCCESS();
+                        forall :: isValidMappingTarget(d', as_page, mapping)
+                            == KOM_ERR_SUCCESS()
+                        {
+                            lemma_allocatePage_preservesMappingGoodness(
+                                s.d,r6,as_page,entry.entry,
+                                d',err,mapping);
+                        }
+                        ghost var l2pte := SecureMapping(r6, 
+                            abs_mapping.perm.w, abs_mapping.perm.x);
+                       
+                        assert validL2PTE(d', as_page, l2pte);
+                        forall :: wellFormedPageDb(d') { reveal_validPageDb(); }
+                        ghost var d'';
+                        assert r10 == mkL1Pte(s.d[s.d[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
+                        assert r10 == mkL1Pte(d'[d'[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
+                        assert validPageNr(r6); 
+                        d'' := update_l2pte(as_page,mapping,r6,r10,d',
+                            abs_mapping,l2pte);
+                        assert pageDbCorresponds(this.m, d'');
+                        assert d'' == updateL2Pte(d', as_page, abs_mapping, l2pte);
+                        err := sp_op_const(KOM_ERR_SUCCESS());
+                        s' := s.(d:=d'').(hw:=this);
+                        assert pageDbCorresponds(s'.hw.m,s'.d);
+                        assert err == specErr(specResult);
+                        assert s'.d == specPageDb(specResult);
+                        assert almostValidSysState(s');
+                    }
+                }
+            }
+        }
+    }
+}
+

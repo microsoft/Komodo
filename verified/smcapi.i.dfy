@@ -40,16 +40,18 @@ function {:opaque} smc_remove_premium(pageDbIn: PageDb, page: word)
 }
 
 function {:opaque} smc_mapSecure_premium(pageDbIn: PageDb, page: word,
-    addrspacePage: word, mapping: Mapping, physPage: word) : (PageDb, word) // PageDbOut, KOM_ERR
+    addrspacePage: word, mapping: word, physPage: word) : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_mapSecure_premium(pageDbIn, page, addrspacePage, mapping, physPage).0)
+    ensures  smc_mapSecure_premium(pageDbIn, page, addrspacePage, mapping, physPage) ==
+        smc_mapSecure(pageDbIn, page, addrspacePage, mapping, physPage);
 {
     mapSecurePreservesPageDBValidity(pageDbIn, page, addrspacePage, mapping, physPage);
     smc_mapSecure(pageDbIn, page, addrspacePage, mapping, physPage)
 }
 
 function {:opaque} smc_mapInsecure_premium(pageDbIn: PageDb, addrspacePage: word,
-    physPage: word, mapping : Mapping) : (PageDb, word)
+    physPage: word, mapping : word) : (PageDb, word)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_mapInsecure_premium(pageDbIn, addrspacePage, physPage, mapping).0)
 {
@@ -82,7 +84,11 @@ function {:opaque} smc_enter_premium(pageDbIn: PageDb, dispPage: word, arg1: wor
 function {:opaque} smc_resume_premium(pageDbIn: PageDb, dispPage: word)
     : (PageDb, word)
     requires validPageDb(pageDbIn) 
-    ensures validPageDb(smc_resume_premium(pageDbIn, dispPage).0)
+    ensures smc_resume_premium(pageDbIn,dispPage) ==
+        smc_resume(pageDbIn,dispPage)
+    ensures  var db:= smc_resume_premium(pageDbIn, dispPage).0;
+        var err := smc_resume_premium(pageDbIn, dispPage).1;
+        validPageDb(db) && (err == KOM_ERR_SUCCESS() ==> validDispatcherPage(pageDbIn, dispPage))
 {
     resumePreservesPageDbValidity(pageDbIn, dispPage);
     smc_resume(pageDbIn, dispPage)
@@ -292,16 +298,17 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: word)
 }
 
 lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: word,
-    addrspacePage: word, mapping: Mapping, physPage: word)
+    addrspacePage: word, map_word: word, physPage: word)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_mapSecure(pageDbIn, page, addrspacePage,
-        mapping, physPage).0)
+        map_word, physPage).0)
 {
     reveal_validPageDb();
+    var mapping := wordToMapping(map_word);
     var pageDbOut := smc_mapSecure(
-        pageDbIn, page, addrspacePage, mapping, physPage).0;
+        pageDbIn, page, addrspacePage, map_word, physPage).0;
     var err := smc_mapSecure(
-        pageDbIn, page, addrspacePage, mapping, physPage).1;
+        pageDbIn, page, addrspacePage, map_word, physPage).1;
 
     if( err != KOM_ERR_SUCCESS() ){
     } else {
@@ -344,15 +351,17 @@ lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: word,
 }
 
 lemma mapInsecurePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word,
-    physPage: word, mapping : Mapping)
+    physPage: word, map_word: word)
     requires validPageDb(pageDbIn)
-    ensures  validPageDb(smc_mapInsecure(pageDbIn, addrspacePage, physPage, mapping).0)
+    ensures  validPageDb(smc_mapInsecure(pageDbIn, addrspacePage, physPage, 
+        map_word).0)
 {
     reveal_validPageDb();
+    var mapping := wordToMapping(map_word);
     var pageDbOut := smc_mapInsecure(
-        pageDbIn, addrspacePage, physPage, mapping).0;
+        pageDbIn, addrspacePage, physPage, map_word).0;
     var err := smc_mapInsecure(
-        pageDbIn, addrspacePage, physPage, mapping).1;
+        pageDbIn, addrspacePage, physPage, map_word).1;
 
     if( err != KOM_ERR_SUCCESS() ){
     } else {        
@@ -506,6 +515,25 @@ lemma stopPreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word)
     }
 }
 
+lemma lemma_allocatePage_preservesMappingGoodness(
+    pageDbIn:PageDb,securePage:word,
+    addrspacePage:PageNr,entry:PageDbEntryTyped,pageDbOut:PageDb,err:word,
+    abs_mapping:word)
+    requires validPageDb(pageDbIn)
+    requires validAddrspacePage(pageDbIn, addrspacePage)
+    requires allocatePageEntryValid(entry)
+    requires (pageDbOut, err) == allocatePage(pageDbIn,securePage,
+        addrspacePage,entry)
+    requires isValidMappingTarget(pageDbIn,addrspacePage,abs_mapping) ==
+        KOM_ERR_SUCCESS();
+    ensures isValidMappingTarget(pageDbOut,addrspacePage,abs_mapping) ==
+        KOM_ERR_SUCCESS();
+    ensures validPageDb(pageDbOut)
+{
+    reveal_validPageDb();
+}
+
+
 lemma smchandlerPreservesPageDbValidity(pageDbIn: PageDb, callno: word, arg1: word,
     arg2: word, arg3: word, arg4: word)
     requires validPageDb(pageDbIn)
@@ -518,9 +546,9 @@ lemma smchandlerPreservesPageDbValidity(pageDbIn: PageDb, callno: word, arg1: wo
     } else if(callno == KOM_SMC_INIT_L2PTABLE()) {
         initL2PTablePreservesPageDBValidity(pageDbIn, arg1, arg2, arg3);
     } else if(callno == KOM_SMC_MAP_SECURE()) {
-        mapSecurePreservesPageDBValidity(pageDbIn, arg1, arg2, wordToMapping(arg3), arg4);
+        mapSecurePreservesPageDBValidity(pageDbIn, arg1, arg2, arg3, arg4);
     } else if(callno == KOM_SMC_MAP_INSECURE()) {
-        mapInsecurePreservesPageDbValidity(pageDbIn, arg1, arg2, wordToMapping(arg3));
+        mapInsecurePreservesPageDbValidity(pageDbIn, arg1, arg2, arg3);
     } else if(callno == KOM_SMC_REMOVE()) {
         removePreservesPageDBValidity(pageDbIn, arg1);
     } else if(callno == KOM_SMC_FINALISE()) {
@@ -532,4 +560,84 @@ lemma smchandlerPreservesPageDbValidity(pageDbIn: PageDb, callno: word, arg1: wo
     } else if(callno == KOM_SMC_STOP()) {
         stopPreservesPageDbValidity(pageDbIn, arg1);
     }
+}
+
+lemma lemma_updateL2PtePreservesPageDb(d:PageDb,a:PageNr,mapping:Mapping,l2e:L2PTE) 
+    requires validPageDb(d)
+    requires isAddrspace(d, a)
+    requires validMapping(mapping,d,a)
+    requires d[a].entry.state.InitState?
+    requires validL2PTE(d,a,l2e)
+    ensures validPageDb(updateL2Pte(d,a,mapping,l2e))
+{
+    reveal_validPageDb();
+    var d' := updateL2Pte(d,a,mapping,l2e);
+    
+    var addrspace := d[a].entry;
+    assert validAddrspace(d, a);
+
+    var l2index := mapping.l2index;
+    var l1index := mapping.l1index;
+
+    var l1p := d[a].entry.l1ptnr;
+    var l1 := d[l1p].entry;
+    var l1p' := d'[a].entry.l1ptnr;
+    var l1' := d'[l1p'].entry;
+    assert l1p' == l1p;
+    assert l1' == l1;
+
+    var l1pte := fromJust(l1.l1pt[l1index]);
+    var l1pte' := fromJust(l1'.l1pt[l1index]);
+    assert l1pte == l1pte';
+    var l2pt := d[l1pte].entry.l2pt;
+    var l2pt' := d'[l1pte].entry.l2pt;
+
+    //it's now okay to drop the primes from everything but l2pt'
+
+    assert !stoppedAddrspace(d[a]);
+    assert !stoppedAddrspace(d'[a]);
+
+    assert validPageDbEntry(d, a);
+    assert validPageDbEntry(d', a) by
+    {
+        assert d'[a].entry.refcount == d[a].entry.refcount;
+        assert addrspaceRefs(d', a) == addrspaceRefs(d, a);
+        
+    }
+
+    assert validPageDbEntry(d, l1p);
+    assert validPageDbEntry(d, l1pte);
+
+    assert validPageDbEntry(d', l1p);
+    assert validPageDbEntry(d', l1pte) by
+    {
+       assert d'[l1pte].entry.L2PTable?;
+       assert !stoppedAddrspace(d'[a]);
+       assert validL2PTE(d',a,l2e);
+       assert wellFormedPageDbEntryTyped(d[l1pte].entry);
+       assert wellFormedPageDbEntryTyped(d'[l1pte].entry);
+
+       assert |l2pt| == |l2pt'|;
+
+       forall ( i | 0 <= i < NR_L2PTES() && i != l2index )
+            ensures validL2PTE(d',a,l2pt'[i])
+       {
+            assert l2pt'[i] == l2pt[i];
+            assert validL2PTE(d,a,l2pt[i]);
+       }
+
+    }
+
+    forall ( p | validPageNr(p) && p != l1p && p != l1pte && p != a )
+        ensures validPageDbEntry(d', p)
+    {
+            assert d'[p] == d[p];
+            assert validPageDbEntry(d, p);
+            assert addrspaceRefs(d', p) == addrspaceRefs(d, p);
+    }
+    
+    assert wellFormedPageDb(d');
+    assert pageDbEntriesValid(d');
+    assert pageDbEntriesValidRefs(d');
+  
 }

@@ -31,9 +31,20 @@ function method ADDRSPACE_SIZE():int        { 16 }
 //-----------------------------------------------------------------------------
 function method DISPATCHER_ENTERED():int    { 0 }
 function method DISPATCHER_ENTRYPOINT():int { 4 }
-// TODO context
-// psr
-// 16 regs
+
+function method DISP_CTXT_PC():int   { 8 }
+function method DISP_CTXT_PSR():int  { 12 }
+function method DISP_CTXT_LR():int   { 16 }
+function method DISP_CTXT_SP():int   { 20 }
+function method DISP_CTXT_R4():int   { 24 }
+function method DISP_CTXT_R5():int   { 28 }
+function method DISP_CTXT_R6():int   { 32 }
+function method DISP_CTXT_R7():int   { 36 }
+function method DISP_CTXT_R8():int   { 40 }
+function method DISP_CTXT_R9():int   { 44 }
+function method DISP_CTXT_R10():int  { 48 }
+function method DISP_CTXT_R11():int  { 52 }
+function method DISP_CTXT_R12():int  { 56 }
 
 //-----------------------------------------------------------------------------
 // Page Types
@@ -111,6 +122,16 @@ predicate pageDbCorrespondsExcluding(s:memstate, pagedb:PageDb, modifiedPage:Pag
             && pageContentsCorresponds(p, pagedb[p], extractPage(s, p)))
 }
 
+predicate pageDbCorrespondsExcludingSet(s:memstate, pagedb:PageDb, 
+    trashed:set<PageNr>)
+    requires SaneMem(s)
+    requires wellFormedPageDb(pagedb)
+{
+    forall p {:trigger validPageNr(p)} | validPageNr(p) && p !in trashed  ::
+        (pageDbEntryCorresponds(pagedb[p], extractPageDbEntry(s, p))
+            && pageContentsCorresponds(p, pagedb[p], extractPage(s, p)))
+}
+
 predicate pageDbCorrespondsOnly(s:memstate, pagedb:PageDb, p:PageNr)
     requires SaneMem(s)
     requires wellFormedPageDb(pagedb)
@@ -138,6 +159,7 @@ predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:memmap
 {
     e.PageDbEntryFree? || (e.PageDbEntryTyped? && (
         var et := e.entry;
+        assert wellFormedPageDbEntryTyped(et);
         (et.Addrspace? && pageDbAddrspaceCorresponds(p, et, page))
         || (et.Dispatcher? && pageDbDispatcherCorresponds(p, et, page))
         || (et.L1PTable? && pageDbL1PTableCorresponds(p, et, page))
@@ -161,13 +183,26 @@ function  to_i(b:bool):int { if(b) then 1 else 0 }
 
 predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
     requires memContainsPage(page, p)
-    requires e.Dispatcher?
+    requires wellFormedPageDbEntryTyped(e) && e.Dispatcher?
 {
     var base := page_monvaddr(p);
     assert base in page;
+    assert validDispatcherContext(e.ctxt);
     page[base + DISPATCHER_ENTERED()] == to_i(e.entered)
     && page[base + DISPATCHER_ENTRYPOINT()] == e.entrypoint
-    // TODO: finish concrete representation of dispatcher fields
+    && page[base + DISP_CTXT_PC()]  == e.ctxt.pc
+    && page[base + DISP_CTXT_PSR()] == e.ctxt.cpsr
+    && page[base + DISP_CTXT_LR()]  == e.ctxt.regs[LR(User)]
+    && page[base + DISP_CTXT_SP()]  == e.ctxt.regs[SP(User)]
+    && page[base + DISP_CTXT_R4()]  == e.ctxt.regs[R4]
+    && page[base + DISP_CTXT_R5()]  == e.ctxt.regs[R5]
+    && page[base + DISP_CTXT_R6()]  == e.ctxt.regs[R6]
+    && page[base + DISP_CTXT_R7()]  == e.ctxt.regs[R7]
+    && page[base + DISP_CTXT_R8()]  == e.ctxt.regs[R8]
+    && page[base + DISP_CTXT_R9()]  == e.ctxt.regs[R9]
+    && page[base + DISP_CTXT_R10()] == e.ctxt.regs[R10]
+    && page[base + DISP_CTXT_R11()] == e.ctxt.regs[R11]
+    && page[base + DISP_CTXT_R12()] == e.ctxt.regs[R12]
 }
 
 function ARM_L1PTE(paddr: word): word
@@ -337,3 +372,12 @@ lemma extractPageDbToAbstractOne(s:memstate, p:PageNr, o:int)
         == extractPageDbEntry(s,p)[BytesToWords(o)]
 {
 }
+
+/*
+lemma allOnlyCorrespondImpliesCorresponds(s:memstate,d:PageDb)
+    requires SaneMem(s)
+    ensures pageDbCorresponds(s,d)
+{
+    reveal_pageDbEntryCorresponds
+}
+*/

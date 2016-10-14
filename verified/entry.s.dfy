@@ -3,6 +3,7 @@ include "ARMdef.dfy"
 include "pagedb.s.dfy"
 include "smcapi.s.dfy"
 include "abstate.s.dfy"
+include "pagedb.i.dfy"
 
 predicate nonStoppedL1(d:PageDb, l1:PageNr)
 {
@@ -56,10 +57,17 @@ predicate validERTransitionHW(hw:state, hw':state, d:PageDb)
     ValidState(hw) && ValidState(hw') && hw'.conf.ttbr0 == hw.conf.ttbr0
     && physPageIsSecure(hw.conf.ttbr0.ptbase / PAGESIZE())
     && nonStoppedL1(d, securePageFromPhysAddr(hw.conf.ttbr0.ptbase))
-    && bankedRegsPreserved(hw, hw')
+    //&& bankedRegsPreserved(hw, hw')
 }
 
 predicate validSysStates(sset:set<SysState>) { forall s :: s in sset ==> validSysState(s) }
+
+// This is just here to make verification easier. It allows irrelevant state 
+// (i.e. some regs) to be changed while checking for error conditions.
+predicate errCheck(s:SysState, s':SysState)
+{
+   validSysState(s) && validSysState(s') && s.d == s'.d
+}
 
 predicate validEnter(s:SysState,s':SysState,
     dispPage:word,a1:word,a2:word,a3:word)
@@ -67,47 +75,51 @@ predicate validEnter(s:SysState,s':SysState,
     // requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KOM_ERR_SUCCESS()
 {
     reveal_ValidRegState();
+    reveal_validExceptionTransition();
     smc_enter(s.d, dispPage, a1, a2, a3).1 != KOM_ERR_SUCCESS() ||
-    
-    // s1 (s)  : State on entry to the monitor
-    // s2      : prior to MOVSPCLR that transitions to userspace
-    // s3      : post MOVS State just before start of userspace execution
-    // s4      : Exceptional state where handler must be called
-    // s5      : State at start of exception handler
-    // s6      : State at start of transition back to smc_handler
-    // s7      : State on re-entry to smc_handler
-    // s8 (s') : State at the end of the monitor call/
-    
-    // s4 == s5 except not in exceptional state in s4
-    // s6 == s7 except branch has happened
-    
-    (exists s2, s3, s4 :: validSysStates({s2,s3,s4})
-        && preEntryEnter(s,s2,dispPage,a1,a2,a3)
+   
+    ((exists serr, s2, s3, s4 :: validSysStates({serr,s2,s3,s4})
+        && errCheck(s, serr)
+        && preEntryEnter(serr,s2,dispPage,a1,a2,a3)
         && entryTransitionEnter(s2, s3)
         && s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d)
-        && validERTransition(s4, s')
-        && (assert mode_of_state(s4.hw) != User;
-           s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
+        && mode_of_state(s4.hw) != User
+        && validExceptionTransition(s4, s', s4.d)
+        && (s'.hw.regs[R0], s'.hw.regs[R1], s'.d)==
             exceptionHandled(s4))
+    && bankedRegsPreserved(s.hw, s'.hw))
 }
 
-/*
-predicate validResume(s:SysState,s':SysState,dispPage:PageNr)
+predicate validResume(s:SysState,s':SysState,dispPage:word)
     requires validSysState(s)
 {
      
+    reveal_ValidRegState();
+    reveal_validExceptionTransition();
     smc_resume(s.d, dispPage).1 != KOM_ERR_SUCCESS() ||
-        ... state transitions
+   
+    ((exists serr, s2, s3, s4 :: validSysStates({serr,s2,s3,s4})
+        && errCheck(s, serr)
+        && preEntryResume(serr,s2,dispPage)
+        && entryTransitionResume(s2, s3)
+        && s4.d == s3.d && userspaceExecution(s3.hw, s4.hw, s3.d)
+        && mode_of_state(s4.hw) != User
+        && validExceptionTransition(s4, s', s4.d)
+        && (s'.hw.regs[R0], s'.hw.regs[R1], s'.d)==
+            exceptionHandled(s4))
+    && bankedRegsPreserved(s.hw, s'.hw))
 }
-*/
 
 predicate preEntryEnter(s:SysState,s':SysState,
     dispPage:PageNr,a1:word,a2:word,a3:word)
     requires validSysState(s)
     requires smc_enter(s.d, dispPage, a1, a2, a3).1 == KOM_ERR_SUCCESS()
-    // ensures  nonStoppedL1(s.d, l1pOfDispatcher(s.d, dispPage));
-    // ensures (validSysState(s) && validSysState(s') && 
-    // preEntryEnter(s,s',dispPage,a1,a2,a3)) ==>false
+    ensures preEntryEnter(s,s',dispPage,a1,a2,a3) ==>
+        PageAligned(s'.hw.conf.ttbr0.ptbase) &&
+        SecurePhysBase() <= s'.hw.conf.ttbr0.ptbase < SecurePhysBase() +
+            KOM_SECURE_NPAGES() * PAGESIZE()
+    ensures preEntryEnter(s,s',dispPage,a1,a2,a3) ==>
+        nonStoppedL1(s'.d, securePageFromPhysAddr(s'.hw.conf.ttbr0.ptbase));
 {
     reveal_validPageDb();
     reveal_ValidRegState();
@@ -128,44 +140,46 @@ predicate preEntryEnter(s:SysState,s':SysState,
     WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, l1p)
 }
 
-/*
 predicate preEntryResume(s:SysState, s':SysState, dispPage:PageNr)
     requires validSysState(s)
     requires smc_resume(s.d, dispPage).1 == KOM_ERR_SUCCESS()
+    ensures preEntryResume(s,s',dispPage) ==>
+        PageAligned(s'.hw.conf.ttbr0.ptbase) &&
+        SecurePhysBase() <= s'.hw.conf.ttbr0.ptbase < SecurePhysBase() +
+            KOM_SECURE_NPAGES() * PAGESIZE()
+    ensures preEntryResume(s,s',dispPage) ==>
+        nonStoppedL1(s'.d, securePageFromPhysAddr(s'.hw.conf.ttbr0.ptbase));
 {
     reveal_validPageDb();
     var disp := s.d[dispPage].entry;
+    var l1p := l1pOfDispatcher(s.d, dispPage);
     
-    validSysState(s') && // s'.d == s.d &&
-    s'.hw.conf.ttbr0 == l1pOfDispatcher(s.d, dispPage) &&
-    s'.hw.conf.cpsr.m  == User && s'.hw.conf.scr.ns == Secure &&
+    validSysState(s') && s'.d == s.d &&
+    s'.hw.conf.ttbr0.ptbase == page_paddr(l1p) && //l1pOfDispatcher(s.d, dispPage) &&
+    s'.hw.conf.scr.ns == Secure &&
 
     s'.g.g_cur_dispatcher == dispPage &&
    
     (reveal_ValidRegState(); 
-    s'.hw.regs == disp.ctxt.regs
-        [LR(FIQ)        := s.hw.regs[LR(FIQ)]]
-        [LR(IRQ)        := s.hw.regs[LR(IRQ)]]
-        [LR(Supervisor) := s.hw.regs[LR(Supervisor)]]
-        [LR(Abort)      := s.hw.regs[LR(Abort)]]
-        [LR(Undefined)  := s.hw.regs[LR(Undefined)]]
-        [LR(Monitor)    := s.hw.regs[LR(Monitor)]]
-        [SP(FIQ)        := s.hw.regs[SP(FIQ)]]
-        [SP(IRQ)        := s.hw.regs[SP(IRQ)]]
-        [SP(Supervisor) := s.hw.regs[SP(Supervisor)]]
-        [SP(Abort)      := s.hw.regs[SP(Abort)]]
-        [SP(Undefined)  := s.hw.regs[SP(Undefined)]]
-        [SP(Monitor)    := s.hw.regs[SP(Monitor)]]) &&
+    s'.hw.regs[R4] == disp.ctxt.regs[R4] &&
+    s'.hw.regs[R5] == disp.ctxt.regs[R5] &&
+    s'.hw.regs[R6] == disp.ctxt.regs[R6] &&
+    s'.hw.regs[R7] == disp.ctxt.regs[R7] &&
+    s'.hw.regs[R8] == disp.ctxt.regs[R8] &&
+    s'.hw.regs[R9] == disp.ctxt.regs[R9] &&
+    s'.hw.regs[R10] == disp.ctxt.regs[R10] &&
+    s'.hw.regs[R11] == disp.ctxt.regs[R11] &&
+    s'.hw.regs[R12] == disp.ctxt.regs[R12] &&
+    s'.hw.regs[LR(User)] == disp.ctxt.regs[LR(User)] &&
+    s'.hw.regs[SP(User)] == disp.ctxt.regs[SP(User)]) &&
     
     (reveal_ValidSRegState();
-    s'.hw.sregs[cpsr] == disp.ctxt.cpsr &&
-    s'.hw.conf.cpsr == decode_psr(disp.ctxt.cpsr)) &&
+    s'.hw.sregs[spsr(Monitor)] == disp.ctxt.cpsr) &&
+    //s'.hw.conf.cpsr == decode_psr(disp.ctxt.cpsr)) &&
     
-    bankedRegsPreserved(s, s') &&
-    WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, d, l1pOfDispatcher(s.d, dispPage))
+    WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, l1p)
 
 }
-*/
 
 predicate entryTransitionEnter(s:SysState,s':SysState)
     // ensures (validSysState(s) && validSysState(s') && entryTransitionEnter(s,s')) ==>false
@@ -197,9 +211,10 @@ predicate userspaceExecution(hw:state, hw':state, d:PageDb)
     && exists s, ex :: evalUserspaceExecution(hw, s)
     && evalExceptionTaken(s, ex, hw')
     // frownyface about this assert -> :(
-    && (assert mode_of_state(hw') != User; WSMemInvariantExceptAddrspace(hw, hw', d))
+    && WSMemInvariantExceptAddrspace(hw, hw', d)
     && hw.conf.excount + 1 == hw'.conf.excount
-    && hw.conf.exstep == hw'.steps
+    && hw'.conf.exstep == hw'.steps
+    && mode_of_state(hw') != User
 }
 
 //-----------------------------------------------------------------------------
@@ -208,6 +223,13 @@ predicate userspaceExecution(hw:state, hw':state, d:PageDb)
 function exceptionHandled(s:SysState) : (word, word, PageDb)
     requires validSysState(s)
     requires mode_of_state(s.hw) != User
+    // This should be true since the exception is taken from user mode
+    requires 
+        (reveal_ValidSRegState();
+        decode_mode'(psr_mask_mode(
+        s.hw.sregs[spsr(mode_of_state(s.hw))])) == Just(User))
+    ensures var (r0,r1,d') := exceptionHandled(s);
+        wellFormedPageDb(d')
 {
     reveal_validPageDb();
     reveal_ValidSRegState();
@@ -220,9 +242,14 @@ function exceptionHandled(s:SysState) : (word, word, PageDb)
         var p := s.g.g_cur_dispatcher;
         var pc := OperandContents(s.hw, OLR);
         var psr := s.hw.sregs[spsr(mode_of_state(s.hw))];
-        var disp' := s.d[p].entry.(entered:=true,
-            ctxt:= DispatcherContext(s.hw.regs, psr, pc));
+        assert decode_mode'(psr_mask_mode(psr)) == Just(User);
+        var ctxt' := DispatcherContext(s.hw.regs, pc, psr);
+        assert decode_mode'(psr_mask_mode(ctxt'.cpsr)) == Just(User);
+        assert validDispatcherContext(ctxt');
+        var disp' := s.d[p].entry.(entered:=true, ctxt:=ctxt');
         var d' := s.d[ p := s.d[p].(entry := disp') ];
+        assert wellFormedPageDbEntry(s.d[p].(entry := disp'));
+        assert wellFormedPageDb(d');
         if s.hw.conf.ex.ExIRQ? || s.hw.conf.ex.ExFIQ? then
             (KOM_ERR_INTERRUPTED(), 0, d')
         else
@@ -231,19 +258,29 @@ function exceptionHandled(s:SysState) : (word, word, PageDb)
             (KOM_ERR_FAULT(), 0, d')
 }
 
-//-----------------------------------------------------------------------------
-// Userspace Execution
-//-----------------------------------------------------------------------------
-
-predicate bankedRegsPreserved(hw:state, hw':state)
-    requires ValidState(hw) && ValidState(hw')
+predicate {:opaque} validExceptionTransition(s:SysState, s':SysState, d:PageDb)
+    ensures validExceptionTransition(s,s',d) ==>
+        validSysState(s) && validSysState(s')
 {
+    reveal_validPageDb();
     reveal_ValidRegState();
-    reveal_ValidConfig();
-    forall m :: m != User ==>
-        hw.conf.spsr[m] == hw'.conf.spsr[m] &&
-        hw.regs[LR(m)] == hw'.regs[LR(m)] &&
-        hw.regs[SP(m)] == hw'.regs[SP(m)]
+    reveal_ValidMemState();
+    validSysState(s) && validSysState(s') &&
+    (var sd := s.g.g_cur_dispatcher;
+    var sd' := s'.g.g_cur_dispatcher;
+    validERTransitionHW(s.hw, s'.hw, s.d) && sd == sd'
+    && equivalentExceptPage(s.d, s'.d, sd) 
+    && nonStoppedDispatcher(s.d, sd) && nonStoppedDispatcher(s'.d, sd')
+    && page_paddr(l1pOfDispatcher(s.d, sd))  == s.hw.conf.ttbr0.ptbase
+    && page_paddr(l1pOfDispatcher(s'.d, sd')) == s'.hw.conf.ttbr0.ptbase  
+    // && (forall g | ValidGlobal(g) && g != PageDb() ::
+    //    GlobalFullContents(s.hw.m, g) == GlobalFullContents(s'.hw.m, g))
+    && (forall p:PageNr | p != sd :: s.d[p] == s'.d[p])
+        //extractPageDbEntry(s.hw.m, p) == extractPageDbEntry(s'.hw.m, p))
+    && (forall a:addr | a in TheValidAddresses() && !(StackLimit() <= a < StackBase()) && 
+        !(addrInPage(a,sd)) :: s.hw.m.addresses[a] == s'.hw.m.addresses[a])
+    && mode_of_state(s.hw) != User 
+    && mode_of_state(s'.hw) == Monitor)
 }
 
 // All writeable and secure memory addresses except the ones in the active l1
