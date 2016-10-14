@@ -75,6 +75,8 @@ procedure init_addrspace_mem(
 
     ghost var l1pg := extractPage(this.m, old(l1pt_page));
     ghost var emptyptes := SeqRepeat(NR_L1PTES(), Nothing);
+    // XXX: FIXME: workaround dafny bug #40
+    assume initL1PTEntry(addrspace_page).entry == L1PTable(emptyptes);
     forall :: pageDbL1PTableCorresponds(l1pt_page, L1PTable(emptyptes), l1pg)
     {
         reveal_pageDbL1PTableCorresponds();
@@ -252,6 +254,7 @@ procedure kom_smc_init_addrspace(
         r0 := sp_op_const(PAGEDB_ENTRY_SIZE());
         MUL(r4,addrspace_page,r0);
         assert r4 == G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_TYPE();
+        assert r4 < G_PAGEDB_SIZE();
         LDRglobal(r3, PageDb(), r12, r4);
         assert pageDbEntryCorresponds(pagedb[addrspace_page], extractPageDbEntry(this.m, addrspace_page));
         extractPageDbToAbstractOne(this.m, addrspace_page, PAGEDB_ENTRY_TYPE());

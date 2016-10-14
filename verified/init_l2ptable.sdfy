@@ -46,19 +46,36 @@ procedure fetch_l1pte(
 }
 
 #verbatim
+// XXX: this level of simplification for bitvector proofs is insane,
+// but, sadly, necessary at present
+lemma lemma_BitOrOneIsLikePlus''(b: bv32)
+    requires b % 2 == 0
+    ensures b + 1 == b | 1
+{}
+
+lemma lemma_BitOrOneIsLikePlus'(b: bv32)
+    requires BitMod(b, 2) == 0
+    ensures BitAdd(b, 1) == BitOr(b, 1)
+{
+    reveal_BitMod(); reveal_BitAdd(); reveal_BitOr();
+    lemma_BitOrOneIsLikePlus''(b);
+}
+
 lemma lemma_BitOrOneIsLikePlus(i: int)
-    requires 0 <= i < 0x1_0000_0000
+    requires 0 <= i < 0xffffffff
     requires i % 2 == 0
     ensures i + 1 == BitsAsInt(BitOr(IntAsBits(i), 1))
 {
     var b := IntAsBits(i);
-    forall ensures BitAdd(b, 1) == BitOr(b, 1) {
+    lemma_BitsAsIntAsBits(i);
+    assert BitsAsInt(b) == i;
+    assert BitsAsInt(BitMod(b, 2)) == 0 by {
+        lemma_BitsAsIntAsBits(2);
+        assume BitsAsInt(2) == 2;
         lemma_BitModEquiv(b, 2);
-        assert BitMod(b, 2) == 0;
-        reveal_BitMod();
-        reveal_BitOr();
-        reveal_BitAdd();
-    }
+        }
+    lemma_BitOrOneIsLikePlus'(b);
+    assume BitsAsInt(1) == 1;
     lemma_BitAddEquiv(b, 1);
 }
 
@@ -68,8 +85,86 @@ lemma lemma_ARM_L1PTE_Dual(paddr: word)
 {
     assert paddr % 0x400 == 0 && paddr % 2 == 0;
     lemma_BitOrOneIsLikePlus(paddr);
+    reveal_IntAsBits(); reveal_BitsAsInt();
+}
+
+lemma lemma_SecurePage(pagebase:word)
+    requires SaneConstants()
+    requires PageAligned(pagebase) && address_is_secure(pagebase)
+    ensures ValidMemRange(pagebase, pagebase + PAGESIZE())
+{
+    var lower := KOM_DIRECTMAP_VBASE() + SecurePhysBase();
+    var upper := lower + KOM_SECURE_RESERVE();
+    assert PageAligned(lower);
+    assert PageAligned(upper);
+    assert lower <= pagebase < upper;
+    assert pagebase + PAGESIZE() <= upper;
 }
 #endverbatim
+
+// updates portion of install_l1ptes
+procedure install_l1ptes'(
+    {:operand} l1base:addr,
+    inout {:operand} l2base:addr,
+    inout {:operand} l1index:int,
+    ghost l2pg:PageNr)
+    requires/ensures
+        SaneState(this);
+    requires
+        //DistinctRegOperands(set(@l1base, @l2base, @l1index), 3);
+        ValidRegOperand(@l1base);
+        ValidRegOperand(@l2base);
+        ValidRegOperand(@l1index);
+        @l1base != @l2base;
+        @l1base != @l1index;
+        @l2base != @l1index;
+        PageAligned(l1base) && address_is_secure(l1base);
+        validPageNr(l2pg) && l2base == page_paddr(l2pg);
+        0 <= l1index < NR_L1PTES();
+    ensures
+        GlobalsInvariant(old(this),this);
+        StackPreserving(old(this),this);
+        RegPreservingExcept(old(this),this, set(@l2base, @l1index));
+        MemPreservingExcept(old(this),this, l1base + old(l1index) * 16,
+                            l1base + (old(l1index) + 1) * 16);
+        forall i :: 0 <= i < 4 ==>
+            MemContents(this.m, old(l1base) + old(l1index) * 16 + WordsToBytes(i))
+                == mkL1Pte(Just(l2pg), i);
+{
+    lemma_SecurePage(l1base);
+
+    lemma_LeftShift4(l1index);
+    LSL(l1index, l1index, 4);
+
+    lemma_ARM_L1PTE_Dual(old(l2base));
+    ORR(l2base, l2base, 1);
+    assert l2base == mkL1Pte(Just(l2pg), 0);
+    STR(l2base, l1base, l1index);
+
+    assert RegPreservingExcept(old(this),this,set(@l1index, @l2base));
+
+    ADD(l1index, l1index, 4);
+    lemma_ARM_L1PTE_Dual(old(l2base) + 1 * ARM_L2PTABLE_BYTES());
+    ADD(l2base, l2base, sp_op_const(ARM_L2PTABLE_BYTES()));
+    assert l2base == mkL1Pte(Just(l2pg), 1);
+    STR(l2base, l1base, l1index);
+
+    assert RegPreservingExcept(old(this),this,set(@l1index, @l2base));
+
+    ADD(l1index, l1index, 4);
+    lemma_ARM_L1PTE_Dual(old(l2base) + 2 * ARM_L2PTABLE_BYTES());
+    ADD(l2base, l2base, sp_op_const(ARM_L2PTABLE_BYTES()));
+    assert l2base == mkL1Pte(Just(l2pg), 2);
+    STR(l2base, l1base, l1index);
+
+    assert RegPreservingExcept(old(this),this,set(@l1index, @l2base));
+
+    ADD(l1index, l1index, 4);
+    lemma_ARM_L1PTE_Dual(old(l2base) + 3 * ARM_L2PTABLE_BYTES());
+    ADD(l2base, l2base, sp_op_const(ARM_L2PTABLE_BYTES()));
+    assert l2base == mkL1Pte(Just(l2pg), 3);
+    STR(l2base, l1base, l1index);
+}
 
 procedure install_l1ptes(
     {:operand} l1pt_va:addr,
@@ -101,7 +196,6 @@ procedure install_l1ptes(
         pageDbCorresponds(this.m, pagedb);
 {
     pagedb := pagedb_in;
-    reveal BitOr;
 
     ghost var oldpg := extractPage(old(this).m, l1pg);
     forall :: pageDbL1PTableCorresponds(l1pg, pagedb[l1pg].entry, oldpg)
@@ -116,36 +210,8 @@ procedure install_l1ptes(
 
     ghost var l2base := page_paddr(l2_pg);
     page_paddr_impl(l2_pg,l2_pg,tmp);
-
-    tmp := 16;
-    MUL(l1index, l1index, tmp);
-
-    ORR(l2_pg, l2_pg, 1);
-    lemma_ARM_L1PTE_Dual(l2base);
-    assert l2_pg == mkL1Pte(Just(old(l2_pg)), 0);
-    STR(l2_pg, l1pt_va, l1index);
-
-    ADD(l1index, l1index, 4);
-    lemma_ARM_L1PTE_Dual(l2base + 1 * ARM_L2PTABLE_BYTES());
-    ADD(l2_pg, l2_pg, sp_op_const(ARM_L2PTABLE_BYTES()));
-    assert l2_pg == mkL1Pte(Just(old(l2_pg)), 1);
-    STR(l2_pg, l1pt_va, l1index);
-
-    assert RegPreservingExcept(old(this),this,set(@l1index, @l2_pg, @tmp));
-
-    ADD(l1index, l1index, 4);
-    lemma_ARM_L1PTE_Dual(l2base + 2 * ARM_L2PTABLE_BYTES());
-    ADD(l2_pg, l2_pg, sp_op_const(ARM_L2PTABLE_BYTES()));
-    assert l2_pg == mkL1Pte(Just(old(l2_pg)), 2);
-    STR(l2_pg, l1pt_va, l1index);
-
-    ADD(l1index, l1index, 4);
-    lemma_ARM_L1PTE_Dual(l2base + 3 * ARM_L2PTABLE_BYTES());
-    ADD(l2_pg, l2_pg, sp_op_const(ARM_L2PTABLE_BYTES()));
-    assert l2_pg == mkL1Pte(Just(old(l2_pg)), 3);
-    STR(l2_pg, l1pt_va, l1index);
-
-    assert RegPreservingExcept(old(this),this,set(@l1index, @l2_pg, @tmp));
+    assert l2_pg == l2base;
+    install_l1ptes'(l1pt_va, l2_pg, l1index, old(l2_pg));
 
     ghost var pg := extractPage(this.m, l1pg);
     forall :: pageDbL1PTableCorresponds(l1pg, newl1pt, pg)
@@ -285,6 +351,7 @@ procedure kom_smc_init_l2ptable(
         LDRglobal(r4, PageDb(), r12, r4);
 
         forall :: r4 == pageDbEntryTypeVal(pagedb[as_page]) {
+            extractPageDbToAbstract(this.m, as_page);
             assert extractPageDbEntry(this.m, as_page)[0] == r4;
             // extractPageDbToAbstractOne(this.m, as_page, PAGEDB_ENTRY_TYPE());
             reveal_pageDbEntryCorresponds();

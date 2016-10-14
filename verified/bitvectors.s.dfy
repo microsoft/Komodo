@@ -33,6 +33,7 @@ lemma lemma_BitsAsInt'(b:bv32)
         {lemma_BitIntEquiv(b, b as int);}
         b;
     }
+    lemma_BitIntEquiv(b, b as int);
 }
 
 function {:opaque} BitsAsInt(b:bv32): int
@@ -42,6 +43,21 @@ function {:opaque} BitsAsInt(b:bv32): int
 {
     lemma_BitsAsInt'(b);
     BitsAsInt'(b)
+}
+
+lemma lemma_BitsAsIntAsBits(i:int)
+    requires 0 <= i < 0x1_0000_0000
+    ensures BitsAsInt(IntAsBits(i)) == i
+{
+    calc {
+        BitsAsInt(IntAsBits(i));
+        { reveal_IntAsBits(); }
+        BitsAsInt(i as bv32);
+        { reveal_BitsAsInt(); }
+        (i as bv32) as int;
+        { lemma_BitIntEquiv(i as bv32, i); }
+        i;
+    }
 }
 
 function {:opaque} BitAdd(x:bv32, y:bv32): bv32
@@ -177,19 +193,20 @@ lemma lemma_BitmaskAsInt(i:int, bitpos:int)
     forall ensures BitsAsInt(BitAnd(b, BitmaskLow(bitpos))) == i % pi {
         assert BitAnd(b, BitmaskLow(bitpos)) == BitMod(b, pb);
         lemma_BitModEquiv(b, pb);
-        reveal_BitsAsInt();
+        reveal_BitsAsInt(); reveal_IntAsBits();
         calc {
             BitsAsInt(BitMod(b, pb));
+            {lemma_BitModEquiv(b, pb);}
             BitsAsInt(b) % BitsAsInt(pb);
+            {lemma_BitsAsIntAsBits(i); lemma_BitsAsIntAsBits(pi);}
             i % pi;
         }
     }
 
     forall ensures BitsAsInt(BitAnd(b, BitmaskHigh(bitpos))) == i / pi * pi {
         assert BitAnd(b, BitmaskHigh(bitpos)) == BitMul(BitDiv(b, pb), pb);
-        lemma_BitDivEquiv(b, pb);
-        reveal_BitsAsInt();
-        assert i / pi == BitsAsInt(BitDiv(b, pb));
+        assert i / pi == BitsAsInt(BitDiv(b, pb))
+            by { lemma_BitDivEquiv(b, pb); lemma_BitsAsIntAsBits(i); }
         lemma_DivMulLessThan(i, pi);
         lemma_BitMulEquiv(BitDiv(b, pb), pb);
         calc {
@@ -228,3 +245,7 @@ function {:opaque} BitwiseMaskHigh(i:int, bitpos:int): int
     lemma_pow2_properties(bitpos);
     BitsAsInt(BitAnd(IntAsBits(i), BitmaskHigh(bitpos)))
 }
+
+lemma {:axiom} lemma_LeftShift4(x: int)
+    requires 0 <= x < 0x10000000
+    ensures BitsAsInt(BitShiftLeft(IntAsBits(x), 4)) == x * 16

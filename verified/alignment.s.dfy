@@ -10,6 +10,7 @@ lemma lemma_1KAlignedImpliesWordAligned(addr:int)
     requires addr % 0x400 == 0
     ensures addr % 4 == 0
 {
+    assert addr % 0x400 == 0;
     assert 0x400 % 4 == 0;
     assert addr % 4 == 0;
 }

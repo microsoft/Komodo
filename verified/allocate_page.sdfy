@@ -246,6 +246,8 @@ procedure allocate_page(
         if (tmp != sp_op_const(KOM_PAGE_FREE())) {
             err := sp_op_const(KOM_ERR_PAGEINUSE());
         } else {
+            assert DistinctRegOperands(set(@pagenr, @as_pagenr,
+                                           @pagedb_base, @tmp, @tmp2, @err), 6);
             page_monvaddr_impl(tmp2, as_pagenr, err);
 
             LDR(tmp, tmp2, sp_op_const(ADDRSPACE_STATE()));
