@@ -135,21 +135,34 @@ function smc_initAddrspace(pageDbIn: PageDb, addrspacePage: word, l1PTPage: word
         (pageDbOut, KOM_ERR_SUCCESS())
 }
 
+function initDispCtxt() : DispatcherContext
+    ensures validDispatcherContext(initDispCtxt())
+{
+    var psr := encode_mode(User);
+    assert psr == 0x10;
+    assume BitwiseAnd(0x10, 0x1f) == 0x10;
+    assert psr_mask_mode(psr) == 0x10;
+    assert decode_mode'(psr_mask_mode(psr)) == Just(User);
+    DispatcherContext(
+        map[R0 := 0, R1 := 0, R2 := 0, R3 := 0, R4 := 0, R5 := 0, R6 := 0, R7 := 0,
+            R8 := 0, R9 := 0, R10 := 0, R11 := 0, R12 := 0, LR(User) := 0,
+            SP(User) := 0],
+        0, // PC
+        psr) // PSR
+}
+
 function smc_initDispatcher(pageDbIn: PageDb, page:word, addrspacePage:word,
     entrypoint:word)
     : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn);
 {
     reveal_validPageDb();
-   if(!isAddrspace(pageDbIn, addrspacePage)) then
-       (pageDbIn, KOM_ERR_INVALID_ADDRSPACE())
-   else
-       var ctxtregs := map[R4:=0,R5:=0,R6:=0,R7:=0,R8:=0,R9:=0,R10:=0,R11:=0,
-            R12:=0,SP(User):=0x10,LR(User):=0];
-       var ctxt := DispatcherContext(ctxtregs, entrypoint, encode_mode(User));
-       // Not sure why this can't verify... moving on for now?
-       assume decode_mode'(psr_mask_mode(encode_mode(User))) == Just(User);  
-       allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false, ctxt))
+    if(!isAddrspace(pageDbIn, addrspacePage)) then
+        (pageDbIn, KOM_ERR_INVALID_ADDRSPACE())
+    else
+        // Not sure why this can't verify... moving on for now?
+        assume decode_mode'(psr_mask_mode(encode_mode(User))) == Just(User);
+        allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false, initDispCtxt()))
 }
 
 function installL1PTE(l1pt: PageDbEntryTyped, l2page: PageNr, l1index: int): PageDbEntryTyped

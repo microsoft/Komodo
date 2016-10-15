@@ -1,5 +1,5 @@
 procedure kom_smc_init_dispatcher(
-    {:register OReg(R1)} disp_page:int,
+    inout {:register OReg(R1)} disp_page:int,
     {:register OReg(R2)} as_page:int,
     {:register OReg(R3)} entrypoint:int,
     out {:register OReg(R0)} err:int,
@@ -15,6 +15,7 @@ procedure kom_smc_init_dispatcher(
             == old(smc_initDispatcher_premium(pagedb_in, disp_page, as_page, entrypoint));
         pageDbCorresponds(this.m, pagedb);
 {
+    ghost var specResult := smc_initDispatcher(pagedb_in, disp_page, as_page, entrypoint);
     pagedb := pagedb_in;
     reveal_smc_initDispatcher_premium();
 
@@ -37,28 +38,45 @@ procedure kom_smc_init_dispatcher(
         } else {
             assert isAddrspace(pagedb, as_page);
             ghost var entry := PageDbEntryTyped(as_page,
-                            Dispatcher(entrypoint, false, dispctxt(entrypoint)));
+                            Dispatcher(entrypoint, false, initDispCtxt()));
             pagedb := allocate_page(disp_page, as_page,
                                     sp_op_const(KOM_PAGE_DISPATCHER()),
                                     r12, r4, r5, err, pagedb, entry);
 
             if (err == sp_op_const(KOM_ERR_SUCCESS())) {
+                assert err == specErr(specResult);
+                assert pagedb == specPageDb(allocatePage(pagedb_in, disp_page, as_page, Dispatcher(entrypoint, false, initDispCtxt())));
+                assert pagedb == specPageDb(specResult);
+
                 assert pageDbCorrespondsExcluding(this.m, pagedb, disp_page);
                 assert pageDbEntryCorresponds(pagedb[disp_page],
                                          extractPageDbEntry(this.m, disp_page));
                 ghost var tmpstate := this;
 
                 // update dispatcher page
-                page_monvaddr_impl(r4, disp_page, r5);
+                page_monvaddr_impl(disp_page, disp_page, r5);
+                r4 := disp_page;
                 r5 := 0;
-                STR(r5, r4, sp_op_const(DISPATCHER_ENTERED())); // entered = 0
-                STR(r3, r4, sp_op_const(DISPATCHER_ENTRYPOINT())); // entrypoint
+                r6 := sp_op_const(PAGESIZE());
+                memset(r4,r5,r6);
+                STR(entrypoint, disp_page, sp_op_const(DISPATCHER_ENTRYPOINT()));
+                r5 := 0x10;
+                STR(r5, disp_page, sp_op_const(DISP_CTXT_PSR()));
 
-                forall :: pageDbCorrespondsOnly(this.m, pagedb, disp_page) {
+                ghost var pg := extractPage(this.m, old(disp_page));
+                forall :: pageDbDispatcherCorresponds(old(disp_page), entry.entry, pg) {
                     reveal_pageDbDispatcherCorresponds();
+                    assert disp_page == page_monvaddr(old(disp_page));
+                    assert pg[disp_page + DISPATCHER_ENTRYPOINT()] == old(entrypoint);
+                    assert pg[disp_page + DISP_CTXT_PSR()] == 0x10 == encode_mode(User);
+                    assert forall a:addr :: addrInPage(a, old(disp_page))
+                        && a != disp_page + DISPATCHER_ENTRYPOINT()
+                        && a != disp_page + DISP_CTXT_PSR() ==> pg[a] == 0;
+                }
+                forall :: pageDbCorrespondsOnly(this.m, pagedb, old(disp_page)) {
                     reveal_pageContentsCorresponds();
                 }
-                AllButOnePagePreserving(disp_page, tmpstate, this);
+                AllButOnePagePreserving(old(disp_page), tmpstate, this);
                 assert pageDbCorresponds(this.m, pagedb);
             } else {
                 assert pagedb == pagedb_in;
@@ -67,10 +85,3 @@ procedure kom_smc_init_dispatcher(
         }
     }
 }
-
-#verbatim
-function dispctxt(entrypoint: word) : DispatcherContext
-{
-    DispatcherContext(map[], entrypoint, encode_mode(User))
-}
-#endverbatim

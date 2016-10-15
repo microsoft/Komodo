@@ -161,6 +161,10 @@ predicate preEntryResume(s:SysState, s':SysState, dispPage:PageNr)
     s'.g.g_cur_dispatcher == dispPage &&
    
     (reveal_ValidRegState(); 
+    s'.hw.regs[R0] == disp.ctxt.regs[R0] &&
+    s'.hw.regs[R1] == disp.ctxt.regs[R1] &&
+    s'.hw.regs[R2] == disp.ctxt.regs[R2] &&
+    s'.hw.regs[R3] == disp.ctxt.regs[R3] &&
     s'.hw.regs[R4] == disp.ctxt.regs[R4] &&
     s'.hw.regs[R5] == disp.ctxt.regs[R5] &&
     s'.hw.regs[R6] == disp.ctxt.regs[R6] &&

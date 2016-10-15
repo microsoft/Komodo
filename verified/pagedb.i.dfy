@@ -32,10 +32,10 @@ function method ADDRSPACE_SIZE():int        { 16 }
 function method DISPATCHER_ENTERED():int    { 0 }
 function method DISPATCHER_ENTRYPOINT():int { 4 }
 
-function method DISP_CTXT_PC():int   { 8 }
-function method DISP_CTXT_PSR():int  { 12 }
-function method DISP_CTXT_LR():int   { 16 }
-function method DISP_CTXT_SP():int   { 20 }
+function method DISP_CTXT_R0():int   { 8 }
+function method DISP_CTXT_R1():int   { 12 }
+function method DISP_CTXT_R2():int   { 16 }
+function method DISP_CTXT_R3():int   { 20 }
 function method DISP_CTXT_R4():int   { 24 }
 function method DISP_CTXT_R5():int   { 28 }
 function method DISP_CTXT_R6():int   { 32 }
@@ -45,6 +45,10 @@ function method DISP_CTXT_R9():int   { 44 }
 function method DISP_CTXT_R10():int  { 48 }
 function method DISP_CTXT_R11():int  { 52 }
 function method DISP_CTXT_R12():int  { 56 }
+function method DISP_CTXT_LR():int   { 60 }
+function method DISP_CTXT_SP():int   { 64 }
+function method DISP_CTXT_PC():int   { 68 }
+function method DISP_CTXT_PSR():int  { 72 }
 
 //-----------------------------------------------------------------------------
 // Page Types
@@ -194,6 +198,10 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
     && page[base + DISP_CTXT_PSR()] == e.ctxt.cpsr
     && page[base + DISP_CTXT_LR()]  == e.ctxt.regs[LR(User)]
     && page[base + DISP_CTXT_SP()]  == e.ctxt.regs[SP(User)]
+    && page[base + DISP_CTXT_R0()]  == e.ctxt.regs[R0]
+    && page[base + DISP_CTXT_R1()]  == e.ctxt.regs[R1]
+    && page[base + DISP_CTXT_R2()]  == e.ctxt.regs[R2]
+    && page[base + DISP_CTXT_R3()]  == e.ctxt.regs[R3]
     && page[base + DISP_CTXT_R4()]  == e.ctxt.regs[R4]
     && page[base + DISP_CTXT_R5()]  == e.ctxt.regs[R5]
     && page[base + DISP_CTXT_R6()]  == e.ctxt.regs[R6]
