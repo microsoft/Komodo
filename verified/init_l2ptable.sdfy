@@ -103,6 +103,16 @@ lemma lemma_SecurePage(pagebase:word)
     assert lower <= pagebase < upper;
     assert pagebase + PAGESIZE() <= upper;
 }
+
+lemma pa_implies_modl2p(p:int)
+    requires PageAligned(p)
+    ensures  p % ARM_L2PTABLE_BYTES() == 0
+{
+    assert p % PAGESIZE() == 0;
+    assert PAGESIZE() == 0x1000;
+    assert ARM_L2PTABLE_BYTES() == 0x400;
+    assert PAGESIZE() % ARM_L2PTABLE_BYTES() == 0;
+}
 #endverbatim
 
 // updates portion of install_l1ptes
@@ -139,9 +149,12 @@ procedure install_l1ptes'(
     lemma_LeftShift4(l1index);
     LSL(l1index, l1index, 4);
 
+    pa_implies_modl2p(old(l2base));
     lemma_ARM_L1PTE_Dual(old(l2base));
     ORR(l2base, l2base, 1);
     assert l2base == mkL1Pte(Just(l2pg), 0);
+    WordAlignedAdd(l1base, l1index);
+    assert ValidMem(l1base + l1index);
     STR(l2base, l1base, l1index);
 
     assert RegPreservingExcept(old(this),this,set(@l1index, @l2base));
