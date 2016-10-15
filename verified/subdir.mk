@@ -96,6 +96,10 @@ map_secure_dep-sdfy = ARMdecls kom_utils allocate_page init_l2ptable
 map_secure_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
 $(dir)/map_secure.verified: $(call mkdeps,map_secure)
 
+map_insecure_dep-sdfy = ARMdecls kom_utils allocate_page init_l2ptable map_secure
+map_insecure_dep-dfy  = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
+$(dir)/map_insecure.verified: $(call mkdeps,map_insecure)
+
 enter_dep-sdfy = ARMdecls kom_utils
 enter_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
 $(dir)/enter.verified: $(call mkdeps,enter)
