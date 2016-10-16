@@ -344,17 +344,14 @@ function smc_finalise(pageDbIn: PageDb, addrspacePage: word) : (PageDb, word)
     requires validPageDb(pageDbIn)
 {
     reveal_validPageDb();
+    var d := pageDbIn; var a := addrspacePage;
     if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KOM_ERR_INVALID_ADDRSPACE())
     else if(pageDbIn[addrspacePage].entry.state != InitState) then
         (pageDbIn, KOM_ERR_ALREADY_FINAL())
     else
-        var addrspace := pageDbIn[addrspacePage].entry;
-        var updatedAddrspace := match addrspace
-            case Addrspace(l1, ref, state) => Addrspace(l1, ref, FinalState);
-        var pageDbOut := pageDbIn[
-            addrspacePage := PageDbEntryTyped(addrspacePage, updatedAddrspace)];
-        (pageDbOut, KOM_ERR_SUCCESS())
+        var d' := d[ a := d[a].( entry := d[a].entry.( state := FinalState ))];
+        (d', KOM_ERR_SUCCESS())
 }
 
 function smc_enter(pageDbIn: PageDb, dispPage: word, arg1: word, arg2: word, arg3: word)

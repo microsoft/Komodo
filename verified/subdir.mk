@@ -108,6 +108,10 @@ resume_dep-sdfy = ARMdecls kom_utils enter
 resume_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i 
 $(dir)/resume.verified: $(call mkdeps,resume)
 
+finalise_dep-sdfy = ARMdecls kom_utils
+finalise_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
+$(dir)/finalise.verified: $(call mkdeps,finalise)
+
 smc_handler_dep-sdfy = ARMdecls kom_utils init_addrspace init_dispatcher \
     init_l2ptable enter resume map_secure
 smc_handler_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
