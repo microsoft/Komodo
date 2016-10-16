@@ -411,6 +411,7 @@ procedure kom_smc_map_secure(
         SaneState(this);
         tuple(s'.d,err) == smc_mapSecure_premium(s.d, page, as_page,
             mapping, phys_page);
+        // TODO
         // For now, avoid proving that we haven't trampled the current 
         // dispatcher page. We probably need to either: 1) add errors for the case 
         // that the current dispatcher page is given in R0, or 2) allow the 

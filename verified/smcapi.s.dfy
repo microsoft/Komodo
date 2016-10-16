@@ -284,12 +284,12 @@ function smc_remove(pageDbIn: PageDb, page: word)
             if( !addrspace.state.StoppedState?) then
                 (pageDbIn, KOM_ERR_NOT_STOPPED())
             else 
-                assert page in addrspaceRefs(pageDbIn, addrspacePage);
-                var updatedAddrspace := match addrspace
-                    case Addrspace(l1, ref, state) => Addrspace(l1, ref - 1, state);
-                var pageDbOut := (pageDbIn[page := PageDbEntryFree])[
-                    addrspacePage := PageDbEntryTyped(addrspacePage, updatedAddrspace)];
-                (pageDbOut, KOM_ERR_SUCCESS())
+                var d := pageDbIn; var p := page; var a := addrspacePage;
+                assert p in addrspaceRefs(d, a);
+                var d' := (d[p := PageDbEntryFree])
+                        [a := d[a].( entry := d[a].entry.( refcount := 
+                            d[a].entry.refcount - 1 ))];
+                (d', KOM_ERR_SUCCESS())
 }
 
 function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,

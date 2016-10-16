@@ -108,6 +108,8 @@ resume_dep-sdfy = ARMdecls kom_utils enter
 resume_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i 
 $(dir)/resume.verified: $(call mkdeps,resume)
 
+# All these things depend on entry.i because they need ValidSysState', which 
+# probably needs a better home. Maybe its own silly, small .i file
 finalise_dep-sdfy = ARMdecls kom_utils
 finalise_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
 $(dir)/finalise.verified: $(call mkdeps,finalise)
@@ -115,6 +117,14 @@ $(dir)/finalise.verified: $(call mkdeps,finalise)
 stop_dep-sdfy = ARMdecls kom_utils
 stop_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
 $(dir)/stop.verified: $(call mkdeps,stop)
+
+remove_nonaddr_dep-sdfy = ARMdecls kom_utils
+remove_nonaddr_dep-dfy  = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
+$(dir)/remove_nonaddr.verified: $(call mkdeps,remove_nonaddr)
+
+remove_dep-sdfy = ARMdecls kom_utils remove_nonaddr
+remove_dep-dfy  = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
+$(dir)/remove.verified: $(call mkdeps,remove)
 
 smc_handler_dep-sdfy = ARMdecls kom_utils init_addrspace init_dispatcher \
     init_l2ptable enter resume map_secure

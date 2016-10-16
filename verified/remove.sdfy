@@ -1,0 +1,136 @@
+procedure kom_smc_remove(
+    {:register OReg(R0)} page:int,
+    out {:register OReg(R0)} err:int,
+    ghost s:SysState)
+returns (ghost s':SysState)
+requires
+    this == s.hw;
+    SaneState(this);
+    validSysState'(s);
+ensures
+    this == s'.hw;
+    SaneState(this);
+    validSysState'(s');
+    tuple(s'.d,err) == smc_remove_premium(s.d, page);
+{
+    reveal_smc_remove_premium();
+    ghost var specResult := smc_remove_premium(s.d, page);
+    ghost var specE := specErr(specResult);
+    ghost var specD := specPageDb(specResult);
+
+    if ( page >= sp_op_const(KOM_SECURE_NPAGES()) ){
+        err := sp_op_const(KOM_ERR_INVALID_PAGENO());
+        s' := s.( hw := this ).(d := specD);
+        assert err == specE;
+        assert s'.d == specD;
+    } else {
+        LDRglobaladdr(r4,PageDb());
+        r5 := sp_op_const(PAGEDB_ENTRY_SIZE());
+        assume isUInt32(page * r5); // TODO FIXME NLARITH 
+        MUL(r5, page, r5);
+        assert r5 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE();
+        LDRglobal(r6,PageDb(),r4,r5);
+        forall :: r6 == pageDbEntryTypeVal(s.d[page])
+            { reveal_pageDbEntryCorresponds(); }
+        if (r6 == sp_op_const(KOM_PAGE_FREE())) {
+            assert s.d[page] is PageDbEntryFree;
+            err := sp_op_const(KOM_ERR_SUCCESS());
+            s' := s.(hw:=this);
+            forall :: validSysState'(s')
+                    { reveal_validPageDb(); }
+            assert err == specE;
+            assert s'.d == specD;
+            assert validSysState'(s');
+        } else {
+            assert s.d[page] is PageDbEntryTyped;
+            if( r6 == sp_op_const(KOM_PAGE_ADDRSPACE()) ){
+                assert s.d[page].entry is Addrspace;
+                page_monvaddr_impl(r8,page,r7);
+                assert r8 == page_monvaddr(page);
+                LDR(r7,r8,sp_op_const(ADDRSPACE_REF()));
+                forall :: r7 == s.d[page].entry.refcount {
+                    reveal_validPageDb();
+                    reveal_pageContentsCorresponds();
+                    reveal_pageDbAddrspaceCorresponds();
+                }
+                if (r7 != 0) {
+                    assert s.d[page].entry.refcount != 0;
+                    err := sp_op_const(KOM_ERR_PAGEINUSE());
+                    s' := s.(hw:=this).(d:=specD);
+                    assert err == specE;
+                    assert s'.d == specD;
+                    assert validSysState'(s');
+                } else {
+                    assert s.d[page].entry.refcount == 0;
+                    r8 := sp_op_const(KOM_PAGE_FREE());
+                    assert r5 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE();
+                    STRglobal(r8,PageDb(),r4,r5);
+                    err := sp_op_const(KOM_ERR_SUCCESS());
+                    s' := s.(hw:=this).(d:=specD);
+                    assert err == specE;
+                    assert s'.d == specD;
+                    forall :: validSysState'(s') {
+                        reveal_validPageDb();
+                        reveal_pageDbEntryCorresponds();
+                        reveal_pageContentsCorresponds();
+                        assert specD[page] is PageDbEntryFree;
+                        assert pageDbEntryCorresponds(specD[page], 
+                            extractPageDbEntry(this.m, page));
+                        assert pageDbCorrespondsOnly(this.m, specD, page);
+                        forall :: pageDbCorrespondsExcluding(this.m, specD, page)
+                        {
+                            reveal_validPageDb();
+                            reveal_pageContentsCorresponds();
+                            reveal_pageDbAddrspaceCorresponds();
+                            ghost var d' := specPageDb(specResult);
+                            assert pageDbCorrespondsExcluding(s.hw.m, s.d, page);
+                            forall :: pageDbCorrespondsExcluding(this.m, s.d, page)
+                            {
+                                forall p :| validPageNr(p) && p != page ::
+                                extractPage(this.m, p) == extractPage(s.hw.m, p) {}
+                            }
+                            forall p :| validPageNr(p) && p != page :: s.d[p] == d'[p] {}
+                        }
+                    }
+                }
+            } else {
+                assert s.d[page] is PageDbEntryTyped;
+                ADD(r6, r5, sp_op_const(PAGEDB_ENTRY_ADDRSPACE()));
+                assert r6 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_ADDRSPACE();
+                LDRglobal(r6,PageDb(),r4,r6);
+                ghost var as_page := s.d[page].addrspace;
+                forall :: r6 == page_monvaddr(as_page) {
+                    reveal_validPageDb();
+                    reveal_pageDbEntryCorresponds();
+                }
+
+                forall :: s.d[as_page] is PageDbEntryTyped &&
+                    s.d[as_page].entry is Addrspace {
+                    reveal_validPageDb();
+                }
+                //page_monvaddr_impl(r7,r6,r8);
+                LDR(r8,r6,sp_op_const(ADDRSPACE_STATE()));
+                forall :: r8 == pageDbAddrspaceStateVal(s.d[as_page].entry.state)
+                {
+                    reveal_pageContentsCorresponds();
+                    reveal_pageDbAddrspaceCorresponds();
+                }
+    
+                if ( r8 != sp_op_const(KOM_ADDRSPACE_STOPPED()) ) {
+                    err := sp_op_const(KOM_ERR_NOT_STOPPED());
+                    s' := s.(hw:=this).(d:=specD);
+                    assert s'.d == specD;
+                    assert err == specE;
+                } else {
+                    assert specE == KOM_ERR_SUCCESS();
+                    assert r4 == AddressOfGlobal(PageDb());
+                    assert r5 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE();
+                    assert r6 == page_monvaddr(as_page);
+                    //err := sp_op_const(KOM_ERR_SUCCESS());
+                    s' := kom_smc_remove_non_addr_success(
+                        page,r4,r5,r6,err,s.(hw:=this));
+                }
+            }
+        }
+    }
+}

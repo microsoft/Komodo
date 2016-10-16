@@ -1,0 +1,115 @@
+procedure kom_smc_remove_non_addr_success(
+    {:register OReg(R0)} page:int,
+    {:register OReg(R4)} pagedb:int,
+    {:register OReg(R5)} page_type:int,
+    {:register OReg(R6)} as_page_va:int,
+    out {:register OReg(R0)} err:int,
+    ghost s:SysState
+) returns (ghost s':SysState)
+requires
+    this == s.hw;
+    SaneState(this);
+    validSysState'(s);
+    specErr(smc_remove(s.d,page)) == KOM_ERR_SUCCESS();
+    wellFormedPageDb(s.d);
+    s.d[page] is PageDbEntryTyped &&
+        !(s.d[page].entry is Addrspace);
+    r4 == AddressOfGlobal(PageDb());
+    r5 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE();
+    r6 == page_monvaddr(s.d[page].addrspace);
+ensures
+    this == s'.hw;
+    SaneState(this);
+    validSysState'(s');
+    s'.d == specPageDb(smc_remove_premium(s.d, page));
+    err == KOM_ERR_SUCCESS();
+{
+     reveal_smc_remove_premium();
+     ghost var specResult := smc_remove_premium(s.d, page);
+     ghost var specE := specErr(specResult);
+     ghost var specD := specPageDb(specResult);
+     ghost var as_page := s.d[page].addrspace;
+
+     forall :: s.d[as_page] is PageDbEntryTyped &&
+        s.d[as_page].entry is Addrspace {
+            reveal_validPageDb();
+     }
+     r8 := sp_op_const(KOM_PAGE_FREE());
+     assert r5 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE();
+     STRglobal(r8,PageDb(),r4,r5);
+     assert extractPageDbEntry(this.m, page)[
+        BytesToWords(PAGEDB_ENTRY_TYPE())] == KOM_PAGE_FREE();
+
+     LDR(r7,r6,sp_op_const(ADDRSPACE_REF()));
+     forall :: r7 == s.d[as_page].entry.refcount {
+        reveal_validPageDb();
+        reveal_pageContentsCorresponds();
+        reveal_pageDbAddrspaceCorresponds();
+     }
+     SUB(r7,r7,1);
+     assert r7 == s.d[as_page].entry.refcount - 1;
+     STR(r7,r6,sp_op_const(ADDRSPACE_REF()));
+
+     err :=  sp_op_const(KOM_ERR_SUCCESS());
+     s' := s.(hw:=this).(d:=specD);
+     assert s'.d == specD;
+     forall :: validSysState'(s')
+     {
+          reveal_validPageDb();
+          // reveal_validPageDb();
+          // reveal_pageDbEntryCorresponds();
+          // reveal_pageContentsCorresponds();
+          // assert pageDbEntryCorresponds(specD[page], 
+          //      extractPageDbEntry(this.m, page));
+          forall :: pageDbCorrespondsOnly(this.m, specD, page)
+            {   
+                reveal_pageDbEntryCorresponds(); 
+                reveal_pageContentsCorresponds();
+            }
+
+          forall :: pageDbCorrespondsOnly(this.m, specD, as_page)
+          {
+                reveal_pageDbEntryCorresponds();
+                assert s.d[as_page].addrspace ==
+                    s'.d[as_page].addrspace;
+                assert extractPageDbEntry(this.m, as_page) ==
+                    extractPageDbEntry(old(this.m), as_page);
+                
+                reveal_pageContentsCorresponds();
+                reveal_pageDbAddrspaceCorresponds();
+                ghost var e := specD[as_page].entry;
+                ghost var base := page_monvaddr(as_page);
+                ghost var page := extractPage(this.m, as_page);
+                assert base == as_page_va;
+                assert page[base + ADDRSPACE_L1PT()] == 
+                    page_monvaddr(e.l1ptnr);
+                assert page[base + ADDRSPACE_L1PT_PHYS()] == 
+                    page_paddr(e.l1ptnr);
+                assert page[base + ADDRSPACE_REF()] == e.refcount;
+                assert page[base + ADDRSPACE_STATE()] == 
+                    pageDbAddrspaceStateVal(e.state);
+          }
+
+          forall p :| validPageNr(p) && p != as_page && p != page ::
+            pageDbCorrespondsOnly(this.m, specD, p)
+          {
+                reveal_pageDbEntryCorresponds();
+                forall p :| validPageNr(p) && p != as_page && p != page ::
+                    (extractPage(this.m, p) ==
+                        extractPage(old(this.m), p)) {}
+                reveal_pageContentsCorresponds();
+                forall p :| validPageNr(p) && p != as_page && p != page ::
+                    (extractPageDbEntry(this.m, p) ==
+                        extractPageDbEntry(old(this.m), p)) {} 
+                forall p :| validPageNr(p) && p != as_page && p != page ::
+                    s.d[p] == s'.d[p] {}
+                assert pageDbCorrespondsOnly(old(this.m), s.d, p);
+          }
+        
+          assert s'.g.g_cur_dispatcher == s.g.g_cur_dispatcher;
+          ghost var disp := s.g.g_cur_dispatcher;
+          assert validDispatcherPage(s.d, disp);
+          assume s'.d[disp] == s.d[disp]; // TODO FIXME, this case is imaginary
+          assert validDispatcherPage(s'.d, disp);
+    }
+}
