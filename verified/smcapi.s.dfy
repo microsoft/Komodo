@@ -391,17 +391,12 @@ function smc_stop(pageDbIn: PageDb, addrspacePage: word)
     requires validPageDb(pageDbIn)
 {
     reveal_validPageDb();
+    var d := pageDbIn; var a := addrspacePage;
     if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KOM_ERR_INVALID_ADDRSPACE())
-    // else if(pageDbIn[addrspacePage].entry.state == InitState) then
-    //     (pageDbIn, KOM_ERR_ALREADY_FINAL())
     else
-        var addrspace := pageDbIn[addrspacePage].entry;
-        var updatedAddrspace := match addrspace
-            case Addrspace(l1, ref, state) => Addrspace(l1, ref, StoppedState);
-        var pageDbOut := pageDbIn[
-            addrspacePage := PageDbEntryTyped(addrspacePage, updatedAddrspace)];
-        (pageDbOut, KOM_ERR_SUCCESS())
+        var d' := d[ a := d[a].( entry := d[a].entry.( state := StoppedState ))];
+        (d', KOM_ERR_SUCCESS())
 }
 
 //=============================================================================

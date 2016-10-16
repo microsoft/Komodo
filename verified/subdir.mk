@@ -112,6 +112,10 @@ finalise_dep-sdfy = ARMdecls kom_utils
 finalise_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
 $(dir)/finalise.verified: $(call mkdeps,finalise)
 
+stop_dep-sdfy = ARMdecls kom_utils
+stop_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
+$(dir)/stop.verified: $(call mkdeps,stop)
+
 smc_handler_dep-sdfy = ARMdecls kom_utils init_addrspace init_dispatcher \
     init_l2ptable enter resume map_secure
 smc_handler_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i

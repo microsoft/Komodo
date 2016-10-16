@@ -1,22 +1,3 @@
-/*
-function smc_finalise(pageDbIn: PageDb, as_page: word) : (PageDb, word)
-    requires validPageDb(pageDbIn)
-{
-    reveal_validPageDb();
-    if(!isAddrspace(pageDbIn, as_page)) then
-        (pageDbIn, KOM_ERR_INVALID_ADDRSPACE())
-    else if(pageDbIn[as_page].entry.state != InitState) then
-        (pageDbIn, KOM_ERR_ALREADY_FINAL())
-    else
-        var addrspace := pageDbIn[as_page].entry;
-        var updatedAddrspace := match addrspace
-            case Addrspace(l1, ref, state) => Addrspace(l1, ref, FinalState);
-        var pageDbOut := pageDbIn[
-            as_page := PageDbEntryTyped(as_page, updatedAddrspace)];
-        (pageDbOut, KOM_ERR_SUCCESS())
-}
-*/
-
 procedure kom_smc_finalise(
     {:register OReg(R0)} as_page:int,
     out {:register OReg(R0)} err:int,
