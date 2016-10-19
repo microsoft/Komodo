@@ -49,46 +49,12 @@ procedure fetch_l1pte(
 }
 
 #verbatim
-// XXX: this level of simplification for bitvector proofs is insane,
-// but, sadly, necessary at present
-lemma lemma_BitOrOneIsLikePlus''(b: bv32)
-    requires b % 2 == 0
-    ensures b + 1 == b | 1
-{}
-
-lemma lemma_BitOrOneIsLikePlus'(b: bv32)
-    requires BitMod(b, 2) == 0
-    ensures BitAdd(b, 1) == BitOr(b, 1)
-{
-    reveal_BitMod(); reveal_BitAdd(); reveal_BitOr();
-    lemma_BitOrOneIsLikePlus''(b);
-}
-
-lemma lemma_BitOrOneIsLikePlus(i: int)
-    requires 0 <= i < 0xffffffff
-    requires i % 2 == 0
-    ensures i + 1 == BitsAsInt(BitOr(IntAsBits(i), 1))
-{
-    var b := IntAsBits(i);
-    lemma_BitsAsIntAsBits(i);
-    assert BitsAsInt(b) == i;
-    assert BitsAsInt(BitMod(b, 2)) == 0 by {
-        lemma_BitsAsIntAsBits(2);
-        assume BitsAsInt(2) == 2;
-        lemma_BitModEquiv(b, 2);
-        }
-    lemma_BitOrOneIsLikePlus'(b);
-    assume BitsAsInt(1) == 1;
-    lemma_BitAddEquiv(b, 1);
-}
-
 lemma lemma_ARM_L1PTE_Dual(paddr: word)
     requires paddr % ARM_L2PTABLE_BYTES() == 0
     ensures ARM_L1PTE(paddr) == paddr + 1
 {
     assert paddr % 0x400 == 0 && paddr % 2 == 0;
     lemma_BitOrOneIsLikePlus(paddr);
-    reveal_IntAsBits(); reveal_BitsAsInt();
 }
 
 lemma lemma_SecurePage(pagebase:word)
