@@ -22,12 +22,12 @@ procedure mkl2pte_insecure(
     AND(r4,mapping,sp_op_const(KOM_MAPPING_W()));
     lemma_extract_kom_mapping_w(mapping,r4);
 
-    assert validInsecurePageNr(page);
+    assert page < KOM_PHYSMEM_LIMIT() / PAGESIZE();
     assert PAGESIZE() == 0x1000;
     // isUInt32(r6 * pagesize) should be provable from above 2;
-    assume isUInt32(r6 * PAGESIZE());
-    r5 := sp_op_const(PAGESIZE());
-    MUL(r7,r6,r5);
+    assert isUInt32(page * PAGESIZE());
+    lemma_LeftShift12(page);
+    LSL(r7,page,12);
     assert PageAligned(r7);
 
     r5 := 0; // because it has to be a RegOperand 
@@ -48,8 +48,11 @@ procedure phys_page_is_insecure_ram({:register OReg(R3)} phys_page:int)
         GlobalsInvariant(old(this),this);
         r12 != 0 ==> validInsecurePageNr(phys_page);
 {
-    LSL(r12,sp_op_const(SecurePhysBase()),12);
-    assume LeftShift(SecurePhysBase(), 12) == SecurePhysBase() / PAGESIZE();
+    LDRglobaladdr(r12, SecurePhysBaseOp());
+    LDRglobal(r12, SecurePhysBaseOp(), r12, 0);
+    lemma_RightShift12(r12);
+    LSR(r12,r12,12);
+    assert r12 == SecurePhysBase() / PAGESIZE();
 
     if(phys_page >= r12)
     {

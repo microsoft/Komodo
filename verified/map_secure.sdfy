@@ -126,8 +126,11 @@ procedure phys_page_is_insecure_ram_nz({:register OReg(R3)} phys_page:int)
         AllMemInvariant(old(this),this);
         GlobalsInvariant(old(this),this);
 {
-    LSL(r12,sp_op_const(SecurePhysBase()),12);
-    assume LeftShift(SecurePhysBase(), 12) == SecurePhysBase() / PAGESIZE();
+    LDRglobaladdr(r12, SecurePhysBaseOp());
+    LDRglobal(r12, SecurePhysBaseOp(), r12, 0);
+    lemma_RightShift12(r12);
+    LSR(r12,r12,12);
+    assert r12 == SecurePhysBase() / PAGESIZE();
 
     if(phys_page >= r12)
     {
