@@ -78,19 +78,23 @@ kom_utils_dep-sdfy = ARMdecls
 kom_utils_dep-dfy = ARMspartan kom_common.i kom_common.s bitvectors.i
 $(dir)/kom_utils.verified: $(call mkdeps,kom_utils)
 
+memset_dep-sdfy = ARMdecls
+memset_dep-dfy = ARMspartan kom_common.i kom_common.s
+$(dir)/memset.verified: $(call mkdeps,memset)
+
 allocate_page_dep-sdfy = ARMdecls kom_utils
 allocate_page_dep-dfy = ARMspartan Sets kom_common.i pagedb.i smcapi.i
 $(dir)/allocate_page.verified: $(call mkdeps,allocate_page)
 
-init_addrspace_dep-sdfy = ARMdecls kom_utils
+init_addrspace_dep-sdfy = ARMdecls kom_utils memset
 init_addrspace_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/init_addrspace.verified: $(call mkdeps,init_addrspace)
 
-init_dispatcher_dep-sdfy = ARMdecls kom_utils allocate_page
+init_dispatcher_dep-sdfy = ARMdecls kom_utils allocate_page memset
 init_dispatcher_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/init_dispatcher.verified: $(call mkdeps,init_dispatcher)
 
-init_l2ptable_dep-sdfy = ARMdecls kom_utils allocate_page
+init_l2ptable_dep-sdfy = ARMdecls kom_utils allocate_page memset
 init_l2ptable_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i bitvectors.i
 $(dir)/init_l2ptable.verified: $(call mkdeps,init_l2ptable)
 
