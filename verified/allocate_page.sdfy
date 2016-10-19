@@ -253,6 +253,7 @@ procedure allocate_page(
         } else {
             assert DistinctRegOperands(set(@pagenr, @as_pagenr,
                                            @pagedb_base, @tmp, @tmp2, @err), 6);
+            assert RegPreservingExcept(old(this),this, set(@tmp, @tmp2, @err));
             page_monvaddr_impl(tmp2, as_pagenr, err);
 
             LDR(tmp, tmp2, sp_op_const(ADDRSPACE_STATE()));
@@ -270,6 +271,7 @@ procedure allocate_page(
                     @pagedb_base, @tmp, @tmp2, @err), 6);
                 assert DistinctRegOperands(set(@pagenr, @pagedb_base, @tmp,
                                                @tmp2, @err), 5);
+                assert RegPreservingExcept(old(this),this, set(@tmp, @tmp2, @err));
                 pagedb := allocate_page_success(pagenr, tmp2, typeval,
                                 pagedb_base, tmp, err, pagedb_in, entry);
                 err := sp_op_const(KOM_ERR_SUCCESS());
