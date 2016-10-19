@@ -71,12 +71,11 @@ lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
         if l1e.Just? {
             var l2p := l1e.v;
             assert validL1PTE(d, l2p);
-            assert l2tablesmatch(s, l2p, d[l2p].entry)
-                by {reveal_l2tablesmatch_opaque();}
             assert absl1pte.Just?;
             calc {
                 ExtractAbsL1PTable(s, l1base)[k];
                 Just(ExtractAbsL2PTable(s, absl1pte.v + PhysBase()));
+                { reveal_l2tablesmatch_opaque(); }
                 Just(mkAbsL2PTable(d[l2p].entry, j));
                 mkAbsPTable(d, l1p)[k];
             }
