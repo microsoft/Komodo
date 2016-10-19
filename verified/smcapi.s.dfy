@@ -140,7 +140,8 @@ function initDispCtxt() : DispatcherContext
 {
     var psr := encode_mode(User);
     assert psr == 0x10;
-    assume BitwiseAnd(0x10, 0x1f) == 0x10;
+    assert BitwiseAnd(0x10, 0x1f) == 0x10
+        by { reveal_BitAnd(); reveal_WordAsBits(); reveal_BitsAsWord(); }
     assert psr_mask_mode(psr) == 0x10;
     assert decode_mode'(psr_mask_mode(psr)) == Just(User);
     DispatcherContext(
@@ -160,8 +161,6 @@ function smc_initDispatcher(pageDbIn: PageDb, page:word, addrspacePage:word,
     if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KOM_ERR_INVALID_ADDRSPACE())
     else
-        // Not sure why this can't verify... moving on for now?
-        assume decode_mode'(psr_mask_mode(encode_mode(User))) == Just(User);
         allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false, initDispCtxt()))
 }
 
