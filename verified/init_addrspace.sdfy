@@ -208,9 +208,26 @@ procedure init_addrspace(
 }
 
 #verbatim
-// FIXME: temp kludge for limitations of dafny's bitvectors
-lemma {:axiom} lemma_maskModEquivalence(x:word)
+lemma lemma_mask3IsMod4(x:word)
     ensures BitwiseAnd(x, 3) == x % 4;
+{
+    assert pow2(2) == 4 by { reveal_pow2(); }
+    calc {
+        BitwiseAnd(x, 3);
+        BitsAsWord(BitAnd(WordAsBits(x), WordAsBits(3)));
+        { calc {
+          BitmaskLow(2);
+          BitAtPos(2) - 1;
+          { assert BitsAsWord(BitAtPos(2)) == 4;
+            reveal_BitsAsWord(); }
+          4 - 1;
+          3;
+        } reveal_WordAsBits(); }
+        BitsAsWord(BitAnd(WordAsBits(x), BitmaskLow(2)));
+        { lemma_BitmaskAsWord(x, 2); }
+        x % pow2(2);
+    }
+}
 #endverbatim
 
 procedure kom_smc_init_addrspace(
@@ -236,8 +253,7 @@ procedure kom_smc_init_addrspace(
 
     // check alignment of l1pt page
     AND(r0,l1pt_page,3);
-    // FIXME: dafny's bv32 type doesn't seem allow proving equivalence of %
-    lemma_maskModEquivalence(l1pt_page);
+    lemma_mask3IsMod4(l1pt_page);
     assert r0 == l1pt_page % 4;
 
     if (addrspace_page == l1pt_page) {
