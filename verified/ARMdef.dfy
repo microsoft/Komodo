@@ -6,13 +6,13 @@ include "alignment.s.dfy"
 //-----------------------------------------------------------------------------
 // Core types (for a 32-bit word-aligned machine)
 //-----------------------------------------------------------------------------
-predicate isUInt32(i:int) { 0 <= i < 0x1_0000_0000 }
+//predicate isUInt32(i:int) { 0 <= i < 0x1_0000_0000 }
 function  BytesPerWord() : int { 4 }
 predicate WordAligned(i:int) { i % 4 == 0 }
 function  WordsToBytes(w:int) : int { 4 * w }
 function  BytesToWords(b:int) : int requires WordAligned(b) { b / 4 }
 
-type word = x | isUInt32(x)
+//type word = x | isUInt32(x)
 type addr = x | isUInt32(x) && WordAligned(x)
 
 //-----------------------------------------------------------------------------
@@ -608,18 +608,18 @@ function method ARM_L2PTE_RO_BIT(): bv32
 
 predicate ValidAbsL2PTEWord(pteword:word)
 {
-    var pte := IntAsBits(pteword);
+    var pte := WordAsBits(pteword);
     var typebits := BitAnd(pte, 0x3);
-    var lowbits := BitAnd(pte, 0xfdfc);
+    var lowbits := BitAnd(pte, 0xdfc);
     var pagebase := BitwiseMaskHigh(pteword, 12);
-    typebits != 1 && lowbits == ARM_L2PTE_CONST_BITS() && isUInt32(pagebase + PhysBase())
+    typebits == 0 || (typebits != 1 && lowbits == ARM_L2PTE_CONST_BITS() && isUInt32(pagebase + PhysBase()))
 }
 
 function ExtractAbsL2PTE(pteword:word): Maybe<AbsPTE>
     requires ValidAbsL2PTEWord(pteword)
     ensures WellformedAbsPTE(ExtractAbsL2PTE(pteword))
 {
-    var pte := IntAsBits(pteword);
+    var pte := WordAsBits(pteword);
     var typebits := BitAnd(pte, 0x3);
     var exec := BitAnd(pte, ARM_L2PTE_NX_BIT()) == 0;
     var write := BitAnd(pte, ARM_L2PTE_RO_BIT()) == 0;
@@ -643,24 +643,24 @@ function method ARM_L2PTE_CONST_BITS(): bv32
 //-----------------------------------------------------------------------------
 
 function BitwiseXor(x:word, y:word): word
-    { BitsAsInt(BitXor(IntAsBits(x), IntAsBits(y))) }
+    { BitsAsWord(BitXor(WordAsBits(x), WordAsBits(y))) }
 
 function BitwiseAnd(x:word, y:word): word
-    { BitsAsInt(BitAnd(IntAsBits(x), IntAsBits(y))) }
+    { BitsAsWord(BitAnd(WordAsBits(x), WordAsBits(y))) }
 
 function BitwiseOr(x:word, y:word): word
-    { BitsAsInt(BitOr(IntAsBits(x), IntAsBits(y))) }
+    { BitsAsWord(BitOr(WordAsBits(x), WordAsBits(y))) }
 
 function BitwiseNot(x:word): word
-    { BitsAsInt(BitNot(IntAsBits(x))) }
+    { BitsAsWord(BitNot(WordAsBits(x))) }
 
 function LeftShift(x:word, amount:word): word
     requires 0 <= amount < 32;
-    { BitsAsInt(BitShiftLeft(IntAsBits(x), amount)) }
+    { BitsAsWord(BitShiftLeft(WordAsBits(x), amount)) }
 
 function RightShift(x:word, amount:word): word
     requires 0 <= amount < 32;
-    { BitsAsInt(BitShiftRight(IntAsBits(x), amount)) }
+    { BitsAsWord(BitShiftRight(WordAsBits(x), amount)) }
 
 //-----------------------------------------------------------------------------
 // Evaluation

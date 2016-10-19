@@ -1,68 +1,65 @@
 include "nlarith.s.dfy"
 
-/* Z3 gets hopelessly lost thinking about bitwise operations, so we
- * wrap them in opaque functions */
+predicate isUInt32(i:int) { 0 <= i < 0x1_0000_0000 }
+type word = x | isUInt32(x)
 
-lemma {:axiom} lemma_BitIntEquiv(b:bv32, i:int)
-    requires i == b as int || (0 <= i < 0x1_0000_0000 && b == i as bv32)
-    ensures i == b as int && b == i as bv32
-    ensures i == 0 <==> b == 0
+/* Z3 gets hopelessly lost thinking about bitvectors, so we wrap both
+ * the conversions and operations in opaque functions. We also need a
+ * large number of axioms in this file, to work around limitations of
+ * Z3's reasoning about the conversions between bitvectors and
+ * ints. */
 
-function {:opaque} IntAsBits(i:int): bv32
-    requires 0 <= i < 0x1_0000_0000;
-    ensures i == 0 <==> IntAsBits(i) == 0;
+/* ================ Conversions ================ */
+
+lemma lemma_WordAsBits(i:word)
+    ensures i == 0 ==> i as bv32 == 0
+
+function {:opaque} WordAsBits(i:word): bv32
+    ensures i == 0 <==> WordAsBits(i) == 0
 {
-    var b := i as bv32;
-    lemma_BitIntEquiv(b, i);
-    b
+    lemma_WordAsBits(i);
+    i as bv32
 }
 
-function BitsAsInt'(b:bv32): int
+lemma lemma_BitsAsWord(b:bv32)
+    ensures isUInt32(b as int)
+    ensures b == 0 ==> b as int == 0
+
+function {:opaque} BitsAsWord(b:bv32): word
+    ensures b == 0 <==> BitsAsWord(b) == 0
 {
-    b as int
+    lemma_BitsAsWord(b);
+    (b as int) as word
 }
 
-lemma lemma_BitsAsInt'(b:bv32)
-    ensures 0 <= BitsAsInt'(b) < 0x1_0000_0000
-    ensures BitsAsInt'(b) as bv32 == b
-    ensures b == 0 <==> BitsAsInt'(b) == 0
+lemma {:axiom} lemma_WordAsBitsAsWord(i:word)
+    ensures BitsAsWord(WordAsBits(i)) == i
+
+lemma {:axiom} lemma_BitsAsWordAsBits(b:bv32)
+    ensures WordAsBits(BitsAsWord(b)) == b
+
+lemma lemma_WordBitEquiv(i:word, b:bv32)
+    requires i == BitsAsWord(b) || b == WordAsBits(i)
+    ensures i == BitsAsWord(b) && b == WordAsBits(i)
 {
-    calc {
-        BitsAsInt'(b) as bv32;
-        b as int as bv32;
-        {lemma_BitIntEquiv(b, b as int);}
-        b;
-    }
-    lemma_BitIntEquiv(b, b as int);
+    lemma_WordAsBitsAsWord(i);
+    lemma_BitsAsWordAsBits(b);
 }
 
-function {:opaque} BitsAsInt(b:bv32): int
-    ensures 0 <= BitsAsInt(b) < 0x1_0000_0000;
-    ensures b == 0 <==> BitsAsInt(b) == 0;
-    decreases b as int // XXX: workaround Dafny issues #26 / #39
-{
-    lemma_BitsAsInt'(b);
-    BitsAsInt'(b)
-}
+lemma {:axiom} lemma_BitsAreUnique(b1:bv32, b2:bv32)
+    requires BitsAsWord(b1) == BitsAsWord(b2)
+    ensures b1 == b2
 
-lemma lemma_BitsAsIntAsBits(i:int)
-    requires 0 <= i < 0x1_0000_0000
-    ensures BitsAsInt(IntAsBits(i)) == i
-{
-    calc {
-        BitsAsInt(IntAsBits(i));
-        { reveal_IntAsBits(); }
-        BitsAsInt(i as bv32);
-        { reveal_BitsAsInt(); }
-        (i as bv32) as int;
-        { lemma_BitIntEquiv(i as bv32, i); }
-        i;
-    }
-}
+/* ================ Primitives ================ */
 
 function {:opaque} BitAdd(x:bv32, y:bv32): bv32
 {
     x + y
+}
+
+function {:opaque} BitSub(x:bv32, y:bv32): bv32
+{
+    x - y
 }
 
 function {:opaque} BitAnd(x:bv32, y:bv32): bv32
@@ -114,25 +111,56 @@ function {:opaque} BitShiftRight(x:bv32, amount:int): bv32
     x >> amount
 }
 
-lemma {:axiom} lemma_BitAddEquiv(x:bv32, y:bv32)
-    requires BitsAsInt(x) + BitsAsInt(y) < 0x1_0000_0000
-    ensures BitsAsInt(BitAdd(x, y)) == BitsAsInt(x) + BitsAsInt(y)
+/* ================ Axioms relating the primitives ================ */
+/* (it would be nice to prove these!) */
 
-lemma {:axiom} lemma_BitSubEquiv(x:bv32, y:bv32)
-    requires BitsAsInt(x) - BitsAsInt(y) >= 0
-    ensures BitsAsInt(x - y) == BitsAsInt(x) - BitsAsInt(y)
+lemma {:axiom} lemma_BitAddEquiv(x:word, y:word)
+    requires isUInt32(x + y)
+    ensures BitsAsWord(BitAdd(WordAsBits(x), WordAsBits(y))) == x + y
 
-lemma {:axiom} lemma_BitModEquiv(x:bv32, y:bv32)
+lemma {:axiom} lemma_BitSubEquiv(x:word, y:word)
+    requires isUInt32(x - y)
+    ensures BitsAsWord(BitSub(WordAsBits(x), WordAsBits(y))) == x - y
+
+lemma {:axiom} lemma_BitModEquiv(x:word, y:word)
     requires y != 0
-    ensures BitsAsInt(BitMod(x, y)) == BitsAsInt(x) % BitsAsInt(y)
+    ensures BitsAsWord(BitMod(WordAsBits(x), WordAsBits(y))) == x % y
 
-lemma {:axiom} lemma_BitDivEquiv(x:bv32, y:bv32)
+lemma {:axiom} lemma_BitDivEquiv(x:word, y:word)
     requires y != 0
-    ensures BitsAsInt(BitDiv(x, y)) == BitsAsInt(x) / BitsAsInt(y)
+    ensures BitsAsWord(BitDiv(WordAsBits(x), WordAsBits(y))) == x / y
 
-lemma {:axiom} lemma_BitMulEquiv(x:bv32, y:bv32)
-    requires BitsAsInt(x) * BitsAsInt(y) < 0x1_0000_0000
-    ensures BitsAsInt(BitMul(x, y)) == BitsAsInt(x) * BitsAsInt(y)
+lemma {:axiom} lemma_BitMulEquiv(x:word, y:word)
+    requires isUInt32(x * y)
+    ensures BitsAsWord(BitMul(WordAsBits(x), WordAsBits(y))) == x * y
+
+lemma {:axiom} lemma_BitCmpEquiv(x:word, y:word)
+    ensures x > y ==> WordAsBits(x) > WordAsBits(y)
+    ensures x < y ==> WordAsBits(x) < WordAsBits(y)
+    ensures x == y ==> WordAsBits(x) == WordAsBits(y)
+
+lemma {:axiom} lemma_BitShiftsSum(x: bv32, a: nat, b: nat)
+    requires 0 <= a + b < 32
+    ensures BitShiftLeft(x, a + b) == BitShiftLeft(BitShiftLeft(x, a), b)
+    ensures BitShiftRight(x, a + b) == BitShiftRight(BitShiftRight(x, a), a)
+
+lemma {:axiom} lemma_BitOrCommutative(a: bv32, b:bv32)
+    ensures BitOr(a, b) == BitOr(b, a)
+
+lemma {:axiom} lemma_BitOrAssociative(a: bv32, b:bv32, c: bv32)
+    ensures BitOr(a, BitOr(b, c)) == BitOr(BitOr(a, b), c)
+
+lemma {:axiom} lemma_BitAndCommutative(a: bv32, b:bv32)
+    ensures BitAnd(a, b) == BitAnd(b, a)
+
+lemma {:axiom} lemma_BitAndAssociative(a: bv32, b:bv32, c: bv32)
+    ensures BitAnd(a, BitAnd(b, c)) == BitAnd(BitAnd(a, b), c)
+
+lemma {:axiom} lemma_BitOrAndRelation(a: bv32, b:bv32, c: bv32)
+    ensures BitAnd(BitOr(a, b), c) == BitOr(BitAnd(a, c), BitAnd(b, c))
+
+
+/* ================ Higher-level operations (needed for spec) ================ */
 
 function {:opaque} pow2(n:nat): nat
     ensures pow2(n) > 0
@@ -148,23 +176,23 @@ function BitAtPos'(bitpos:int): bv32
 
 lemma {:axiom} lemma_BitposPowerOf2(bitpos:int)
     requires 0 <= bitpos < 32
-    ensures BitsAsInt(BitAtPos'(bitpos)) == pow2(bitpos)
+    ensures BitsAsWord(BitAtPos'(bitpos)) == pow2(bitpos)
 
-function BitAtPos(bitpos:int): bv32
+function {:opaque} BitAtPos(bitpos:int): bv32
     requires 0 <= bitpos < 32
     ensures BitAtPos(bitpos) != 0
-    ensures BitsAsInt(BitAtPos(bitpos)) == pow2(bitpos)
+    ensures BitsAsWord(BitAtPos(bitpos)) == pow2(bitpos)
 {
     lemma_BitposPowerOf2(bitpos); BitAtPos'(bitpos)
 }
 
-function {:opaque} BitmaskLow(bitpos:int): bv32
+function BitmaskLow(bitpos:int): bv32
     requires 0 <= bitpos < 32
 {
     BitAtPos(bitpos) - 1
 }
 
-function {:opaque} BitmaskHigh(bitpos:int): bv32
+function BitmaskHigh(bitpos:int): bv32
     requires 0 <= bitpos < 32
 {
     BitNot(BitmaskLow(bitpos))
@@ -177,41 +205,46 @@ lemma {:axiom} lemma_Bitmask(b:bv32, bitpos:int)
         == BitMul(BitDiv(b, BitAtPos(bitpos)), BitAtPos(bitpos))
 /* TODO: can't we prove this? */
 
-lemma lemma_BitmaskAsInt(i:int, bitpos:int)
-    requires 0 <= i < 0x1_0000_0000
+lemma lemma_BitmaskAsWord(i:word, bitpos:int)
     requires 0 <= bitpos < 32
-    ensures BitsAsInt(BitAnd(IntAsBits(i), BitmaskLow(bitpos))) == i % pow2(bitpos)
-    ensures BitsAsInt(BitAnd(IntAsBits(i), BitmaskHigh(bitpos))) == i / pow2(bitpos) * pow2(bitpos)
-    ensures BitsAsInt(BitAnd(IntAsBits(i), BitmaskHigh(bitpos))) % pow2(bitpos) == 0
+    ensures BitsAsWord(BitAnd(WordAsBits(i), BitmaskLow(bitpos))) == i % pow2(bitpos)
+    ensures BitsAsWord(BitAnd(WordAsBits(i), BitmaskHigh(bitpos))) == i / pow2(bitpos) * pow2(bitpos)
+    ensures BitsAsWord(BitAnd(WordAsBits(i), BitmaskHigh(bitpos))) % pow2(bitpos) == 0
 {
+    var b := WordAsBits(i);
+    lemma_WordBitEquiv(i, b);
     var pb := BitAtPos(bitpos);
     var pi := pow2(bitpos);
-    assert BitsAsInt(pb) == pi;
-    var b := IntAsBits(i);
+    lemma_WordBitEquiv(pi, pb);
+
     lemma_Bitmask(b, bitpos);
 
-    forall ensures BitsAsInt(BitAnd(b, BitmaskLow(bitpos))) == i % pi {
-        assert BitAnd(b, BitmaskLow(bitpos)) == BitMod(b, pb);
-        lemma_BitModEquiv(b, pb);
-        reveal_BitsAsInt(); reveal_IntAsBits();
+    forall ensures BitsAsWord(BitAnd(b, BitmaskLow(bitpos))) == i % pi {
         calc {
-            BitsAsInt(BitMod(b, pb));
-            {lemma_BitModEquiv(b, pb);}
-            BitsAsInt(b) % BitsAsInt(pb);
-            {lemma_BitsAsIntAsBits(i); lemma_BitsAsIntAsBits(pi);}
+            BitsAsWord(BitAnd(b, BitmaskLow(bitpos)));
+            BitsAsWord(BitMod(b, pb));
+            { lemma_BitModEquiv(i, pi); }
             i % pi;
         }
     }
 
-    forall ensures BitsAsInt(BitAnd(b, BitmaskHigh(bitpos))) == i / pi * pi {
-        assert BitAnd(b, BitmaskHigh(bitpos)) == BitMul(BitDiv(b, pb), pb);
-        assert i / pi == BitsAsInt(BitDiv(b, pb))
-            by { lemma_BitDivEquiv(b, pb); lemma_BitsAsIntAsBits(i); }
-        lemma_DivMulLessThan(i, pi);
-        lemma_BitMulEquiv(BitDiv(b, pb), pb);
+    forall ensures BitsAsWord(BitAnd(b, BitmaskHigh(bitpos))) == i / pi * pi {
         calc {
-            BitsAsInt(BitMul(BitDiv(b, pb), pb));
-            BitsAsInt(BitDiv(b, pb)) * BitsAsInt(pb);
+            BitsAsWord(BitAnd(b, BitmaskHigh(bitpos)));
+            BitsAsWord(BitMul(BitDiv(b, pb), pb));
+            { lemma_BitsAsWordAsBits(BitDiv(b, pb)); }
+            BitsAsWord(BitMul(WordAsBits(BitsAsWord(BitDiv(b, pb))), pb));
+            {
+                lemma_BitsAsWordAsBits(BitDiv(b, pb));
+                lemma_DivMulLessThan(i, pi);
+                assert BitsAsWord(BitDiv(b, pb)) == i / pi by { lemma_BitDivEquiv(i, pi); }
+                assert i >= 0 && pi > 0;
+                lemma_DivBounds(i, pi); lemma_MulSign(i / pi, pi);
+                assert i / pi * pi >= 0;
+                lemma_BitMulEquiv(BitsAsWord(BitDiv(b, pb)), pi);
+            }
+            BitsAsWord(BitDiv(b, pb)) * BitsAsWord(pb);
+            { lemma_BitDivEquiv(i, pi); }
             i / pi * pi;
         }
     }
@@ -219,10 +252,10 @@ lemma lemma_BitmaskAsInt(i:int, bitpos:int)
     lemma_MulModZero(i / pi, pi);
 }
 
-// useful properties of pow2
+// useful properties of pow2 needed for spec
 predicate pow2_properties(n:nat)
 {
-    n >= 2 ==> pow2(n) % 4 == 0
+    (n >= 2 ==> pow2(n) % 4 == 0)
     && pow2(10) == 0x400
     && pow2(12) == 0x1000
 }
@@ -233,19 +266,13 @@ lemma lemma_pow2_properties(n:nat)
     reveal_pow2();
 }
 
-function {:opaque} BitwiseMaskHigh(i:int, bitpos:int): int
-    requires 0 <= i < 0x1_0000_0000;
+function {:opaque} BitwiseMaskHigh(i:word, bitpos:int): word
     requires 0 <= bitpos < 32;
-    ensures 0 <= BitwiseMaskHigh(i, bitpos) < 0x1_0000_0000;
     ensures BitwiseMaskHigh(i, bitpos) == i / pow2(bitpos) * pow2(bitpos)
     ensures BitwiseMaskHigh(i, bitpos) % pow2(bitpos) == 0
     ensures pow2_properties(bitpos)
 {
-    lemma_BitmaskAsInt(i, bitpos);
+    lemma_BitmaskAsWord(i, bitpos);
     lemma_pow2_properties(bitpos);
-    BitsAsInt(BitAnd(IntAsBits(i), BitmaskHigh(bitpos)))
+    BitsAsWord(BitAnd(WordAsBits(i), BitmaskHigh(bitpos)))
 }
-
-lemma {:axiom} lemma_LeftShift4(x: int)
-    requires 0 <= x < 0x10000000
-    ensures BitsAsInt(BitShiftLeft(IntAsBits(x), 4)) == x * 16

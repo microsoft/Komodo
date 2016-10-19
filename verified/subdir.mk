@@ -56,6 +56,7 @@ CLEAN := $(CLEAN) $(dir)/*.exe $(dir)/*.dll $(dir)/*.pdb $(dir)/*.S $(dir)/*.o $
 $(dir)/ARMdef.verified: $(dir)/Maybe.verified $(dir)/Seq.verified $(dir)/bitvectors.s.verified $(dir)/alignment.s.verified
 $(dir)/abstate.s.verified:  $(dir)/kom_common.s.verified $(dir)/ARMdef.verified $(dir)/pagedb.s.verified
 $(dir)/bitvectors.s.verified: $(dir)/nlarith.s.verified
+$(dir)/bitvectors.i.verified: $(dir)/bitvectors.s.verified $(dir)/ARMdef.verified
 $(dir)/ARMprint.verified: $(dir)/ARMdef.verified
 $(dir)/ARMspartan.verified: $(dir)/ARMdef.verified
 $(dir)/kom_common.s.verified: $(dir)/ARMdef.verified
@@ -64,7 +65,7 @@ $(dir)/kom_common.i.verified: $(dir)/ARMspartan.verified $(dir)/kom_common.s.ver
 $(dir)/smcapi.s.verified: $(dir)/kom_common.s.verified $(dir)/pagedb.s.verified
 $(dir)/smcapi.i.verified: $(dir)/smcapi.s.verified
 $(dir)/pagedb.i.verified: $(dir)/pagedb.s.verified $(dir)/kom_common.i.verified
-$(dir)/ptables.i.verified: $(dir)/pagedb.i.verified $(dir)/entry.s.verified
+$(dir)/ptables.i.verified: $(dir)/pagedb.i.verified $(dir)/entry.s.verified $(dir)/bitvectors.i.verified
 $(dir)/entry.s.verified:  $(dir)/kom_common.s.verified $(dir)/ARMdef.verified $(dir)/pagedb.s.verified $(dir)/smcapi.s.verified $(dir)/abstate.s.verified
 $(dir)/entry.i.verified: $(dir)/entry.s.verified $(dir)/pagedb.i.verified
 $(dir)/main.i.verified: $(dir)/ARMprint.verified $(dir)/smc_handler.verified

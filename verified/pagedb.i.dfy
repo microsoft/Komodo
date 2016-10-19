@@ -226,7 +226,8 @@ function ARM_L2PTE(paddr: word, write: bool, exec: bool): word
 {
     var nxbits:bv32 := if exec then 0 else ARM_L2PTE_NX_BIT();
     var robits:bv32 := if write then 0 else ARM_L2PTE_RO_BIT();
-    BitsAsInt(IntAsBits(paddr) | ARM_L2PTE_CONST_BITS() | 0x2 /* type */ | nxbits | robits)
+    BitsAsWord(BitOr(WordAsBits(paddr), BitOr(
+        BitOr(ARM_L2PTE_CONST_BITS() | 0x2, nxbits), robits)))
 }
 
 function mkL1Pte(e: Maybe<PageNr>, subpage:int): int
