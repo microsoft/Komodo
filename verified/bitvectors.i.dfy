@@ -29,7 +29,7 @@ lemma lemma_BitOrOneIsLikePlus(i: word)
     lemma_BitAddEquiv(i, 1);
 }
 
-lemma lemma_BitShift1(x: bv32)
+lemma lemma_BitShiftLeft1(x: bv32)
     requires x < 0x80000000
     ensures BitShiftLeft(x, 1) == BitMul(x, 2)
 {
@@ -43,6 +43,19 @@ lemma lemma_BitShift1(x: bv32)
     }
 }
 
+lemma lemma_BitShiftRight1(x: bv32)
+    ensures BitShiftRight(x, 1) == BitDiv(x, 2)
+{
+    calc {
+        BitShiftRight(x, 1);
+        { reveal_BitShiftRight(); }
+        x >> 1;
+        x / 2;
+        { reveal_BitDiv(); }
+        BitDiv(x, 2);
+    }
+}
+
 lemma lemma_LeftShift1(x: word)
     requires x < 0x80000000
     ensures LeftShift(x, 1) == x * 2
@@ -52,7 +65,7 @@ lemma lemma_LeftShift1(x: word)
         BitsAsWord(BitShiftLeft(WordAsBits(x), 1));
         { lemma_BitCmpEquiv(x, 0x80000000);
           assert WordAsBits(0x80000000) == 0x80000000 by { reveal_WordAsBits(); }
-          lemma_BitShift1(WordAsBits(x)); }
+          lemma_BitShiftLeft1(WordAsBits(x)); }
         BitsAsWord(BitMul(WordAsBits(x), 2));
         { assert WordAsBits(2) == 2 by { reveal_WordAsBits(); } }
         BitsAsWord(BitMul(WordAsBits(x), WordAsBits(2)));
@@ -61,19 +74,46 @@ lemma lemma_LeftShift1(x: word)
     }
 }
 
-lemma lemma_LeftShiftsAdd(x: word, a: nat, b: nat)
+lemma lemma_RightShift1(x: word)
+    ensures RightShift(x, 1) == x / 2
+{
+    calc {
+        RightShift(x, 1);
+        BitsAsWord(BitShiftRight(WordAsBits(x), 1));
+        { lemma_BitShiftRight1(WordAsBits(x)); }
+        BitsAsWord(BitDiv(WordAsBits(x), 2));
+        { assert WordAsBits(2) == 2 by { reveal_WordAsBits(); } }
+        BitsAsWord(BitDiv(WordAsBits(x), WordAsBits(2)));
+        { lemma_BitDivEquiv(x, 2); }
+        x / 2;
+    }
+}
+
+lemma lemma_ShiftsAdd(x: word, a: nat, b: nat)
     requires 0 <= a + b < 32
     ensures LeftShift(x, a + b) == LeftShift(LeftShift(x, a), b)
+    ensures RightShift(x, a + b) == RightShift(RightShift(x, a), b)
 {
     calc {
         LeftShift(x, a + b);
-        BitsAsWord(BitShiftLeft(WordAsBits(x), (a + b)));
+        BitsAsWord(BitShiftLeft(WordAsBits(x), a + b));
         { lemma_BitShiftsSum(WordAsBits(x), a, b); }
         BitsAsWord(BitShiftLeft(BitShiftLeft(WordAsBits(x), a), b));
         { lemma_BitsAsWordAsBits(BitShiftLeft(WordAsBits(x), a)); }
         BitsAsWord(BitShiftLeft(WordAsBits(BitsAsWord(BitShiftLeft(WordAsBits(x), a))), b));
         BitsAsWord(BitShiftLeft(WordAsBits(LeftShift(x, a)), b));
         LeftShift(LeftShift(x, a), b);
+    }
+
+    calc {
+        RightShift(x, a + b);
+        BitsAsWord(BitShiftRight(WordAsBits(x), a + b));
+        { lemma_BitShiftsSum(WordAsBits(x), a, b); }
+        BitsAsWord(BitShiftRight(BitShiftRight(WordAsBits(x), a), b));
+        { lemma_BitsAsWordAsBits(BitShiftRight(WordAsBits(x), a)); }
+        BitsAsWord(BitShiftRight(WordAsBits(BitsAsWord(BitShiftRight(WordAsBits(x), a))), b));
+        BitsAsWord(BitShiftRight(WordAsBits(RightShift(x, a)), b));
+        RightShift(RightShift(x, a), b);
     }
 }
 
@@ -84,7 +124,7 @@ lemma lemma_LeftShift2(x: word)
     var x' := LeftShift(x, 1);
     lemma_LeftShift1(x);
     lemma_LeftShift1(x');
-    lemma_LeftShiftsAdd(x, 1, 1);
+    lemma_ShiftsAdd(x, 1, 1);
 }
 
 lemma lemma_LeftShift4(x: word)
@@ -94,7 +134,7 @@ lemma lemma_LeftShift4(x: word)
     var x' := LeftShift(x, 2);
     lemma_LeftShift2(x);
     lemma_LeftShift2(x');
-    lemma_LeftShiftsAdd(x, 2, 2);
+    lemma_ShiftsAdd(x, 2, 2);
 }
 
 lemma lemma_LeftShift12(x: word)
@@ -105,14 +145,49 @@ lemma lemma_LeftShift12(x: word)
     lemma_LeftShift4(x);
     var x'' := LeftShift(x', 4);
     lemma_LeftShift4(x');
-    lemma_LeftShiftsAdd(x, 4, 4);
+    lemma_ShiftsAdd(x, 4, 4);
     assert x'' == LeftShift(x, 8);
     assert x'' == x * 256;
     var x''' := LeftShift(x'', 4);
     lemma_LeftShift4(x'');
     assert x''' == x * 4096;
-    lemma_LeftShiftsAdd(x, 8, 4);
+    lemma_ShiftsAdd(x, 8, 4);
     assert x''' == LeftShift(x, 12);
+}
+
+lemma lemma_RightShift2(x: word)
+    ensures RightShift(x, 2) == x / 4
+{
+    var x' := RightShift(x, 1);
+    lemma_RightShift1(x);
+    lemma_RightShift1(x');
+    lemma_ShiftsAdd(x, 1, 1);
+}
+
+lemma lemma_RightShift4(x: word)
+    ensures RightShift(x, 4) == x / 16
+{
+    var x' := RightShift(x, 2);
+    lemma_RightShift2(x);
+    lemma_RightShift2(x');
+    lemma_ShiftsAdd(x, 2, 2);
+}
+
+lemma lemma_RightShift12(x: word)
+    ensures RightShift(x, 12) == x / 4096
+{
+    var x' := RightShift(x, 4);
+    lemma_RightShift4(x);
+    var x'' := RightShift(x', 4);
+    lemma_RightShift4(x');
+    lemma_ShiftsAdd(x, 4, 4);
+    assert x'' == RightShift(x, 8);
+    assert x'' == x / 256;
+    var x''' := RightShift(x'', 4);
+    lemma_RightShift4(x'');
+    assert x''' == x / 4096;
+    lemma_ShiftsAdd(x, 8, 4);
+    assert x''' == RightShift(x, 12);
 }
 
 function {:opaque} BitwiseMaskLow(i:word, bitpos:int): word

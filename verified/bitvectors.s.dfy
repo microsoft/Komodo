@@ -142,7 +142,7 @@ lemma {:axiom} lemma_BitCmpEquiv(x:word, y:word)
 lemma {:axiom} lemma_BitShiftsSum(x: bv32, a: nat, b: nat)
     requires 0 <= a + b < 32
     ensures BitShiftLeft(x, a + b) == BitShiftLeft(BitShiftLeft(x, a), b)
-    ensures BitShiftRight(x, a + b) == BitShiftRight(BitShiftRight(x, a), a)
+    ensures BitShiftRight(x, a + b) == BitShiftRight(BitShiftRight(x, a), b)
 
 lemma {:axiom} lemma_BitOrCommutative(a: bv32, b:bv32)
     ensures BitOr(a, b) == BitOr(b, a)

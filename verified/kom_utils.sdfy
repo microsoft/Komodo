@@ -24,9 +24,9 @@ procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:
         isUInt32(phys);
         PageAligned(phys);
 {
-    tmp := sp_op_const(PAGESIZE());
-    MUL(phys,pagenr,tmp);
-    // LSL(phys, pagenr, sp_op_const(PAGE_SHIFT()));
+    assert pagenr < KOM_SECURE_NPAGES();
+    lemma_LeftShift12(pagenr);
+    LSL(phys, pagenr, 12);
     assert phys == old(pagenr) * PAGESIZE();
 
     LDRglobaladdr(tmp, SecurePhysBaseOp());
@@ -67,8 +67,10 @@ procedure paddr_page_impl(out {:operand} pagenr:int, {:operand} phys:int, out {:
     assert WordAligned(tmp);
     SUB(pagenr,phys,tmp);
     
-    tmp := sp_op_const(PAGESIZE());
-    UDIV(pagenr,pagenr,tmp);
+    ghost var oldpagenr := pagenr;
+    LSR(pagenr, pagenr, 12);
+    lemma_RightShift12(oldpagenr);
+    assert pagenr == oldpagenr / PAGESIZE();
 }
 
 procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out {:operand} tmp:int)
