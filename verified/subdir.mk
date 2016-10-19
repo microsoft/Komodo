@@ -1,4 +1,5 @@
-DAFNYFLAGS = /timeLimit:90 /trace $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
+DAFNYTIMELIMIT ?= 90
+DAFNYFLAGS = /timeLimit:$(DAFNYTIMELIMIT) /trace $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
 SPARTANFLAGS = #-assumeUpdates 1
 
 # top-level target
