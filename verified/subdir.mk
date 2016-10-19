@@ -98,11 +98,11 @@ init_l2ptable_dep-sdfy = ARMdecls kom_utils allocate_page memset
 init_l2ptable_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i bitvectors.i
 $(dir)/init_l2ptable.verified: $(call mkdeps,init_l2ptable)
 
-map_secure_dep-sdfy = ARMdecls kom_utils allocate_page init_l2ptable
+map_secure_dep-sdfy = ARMdecls kom_utils allocate_page init_l2ptable memset
 map_secure_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
 $(dir)/map_secure.verified: $(call mkdeps,map_secure)
 
-map_insecure_dep-sdfy = ARMdecls kom_utils allocate_page init_l2ptable map_secure
+map_insecure_dep-sdfy = ARMdecls kom_utils allocate_page init_l2ptable map_secure memset
 map_insecure_dep-dfy  = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
 $(dir)/map_insecure.verified: $(call mkdeps,map_insecure)
 
