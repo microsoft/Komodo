@@ -34,6 +34,7 @@ procedure is_valid_mapping_target(
         assert err == specResult;
     } else {
         ghost var abs_mapping := wordToMapping(mapping);
+        reveal_wordToMapping();
         LSR(r7,mapping,20); 
         LSR(r8,mapping,12);
         AND(r8,r8,0xff);
@@ -143,65 +144,95 @@ procedure phys_page_is_insecure_ram_nz({:register OReg(R3)} phys_page:int)
 }
 
 #verbatim
-function method ARM_L2PTE_CONST_INT():word
-    { ARM_L2PTE_CONST_BITS() as word }
-function method ARM_L2PTE_NX_INT():word
-    { ARM_L2PTE_NX_BIT() as word }
-function method ARM_L2PTE_RO_INT():word
-    { ARM_L2PTE_RO_BIT() as word }
-#endverbatim
+function method L2PTE_CONST_WORD():word
+    { (ARM_L2PTE_CONST_BITS() | 0x2) as word }
 
-procedure arm_l2pte(
-    {:operand } pg:int,
-    {:operand} w:int,
-    {:operand} x:int,
-    out {:operand} res:int
-)
-    requires/ensures
-        SaneState(this);
-    requires
-        @pg != OSP && @w != OSP && @x != OSP;
-        @pg != OLR && @w != OLR && @x != OLR;
-        DistinctRegOperands(set(@pg,@x,@w,@res),4);
-        w == 0 || w == 1;
-        x == 0 || x == 1;
-        PageAligned(pg);
-    ensures
-        RegPreservingExcept(old(this),this,set(@res));
-        AllMemInvariant(old(this),this);
-        GlobalsInvariant(old(this),this);
-        res == ARM_L2PTE(old(pg),old(w==1),old(x==1));
+lemma lemma_extract_kom_mapping_w(mapping:word, res:word)
+    requires res == BitwiseXor(BitwiseAnd(mapping,KOM_MAPPING_W()),KOM_MAPPING_W())
+    ensures res == KOM_MAPPING_W() || res == 0
+    ensures res == 0 <==> wordToMapping(mapping).perm.w
 {
-    ghost var exec  := x == 1;
-    ghost var write := w == 1;
-    ghost var nxbits := if exec  then 0 else ARM_L2PTE_NX_INT();
-    ghost var robits := if write then 0 else ARM_L2PTE_RO_INT();
-    assert ARM_L2PTE_NX_BIT() == 1;
-    assert ARM_L2PTE_RO_BIT() == 0x200;
-    assume x == nxbits;
-    LSL(res,w,10);
-    assume res == robits;
-    ORR(res,res,pg);
-    ORR(res,res,sp_op_const(ARM_L2PTE_CONST_INT()));
-    ORR(res,res,0x2);
-    ORR(res,res,x);
-    // Currently I'm not sure how to deal with the use of bv32s and BitsAsInt / 
-    // IntAsBits and generally dealing with bitvectors... moving on for now
-    assume false;
+    assert WordAsBits(KOM_MAPPING_W()) == 2 by { reveal_WordAsBits(); }
+    lemma_WordBitEquiv(KOM_MAPPING_W(), 2);
+
+    var tmp := BitwiseAnd(mapping,KOM_MAPPING_W());
+    assert (tmp == KOM_MAPPING_W() || tmp == 0)
+        by { reveal_BitAnd(); }
+    assert wordToMapping(mapping).perm.w <==> tmp != 0
+        by { reveal_wordToMapping(); }
+
+    assert res == if tmp == 0 then KOM_MAPPING_W() else 0
+        by { reveal_BitXor(); }
 }
 
-#verbatim
-lemma {:axiom} lemma_extract_kom_mapping_w(mapping:word,v:word)
-    requires v == BitwiseAnd(mapping,KOM_MAPPING_W())
-    ensures  v == 1 <==> wordToMapping(mapping).perm.w
-    ensures  v == 0 <==> !wordToMapping(mapping).perm.w
-    ensures  v == 0 || v == 1
+lemma lemma_extract_kom_mapping_x(mapping:word, res:word)
+    requires res == BitwiseXor(BitwiseAnd(mapping,KOM_MAPPING_X()),KOM_MAPPING_X())
+    ensures res == KOM_MAPPING_X() || res == 0
+    ensures res == 0 <==> wordToMapping(mapping).perm.x
+{
+    assert WordAsBits(KOM_MAPPING_X()) == 4 by { reveal_WordAsBits(); }
+    lemma_WordBitEquiv(KOM_MAPPING_X(), 4);
 
-lemma {:axiom} lemma_extract_kom_mapping_x(mapping:word,v:word)
-    requires v == BitwiseAnd(mapping,KOM_MAPPING_X())
-    ensures  v == 1 <==> wordToMapping(mapping).perm.x
-    ensures  v == 0 <==> !wordToMapping(mapping).perm.x
-    ensures  v == 0 || v == 1
+    var tmp := BitwiseAnd(mapping,KOM_MAPPING_X());
+    assert (tmp == KOM_MAPPING_X() || tmp == 0)
+        by { reveal_BitAnd(); }
+    assert wordToMapping(mapping).perm.x <==> tmp != 0
+        by { reveal_wordToMapping(); }
+
+    assert res == if tmp == 0 then KOM_MAPPING_X() else 0
+        by { reveal_BitXor(); }
+}
+
+lemma lemma_shift_robit()
+    ensures LeftShift(0, 8) == 0;
+    ensures LeftShift(KOM_MAPPING_W(), 8) == BitsAsWord(ARM_L2PTE_RO_BIT());
+{
+    assert WordAsBits(KOM_MAPPING_W()) == 2 by { reveal_WordAsBits(); }
+    assert BitsAsWord(ARM_L2PTE_RO_BIT()) == 0x200 by { reveal_BitsAsWord(); }
+    reveal_BitShiftLeft();
+}
+
+lemma lemma_shift_nxbit()
+    ensures RightShift(0, 2) == 0;
+    ensures RightShift(KOM_MAPPING_X(), 2) == BitsAsWord(ARM_L2PTE_NX_BIT())
+{
+    assert WordAsBits(KOM_MAPPING_X()) == 4 by { reveal_WordAsBits(); }
+    assert BitsAsWord(ARM_L2PTE_NX_BIT()) == 1 by { reveal_BitsAsWord(); }
+    reveal_BitShiftRight();
+}
+
+lemma lemma_mkL2Pte_secure(page: PageNr, w: bool, x:bool, ptew: word)
+    requires ptew == BitwiseOr(BitwiseOr(BitwiseOr(page_paddr(page),
+                        L2PTE_CONST_WORD()),
+                        if x then 0 else BitsAsWord(ARM_L2PTE_NX_BIT())),
+                        if w then 0 else BitsAsWord(ARM_L2PTE_RO_BIT()))
+    ensures ptew == mkL2Pte(SecureMapping(page, w, x))
+{
+    var pa := page_paddr(page);
+    var constbits := ARM_L2PTE_CONST_BITS() | 0x2;
+    assert L2PTE_CONST_WORD() == BitsAsWord(constbits) by { reveal_BitsAsWord(); }
+    lemma_WordBitEquiv(L2PTE_CONST_WORD(), constbits);
+    var nxbit := if x then 0 else ARM_L2PTE_NX_BIT();
+    var nxword := BitsAsWord(nxbit);
+    lemma_WordBitEquiv(nxword, nxbit);
+    var robit := if w then 0 else ARM_L2PTE_RO_BIT();
+    var roword := BitsAsWord(robit);
+    lemma_WordBitEquiv(roword, robit);
+
+    calc {
+         ptew;
+         BitwiseOr(BitwiseOr(BitwiseOr(pa,L2PTE_CONST_WORD()),nxword),roword);
+         { lemma_BitwiseOrAssociative(pa, L2PTE_CONST_WORD(), nxword); }
+         BitwiseOr(BitwiseOr(pa,BitwiseOr(L2PTE_CONST_WORD(),nxword)),roword);
+         { lemma_BitwiseOrAssociative(pa, BitwiseOr(L2PTE_CONST_WORD(),nxword), roword); }
+         BitwiseOr(pa,BitwiseOr(BitwiseOr(L2PTE_CONST_WORD(),nxword),roword));
+         { lemma_ExpandBitwiseOr(L2PTE_CONST_WORD(), nxword, roword); }
+         BitwiseOr(pa, BitsAsWord(BitOr(BitOr(constbits, nxbit), robit)));
+         { lemma_BitsAsWordAsBits(BitOr(BitOr(constbits, nxbit), robit)); }
+         BitsAsWord(BitOr(WordAsBits(pa), BitOr(BitOr(constbits, nxbit), robit)));
+         ARM_L2PTE(pa, w, x);
+     }
+}
 #endverbatim
 
 procedure mkL2Pte_secure(
@@ -220,21 +251,51 @@ procedure mkL2Pte_secure(
             && abs_mapping.perm.w == l2pte.write);
     ensures
         page == mkL2Pte(l2pte);
-        RegPreservingExcept(old(this),this,set(@r6,@r4,@r5,@r7,@r11));
+        RegPreservingExcept(old(this),this,set(@r4,@r6));
         AllMemInvariant(old(this),this);
         GlobalsInvariant(old(this),this);
-        
 {
+    // compute phys addr
+    page_paddr_impl(r6,r6,r4);
+    assert r6 == page_paddr(old(page));
+    assert PageAligned(r6);
+
+    // OR in const bits
+    ORR(r6, r6, sp_op_const(L2PTE_CONST_WORD()));
+    assert r6 == BitwiseOr(page_paddr(old(page)), L2PTE_CONST_WORD());
+
+    // compute nxbit
+    ghost var nxbit := if abs_mapping.perm.x then 0 else BitsAsWord(ARM_L2PTE_NX_BIT());
+    AND(r4,mapping,sp_op_const(KOM_MAPPING_X()));
+    EOR(r4,r4,sp_op_const(KOM_MAPPING_X()));
+    lemma_extract_kom_mapping_x(mapping, r4);
+    assert (r4 == 0 || r4 == KOM_MAPPING_X())
+           && (r4 == 0 <==> abs_mapping.perm.x);
+    LSR(r4,r4,2);
+    lemma_shift_nxbit();
+    assert (r4 == 0 || r4 == BitsAsWord(ARM_L2PTE_NX_BIT()))
+           && (r4 == 0 <==> abs_mapping.perm.x);
+    assert r4 == nxbit;
+    ORR(r6, r6, r4);
+    assert r6 == BitwiseOr(BitwiseOr(page_paddr(old(page)), L2PTE_CONST_WORD()), nxbit);
+
+    // compute robit
+    ghost var robit := if abs_mapping.perm.w then 0 else BitsAsWord(ARM_L2PTE_RO_BIT());
     AND(r4,mapping,sp_op_const(KOM_MAPPING_W()));
-    AND(r5,mapping,sp_op_const(KOM_MAPPING_X()));
-    lemma_extract_kom_mapping_w(mapping,r4);
-    lemma_extract_kom_mapping_x(mapping,r5);
+    EOR(r4,r4,sp_op_const(KOM_MAPPING_W()));
+    lemma_extract_kom_mapping_w(mapping, r4);
+    assert (r4 == 0 || r4 == KOM_MAPPING_W())
+           && (r4 == 0 <==> abs_mapping.perm.w);
+    LSL(r4,r4,8);
+    lemma_shift_robit();
+    assert (r4 == 0 || r4 == BitsAsWord(ARM_L2PTE_RO_BIT()))
+           && (r4 == 0 <==> abs_mapping.perm.w);
+    assert r4 == robit;
+    ORR(r6, r6, r4);
+    assert r6 == BitwiseOr(BitwiseOr(BitwiseOr(page_paddr(old(page)), L2PTE_CONST_WORD()), nxbit), robit);
 
-    page_paddr_impl(r7,r6,r11);
-    assert r7 == page_paddr(old(page));
-    assert PageAligned(r7);
-
-    arm_l2pte(r7,r4,r5,r6);
+    // prove that we did the right thing
+    lemma_mkL2Pte_secure(old(page), l2pte.write, l2pte.exec, r6);
 }
 
 
@@ -269,8 +330,8 @@ procedure update_l2pte(
         pageDbCorresponds(this.m,d');
         GlobalsPreservingExcept(old(this),this,set(PageDb()));
 {
-
     reveal_validPageDb();
+    reveal_wordToMapping();
     //reveal_pageDbEntryCorresponds();
     //reveal_pageContentsCorresponds();
     //reveal_pageDbL1PTableCorresponds();
@@ -517,6 +578,7 @@ procedure kom_smc_map_secure(
                                 s.d,r6,as_page,entry.entry,
                                 d',err,mapping);
                         }
+                        reveal_wordToMapping();
                         ghost var l2pte := SecureMapping(r6, 
                             abs_mapping.perm.w, abs_mapping.perm.x);
                        

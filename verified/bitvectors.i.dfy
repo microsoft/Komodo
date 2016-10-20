@@ -251,3 +251,24 @@ lemma lemma_Bitmask10()
         0xfffffc00;
     }
 }
+
+lemma lemma_ExpandBitwiseOr(a: word, b: word, c: word)
+    ensures BitwiseOr(BitwiseOr(a, b), c)
+        == BitsAsWord(BitOr(BitOr(WordAsBits(a), WordAsBits(b)), WordAsBits(c)))
+{
+    lemma_BitsAsWordAsBits(BitOr(WordAsBits(a), WordAsBits(b)));
+}
+
+lemma lemma_BitwiseOrAssociative(a: word, b: word, c: word)
+    ensures BitwiseOr(BitwiseOr(a, b), c) == BitwiseOr(a, BitwiseOr(b, c))
+{
+    calc {
+        BitwiseOr(BitwiseOr(a, b), c);
+        { lemma_ExpandBitwiseOr(a, b, c); }
+        BitsAsWord(BitOr(BitOr(WordAsBits(a), WordAsBits(b)), WordAsBits(c)));
+        { lemma_BitOrAssociative(WordAsBits(a), WordAsBits(b), WordAsBits(c)); }
+        BitsAsWord(BitOr(WordAsBits(a), BitOr(WordAsBits(b), WordAsBits(c))));
+        { lemma_BitsAsWordAsBits(BitOr(WordAsBits(b), WordAsBits(c))); }
+        BitwiseOr(a, BitwiseOr(b, c));
+    }
+}

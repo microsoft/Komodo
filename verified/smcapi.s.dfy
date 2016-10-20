@@ -37,21 +37,20 @@ predicate validMapping(m:Mapping,d:PageDb,a:PageNr)
         l1.l1pt[m.l1index].Just?))
 }
 
-// Keep all your bits hidden!
-function {:opaque} l1indexFromMapping(arg:word) : word
+function l1indexFromMapping(arg:word) : word
     { RightShift(arg,20) }
 
-function {:opaque} l2indexFromMapping(arg:word) : word
+function l2indexFromMapping(arg:word) : word
     { BitwiseAnd(RightShift(arg,12),0xff) }
 
-function {:opaque} permFromMapping(arg:word) : Perm
+function permFromMapping(arg:word) : Perm
 {
-    Perm(BitwiseAnd(arg,KOM_MAPPING_R()) == 1,
-        BitwiseAnd(arg,KOM_MAPPING_W()) == 1,
-        BitwiseAnd(arg,KOM_MAPPING_X()) == 1)
+    Perm(BitwiseAnd(arg,KOM_MAPPING_R()) != 0,
+        BitwiseAnd(arg,KOM_MAPPING_W()) != 0,
+        BitwiseAnd(arg,KOM_MAPPING_X()) != 0)
 }
 
-function wordToMapping(arg:word) : Mapping
+function {:opaque} wordToMapping(arg:word) : Mapping
 {
     Mapping(l1indexFromMapping(arg),l2indexFromMapping(arg),
         permFromMapping(arg))
@@ -84,6 +83,7 @@ function isValidMappingTarget(d: PageDb, a: PageNr, mapping: word)
         validMapping(wordToMapping(mapping),d,a)
 {
     reveal_validPageDb();
+    reveal_wordToMapping();
     var addrspace := d[a].entry;
     var l1index := l1indexFromMapping(mapping);
     var l2index := l2indexFromMapping(mapping);
