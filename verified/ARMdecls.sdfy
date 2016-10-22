@@ -214,6 +214,21 @@ LSR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     reveal_sp_eval();
 }
 
+procedure {:instruction Ins(REV(dst, src))}
+REV(out{:operand} dst:int, {:operand} src:int)
+    requires/ensures
+        ValidState(this);
+    requires
+        ValidRegOperand(@src);
+        ValidRegOperand(@dst);
+    ensures
+        evalUpdate(old(this), @dst, old(bswap32(src)), this);
+        SRegsInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
+{
+    reveal_sp_eval();
+}
+
 procedure {:instruction Ins(MVN(dst, src))}
 MVN(out{:operand} dst:int, {:operand} src:int)
     requires/ensures

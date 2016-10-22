@@ -2,6 +2,7 @@ include "Maybe.dfy"
 include "Seq.dfy"
 include "bitvectors.s.dfy"
 include "alignment.s.dfy"
+include "words_and_bytes.s.dfy"
 
 //-----------------------------------------------------------------------------
 // Core types (for a 32-bit word-aligned machine)
@@ -201,6 +202,7 @@ datatype ins =
     | EOR(dstEOR:operand, src1EOR:operand, src2EOR:operand) // Also known as XOR
     | LSL(dstLSL:operand, src1LSL:operand, src2LSL:operand)
     | LSR(dstLSR:operand, src1LSR:operand, src2LSR:operand)
+    | REV(dstREV:operand, srcREV:operand)
     | MOV(dstMOV:operand, srcMOV:operand)
     | MVN(dstMVN:operand, srcMVN:operand)
     | LDR(rdLDR:operand,  baseLDR:operand, ofsLDR:operand)
@@ -663,6 +665,15 @@ function RightShift(x:word, amount:word): word
     { BitsAsWord(BitShiftRight(WordAsBits(x), amount)) }
 
 //-----------------------------------------------------------------------------
+// Functions for bytewise operations
+//-----------------------------------------------------------------------------
+
+function bswap32(x:word) : word { 
+    var bytes := WordToBytes(x);
+    BytesToWord(bytes[3], bytes[2], bytes[1], bytes[0])
+}
+
+//-----------------------------------------------------------------------------
 // Evaluation
 //-----------------------------------------------------------------------------
 function OperandContents(s:state, o:operand): word
@@ -825,6 +836,8 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidShiftOperand(s, src2) && ValidRegOperand(dest)
         case LSR(dest, src1, src2) => ValidOperand(src1) &&
             ValidShiftOperand(s, src2) && ValidRegOperand(dest)
+        case REV(dest, src) => ValidRegOperand(src) &&
+            ValidRegOperand(dest)
         case MVN(dest, src) => ValidOperand(src) &&
             ValidRegOperand(dest)
         case LDR(rd, base, ofs) => 
@@ -907,6 +920,7 @@ predicate evalIns(ins:ins, s:state, r:state)
             else evalUpdate(s, dst,
                 RightShift(OperandContents(s, src1), OperandContents(s, src2)),
                 r)
+        case REV(dst, src) => evalUpdate(s, dst, bswap32(OperandContents(s, src)), r)
         case MVN(dst, src) => evalUpdate(s, dst,
             BitwiseNot(OperandContents(s, src)), r)
         case LDR(rd, base, ofs) => 

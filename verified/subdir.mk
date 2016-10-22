@@ -53,7 +53,7 @@ CLEAN := $(CLEAN) $(dir)/*.exe $(dir)/*.dll $(dir)/*.pdb $(dir)/*.S $(dir)/*.o $
 .DELETE_ON_ERROR:
 
 # deps for all Dafny code
-$(dir)/ARMdef.verified: $(dir)/Maybe.verified $(dir)/Seq.verified $(dir)/bitvectors.s.verified $(dir)/alignment.s.verified
+$(dir)/ARMdef.verified: $(dir)/Maybe.verified $(dir)/Seq.verified $(dir)/bitvectors.s.verified $(dir)/alignment.s.verified $(dir)/words_and_bytes.s.dfy
 $(dir)/abstate.s.verified:  $(dir)/kom_common.s.verified $(dir)/ARMdef.verified $(dir)/pagedb.s.verified
 $(dir)/bitvectors.s.verified: $(dir)/nlarith.s.verified
 $(dir)/bitvectors.i.verified: $(dir)/bitvectors.s.verified $(dir)/ARMdef.verified
