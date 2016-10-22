@@ -61,6 +61,23 @@ ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     reveal_sp_eval();
 }
 
+procedure {:instruction Ins(ADD(dst, src1, src2))}
+ADDWrap(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+    requires/ensures
+        ValidState(this);
+    requires
+        ValidOperand(@src1);
+        ValidOperand(@src2);
+        ValidRegOperand(@dst);
+    ensures
+        evalUpdate(old(this), @dst, old(src1 + src2) % 0x1_0000_0000, this);
+        WordAligned(src1) && WordAligned(src2) ==> WordAligned(dst);
+        SRegsInvariant(old(this), this);
+        AllMemInvariant(old(this), this);
+{
+    reveal_sp_eval();
+}
+
 procedure {:instruction Ins(SUB(dst, src1, src2))}
 SUB(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures

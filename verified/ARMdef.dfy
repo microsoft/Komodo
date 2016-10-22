@@ -804,8 +804,7 @@ predicate ValidInstruction(s:state, ins:ins)
 {   
     ValidState(s) && match ins
         case ADD(dest, src1, src2) => ValidOperand(src1) &&
-            ValidOperand(src2) && ValidRegOperand(dest) &&
-            isUInt32(OperandContents(s,src1) + OperandContents(s,src2))
+            ValidOperand(src2) && ValidRegOperand(dest)
         case SUB(dest, src1, src2) => ValidOperand(src1) &&
             ValidOperand(src2) && ValidRegOperand(dest) &&
             isUInt32(OperandContents(s,src1) - OperandContents(s,src2))
@@ -880,7 +879,7 @@ predicate evalIns(ins:ins, s:state, r:state)
     if !s.ok || !ValidInstruction(s, ins) then !r.ok
     else match ins
         case ADD(dst, src1, src2) => evalUpdate(s, dst,
-            ((OperandContents(s, src1) + OperandContents(s, src2))),
+            ((OperandContents(s, src1) + OperandContents(s, src2)) % 0x1_0000_0000),
             r)
         case SUB(dst, src1, src2) => evalUpdate(s, dst,
             ((OperandContents(s, src1) - OperandContents(s, src2))),
