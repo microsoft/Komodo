@@ -27,7 +27,7 @@ predicate{:opaque} sp_eval(c:code, s:state, r:state)
 function sp_eval_op(s:state, o:operand): word
     requires ValidState(s)
     requires o.OSReg? ==> ValidSpecialOperand(s, o)
-    requires !o.OSReg? ==> ValidOperand(o) || ValidBankedRegOperand(s, o)
+    requires !o.OSReg? ==> ValidOperand(o) || ValidBankedRegOperand(s, o) || ValidSecondOperand(o)
     {   
         if(o.OSReg?) then SpecialOperandContents(s, o)
         else OperandContents(s,o)

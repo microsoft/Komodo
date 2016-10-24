@@ -49,12 +49,12 @@ ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         ValidState(this);
     requires
         ValidOperand(@src1);
-        ValidOperand(@src2);
+        ValidSecondOperand(@src2);
         ValidRegOperand(@dst);
         isUInt32(src1 + src2);
     ensures
         evalUpdate(old(this), @dst, old(src1 + src2), this);
-        WordAligned(src1) && WordAligned(src2) ==> WordAligned(dst);
+        WordAligned(old(src1)) && WordAligned(old(src2)) ==> WordAligned(dst);
         SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
@@ -67,11 +67,11 @@ ADDWrap(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         ValidState(this);
     requires
         ValidOperand(@src1);
-        ValidOperand(@src2);
+        ValidSecondOperand(@src2);
         ValidRegOperand(@dst);
     ensures
         evalUpdate(old(this), @dst, old(src1 + src2) % 0x1_0000_0000, this);
-        WordAligned(src1) && WordAligned(src2) ==> WordAligned(dst);
+        WordAligned(old(src1)) && WordAligned(old(src2)) ==> WordAligned(dst);
         SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
@@ -168,7 +168,7 @@ EOR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         ValidState(this);
     requires
         ValidOperand(@src1);
-        ValidOperand(@src2);
+        ValidSecondOperand(@src2);
         ValidRegOperand(@dst);
     ensures
         evalUpdate(old(this), @dst, old(BitwiseXor(src1,src2)), this);
@@ -249,7 +249,7 @@ MOV(out{:operand} dst:int, {:operand} src:int)
     requires/ensures
         ValidState(this);
     requires
-        ValidOperand(@src);
+        ValidSecondOperand(@src);
         ValidRegOperand(@dst);
     ensures
         evalUpdate(old(this), @dst, old(src), this);

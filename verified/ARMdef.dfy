@@ -15,6 +15,7 @@ function  BytesToWords(b:int) : int requires WordAligned(b) { b / 4 }
 
 //type word = x | isUInt32(x)
 type addr = x | isUInt32(x) && WordAligned(x)
+type shift_amount = s | 0 <= s < 32 // Some shifts allow s=32, but we'll be conservative for simplicity
 
 //-----------------------------------------------------------------------------
 // Microarchitectural State
@@ -37,8 +38,13 @@ datatype PSR  = PSR(m:mode)           // See B1.3.3
 datatype SCR  = SCR(ns:world, irq:bool, fiq:bool) // See B4.1.129
 datatype TTBR = TTBR(ptbase:addr)      // See B4.1.154
 
+datatype Shift = LSLShift(amount_lsl:shift_amount)
+               | LSRShift(amount_lsr:shift_amount)
+               | RORShift(amount_ror:shift_amount)
+
 datatype operand = OConst(n:word)
     | OReg(r:ARMReg)
+    | OShift(reg:ARMReg, s:Shift)
     | OSymbol(sym:string)
     | OSReg(sr:SReg)
     | OSP | OLR
@@ -287,10 +293,17 @@ predicate ValidOperand(o:operand)
     match o
         case OConst(n) => true
         case OReg(r) => !(r.SP? || r.LR?) // not used directly
+        case OShift(_,_) => false
         case OSP => true
         case OLR => true
         case OSymbol(s) => false
         case OSReg(sr) => false
+}
+
+predicate ValidSecondOperand(o:operand)
+{
+    ValidOperand(o) 
+ || (o.OShift? && !(o.reg.SP? || o.reg.LR?))
 }
 
 // Except for those times that banked regs *are* used directly...
@@ -333,7 +346,7 @@ predicate ValidShiftOperand(s:state, o:operand)
     { ValidOperand(o) && OperandContents(s, o) < 32 }
 
 predicate ValidRegOperand(o:operand)
-    { !o.OConst? && ValidOperand(o) }
+    { !o.OConst? && !o.OShift? && ValidOperand(o) }
 
 //-----------------------------------------------------------------------------
 // Globals
@@ -664,6 +677,8 @@ function RightShift(x:word, amount:word): word
     requires 0 <= amount < 32;
     { BitsAsWord(BitShiftRight(WordAsBits(x), amount)) }
 
+function RotateRight(x:word, amount:shift_amount) : word
+
 //-----------------------------------------------------------------------------
 // Functions for bytewise operations
 //-----------------------------------------------------------------------------
@@ -676,14 +691,24 @@ function bswap32(x:word) : word {
 //-----------------------------------------------------------------------------
 // Evaluation
 //-----------------------------------------------------------------------------
+
+function EvalShift(w:word, shift:Shift) : word
+{
+    match shift
+        case LSLShift(amount) => LeftShift(w, amount)
+        case LSRShift(amount) => RightShift(w, amount)
+        case RORShift(amount) => RotateRight(w, amount)
+}
+
 function OperandContents(s:state, o:operand): word
-    requires ValidOperand(o) || ValidBankedRegOperand(s,o)
+    requires ValidOperand(o) || ValidBankedRegOperand(s,o) || ValidSecondOperand(o)
     requires ValidState(s)
 {
     reveal_ValidRegState();
     match o
         case OConst(n) => n
         case OReg(r) => s.regs[r]
+        case OShift(r, amount) => EvalShift(s.regs[r], amount)
         case OSP => s.regs[SP(mode_of_state(s))]
         case OLR => s.regs[LR(mode_of_state(s))]
 }
@@ -815,7 +840,7 @@ predicate ValidInstruction(s:state, ins:ins)
 {   
     ValidState(s) && match ins
         case ADD(dest, src1, src2) => ValidOperand(src1) &&
-            ValidOperand(src2) && ValidRegOperand(dest)
+            ValidSecondOperand(src2) && ValidRegOperand(dest)
         case SUB(dest, src1, src2) => ValidOperand(src1) &&
             ValidOperand(src2) && ValidRegOperand(dest) &&
             isUInt32(OperandContents(s,src1) - OperandContents(s,src2))
@@ -831,7 +856,7 @@ predicate ValidInstruction(s:state, ins:ins)
         case ORR(dest, src1, src2) => ValidOperand(src1) &&
             ValidOperand(src2) && ValidRegOperand(dest)
         case EOR(dest, src1, src2) => ValidOperand(src1) &&
-            ValidOperand(src2) && ValidRegOperand(dest)
+            ValidSecondOperand(src2) && ValidRegOperand(dest)
         case LSL(dest, src1, src2) => ValidOperand(src1) &&
             ValidShiftOperand(s, src2) && ValidRegOperand(dest)
         case LSR(dest, src1, src2) => ValidOperand(src1) &&
@@ -863,7 +888,7 @@ predicate ValidInstruction(s:state, ins:ins)
             AddressOfGlobal(global) == OperandContents(s, base) &&
             ValidGlobalOffset(global, OperandContents(s, ofs))
         case MOV(dst, src) => ValidRegOperand(dst) &&
-            ValidOperand(src)
+            ValidSecondOperand(src)
         case MRS(dst, src) =>
             priv_of_state(s) == PL1 && ValidRegOperand(dst)
             && ((ValidSpecialOperand(s, src) && !ValidMcrMrcOperand(s, src))
