@@ -43,13 +43,14 @@ lemma lemma_nonexec_mapping(mapping: Mapping, x: word)
     assert permFromMapping(y) == permFromMapping(x).(x := false) by {
         assert WordAsBits(KOM_MAPPING_R()) == 1 && WordAsBits(KOM_MAPPING_W()) == 2
             && WordAsBits(KOM_MAPPING_X()) == 4 by { reveal_WordAsBits(); }
+
         calc {
             BitwiseAnd(y, KOM_MAPPING_R());
             BitsAsWord(BitAnd(yb, 1));
             BitsAsWord(BitAnd(BitAnd(xb, 0xfffffffb), 1));
             { lemma_BitAndAssociative(xb, 0xfffffffb, 1); }
             BitsAsWord(BitAnd(xb, BitAnd(0xfffffffb, 1)));
-            { reveal_BitAnd(); }
+            { assert BitAnd(0xfffffffb, 1) == 1 by { reveal_BitAnd(); } }
             BitsAsWord(BitAnd(xb, 1));
             BitwiseAnd(x, KOM_MAPPING_R());
         }
@@ -60,7 +61,7 @@ lemma lemma_nonexec_mapping(mapping: Mapping, x: word)
             BitsAsWord(BitAnd(BitAnd(xb, 0xfffffffb), 2));
             { lemma_BitAndAssociative(xb, 0xfffffffb, 2); }
             BitsAsWord(BitAnd(xb, BitAnd(0xfffffffb, 2)));
-            { reveal_BitAnd(); }
+            { assert BitAnd(0xfffffffb, 2) == 2 by { reveal_BitAnd(); } }
             BitsAsWord(BitAnd(xb, 2));
             BitwiseAnd(x, KOM_MAPPING_W());
         }
@@ -71,19 +72,19 @@ lemma lemma_nonexec_mapping(mapping: Mapping, x: word)
             BitsAsWord(BitAnd(BitAnd(xb, 0xfffffffb), 4));
             { lemma_BitAndAssociative(xb, 0xfffffffb, 4); }
             BitsAsWord(BitAnd(xb, BitAnd(0xfffffffb, 4)));
-            { reveal_BitAnd(); }
+            { assert BitAnd(0xfffffffb, 4) == 0 by { reveal_BitAnd(); } }
             BitsAsWord(BitAnd(xb, 0));
             { reveal_BitAnd(); }
             0;
         }
     }
 
-    reveal_wordToMapping();
+    assert wordToMapping(y) == nonexec_mapping(mapping) by { reveal_wordToMapping(); }
 }
 #endverbatim
 
 procedure mkl2pte_insecure(
-    {:register OReg(R2)} mapping:int,
+    inout {:register OReg(R2)} mapping:int,
     inout {:register OReg(R6)} page:int,
     ghost abs_mapping:Mapping,
     ghost l2pte:L2PTE
@@ -169,7 +170,7 @@ procedure kom_smc_map_insecure(
         this == s'.hw;
         SaneState(this);
         tuple(s'.d,err) == smc_mapInsecure_premium(s.d, as_page, phys_page, 
-        mapping);
+        old(mapping));
         // For now, avoid proving that we haven't trampled the current 
         // dispatcher page. We probably need to either: 1) add errors for the 
         // case that the current dispatcher page is given in R0, or 2) allow 
@@ -187,6 +188,8 @@ procedure kom_smc_map_insecure(
     if (as_page >= sp_op_const(KOM_SECURE_NPAGES())) {
         err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE());
         s' := s.(hw:=this);
+        assert err == specErr(specResult);
+        assert s'.d == specPageDb(specResult);
     } else {
         LDRglobaladdr(r12, PageDb());
         assert sp_eval_op_addr(this, @r12) == AddressOfGlobal(PageDb());
@@ -205,8 +208,9 @@ procedure kom_smc_map_insecure(
             err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE());
             assert !isAddrspace(s.d, as_page) ==> specErr(specResult) == 
                 KOM_ERR_INVALID_ADDRSPACE();
-            assert err == specErr(specResult);
             s' := s.(hw:=this);
+            assert err == specErr(specResult);
+            assert s'.d == specPageDb(specResult);
             forall :: validSysState'(s')
                     { reveal_validPageDb(); }
         } else {
@@ -225,8 +229,9 @@ procedure kom_smc_map_insecure(
                 r12 := phys_page_is_insecure_ram(phys_page);
                 if(r12 == 0) {
                     err := sp_op_const(KOM_ERR_INVALID_PAGENO());
-                    assert err == specErr(specResult);
                     s' := s.(hw:=this);
+                    assert err == specErr(specResult);
+                    assert s'.d == specPageDb(specResult);
                     forall :: validSysState'(s')
                         { reveal_validPageDb(); }
                 } else {
