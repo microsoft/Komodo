@@ -18,10 +18,10 @@ lemma SameMemAndGlobalsImpliesSamePageDb(s:state, s':state, pagedb:PageDb)
 
 procedure smc_handler(
     {:register OReg(R0)} callno:int,
-    {:register OReg(R1)} arg1:int,
-    {:register OReg(R2)} arg2:int,
-    {:register OReg(R3)} arg3:int,
-    {:register OReg(R4)} arg4:int,
+    inout {:register OReg(R1)} arg1:int,
+    inout {:register OReg(R2)} arg2:int,
+    inout {:register OReg(R3)} arg3:int,
+    inout {:register OReg(R4)} arg4:int,
     out {:register OReg(R0)} err:int,
     out {:register OReg(R1)} retval:int,
     ghost pagedb_in: PageDb) returns (ghost pagedb: PageDb)
@@ -41,30 +41,35 @@ procedure smc_handler(
 {
     ghost var stack_bytes := 120;
     pagedb := pagedb_in;
-    retval := 0;
 
     fcall_prologue(stack_bytes);
     SameMemAndGlobalsImpliesSamePageDb(old(this), this, pagedb);
 
     if(callno == sp_op_const(KOM_SMC_QUERY())) {
+        retval := 0;
         err := sp_op_const(KOM_MAGIC());
     } else if(callno == sp_op_const(KOM_SMC_GETPHYSPAGES())) {
         retval := sp_op_const(KOM_SECURE_NPAGES());
         err := sp_op_const(KOM_ERR_SUCCESS());
     } else if(callno == sp_op_const(KOM_SMC_INIT_ADDRSPACE())) {
         pagedb := kom_smc_init_addrspace(arg1, arg2, err, pagedb);
+        retval := 0;
     } else if(callno == sp_op_const(KOM_SMC_INIT_DISPATCHER())) {
         pagedb := kom_smc_init_dispatcher(arg1, arg2, arg3, err, pagedb);
+        retval := 0;
     } else if(callno == sp_op_const(KOM_SMC_INIT_L2PTABLE())) {
         pagedb := kom_smc_init_l2ptable(arg1, arg2, arg3, err, pagedb);
+        retval := 0;
     } else if(callno == sp_op_const(KOM_SMC_ENTER())) {
         // TODO add implemented monitor call. Need to figure out the systate 
         // thing.
         pagedb := pagedb;
+        retval := 0;
     } else if(callno == sp_op_const(KOM_SMC_INIT_RESUME())) {
         // TODO add implemented monitor call. Need to figure out the systate 
         // thing.
         pagedb := pagedb;
+        retval := 0;
     }
 
     ghost var prePopThis := this;
