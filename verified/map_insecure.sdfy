@@ -1,3 +1,87 @@
+#verbatim
+function nonexec_mapping(mapping: Mapping): Mapping
+{
+    mapping.(perm := mapping.perm.(x := false))
+}
+
+function method NOT_KOM_MAPPING_X(): word
+    ensures NOT_KOM_MAPPING_X() == BitwiseNot(KOM_MAPPING_X())
+    ensures NOT_KOM_MAPPING_X() == BitsAsWord(0xfffffffb)
+{
+    assert 0xfffffffb == BitsAsWord(0xfffffffb) by { reveal_BitsAsWord(); }
+    assert WordAsBits(KOM_MAPPING_X()) == 4 by { reveal_WordAsBits(); }
+    reveal_BitNot();
+    0xfffffffb
+}
+
+lemma lemma_nonexec_mapping(mapping: Mapping, x: word)
+    requires mapping == wordToMapping(x)
+    ensures wordToMapping(BitwiseAnd(x, NOT_KOM_MAPPING_X()))
+                == nonexec_mapping(mapping)
+{
+    var y := BitwiseAnd(x, NOT_KOM_MAPPING_X());
+    lemma_WordBitEquiv(NOT_KOM_MAPPING_X(), 0xfffffffb);
+    var xb := WordAsBits(x);
+    lemma_WordBitEquiv(x, xb);
+    var yb := BitAnd(xb, 0xfffffffb);
+    assert y == BitsAsWord(yb);
+    lemma_WordBitEquiv(y, yb);
+    lemma_BitsAsWordAsBits(yb);
+
+    assert l1indexFromMapping(y) == l1indexFromMapping(x) by {
+        assert RightShift(y,20) == RightShift(x,20) by {
+            reveal_BitAnd(); reveal_BitShiftRight();
+        }
+    }
+
+    assert l2indexFromMapping(y) == l2indexFromMapping(x) by {
+        assert RightShift(y,12) == RightShift(x,12) by {
+            assume false; // FIXME: why is this so hard when >> 20 is so easy?
+        }
+    }
+
+    assert permFromMapping(y) == permFromMapping(x).(x := false) by {
+        assert WordAsBits(KOM_MAPPING_R()) == 1 && WordAsBits(KOM_MAPPING_W()) == 2
+            && WordAsBits(KOM_MAPPING_X()) == 4 by { reveal_WordAsBits(); }
+        calc {
+            BitwiseAnd(y, KOM_MAPPING_R());
+            BitsAsWord(BitAnd(yb, 1));
+            BitsAsWord(BitAnd(BitAnd(xb, 0xfffffffb), 1));
+            { lemma_BitAndAssociative(xb, 0xfffffffb, 1); }
+            BitsAsWord(BitAnd(xb, BitAnd(0xfffffffb, 1)));
+            { reveal_BitAnd(); }
+            BitsAsWord(BitAnd(xb, 1));
+            BitwiseAnd(x, KOM_MAPPING_R());
+        }
+
+        calc {
+            BitwiseAnd(y, KOM_MAPPING_W());
+            BitsAsWord(BitAnd(yb, 2));
+            BitsAsWord(BitAnd(BitAnd(xb, 0xfffffffb), 2));
+            { lemma_BitAndAssociative(xb, 0xfffffffb, 2); }
+            BitsAsWord(BitAnd(xb, BitAnd(0xfffffffb, 2)));
+            { reveal_BitAnd(); }
+            BitsAsWord(BitAnd(xb, 2));
+            BitwiseAnd(x, KOM_MAPPING_W());
+        }
+
+        calc {
+            BitwiseAnd(y, KOM_MAPPING_X());
+            BitsAsWord(BitAnd(yb, 4));
+            BitsAsWord(BitAnd(BitAnd(xb, 0xfffffffb), 4));
+            { lemma_BitAndAssociative(xb, 0xfffffffb, 4); }
+            BitsAsWord(BitAnd(xb, BitAnd(0xfffffffb, 4)));
+            { reveal_BitAnd(); }
+            BitsAsWord(BitAnd(xb, 0));
+            { reveal_BitAnd(); }
+            0;
+        }
+    }
+
+    reveal_wordToMapping();
+}
+#endverbatim
+
 procedure mkl2pte_insecure(
     {:register OReg(R2)} mapping:int,
     inout {:register OReg(R6)} page:int,
@@ -14,24 +98,26 @@ procedure mkl2pte_insecure(
         validInsecurePageNr(page);
     ensures
         page == mkL2Pte(l2pte);
-        RegPreservingExcept(old(this),this,set(@r6,@r7,@r11,@r4,@r5));
+        nonexec_mapping(abs_mapping) == wordToMapping(mapping);
+        RegPreservingExcept(old(this),this,set(@r2,@r6,@r4));
         AllMemInvariant(old(this),this);
         GlobalsInvariant(old(this),this);
         
 {
-    AND(r4,mapping,sp_op_const(KOM_MAPPING_W()));
-    lemma_extract_kom_mapping_w(mapping,r4);
-
-    assert page < KOM_PHYSMEM_LIMIT() / PAGESIZE();
-    assert PAGESIZE() == 0x1000;
-    // isUInt32(r6 * pagesize) should be provable from above 2;
-    assert isUInt32(page * PAGESIZE());
     lemma_LeftShift12(page);
-    LSL(r7,page,12);
-    assert PageAligned(r7);
+    LSL(page,page,12);
+    assert page == old(page) * PAGESIZE();
+    assert PageAligned(page);
 
-    r5 := 0; // because it has to be a RegOperand 
-    arm_l2pte(r7,r4,r5,r6);
+    // mask out X bit in mapping, so it can't construct an executable mapping
+    // TODO: it would be better to elide this code from ARM_L2PTE
+    lemma_nonexec_mapping(abs_mapping, mapping);
+    AND(mapping,mapping,sp_op_const(NOT_KOM_MAPPING_X()));
+    ghost var newabs_mapping := nonexec_mapping(abs_mapping);
+    assert wordToMapping(mapping) == newabs_mapping;
+
+    assert mkL2Pte(l2pte) == ARM_L2PTE(page, l2pte.insecureWrite, false);
+    ARM_L2PTE_impl(mapping,page,r4,newabs_mapping);
 }
 
 procedure phys_page_is_insecure_ram({:register OReg(R3)} phys_page:int)
@@ -70,7 +156,7 @@ procedure phys_page_is_insecure_ram({:register OReg(R3)} phys_page:int)
 
 procedure kom_smc_map_insecure(
     {:register OReg(R1)} as_page:int,
-    {:register OReg(R2)} mapping:int,
+    inout {:register OReg(R2)} mapping:int,
     {:register OReg(R3)} phys_page:int,
     out {:register OReg(R0)} err:int,
     ghost s:SysState)

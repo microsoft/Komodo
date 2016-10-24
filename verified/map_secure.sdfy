@@ -201,14 +201,13 @@ lemma lemma_shift_nxbit()
     reveal_BitShiftRight();
 }
 
-lemma lemma_mkL2Pte_secure(page: PageNr, w: bool, x:bool, ptew: word)
-    requires ptew == BitwiseOr(BitwiseOr(BitwiseOr(page_paddr(page),
-                        L2PTE_CONST_WORD()),
+lemma lemma_ARM_L2PTE_impl(pa: word, w: bool, x:bool, ptew: word)
+    requires PageAligned(pa)
+    requires ptew == BitwiseOr(BitwiseOr(BitwiseOr(pa, L2PTE_CONST_WORD()),
                         if x then 0 else BitsAsWord(ARM_L2PTE_NX_BIT())),
                         if w then 0 else BitsAsWord(ARM_L2PTE_RO_BIT()))
-    ensures ptew == mkL2Pte(SecureMapping(page, w, x))
+    ensures ptew == ARM_L2PTE(pa, w, x)
 {
-    var pa := page_paddr(page);
     var constbits := ARM_L2PTE_CONST_BITS() | 0x2;
     assert L2PTE_CONST_WORD() == BitsAsWord(constbits) by { reveal_BitsAsWord(); }
     lemma_WordBitEquiv(L2PTE_CONST_WORD(), constbits);
@@ -235,6 +234,62 @@ lemma lemma_mkL2Pte_secure(page: PageNr, w: bool, x:bool, ptew: word)
 }
 #endverbatim
 
+procedure ARM_L2PTE_impl(
+    {:register OReg(R2)} mapping:int,
+    inout {:register OReg(R6)} pte:int, // paddr at input time; pte at return
+    out {:register OReg(R4)} tmp:int,
+    ghost abs_mapping:Mapping
+)
+    requires/ensures
+        SaneState(this);
+    requires
+        PageAligned(pte);
+        abs_mapping == wordToMapping(mapping);
+    ensures
+        pte == ARM_L2PTE(old(pte), abs_mapping.perm.w, abs_mapping.perm.x);
+        RegPreservingExcept(old(this),this,set(@pte,@tmp));
+        AllMemInvariant(old(this),this);
+{
+    ghost var pa := pte;
+
+    // OR in const bits
+    ORR(pte, pte, sp_op_const(L2PTE_CONST_WORD()));
+    assert pte == BitwiseOr(pa, L2PTE_CONST_WORD());
+
+    // compute nxbit
+    ghost var nxbit := if abs_mapping.perm.x then 0 else BitsAsWord(ARM_L2PTE_NX_BIT());
+    AND(tmp,mapping,sp_op_const(KOM_MAPPING_X()));
+    EOR(tmp,tmp,sp_op_const(KOM_MAPPING_X()));
+    lemma_extract_kom_mapping_x(mapping, tmp);
+    assert (tmp == 0 || tmp == KOM_MAPPING_X())
+           && (tmp == 0 <==> abs_mapping.perm.x);
+    LSR(tmp,tmp,2);
+    lemma_shift_nxbit();
+    assert (tmp == 0 || tmp == BitsAsWord(ARM_L2PTE_NX_BIT()))
+           && (tmp == 0 <==> abs_mapping.perm.x);
+    assert tmp == nxbit;
+    ORR(pte, pte, tmp);
+    assert pte == BitwiseOr(BitwiseOr(pa, L2PTE_CONST_WORD()), nxbit);
+
+    // compute robit
+    ghost var robit := if abs_mapping.perm.w then 0 else BitsAsWord(ARM_L2PTE_RO_BIT());
+    AND(tmp,mapping,sp_op_const(KOM_MAPPING_W()));
+    EOR(tmp,tmp,sp_op_const(KOM_MAPPING_W()));
+    lemma_extract_kom_mapping_w(mapping, tmp);
+    assert (tmp == 0 || tmp == KOM_MAPPING_W())
+           && (tmp == 0 <==> abs_mapping.perm.w);
+    LSL(tmp,tmp,8);
+    lemma_shift_robit();
+    assert (tmp == 0 || tmp == BitsAsWord(ARM_L2PTE_RO_BIT()))
+           && (tmp == 0 <==> abs_mapping.perm.w);
+    assert tmp == robit;
+    ORR(pte, pte, tmp);
+    assert pte == BitwiseOr(BitwiseOr(BitwiseOr(pa, L2PTE_CONST_WORD()), nxbit), robit);
+
+    // prove that we did the right thing
+    lemma_ARM_L2PTE_impl(pa, abs_mapping.perm.w, abs_mapping.perm.x, pte);
+}
+
 procedure mkL2Pte_secure(
     {:register OReg(R2)} mapping:int,
     inout {:register OReg(R6)} page:int,
@@ -253,49 +308,9 @@ procedure mkL2Pte_secure(
         page == mkL2Pte(l2pte);
         RegPreservingExcept(old(this),this,set(@r4,@r6));
         AllMemInvariant(old(this),this);
-        GlobalsInvariant(old(this),this);
 {
-    // compute phys addr
     page_paddr_impl(r6,r6,r4);
-    assert r6 == page_paddr(old(page));
-    assert PageAligned(r6);
-
-    // OR in const bits
-    ORR(r6, r6, sp_op_const(L2PTE_CONST_WORD()));
-    assert r6 == BitwiseOr(page_paddr(old(page)), L2PTE_CONST_WORD());
-
-    // compute nxbit
-    ghost var nxbit := if abs_mapping.perm.x then 0 else BitsAsWord(ARM_L2PTE_NX_BIT());
-    AND(r4,mapping,sp_op_const(KOM_MAPPING_X()));
-    EOR(r4,r4,sp_op_const(KOM_MAPPING_X()));
-    lemma_extract_kom_mapping_x(mapping, r4);
-    assert (r4 == 0 || r4 == KOM_MAPPING_X())
-           && (r4 == 0 <==> abs_mapping.perm.x);
-    LSR(r4,r4,2);
-    lemma_shift_nxbit();
-    assert (r4 == 0 || r4 == BitsAsWord(ARM_L2PTE_NX_BIT()))
-           && (r4 == 0 <==> abs_mapping.perm.x);
-    assert r4 == nxbit;
-    ORR(r6, r6, r4);
-    assert r6 == BitwiseOr(BitwiseOr(page_paddr(old(page)), L2PTE_CONST_WORD()), nxbit);
-
-    // compute robit
-    ghost var robit := if abs_mapping.perm.w then 0 else BitsAsWord(ARM_L2PTE_RO_BIT());
-    AND(r4,mapping,sp_op_const(KOM_MAPPING_W()));
-    EOR(r4,r4,sp_op_const(KOM_MAPPING_W()));
-    lemma_extract_kom_mapping_w(mapping, r4);
-    assert (r4 == 0 || r4 == KOM_MAPPING_W())
-           && (r4 == 0 <==> abs_mapping.perm.w);
-    LSL(r4,r4,8);
-    lemma_shift_robit();
-    assert (r4 == 0 || r4 == BitsAsWord(ARM_L2PTE_RO_BIT()))
-           && (r4 == 0 <==> abs_mapping.perm.w);
-    assert r4 == robit;
-    ORR(r6, r6, r4);
-    assert r6 == BitwiseOr(BitwiseOr(BitwiseOr(page_paddr(old(page)), L2PTE_CONST_WORD()), nxbit), robit);
-
-    // prove that we did the right thing
-    lemma_mkL2Pte_secure(old(page), l2pte.write, l2pte.exec, r6);
+    ARM_L2PTE_impl(r2, r6, r4, abs_mapping);
 }
 
 
@@ -312,7 +327,8 @@ procedure update_l2pte(
         SaneState(this);
     requires 
         validPageDb(d) && wellFormedPageDb(d);
-        abs_mapping == wordToMapping(mapping);
+        abs_mapping.l1index == wordToMapping(mapping).l1index;
+        abs_mapping.l2index == wordToMapping(mapping).l2index;
         l2pte_abs is SecureMapping ==> (
             pageDbCorrespondsExcluding(this.m,d,l2pte_abs.page)
             && pageDbEntryCorresponds(d[l2pte_abs.page],
@@ -331,7 +347,7 @@ procedure update_l2pte(
         GlobalsPreservingExcept(old(this),this,set(PageDb()));
 {
     reveal_validPageDb();
-    reveal_wordToMapping();
+    //reveal_wordToMapping();
     //reveal_pageDbEntryCorresponds();
     //reveal_pageContentsCorresponds();
     //reveal_pageDbL1PTableCorresponds();
@@ -364,31 +380,6 @@ procedure update_l2pte(
     assume ValidMem(r12 + r8);
     assert addrInPage(r12 + r8, l1pte_abs);
 
-    // TODO actually mkL2Pte
-    /*
-    assert l2pte_abs is SecureMapping;
-        
-    AND(r4,mapping,sp_op_const(KOM_MAPPING_W()));
-    AND(r5,mapping,sp_op_const(KOM_MAPPING_X()));
-    lemma_extract_kom_mapping_w(mapping,r4);
-    lemma_extract_kom_mapping_x(mapping,r5);
-
-    page_paddr_impl(r7,r6,r11);
-    assert r7 == page_paddr(old(page));
-    assert PageAligned(r7);
-
-    arm_l2pte(r7,r4,r5,r6);
-    //assert r6 == ARM_L2PTE(page_paddr(old(page)),r4==1,r5==1);
-
-    forall :: r6 == mkL2Pte(l2pte_abs)
-    {
-        assert l2pte is SecureMapping;
-        assert old(page) == l2pte.page;
-        assert r6 == ARM_L2PTE(page_paddr(old(page)),r4==1,r5==1);
-        assert r6 == ARM_L2PTE(page_paddr(l2pte.page),
-            l2pte.write,l2pte.exec);
-    }
-    */
     assert r6 == mkL2Pte(l2pte_abs);
     STR(r6,r12,r8);
 
