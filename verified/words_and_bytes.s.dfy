@@ -3,6 +3,7 @@
 
 include "bitvectors.s.dfy"  // For the definition of word
 type byte = i | 0 <= i < 256
+type uint64 = i | 0 <= i < 0x1_0000_0000_0000_0000
 
 // Map an arbitrary number of bytes to an integer
 function BEByteSeqToInt(bytes:seq<byte>) : int
@@ -37,6 +38,19 @@ function{:opaque} WordToBytes(w:word) : seq<byte>
 //      byte((w/   0x10000) % 256),
 //      byte((w/     0x100) % 256),
 //      byte(w              % 256) ]
+}
+
+function {:opaque} Uint64ToBytes(u:uint64) : seq<byte>
+    ensures |Uint64ToBytes(u)| == 8;
+{
+    [ ( u/ 0x100000000000000) as byte,
+      ((u/   0x1000000000000) % 0x100) as byte,
+      ((u/     0x10000000000) % 0x100) as byte,
+      ((u/       0x100000000) % 0x100) as byte,
+      ((u/         0x1000000) % 0x100) as byte,
+      ((u/           0x10000) % 0x100) as byte,
+      ((u/             0x100) % 0x100) as byte,
+      ((u                   ) % 0x100) as byte]
 }
 
 function WordSeqToBytes(ws:seq<word>) : seq<byte>

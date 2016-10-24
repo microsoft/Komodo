@@ -114,6 +114,10 @@ resume_dep-sdfy = ARMdecls kom_utils enter
 resume_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i 
 $(dir)/resume.verified: $(call mkdeps,resume)
 
+sha256_dep-sdfy = ARMdecls 
+sha256_dep-dfy = ARMspartan words_and_bytes.s kom_common.s sha/sha256.s
+$(dir)/sha256.verified: $(call mkdeps,sha256)
+
 # All these things depend on entry.i because they need ValidSysState', which 
 # probably needs a better home. Maybe its own silly, small .i file
 finalise_dep-sdfy = ARMdecls kom_utils

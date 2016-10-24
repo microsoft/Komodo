@@ -1,0 +1,164 @@
+///////////////////////////////////////////////////
+//
+//  Based on sha256-armv4.pl form OpenSSL 1.0.2j
+//
+///////////////////////////////////////////////////
+
+
+#verbatim
+
+function method Sigma0(i:int) : word
+    requires 0 <= i < 3;
+{
+    [2, 13, 22][i]
+}
+
+function method Sigma1(i:int) : word
+    requires 0 <= i < 3;
+{
+    [6, 11, 25][i]
+}
+function method sigma0(i:int) : word
+    requires 0 <= i < 3;
+{
+    [7, 18, 3][i]
+}
+
+function method sigma1(i:int) : word
+    requires 0 <= i < 3;
+{
+    [17, 19, 10][i]
+}
+
+type SHA_step = i | 0 <= i < 64
+
+function method ror(r:ARMReg, amount:shift_amount) : operand
+//    requires r.OReg?;
+{
+    OShift(r, RORShift(amount))
+}
+
+function method lsr(r:ARMReg, amount:shift_amount) : operand
+//    requires r.OReg?;
+{
+    OShift(r, LSRShift(amount))
+}
+#endverbatim
+
+procedure Body_00_15(
+    {:inline} i:SHA_step,
+    inout {:register OReg(R0)} t0:int,
+    inout {:register OReg(R1)} t4:int,
+    inout {:register OReg(R2)} t1:int,
+    inout {:register OReg(R3)} t3:int,
+    inout {:register OReg(R3)} T1:int,
+    inout {:register OReg(R4)} A:int,
+    inout {:register OReg(R5)} B:int,
+    inout {:register OReg(R6)} C:int,
+    inout {:register OReg(R7)} D:int,
+    inout {:register OReg(R8)} E:int,
+    inout {:register OReg(R9)} F:int,
+    inout {:register OReg(R10)} G:int,
+    inout {:register OReg(R11)} H:int,
+    inout {:register OReg(R12)} t2:int)
+requires/ensures
+    SaneState(this);
+requires
+
+{
+    // if i < 16
+    //EOR(t0, E, ror(E, Sigma1(1) - Sigma1(0)));
+    EOR(t0, E, ror(R8, Sigma1(1) - Sigma1(0)));
+    ADDWrap(A, A, t2);  // h += Maj(a,b,c) from the past?
+    //EOR(t0, t0, ror(E, Sigma1(2) - Sigma1(0)));   // Sigma1(e)
+    EOR(t0, t0, ror(R8, Sigma1(2) - Sigma1(0)));   // Sigma1(e)
+    REV(t1, t1);
+
+    //--------
+
+    EOR(t1, F, G);
+    //ADDWrap(H, H, ror(t0, Sigma1(0))); // h += Sigma1(e)
+    ADDWrap(H, H, ror(R0, Sigma1(0))); // h += Sigma1(e)
+    AND(t1, t1, E);
+    ADDWrap(H, H, OConst(K_SHA256(i)));      // h += K256(i)
+    EOR(t1, t1, G);     // Ch(e,f,g)
+    //EOR(t0, A, ror(A, Sigma0(1) - Sigma0(0)));
+    EOR(t0, A, ror(R4, Sigma0(1) - Sigma0(0)));
+    ADDWrap(H, H, t1);  // h += Ch(e,f,g)
+
+//    #if $i==31
+//        and  $t2,$t2,#0xff
+//        cmp  $t2,#0xf2      @ done?
+//    #endif
+
+    // if $i<15
+    //ldr  $t1,[$inp],#4      @ prefetch
+    EOR(t2, A, B);            //  a^b, b^c in next round
+    // else
+    //ldr  $t1,[sp,#`($i+2)%16`*4]    @ from future BODY_16_xx
+    EOR(t2, A, B);            //  a^b, b^c in next round
+    //ldr  $t4,[sp,#`($i+15)%16`*4]  @ from future BODY_16_xx
+    // endif
+    //EOR(t0,t0,ror(A,Sigma0(2)-Sigma0(0))); // Sigma0(a)
+    EOR(t0,t0,ror(R4,Sigma0(2)-Sigma0(0))); // Sigma0(a)
+    AND(t3,t3,t2);      // (b^c)&=(a^b)
+    ADDWrap(D,D,H);     // d+=h
+    EOR(t3,t3,B);       // Maj(a,b,c)
+    //ADDWrap(H,H,ror(A, Sigma0(0)));   // h+=Sigma0(a)
+    ADDWrap(H,H,ror(R4, Sigma0(0)));   // h+=Sigma0(a)
+    //@ add  $h,$h,$t3      @ h+=Maj(a,b,c)
+    //ADDWrap(H, H, t3);  // h+=Maj(a,b,c)
+
+    // TODO: ($t2,$t3)=($t3,$t2);
+}
+
+procedure Body_16_XX( 
+    {:inline} i:SHA_step,
+    inout {:register OReg(R0)} t0:int,
+    inout {:register OReg(R1)} t4:int,
+    inout {:register OReg(R2)} t1:int,
+    inout {:register OReg(R3)} t3:int,
+    inout {:register OReg(R3)} T1:int,
+    inout {:register OReg(R4)} A:int,
+    inout {:register OReg(R5)} B:int,
+    inout {:register OReg(R6)} C:int,
+    inout {:register OReg(R7)} D:int,
+    inout {:register OReg(R8)} E:int,
+    inout {:register OReg(R9)} F:int,
+    inout {:register OReg(R10)} G:int,
+    inout {:register OReg(R11)} H:int,
+    inout {:register OReg(R12)} t2:int)
+requires/ensures
+    SaneState(this);
+requires
+
+{
+    //@ ldr  $t1,[sp,#`($i+1)%16`*4]    @ $i
+    //@ ldr  $t4,[sp,#`($i+14)%16`*4]
+    //MOV(t0, ror(t1, sigma0(0)));
+    MOV(t0, ror(R2, sigma0(0)));
+    ADDWrap(A, A, t2);  // h+=Maj(a,b,c) from the past
+    //MOV(t2, ror(t4, sigma1(0)));
+    MOV(t2, ror(R1, sigma1(0)));
+    //EOR(t0,t0,ror(t1,sigma0(1)));
+    EOR(t0,t0,ror(R2,sigma0(1)));
+    //EOR(t2,t2,ror(t4,sigma1(1)));
+    EOR(t2,t2,ror(R1,sigma1(1)));
+    //EOR(t0,t0,lsr(t1,sigma0(2)));     // sigma0(X[i+1])
+    EOR(t0,t0,lsr(R2,sigma0(2)));     // sigma0(X[i+1])
+    // TODO: ldr  t1,[sp,#`(i+0)%16`*4]
+    //EOR(t2,t2,lsr(t4, sigma1(2)));     // sigma1(X[i+14])
+    EOR(t2,t2,lsr(R1, sigma1(2)));     // sigma1(X[i+14])
+    // TODO: ldr  t4,[sp,#`(i+9)%16`*4]
+
+    ADDWrap(t2,t2,t0);
+    //EOR(t0,E,ror(E,Sigma1(1)-Sigma1(0)));    // from BODY_00_15
+    EOR(t0,E,ror(R8,Sigma1(1)-Sigma1(0)));    // from BODY_00_15
+    ADDWrap(t1,t1,t2);
+    //EOR(t0,t0,ror(e,(Sigma1(2)-Sigma1(0))));  // Sigma1(e)
+    EOR(t0,t0,ror(R8,(Sigma1(2)-Sigma1(0))));  // Sigma1(e)
+    ADDWrap(t1,t1,t4);      // X[i]
+
+    Body_00_15(i, t0, t4, t1, t3, T1, A, B, C, D, E, F, G, H, t2);
+
+}
