@@ -65,6 +65,44 @@ function method GetReg(r:int) : operand
 
 #endverbatim
 
+procedure Body_00_15_NoOp(
+    {:inline} i:SHA_step,
+    inout {:register OReg(R0)} t0:int,
+    inout {:register OReg(R2)} t1:int,
+    inout {:register GetReg(if i % 2 == 0 then 12 else 3)} t2:int,
+    inout {:register GetReg(if i % 2 == 0 then  3 else 12)} t3:int,
+    inout {:register OReg(R1)} t4:int,
+    inout {:register GetReg(4+((0+i)%8))} a:int,
+    inout {:register GetReg(4+((1+i)%8))} b:int,
+    inout {:register GetReg(4+((2+i)%8))} c:int,
+    inout {:register GetReg(4+((3+i)%8))} d:int,
+    inout {:register GetReg(4+((4+i)%8))} e:int,
+    inout {:register GetReg(4+((5+i)%8))} f:int,
+    inout {:register GetReg(4+((6+i)%8))} g:int,
+    inout {:register GetReg(4+((7+i)%8))} h:int)
+requires/ensures
+    SaneState(this);
+{
+    EOR(t0, e, ror(/*e*/GetReg(4+((4+i)%8)), Sigma1(1) - Sigma1(0)));
+    ADDWrap(a, a, t2);  // h += Maj(a,b,c) from the past?
+    EOR(t0, t0, ror(/*e*/GetReg(4+((4+i)%8)), Sigma1(2) - Sigma1(0)));   // Sigma1(e)
+    REV(t1, t1);
+    EOR(t1, f, g);
+    ADDWrap(h, h, ror(/*t0*/OReg(R0), Sigma1(0))); // h += Sigma1(e)
+    AND(t1, t1, e);
+    ADDWrap(h, h, OConst(K_SHA256(i)));      // h += K256(i)
+    EOR(t1, t1, g);     // Ch(e,f,g)
+    EOR(t0, a, ror(/*a*/GetReg(4+((0+i)%8)), Sigma0(1) - Sigma0(0)));
+    ADDWrap(h, h, t1);  // h += Ch(e,f,g)
+    EOR(t2, a, b);            //  a^b, b^c in next round
+    EOR(t2, a, b);            //  a^b, b^c in next round
+    EOR(t0,t0,ror(/*a*/GetReg(4+((0+i)%8)),Sigma0(2)-Sigma0(0))); // Sigma0(a)
+    AND(t3,t3,t2);      // (b^c)&=(a^b)
+    ADDWrap(d,d,h);     // d+=h
+    EOR(t3,t3,b);       // Maj(a,b,c)
+    ADDWrap(h,h,ror(/*a*/GetReg(4+((0+i)%8)), Sigma0(0)));   // h+=Sigma0(a)
+}
+
 procedure Body_00_15(
     {:inline} i:SHA_step,
     inout {:register OReg(R0)} t0:int,
@@ -92,7 +130,7 @@ ensures
 {
     // if i < 16
     EOR(t0, e, ror(/*e*/GetReg(4+((4+i)%8)), Sigma1(1) - Sigma1(0)));
-    assert t0 == BitwiseXor(e, RotateRight(e, 9));
+    //assert t0 == BitwiseXor(e, RotateRight(e, 5));
     ADDWrap(a, a, t2);  // h += Maj(a,b,c) from the past?
     EOR(t0, t0, ror(/*e*/GetReg(4+((4+i)%8)), Sigma1(2) - Sigma1(0)));   // Sigma1(e)
     REV(t1, t1);
@@ -101,41 +139,53 @@ ensures
 
     EOR(t1, f, g);
     ghost var old_h := h;
-    assert t0 == BitwiseXor(BitwiseXor(e, RotateRight(e, 5)), RotateRight(e, 19));
-    reveal BSIG1;
+    //assert t0 == BitwiseXor(BitwiseXor(e, RotateRight(e, 5)), RotateRight(e, 19));
     ADDWrap(h, h, ror(/*t0*/OReg(R0), Sigma1(0))); // h += Sigma1(e)
-    lemma_RotateRightCommutesXor(e, 6, 11, 25);
-    assert h == (old_h + BSIG1(e)) % 0x1_0000_0000;
-//    AND(t1, t1, e);
-//    ADDWrap(h, h, OConst(K_SHA256(i)));      // h += K256(i)
-//    EOR(t1, t1, g);     // Ch(e,f,g)
-//    lemma_Ch(e, f, g, t1);
-//    assert t1 == Ch(e, f, g);
-//    EOR(t0, a, ror(/*a*/GetReg(4+((0+i)%8)), Sigma0(1) - Sigma0(0)));
-//    ADDWrap(h, h, t1);  // h += Ch(e,f,g)
-//
-////    #if $i==31
-////        and  $t2,$t2,#0xff
-////        cmp  $t2,#0xf2      @ done?
-////    #endif
-//
-//    // if $i<15
-//    //ldr  $t1,[$inp],#4      @ prefetch
-//    EOR(t2, a, b);            //  a^b, b^c in next round
-//    // else
-//    //ldr  $t1,[sp,#`($i+2)%16`*4]    @ from future BODY_16_xx
-//    EOR(t2, a, b);            //  a^b, b^c in next round
-//    //ldr  $t4,[sp,#`($i+15)%16`*4]  @ from future BODY_16_xx
-//    // endif
-//    EOR(t0,t0,ror(/*a*/GetReg(4+((0+i)%8)),Sigma0(2)-Sigma0(0))); // Sigma0(a)
-//    AND(t3,t3,t2);      // (b^c)&=(a^b)
-//    ADDWrap(d,d,h);     // d+=h
-//    EOR(t3,t3,b);       // Maj(a,b,c)
-//    lemma_Maj(a, b, c, t3);
-//    old_h := h;
-//    ADDWrap(h,h,ror(/*a*/GetReg(4+((0+i)%8)), Sigma0(0)));   // h+=Sigma0(a)
-//    lemma_RotateRightCommutesXor(a, 2, 13, 22);
-//    assert h == (old_h + Sigma0(a)) % 0x1_0000_0000;
+
+    // Prove that we computed Sigma1(e) correctly:
+    forall :: h == (old_h + BSIG1(e)) % 0x1_0000_0000 
+    {
+        reveal BSIG1;
+        lemma_RotateRightCommutesXor(e, 6, 11, 25);
+    }
+
+    AND(t1, t1, e);
+    ADDWrap(h, h, OConst(K_SHA256(i)));      // h += K256(i)
+    EOR(t1, t1, g);     // Ch(e,f,g)
+    
+    lemma_Ch(e, f, g, t1);
+    assert t1 == Ch(e, f, g);
+
+    EOR(t0, a, ror(/*a*/GetReg(4+((0+i)%8)), Sigma0(1) - Sigma0(0)));
+    ADDWrap(h, h, t1);  // h += Ch(e,f,g)
+
+//    #if $i==31
+//        and  $t2,$t2,#0xff
+//        cmp  $t2,#0xf2      @ done?
+//    #endif
+
+    // if $i<15
+    //ldr  $t1,[$inp],#4      @ prefetch
+    EOR(t2, a, b);            //  a^b, b^c in next round
+    // else
+    //ldr  $t1,[sp,#`($i+2)%16`*4]    @ from future BODY_16_xx
+    EOR(t2, a, b);            //  a^b, b^c in next round
+    //ldr  $t4,[sp,#`($i+15)%16`*4]  @ from future BODY_16_xx
+    // endif
+    EOR(t0,t0,ror(/*a*/GetReg(4+((0+i)%8)),Sigma0(2)-Sigma0(0))); // Sigma0(a)
+    AND(t3,t3,t2);      // (b^c)&=(a^b)
+    ADDWrap(d,d,h);     // d+=h
+    EOR(t3,t3,b);       // Maj(a,b,c)
+    lemma_Maj(a, b, c, t3);
+    assert t3 == Maj(a,b,c);
+    assume false;
+    old_h := h;
+    ADDWrap(h,h,ror(/*a*/GetReg(4+((0+i)%8)), Sigma0(0)));   // h+=Sigma0(a)
+    
+    // Prove we computed Sigma0(a) correctly:
+    reveal BSIG0;
+    lemma_RotateRightCommutesXor(a, 2, 13, 22);
+    assert h == (old_h + BSIG0(a)) % 0x1_0000_0000;
 }
 
 procedure Body_16_XX( 

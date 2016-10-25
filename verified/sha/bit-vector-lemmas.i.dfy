@@ -39,7 +39,8 @@ lemma lemma_Ch(x:word, y:word, z:word, result:word)
 }
 
 // Used for BSIG calculations
-lemma lemma_RotateRightCommutesXor(x:word, amt_0:word, amt_1:word, amt_2:word)
+lemma lemma_RotateRightCommutesXor(x:word, amt_0:shift_amount, amt_1:shift_amount, amt_2:shift_amount)
+    requires amt_1 - amt_0 >= 0 && amt_2-amt_0 >= 0;
     ensures RotateRight(BitwiseXor(BitwiseXor(x, RotateRight(x, amt_1-amt_0)), RotateRight(x, amt_2-amt_0)), amt_0)
          == BitwiseXor(BitwiseXor(RotateRight(x, amt_0), RotateRight(x, amt_1)), 
                        RotateRight(x, amt_2));
