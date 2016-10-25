@@ -1,6 +1,6 @@
 DAFNYTIMELIMIT ?= 90
-DAFNYFLAGS = $(call mkdafnyflags,$(notdir $(*)),) /trace /timeLimit:$(DAFNYTIMELIMIT) $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
-SPARTANFLAGS = #-assumeUpdates 1
+DAFNYFLAGS = /trace /timeLimit:$(DAFNYTIMELIMIT) /ironDafny \
+    $(call mkdafnyflags,$(notdir $(*)),) $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
 
 # dafny flags: file-specific flags plus /noNLarith unless the file is named nlarith.x
 mkdafnyflags = $(DAFNYFLAGS_$(1)) $(if $(filter nlarith.%,$(1)),,/noNLarith)
