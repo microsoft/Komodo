@@ -56,12 +56,17 @@ procedure update_l2pte(
     assert r12 == page_monvaddr(l1pte_abs);
 
     LSR(r8,mapping,12);
-    assume r8 == abs_mapping.l2index;
+    AND(r8,r8,0xff);
+    forall :: r8 == abs_mapping.l2index {
+        reveal_wordToMapping();
+        assert r8 == l2indexFromMapping(mapping);
+    }
     // Seems like it could be easier to prove this way rather than shifting in 
     // one ins some day
+    lemma_LeftShift2(r8);
     LSL(r8,r8,2);
-    assume r8 == WordsToBytes(abs_mapping.l2index);
-    assume ValidMem(r12 + r8);
+    assert r8 == WordsToBytes(abs_mapping.l2index);
+    //assume ValidMem(r12 + r8);
     assert addrInPage(r12 + r8, l1pte_abs);
 
     assert r6 == mkL2Pte(l2pte_abs);
@@ -169,10 +174,15 @@ procedure is_valid_mapping_target(
         ghost var abs_mapping := wordToMapping(mapping);
         reveal_wordToMapping();
         LSR(r7,mapping,20); 
+        forall :: r7 == abs_mapping.l1index {
+            reveal_wordToMapping();
+        }
         LSR(r8,mapping,12);
         AND(r8,r8,0xff);
-        assume r7 == abs_mapping.l1index;
-        assume r8 == abs_mapping.l2index;
+        forall :: r8 == abs_mapping.l2index {
+            reveal_wordToMapping();
+            assert r8 == l2indexFromMapping(mapping);
+        }
         if(r7 >= sp_op_const(KOM_SECURE_NPAGES())){
             err := sp_op_const(KOM_ERR_INVALID_MAPPING());
             assert err == specResult;
@@ -182,8 +192,12 @@ procedure is_valid_mapping_target(
         } else {
             //if(!perm.r) then KOM_ERR_INVALID_MAPPING()
             AND(r9,mapping,sp_op_const(KOM_MAPPING_R()));
-            assume r9 == 1 <==> abs_mapping.perm.r;
-            if(r9 != 1){
+            forall :: r9 == 0 <==> !abs_mapping.perm.r
+            {
+                reveal_wordToMapping();
+                assert r9 != 0 <==> permFromMapping(mapping).r;
+            }
+            if(r9 == 0){
                 err := sp_op_const(KOM_ERR_INVALID_MAPPING());
                 assert err == specResult;
             } else {
@@ -204,7 +218,9 @@ procedure is_valid_mapping_target(
                     //assume isUInt32(PAGEDB_ENTRY_SIZE());
                     //assume isUInt32(KOM_SECURE_NPAGES()); 
                     //assume isUInt32(8 * 256);
-                    assume isUInt32(addr * r9);
+                    assert r9 == 8;
+                    assert validPageNr(addr);
+                    assert isUInt32(addr * r9);
                     MUL(r9,addr,r9);
                     assert r9 == G_PAGEDB_ENTRY(addr) + PAGEDB_ENTRY_TYPE();
                     LDRglobal(r9,PageDb(),r10,r9);
