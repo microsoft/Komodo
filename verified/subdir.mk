@@ -17,7 +17,7 @@ mkincs-nodir = $(call mkdfyincs,$(1),) $(call mksdfyincs,$(1),)
 
 # Spartan-to-Dafny
 # NB: Spartan include paths are relative to the (generated) dfy file, not the CWD
-%.gen.dfy: %.sdfy
+%.gen.dfy: %.sdfy $(SPARTAN)
 	$(SPARTAN) $(SPARTANFLAGS) $(call mkincs-nodir,$*) $< -out $@
 	@which dos2unix >/dev/null && dos2unix $@ || true
 
