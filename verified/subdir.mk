@@ -114,7 +114,7 @@ resume_dep-sdfy = ARMdecls kom_utils enter
 resume_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i 
 $(dir)/resume.verified: $(call mkdeps,resume)
 
-DAFNYFLAGS_bit-vector-lemmas.i = /proverOpt:OPTIMIZE_FOR_BV=true /ironDafny
+DAFNYFLAGS_bit-vector-lemmas.i = /proverOpt:OPTIMIZE_FOR_BV=true 
 
 sha256_dep-sdfy = ARMdecls 
 sha256_dep-dfy = ARMspartan words_and_bytes.s kom_common.s sha/sha256.s sha/bit-vector-lemmas.i
