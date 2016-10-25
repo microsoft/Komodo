@@ -1,6 +1,9 @@
 DAFNYTIMELIMIT ?= 90
-DAFNYFLAGS = /timeLimit:$(DAFNYTIMELIMIT) /trace $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
+DAFNYFLAGS = $(call mkdafnyflags,$(notdir $(*)),) /trace /timeLimit:$(DAFNYTIMELIMIT) $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
 SPARTANFLAGS = #-assumeUpdates 1
+
+# dafny flags: file-specific flags plus /noNLarith unless the file is named nlarith.x
+mkdafnyflags = $(DAFNYFLAGS_$(1)) $(if $(filter nlarith.%,$(1)),,/noNLarith)
 
 # top-level target
 .PHONY: verified
@@ -24,14 +27,11 @@ mkincs-nodir = $(call mkdfyincs,$(1),) $(call mksdfyincs,$(1),)
 # Spartan direct verification, including cheesy workaround for broken error code.
 %.verified %.log: %.sdfy %.gen.dfy
 	/bin/bash -c "$(SPARTAN) $(SPARTANFLAGS) $(call mkincs-dir,$*) $< \
-	-dafnyDirect $(DAFNYFLAGS) /noNLarith /compile:0 | tee $*.log; exit \$${PIPESTATUS[0]}"
+	-dafnyDirect $(DAFNYFLAGS) /compile:0 | tee $*.log; exit \$${PIPESTATUS[0]}"
 	@grep -q "^Dafny program verifier finished with [^0][0-9]* verified, 0 errors$$" $*.log $(if $(DAFNYPROC),,&& touch $*.verified)
 	@$(RM) $*.log
 
 %.verified: %.dfy
-	$(DAFNY) $(DAFNYFLAGS) /noNLarith /compile:0 $< $(if $(DAFNYPROC),,&& touch $@)
-
-$(dir)/nlarith.s.verified: $(dir)/nlarith.s.dfy
 	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< $(if $(DAFNYPROC),,&& touch $@)
 
 %.exe: %.i.dfy %.i.verified
@@ -136,3 +136,7 @@ smc_handler_dep-sdfy = ARMdecls kom_utils init_addrspace init_dispatcher \
     init_l2ptable enter resume map_secure
 smc_handler_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/smc_handler.verified: $(call mkdeps,smc_handler)
+
+# file-specific flags (besides /noNLarith)
+DAFNYFLAGS_bitvectors.s = /proverOpt:OPTIMIZE_FOR_BV=true
+DAFNYFLAGS_bitvectors.i = /proverOpt:OPTIMIZE_FOR_BV=true
