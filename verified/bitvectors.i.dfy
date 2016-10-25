@@ -272,3 +272,20 @@ lemma lemma_BitwiseOrAssociative(a: word, b: word, c: word)
         BitwiseOr(a, BitwiseOr(b, c));
     }
 }
+
+lemma lemma_BitsAndWordConversions()
+    ensures forall w:word :: BitsAsWord(WordAsBits(w)) == w;
+    ensures forall b:bv32 :: WordAsBits(BitsAsWord(b)) == b;
+{
+    forall w:word 
+        ensures BitsAsWord(WordAsBits(w)) == w;
+    {
+        lemma_WordAsBitsAsWord(w);
+    }
+    forall b:bv32
+        ensures WordAsBits(BitsAsWord(b)) == b;
+    {
+        lemma_BitsAsWordAsBits(b);
+    }
+}
+

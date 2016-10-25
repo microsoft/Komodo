@@ -1,21 +1,5 @@
 include "sha256.s.dfy"
 
-lemma lemma_BitsAndWordConversions()
-    ensures forall w:word :: BitsAsWord(WordAsBits(w)) == w;
-    ensures forall b:bv32 :: WordAsBits(BitsAsWord(b)) == b;
-{
-    forall w:word 
-        ensures BitsAsWord(WordAsBits(w)) == w;
-    {
-        lemma_WordAsBitsAsWord(w);
-    }
-    forall b:bv32
-        ensures WordAsBits(BitsAsWord(b)) == b;
-    {
-        lemma_BitsAsWordAsBits(b);
-    }
-}
-
 
 lemma  lemma_Maj(x:word, y:word, z:word, result:word)
     requires result == BitwiseXor(BitwiseAnd(BitwiseXor(y, z), BitwiseXor(x, y)), y);
