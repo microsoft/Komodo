@@ -43,48 +43,66 @@ function method lsr(r:ARMReg, amount:shift_amount) : operand
 {
     OShift(r, LSRShift(amount))
 }
+
+function method GetReg(r:int) : operand
+    requires 0 <= r <= 12;
+{
+    OReg(     if r ==  0 then R0
+         else if r ==  1 then R1
+         else if r ==  2 then R2
+         else if r ==  3 then R3
+         else if r ==  4 then R4
+         else if r ==  5 then R5
+         else if r ==  6 then R6
+         else if r ==  7 then R7
+         else if r ==  8 then R8
+         else if r ==  9 then R9
+         else if r == 10 then R10
+         else if r == 11 then R11
+         else R12)
+}
+
 #endverbatim
 
 procedure Body_00_15(
     {:inline} i:SHA_step,
     inout {:register OReg(R0)} t0:int,
-    inout {:register OReg(R1)} t4:int,
     inout {:register OReg(R2)} t1:int,
-    inout {:register OReg(R3)} t3:int,
-    inout {:register OReg(R3)} T1:int,
-    inout {:register OReg(R4)} A:int,
-    inout {:register OReg(R5)} B:int,
-    inout {:register OReg(R6)} C:int,
-    inout {:register OReg(R7)} D:int,
-    inout {:register OReg(R8)} E:int,
-    inout {:register OReg(R9)} F:int,
-    inout {:register OReg(R10)} G:int,
-    inout {:register OReg(R11)} H:int,
-    inout {:register OReg(R12)} t2:int)
+    inout {:register GetReg(if i % 2 == 0 then 12 else 3)} t2:int,
+    inout {:register GetReg(if i % 2 == 0 then  3 else 12)} t3:int,
+    inout {:register OReg(R1)} t4:int,
+    inout {:register GetReg(4+((0+i)%8))} a:int,
+    inout {:register GetReg(4+((1+i)%8))} b:int,
+    inout {:register GetReg(4+((2+i)%8))} c:int,
+    inout {:register GetReg(4+((3+i)%8))} d:int,
+    inout {:register GetReg(4+((4+i)%8))} e:int,
+    inout {:register GetReg(4+((5+i)%8))} f:int,
+    inout {:register GetReg(4+((6+i)%8))} g:int,
+    inout {:register GetReg(4+((7+i)%8))} h:int)
 requires/ensures
     SaneState(this);
 requires
 
 {
     // if i < 16
-    //EOR(t0, E, ror(E, Sigma1(1) - Sigma1(0)));
-    EOR(t0, E, ror(R8, Sigma1(1) - Sigma1(0)));
-    ADDWrap(A, A, t2);  // h += Maj(a,b,c) from the past?
-    //EOR(t0, t0, ror(E, Sigma1(2) - Sigma1(0)));   // Sigma1(e)
+    //EOR(t0, e, ror(e, Sigma1(1) - Sigma1(0)));
+    EOR(t0, e, ror(R8, Sigma1(1) - Sigma1(0)));
+    ADDWrap(a, a, t2);  // h += Maj(a,b,c) from the past?
+    //EOR(t0, t0, ror(e, Sigma1(2) - Sigma1(0)));   // Sigma1(e)
     EOR(t0, t0, ror(R8, Sigma1(2) - Sigma1(0)));   // Sigma1(e)
     REV(t1, t1);
 
     //--------
 
-    EOR(t1, F, G);
-    //ADDWrap(H, H, ror(t0, Sigma1(0))); // h += Sigma1(e)
-    ADDWrap(H, H, ror(R0, Sigma1(0))); // h += Sigma1(e)
-    AND(t1, t1, E);
-    ADDWrap(H, H, OConst(K_SHA256(i)));      // h += K256(i)
-    EOR(t1, t1, G);     // Ch(e,f,g)
-    //EOR(t0, A, ror(A, Sigma0(1) - Sigma0(0)));
-    EOR(t0, A, ror(R4, Sigma0(1) - Sigma0(0)));
-    ADDWrap(H, H, t1);  // h += Ch(e,f,g)
+    EOR(t1, f, g);
+    //ADDWrap(h, h, ror(t0, Sigma1(0))); // h += Sigma1(e)
+    ADDWrap(h, h, ror(R0, Sigma1(0))); // h += Sigma1(e)
+    AND(t1, t1, e);
+    ADDWrap(h, h, OConst(K_SHA256(i)));      // h += K256(i)
+    EOR(t1, t1, g);     // Ch(e,f,g)
+    //EOR(t0, a, ror(a, Sigma0(1) - Sigma0(0)));
+    EOR(t0, a, ror(R4, Sigma0(1) - Sigma0(0)));
+    ADDWrap(h, h, t1);  // h += Ch(e,f,g)
 
 //    #if $i==31
 //        and  $t2,$t2,#0xff
@@ -93,21 +111,21 @@ requires
 
     // if $i<15
     //ldr  $t1,[$inp],#4      @ prefetch
-    EOR(t2, A, B);            //  a^b, b^c in next round
+    EOR(t2, a, b);            //  a^b, b^c in next round
     // else
     //ldr  $t1,[sp,#`($i+2)%16`*4]    @ from future BODY_16_xx
-    EOR(t2, A, B);            //  a^b, b^c in next round
+    EOR(t2, a, b);            //  a^b, b^c in next round
     //ldr  $t4,[sp,#`($i+15)%16`*4]  @ from future BODY_16_xx
     // endif
-    //EOR(t0,t0,ror(A,Sigma0(2)-Sigma0(0))); // Sigma0(a)
+    //EOR(t0,t0,ror(a,Sigma0(2)-Sigma0(0))); // Sigma0(a)
     EOR(t0,t0,ror(R4,Sigma0(2)-Sigma0(0))); // Sigma0(a)
     AND(t3,t3,t2);      // (b^c)&=(a^b)
-    ADDWrap(D,D,H);     // d+=h
-    EOR(t3,t3,B);       // Maj(a,b,c)
-    //ADDWrap(H,H,ror(A, Sigma0(0)));   // h+=Sigma0(a)
-    ADDWrap(H,H,ror(R4, Sigma0(0)));   // h+=Sigma0(a)
+    ADDWrap(d,d,h);     // d+=h
+    EOR(t3,t3,b);       // Maj(a,b,c)
+    //ADDWrap(h,h,ror(a, Sigma0(0)));   // h+=Sigma0(a)
+    ADDWrap(h,h,ror(R4, Sigma0(0)));   // h+=Sigma0(a)
     //@ add  $h,$h,$t3      @ h+=Maj(a,b,c)
-    //ADDWrap(H, H, t3);  // h+=Maj(a,b,c)
+    //ADDWrap(h, h, t3);  // h+=Maj(a,b,c)
 
     // TODO: ($t2,$t3)=($t3,$t2);
 }
@@ -159,6 +177,6 @@ requires
     EOR(t0,t0,ror(R8,(Sigma1(2)-Sigma1(0))));  // Sigma1(e)
     ADDWrap(t1,t1,t4);      // X[i]
 
-    Body_00_15(i, t0, t4, t1, t3, T1, A, B, C, D, E, F, G, H, t2);
+    Body_00_15(i, t0, t1, t2, t3, t4, A, B, C, D, E, F, G, H);
 
 }
