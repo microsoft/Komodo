@@ -117,7 +117,7 @@ $(dir)/resume.verified: $(call mkdeps,resume)
 DAFNYFLAGS_bit-vector-lemmas.i = /proverOpt:OPTIMIZE_FOR_BV=true 
 
 sha256_dep-sdfy = ARMdecls 
-sha256_dep-dfy = ARMspartan words_and_bytes.s kom_common.s sha/sha256.s sha/bit-vector-lemmas.i
+sha256_dep-dfy = ARMspartan words_and_bytes.s kom_common.s sha/sha256.i sha/bit-vector-lemmas.i
 DAFNYFLAGS_sha256 = /proc:'*Body__16__XX'
 $(dir)/sha256.verified: $(call mkdeps,sha256)
 

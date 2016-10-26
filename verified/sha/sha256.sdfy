@@ -118,7 +118,9 @@ procedure Body_00_15(
     inout {:register GetReg(4+((4+i)%8))} e:int,
     inout {:register GetReg(4+((5+i)%8))} f:int,
     inout {:register GetReg(4+((6+i)%8))} g:int,
-    inout {:register GetReg(4+((7+i)%8))} h:int)
+    inout {:register GetReg(4+((7+i)%8))} h:int,
+    ghost z:SHA256Trace
+    )
 requires/ensures
     SaneState(this);
     WordAligned(OperandContents(this,OSP));
@@ -127,6 +129,15 @@ requires
     t3 == BitwiseXor(b, c);
     //if i == 0 then t2 == 0 else i < 16 ==> t2 == old(Maj(a, b, c));
     // i >= 16 ==> RotateRight(t0, Sigma1(0)) == Sigma1(e)
+
+    // SHA semantics
+    SeqLength(z.H) > 0;
+    IsSHA256TraceReadyForStep(z, i);
+    last(z.atoh) == atoh_c(a, b, c, d, e, f, g, h);
+
+    // TODO: Need an invariant about the 16-element array X
+    //       and its relationship with W
+    //i < 16 ==> forall j :: 0 <= j < i ==> last(z.W)[j] == inp[j];
 ensures
 //    t2 == BitwiseXor(a, b);
 //    t3 == Maj(a, b, c);
@@ -143,7 +154,7 @@ ensures
 //                           W[i]) in
 //        d == BitwiseAdd32(old(d))
 //     && h == BitwiseAdd32(T1, BSIG0(a));
-
+//     i < 16 ==> forall j :: 0 <= j <= i ==> last(z.W)[j] == inp[j];
 {
     //if i < 16
     //  if i == 15
