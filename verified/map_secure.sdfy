@@ -28,14 +28,9 @@ procedure update_l2pte(
         validPageDb(d');
         d' == updateL2Pte(d, as_page, abs_mapping, l2pte_abs);
         pageDbCorresponds(this.m,d');
-        GlobalsPreservingExcept(old(this),this,set(PageDb()));
+        GlobalsInvariant(old(this),this);
 {
     reveal_validPageDb();
-    //reveal_wordToMapping();
-    //reveal_pageDbEntryCorresponds();
-    //reveal_pageContentsCorresponds();
-    //reveal_pageDbL1PTableCorresponds();
-    //reveal_pageDbL2PTableCorresponds();
     ghost var a := as_page;
     ghost var addrspace := d[a].entry;
     assert validAddrspace(d, a);
@@ -44,7 +39,7 @@ procedure update_l2pte(
     ghost var l2pt := d[l1pte_abs].entry.l2pt;
     ghost var l2pt' := l2pt[ abs_mapping.l2index := l2pte_abs ];
     d' := updateL2Pte(d, as_page, abs_mapping, l2pte_abs);
-   
+
     assert l1pte == ARM_L1PTE(page_paddr(l1pte_abs));
     lemma_ARM_L1PTE_Dual(page_paddr(l1pte_abs));
     SUB(r12,l1pte,1);
@@ -61,44 +56,43 @@ procedure update_l2pte(
         reveal_wordToMapping();
         assert r8 == l2indexFromMapping(mapping);
     }
-    // Seems like it could be easier to prove this way rather than shifting in 
-    // one ins some day
     lemma_LeftShift2(r8);
     LSL(r8,r8,2);
     assert r8 == WordsToBytes(abs_mapping.l2index);
-    //assume ValidMem(r12 + r8);
     assert addrInPage(r12 + r8, l1pte_abs);
 
     assert r6 == mkL2Pte(l2pte_abs);
     STR(r6,r12,r8);
 
+    assert GlobalsInvariant(old(this),this);
     forall :: pageDbCorrespondsOnly(this.m, d', l1pte_abs)
     {
-        reveal_pageDbEntryCorresponds();
-        reveal_pageContentsCorresponds();
         ghost var p := l1pte_abs;
-        assert pageDbEntryCorresponds(d'[p], extractPageDbEntry(this.m, p));
-        forall :: pageDbL2PTableCorresponds(p,
-            d'[p].entry, extractPage(this.m, p))
+        forall :: pageDbEntryCorresponds(d'[p], extractPageDbEntry(this.m, p)) {
+            reveal_pageDbEntryCorresponds();
+        }
+        forall :: pageDbL2PTableCorresponds(p, d'[p].entry, extractPage(this.m, p))
         {
-            reveal_pageDbL2PTableCorresponds();
             ghost var base := page_monvaddr(p);
+            ghost var old_page := extractPage(old(this.m), p);
             ghost var mem_page := extractPage(this.m, p);
+            forall :: pageDbL2PTableCorresponds(p, d[p].entry, old_page) {
+                reveal_pageContentsCorresponds();
+                assert pageDbCorrespondsOnly(old(this.m), d, p);
+            }
+            reveal_pageDbL2PTableCorresponds();
             forall i :| 0 <= i < NR_L2PTES() && i != abs_mapping.l2index
                 :: mem_page[base+WordsToBytes(i)] == mkL2Pte(d'[p].entry.l2pt[i])
             {
                 assert base + WordsToBytes(i) !=
                     page_monvaddr(l1pte_abs) + 
                     WordsToBytes(abs_mapping.l2index);
-                assert extractPage(this.m, p)[base+WordsToBytes(i)] ==
-                    extractPage(old(this.m), p)[base+WordsToBytes(i)];
-                assert pageDbCorrespondsOnly(old(this.m), d, p);
+                assert mem_page[base+WordsToBytes(i)] == old_page[base+WordsToBytes(i)];
             }
             ghost var j := abs_mapping.l2index;
-            forall :: mem_page[base+WordsToBytes(j)] == mkL2Pte(d'[p].entry.l2pt[j])
-            {
-            }
+            assert mem_page[base+WordsToBytes(j)] == mkL2Pte(d'[p].entry.l2pt[j]);
         }
+        reveal_pageContentsCorresponds();
         assert pageContentsCorresponds(p, d'[p], extractPage(this.m, p));
     }
 
@@ -109,17 +103,6 @@ procedure update_l2pte(
     {   
         forall i :| validPageNr(i) && i != l1pte_abs ::
             extractPage(this.m, i) == extractPage(old(this.m), i){}
-
-        forall i :| validPageNr(i) && i != l1pte_abs && d'[i] is PageDbEntryTyped ::
-            pageDbEntryCorresponds(d'[i], extractPageDbEntry(this.m, i))
-        {
-            reveal_pageDbEntryCorresponds();
-            assert d[i] == d'[i];
-            assert extractPageDbEntry(this.m, i) == 
-                extractPageDbEntry(old(this.m), i);
-            assert pageDbEntryCorresponds(d[i], extractPageDbEntry(old(this.m), i));
-            assert pageDbEntryCorresponds(d'[i], extractPageDbEntry(this.m,i));
-        }
         forall i :| validPageNr(i) && i != l1pte_abs && d'[i] is PageDbEntryTyped ::
             pageContentsCorresponds(i, d'[i], extractPage(this.m, i))
         {
