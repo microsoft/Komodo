@@ -387,6 +387,61 @@ procedure unstash_banked_regs(ghost s:SysState)
 
 }
 
+#verbatim
+lemma lemma_scr_entry(pre: word, post: word)
+    requires post == BitwiseOr(BitwiseAnd(pre, 0xfffffffe), 6)
+    ensures decode_scr(post) == SCR(Secure, true, true)
+{
+    assert WordAsBits(1) == 1 && WordAsBits(2) == 2 && WordAsBits(4) == 4
+           && WordAsBits(6) == 6 && WordAsBits(0xfffffffe) == 0xfffffffe
+        by { reveal_WordAsBits(); }
+    lemma_WordBitEquiv(1,1);
+
+    calc {
+        post;
+        BitwiseOr(BitwiseAnd(pre, 0xfffffffe), 6);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitOr(BitAnd(WordAsBits(pre), 0xfffffffe), 6));
+    }
+
+    calc {
+        BitwiseAnd(post, 1);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffffe), 6), 1));
+        { reveal_BitAnd(); reveal_BitOr(); }
+        BitsAsWord(0);
+    }
+
+    var x := BitAnd(WordAsBits(pre), 0xfffffffe);
+
+    calc {
+        BitwiseAnd(post, 2);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffffe), 6), 2));
+        BitsAsWord(BitAnd(BitOr(x, 6), 2));
+        { lemma_BitOrAndRelation(x, 6, 2); }
+        BitsAsWord(BitOr(BitAnd(x, 2), BitAnd(6, 2)));
+        { reveal_BitAnd(); }
+        BitsAsWord(BitOr(BitAnd(x, 2), 2));
+        != { reveal_BitOr(); }
+        BitsAsWord(0);
+    }
+
+    calc {
+        BitwiseAnd(post, 4);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffffe), 6), 4));
+        BitsAsWord(BitAnd(BitOr(x, 6), 4));
+        { lemma_BitOrAndRelation(x, 6, 4); }
+        BitsAsWord(BitOr(BitAnd(x, 4), BitAnd(6, 4)));
+        { reveal_BitAnd(); }
+        BitsAsWord(BitOr(BitAnd(x, 4), 4));
+        != { reveal_BitOr(); }
+        BitsAsWord(0);
+    }
+}
+#endverbatim
+
 procedure pre_entry_enter(
     {:register OReg(R0)} err:int,
     {:register OReg(R1)} arg1:int,
@@ -418,33 +473,41 @@ procedure pre_entry_enter(
         s'.g.g_lrs  == s.g.g_lrs;
         s'.g.g_psrs == s.g.g_psrs;
 {
-    reveal_validPageDb();
-    reveal_ValidRegState();
     reveal_smc_enter_premium();
+    //reveal_validPageDb();
+    //reveal_ValidRegState();
+
+    assert validPageNr(pagenr);
+    ghost var addrspace := s.d[pagenr].addrspace;
+    forall :: validAddrspacePage(s.d, addrspace) { reveal_validPageDb(); }
+
     ghost var d := s.d;
     assert validDispatcherPage(s.d, pagenr);
     assert !hasStoppedAddrspace(s.d, pagenr);
     ghost var l1p := l1pOfDispatcher(s.d, pagenr);
-  
-    // TODO: read r12, clear lsb, store into MCR
-    // MRC(r12,scr);
-    // Dafny/Spartan are unlikely to enjoy bit vector math
-    
-    r10 := 0;
+
+    //-------------------------------------------------------------------------
+    // update SCR
+    //-------------------------------------------------------------------------
+
+    // read SCR
+    MRC(r10, OSReg(scr));
+    ghost var old_scr := r10;
+
+    // clear NS bit
+    AND(r10, r10, 0xfffffffe);
+
+    // set IRQ and FIQ bits
+    ORR(r10, r10, 6);
+
+    // write SCR
+    lemma_scr_entry(old_scr, r10);
     MCR(OSReg(scr), r10);
-    forall :: this.conf.scr.ns == Secure
-    {
-        //FIXME
-        assume false;
-        assert BitwiseAnd(r10,1) != 1;
-        assert decode_scr(r10) == SCR(Secure, false, false);
-    }
-  
+    assert this.conf.scr.ns == Secure;
+
     //-------------------------------------------------------------------------
     // load l1p into ttbr0
     //-------------------------------------------------------------------------
-    LDRglobaladdr(r12, PageDb());
-    assert validPageNr(pagenr);
     r11 := sp_op_const(PAGEDB_ENTRY_SIZE());
     MUL(r10,pagenr,r11);
     assert r10 == G_PAGEDB_ENTRY(pagenr);
@@ -452,43 +515,32 @@ procedure pre_entry_enter(
     assert r9 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE();
     WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE(), r9);
 
+    LDRglobaladdr(r12, PageDb());
     LDRglobal(r11, PageDb(), r12, r9);
-    ghost var addrspace := s.d[pagenr].addrspace;
-    forall :: r11 == page_monvaddr(addrspace) && WordAligned(r11) 
-        && PageAligned(r11)
+    forall :: r11 == page_monvaddr(addrspace)
     {
-        reveal_pageDbEntryCorresponds(); reveal_pageContentsCorresponds();
-        reveal_validPageDb();
-        assert validAddrspacePage(s.d, s.d[pagenr].addrspace);
+        reveal_pageDbEntryCorresponds();
+        assert validAddrspacePage(d, addrspace);
     }
-
-    forall :: ValidMem(r11 + ADDRSPACE_L1PT_PHYS())
-        { reveal_validPageDb(); } 
 
     // page_monvaddr_impl(r9,r11,r10); 
     LDR(r10,r11,sp_op_const(ADDRSPACE_L1PT_PHYS()));
 
     forall :: r10 == page_paddr(d[addrspace].entry.l1ptnr)
     {
-        assert pageDbCorrespondsOnly(this.m, d, addrspace);
-        assert validAddrspacePage(d, addrspace);
-        reveal_pageContentsCorresponds();
-        assert pageContentsCorresponds(addrspace, d[addrspace],
-            extractPage(this.m, addrspace));
+        forall :: pageDbAddrspaceCorresponds(addrspace, d[addrspace].entry,
+            extractPage(this.m, addrspace))
+        {
+            assert validAddrspacePage(d, addrspace);
+            assert pageDbCorrespondsOnly(this.m, d, addrspace);
+            reveal_pageContentsCorresponds();
+        }
         reveal_pageDbAddrspaceCorresponds();
     }
-    
+
     assert r10 == page_paddr(l1p);
-
-    // reveal_pageContentsCorresponds();
-    // reveal_pageDbAddrspaceCorresponds();
+    assert PageAligned(r10);
     MSR(OSReg(ttbr0), r10);
-
-    assert isUInt32(r10);
-    assert isUInt32(0xffff_f000);
-    forall :: r10 == BitwiseAnd(r10, 0xffff_f000){
-        assume false;
-    }
     assert this.conf.ttbr0.ptbase == page_paddr(l1p);
     //-------------------------------------------------------------------------
     
@@ -504,7 +556,11 @@ procedure pre_entry_enter(
     // Set SPSR to Usermode
     //-------------------------------------------------------------------------
     r10 := 0x10;
-    assume psr_mask_mode(r10) == 0x10;
+    forall :: psr_mask_mode(0x10) == 0x10 {
+        forall :: WordAsBits(0x10) == 0x10 && WordAsBits(0x1f) == 0x1f { reveal WordAsBits; }
+        forall :: BitAnd(0x10, 0x1f) == 0x10 { reveal BitAnd; }
+        lemma_WordBitEquiv(0x10, 0x10);
+    }
     assert decode_mode(psr_mask_mode(r10)) == User;
     assert ValidModeChange'(this, User);
     assert ValidModeChange(this, r10);
@@ -551,10 +607,10 @@ procedure pre_entry_enter(
     
     assert s.d == s'.d;
     assert s'.hw.conf.ttbr0.ptbase == page_paddr(l1p);
-    assert s'.hw.conf.scr.ns == Secure; // XXX FIXME TODO
+    assert s'.hw.conf.scr.ns == Secure;
     assert s'.g.g_cur_dispatcher == pagenr;
-    assert s'.hw.regs[R0] == arg1 && s'.hw.regs[R1] == arg2 &&
-        s'.hw.regs[R2] == arg3; 
+    //assert s'.hw.regs[R0] == arg1 && s'.hw.regs[R1] == arg2 &&
+    //    s'.hw.regs[R2] == arg3; 
     assert s'.g.g_cur_dispatcher == pagenr;
     assert WSMemInvariantExceptAddrspaceAtPage(s.hw,s'.hw, s.d, l1p);
     assert preEntryEnter(s,s',pagenr, arg1, arg2, arg3);
