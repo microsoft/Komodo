@@ -759,13 +759,14 @@ procedure kom_smc_enter(
         
         assert mode_of_state(ss5.hw) != User;
         assert pre_unstash.hw == this;
-        reveal_ValidRegState();
-        forall :: tuple(pre_unstash.hw.regs[R0], pre_unstash.hw.regs[R1], pre_unstash.d) ==
+        forall :: pre_unstash.hw.regs ?[R0] && pre_unstash.hw.regs ?[R1]
+            && tuple(pre_unstash.hw.regs[R0], pre_unstash.hw.regs[R1], pre_unstash.d) ==
             exceptionHandled(ss5)
             && validExceptionTransition(ss5,pre_unstash,ss5.d)
             && validSysState'(pre_unstash)
             && mode_of_state(pre_unstash.hw) == Monitor
         {
+            reveal_ValidRegState();
             assert AUCIdef();
             assert validSysState(ss5);
             assert ApplicationUsermodeContinuationInvariant(ss5.hw, pre_unstash.hw);
@@ -781,11 +782,13 @@ procedure kom_smc_enter(
         s':= unstash_banked_regs(pre_unstash);
         assert this == s'.hw;
 
-        forall :: tuple(s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
+        forall :: s'.hw.regs ?[R0] && s'.hw.regs ?[R1]
+            && tuple(s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
             exceptionHandled(ss5)
             && validExceptionTransition(ss5,s',ss5.d)
             && validSysState'(s')
         {
+            reveal_ValidRegState();
             assert pre_unstash.hw.regs[R0] == s'.hw.regs[R0];
             assert pre_unstash.hw.regs[R1] == s'.hw.regs[R1];
             assert pre_unstash.d == s'.d;
@@ -817,12 +820,13 @@ procedure kom_smc_enter(
             assert s'.hw.sregs[spsr(Monitor)] == pre_unstash.g.g_psrs[Monitor];
             assert s.hw.sregs[spsr(Monitor)] == s'.hw.sregs[spsr(Monitor)];
          
-            // I wish I knew the syntax for "m in set" in Spartan.
-            forall m :| m == FIQ || m == IRQ || m == Supervisor ||
-                m == Abort || m == Undefined || m == Monitor ::
-            s'.hw.regs[LR(m)] == s.hw.regs[LR(m)] &&
-            s'.hw.regs[SP(m)] == s.hw.regs[SP(m)]
+            forall m :| set(FIQ,IRQ,Supervisor,Abort,Undefined,Monitor) ?[m] ::
+            s'.hw.regs ?[LR(m)] && s.hw.regs ?[LR(m)]
+            && s'.hw.regs[LR(m)] == s.hw.regs[LR(m)]
+            && s'.hw.regs ?[SP(m)] && s.hw.regs ?[SP(m)]
+            && s'.hw.regs[SP(m)] == s.hw.regs[SP(m)]
             {
+                reveal_ValidRegState();
                 assert s.hw.regs[LR(m)] == s_stash.g.g_lrs[m];
                 assert s'.hw.regs[LR(m)] == pre_unstash.g.g_lrs[m];
 
