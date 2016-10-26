@@ -123,8 +123,8 @@ procedure Body_00_15(
     )
 requires/ensures
     SaneState(this);
-    WordAligned(OperandContents(this,OSP));
-    ValidMem(OperandContents(this, OSP) + (i%16)*4);
+    WordAligned(sp);
+    ValidMem(sp + (i%16)*4);
 requires
     t3 == BitwiseXor(b, c);
     //if i == 0 then t2 == 0 else i < 16 ==> t2 == old(Maj(a, b, c));
@@ -158,7 +158,7 @@ ensures
 {
     //if i < 16
     //  if i == 15
-    //    STR(inp, OSP,17*4);
+    //    STR(inp, sp,17*4);
     //  end if
 
     EOR(t0, e, ror(/*e*/GetReg(4+((4+i)%8)), Sigma1(1) - Sigma1(0)));
@@ -173,7 +173,7 @@ ensures
     // BP: Skipping this and encoding K256 directly as a const
     // ldr	$t2,[$Ktbl],#4			@ *K256++
     ADDWrap(h, h, t2);      //  h+=X[i]  BP: X[i] = input[i]?
-    STR(t1, OSP, OConst((i%16)*4));  // @ BP: Save a copy of input[i] for use in subsequent W calculations
+    STR(t1, sp, OConst((i%16)*4));  // @ BP: Save a copy of input[i] for use in subsequent W calculations
     EOR(t1, f, g);
     ghost var old_h := h;
     //assert t0 == BitwiseXor(BitwiseXor(e, RotateRight(e, 5)), RotateRight(e, 19));
@@ -205,9 +205,9 @@ ensures
     //   LDR(t1, inp, 0);    // Prefetch
          EOR(t2, a, b);            //  a^b, b^c in next round
     // else
-    //   LDR(t1, OSP, ((i+2)%16)*4);     // @ from future BODY_16_xx 
+    //   LDR(t1, sp, ((i+2)%16)*4);     // @ from future BODY_16_xx 
     //   EOR(t2, a, b);            //  a^b, b^c in next round
-    //   LDR(t4, OSP, ((i+15)%16)*4);   // @ from future BODY_16_xx
+    //   LDR(t4, sp, ((i+15)%16)*4);   // @ from future BODY_16_xx
     // endif
     EOR(t0,t0,ror(/*a*/GetReg(4+((0+i)%8)),Sigma0(2)-Sigma0(0))); // Sigma0(a)
     AND(t3,t3,t2);      // (b^c)&=(a^b)
@@ -245,9 +245,9 @@ procedure Body_16_XX(
 requires/ensures
     SaneState(this);
 requires
-    WordAligned(OperandContents(this,OSP));
-    ValidMem(OperandContents(this, OSP) + (i%16)*4);
-    ValidMem(OperandContents(this, OSP) + ((i+9)%16)*4);
+    WordAligned(sp);
+    ValidMem(sp + (i%16)*4);
+    ValidMem(sp + ((i+9)%16)*4);
     t3 == BitwiseXor(b, c);
 {
     //@ ldr  $t1,[sp,#`($i+1)%16`*4]    @ $i
@@ -262,13 +262,13 @@ requires
     {
         reveal SSIG0;
     }
-    LDR(t1, OSP, OConst((i%16)*4));
+    LDR(t1, sp, OConst((i%16)*4));
     EOR(t2,t2,lsr(/*t4*/OReg(R1), sigma1(2)));     // sigma1(X[i+14])
     forall :: t2 == SSIG1(t4)
     {
         reveal SSIG1;
     }
-    LDR(t4, OSP, OConst(((i+9)%16)*4));
+    LDR(t4, sp, OConst(((i+9)%16)*4));
 
     ADDWrap(t2,t2,t0);
     EOR(t0,e,ror(/*e*/GetReg(4+((4+i)%8)),Sigma1(1)-Sigma1(0)));    // from BODY_00_15
