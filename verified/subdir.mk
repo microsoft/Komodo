@@ -118,7 +118,7 @@ DAFNYFLAGS_bit-vector-lemmas.i = /proverOpt:OPTIMIZE_FOR_BV=true
 
 sha256_dep-sdfy = ARMdecls 
 sha256_dep-dfy = ARMspartan words_and_bytes.s kom_common.s sha/sha256.s sha/bit-vector-lemmas.i
-DAFNYFLAGS_sha256 = /proc:'*Body__00__15'
+DAFNYFLAGS_sha256 = /proc:'*Body__16__XX'
 $(dir)/sha256.verified: $(call mkdeps,sha256)
 
 # All these things depend on entry.i because they need ValidSysState', which 

@@ -39,10 +39,10 @@ function method ror(r:operand, amount:shift_amount) : operand
     OShift(r.r, RORShift(amount))
 }
 
-function method lsr(r:ARMReg, amount:shift_amount) : operand
-//    requires r.OReg?;
+function method lsr(r:operand, amount:shift_amount) : operand
+    requires r.OReg?;
 {
-    OShift(r, LSRShift(amount))
+    OShift(r.r, LSRShift(amount))
 }
 
 function method GetReg(r:int) : operand
@@ -125,10 +125,23 @@ requires/ensures
     ValidMem(OperandContents(this, OSP) + (i%16)*4);
 requires
     t3 == BitwiseXor(b, c);
-    
+    //if i == 0 then t2 == 0 else i < 16 ==> t2 == old(Maj(a, b, c));
 ensures
 //    t2 == BitwiseXor(a, b);
 //    t3 == Maj(a, b, c);
+//    a == old(a) + t2;
+//    b == old(b);
+//    c == old(c);
+//
+//    e == old(e);
+//    f == old(f);
+//    g == old(g);
+//    let T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), BSIG1(e)),
+//                                                     Ch(e,f,g)),
+//                                        K_SHA256(i)),
+//                           W[i]) in
+//        d == BitwiseAdd32(old(d))
+//     && h == BitwiseAdd32(T1, BSIG0(a));
 
 {
     //if i < 16
@@ -204,50 +217,44 @@ ensures
 procedure Body_16_XX( 
     {:inline} i:SHA_step,
     inout {:register OReg(R0)} t0:int,
-    inout {:register OReg(R1)} t4:int,
     inout {:register OReg(R2)} t1:int,
-    inout {:register OReg(R3)} t3:int,
-    inout {:register OReg(R3)} T1:int,
-    inout {:register OReg(R4)} A:int,
-    inout {:register OReg(R5)} B:int,
-    inout {:register OReg(R6)} C:int,
-    inout {:register OReg(R7)} D:int,
-    inout {:register OReg(R8)} E:int,
-    inout {:register OReg(R9)} F:int,
-    inout {:register OReg(R10)} G:int,
-    inout {:register OReg(R11)} H:int,
-    inout {:register OReg(R12)} t2:int)
+    inout {:register GetReg(if i % 2 == 0 then 12 else 3)} t2:int,
+    inout {:register GetReg(if i % 2 == 0 then  3 else 12)} t3:int,
+    inout {:register OReg(R1)} t4:int,
+    inout {:register OReg(R1)} inp:int,
+    inout {:register GetReg(4+((0+i)%8))} a:int,
+    inout {:register GetReg(4+((1+i)%8))} b:int,
+    inout {:register GetReg(4+((2+i)%8))} c:int,
+    inout {:register GetReg(4+((3+i)%8))} d:int,
+    inout {:register GetReg(4+((4+i)%8))} e:int,
+    inout {:register GetReg(4+((5+i)%8))} f:int,
+    inout {:register GetReg(4+((6+i)%8))} g:int,
+    inout {:register GetReg(4+((7+i)%8))} h:int)
 requires/ensures
     SaneState(this);
 requires
+    WordAligned(OperandContents(this,OSP));
+    ValidMem(OperandContents(this, OSP) + (i%16)*4);
+    ValidMem(OperandContents(this, OSP) + ((i+9)%16)*4);
+    t3 == BitwiseXor(b, c);
+{
+    //@ ldr  $t1,[sp,#`($i+1)%16`*4]    @ $i
+    //@ ldr  $t4,[sp,#`($i+14)%16`*4]
+    MOV(t0, ror(/*t1*/OReg(R2), sigma0(0)));
+    ADDWrap(a, a, t2);  // h+=Maj(a,b,c) from the past
+    MOV(t2, ror(/*t4*/OReg(R1), sigma1(0)));
+    EOR(t0,t0,ror(/*t1*/OReg(R2),sigma0(1)));
+    EOR(t2,t2,ror(/*t4*/OReg(R1),sigma1(1)));
+    EOR(t0,t0,lsr(/*t1*/OReg(R2),sigma0(2)));     // sigma0(X[i+1])
+    LDR(t1, OSP, OConst((i%16)*4));
+    EOR(t2,t2,lsr(/*t4*/OReg(R1), sigma1(2)));     // sigma1(X[i+14])
+    LDR(t4, OSP, OConst(((i+9)%16)*4));
 
-//{
-//    //@ ldr  $t1,[sp,#`($i+1)%16`*4]    @ $i
-//    //@ ldr  $t4,[sp,#`($i+14)%16`*4]
-//    //MOV(t0, ror(t1, sigma0(0)));
-//    MOV(t0, ror(R2, sigma0(0)));
-//    ADDWrap(A, A, t2);  // h+=Maj(a,b,c) from the past
-//    //MOV(t2, ror(t4, sigma1(0)));
-//    MOV(t2, ror(R1, sigma1(0)));
-//    //EOR(t0,t0,ror(t1,sigma0(1)));
-//    EOR(t0,t0,ror(R2,sigma0(1)));
-//    //EOR(t2,t2,ror(t4,sigma1(1)));
-//    EOR(t2,t2,ror(R1,sigma1(1)));
-//    //EOR(t0,t0,lsr(t1,sigma0(2)));     // sigma0(X[i+1])
-//    EOR(t0,t0,lsr(R2,sigma0(2)));     // sigma0(X[i+1])
-//    // TODO: ldr  t1,[sp,#`(i+0)%16`*4]
-//    //EOR(t2,t2,lsr(t4, sigma1(2)));     // sigma1(X[i+14])
-//    EOR(t2,t2,lsr(R1, sigma1(2)));     // sigma1(X[i+14])
-//    // TODO: ldr  t4,[sp,#`(i+9)%16`*4]
-//
-//    ADDWrap(t2,t2,t0);
-//    //EOR(t0,E,ror(E,Sigma1(1)-Sigma1(0)));    // from BODY_00_15
-//    EOR(t0,E,ror(R8,Sigma1(1)-Sigma1(0)));    // from BODY_00_15
-//    ADDWrap(t1,t1,t2);
-//    //EOR(t0,t0,ror(e,(Sigma1(2)-Sigma1(0))));  // Sigma1(e)
-//    EOR(t0,t0,ror(R8,(Sigma1(2)-Sigma1(0))));  // Sigma1(e)
-//    ADDWrap(t1,t1,t4);      // X[i]
-//
-//    Body_00_15(i, t0, t1, t2, t3, t4, A, B, C, D, E, F, G, H);
-//
-//}
+    ADDWrap(t2,t2,t0);
+    EOR(t0,e,ror(/*e*/GetReg(4+((4+i)%8)),Sigma1(1)-Sigma1(0)));    // from BODY_00_15
+    ADDWrap(t1,t1,t2);
+    EOR(t0,t0,ror(/*e*/GetReg(4+((4+i)%8)),(Sigma1(2)-Sigma1(0))));  // Sigma1(e)
+    ADDWrap(t1,t1,t4);      // X[i]
+
+    Body_00_15(i, t0, t1, t2, t3, t4, inp, a, b, c, d, e, f, g, h);
+}
