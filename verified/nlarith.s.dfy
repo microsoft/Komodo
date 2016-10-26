@@ -8,6 +8,11 @@ lemma lemma_DivMulLessThan(a:int, b:int)
     ensures (a / b) * b <= a
 {}
 
+lemma {:axiom} lemma_DivBounds'(a:int, b:int)
+    requires a > b > 0
+    ensures a / b < a
+/* FIXME: this is unstable, but proves in some versions of Dafny/Z3 */
+
 lemma lemma_DivBounds(a:int, b:int)
     requires a >= 0 && b > 0
     ensures 0 <= (a / b) <= a
@@ -19,7 +24,8 @@ lemma lemma_DivBounds(a:int, b:int)
     } else if b == 1 {
         assert a / b == a;
     } else if a > b {
-        assert 1 <= a / b < a;
+        assert 1 <= a / b;
+        lemma_DivBounds'(a, b);
     }
 }
 
