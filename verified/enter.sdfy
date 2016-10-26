@@ -38,9 +38,7 @@ procedure smc_enter_err(
         forall :: r9 == pageDbEntryTypeVal(pagedb[pagenr])
         {
             reveal_pageDbEntryCorresponds();
-            ghost var entryWords := extractPageDbEntry(this.m, pagenr);
-            assert entryWords[BytesToWords(PAGEDB_ENTRY_TYPE())] ==
-                GlobalWord(this.m, PageDb(), r10);
+            extractPageDbToAbstractOne(this.m, pagenr, PAGEDB_ENTRY_TYPE());
             assert GlobalWord(this.m, PageDb(), r10) == 
                 pageDbEntryTypeVal(pagedb[pagenr]);
         }
