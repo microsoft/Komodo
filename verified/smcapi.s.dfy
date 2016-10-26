@@ -353,36 +353,34 @@ function smc_finalise(pageDbIn: PageDb, addrspacePage: word) : (PageDb, word)
         (d', KOM_ERR_SUCCESS())
 }
 
+// common success/failure checks for enter and resume
+function smc_enter_err(d: PageDb, p: word, isresume: bool): word
+    requires validPageDb(d)
+{
+    reveal_validPageDb();
+    if (!(validPageNr(p) && d[p].PageDbEntryTyped? && d[p].entry.Dispatcher?)) then
+        KOM_ERR_INVALID_PAGENO()
+    else if (var a := d[p].addrspace; d[a].entry.state != FinalState) then
+        KOM_ERR_NOT_FINAL()
+    else if (!isresume && d[p].entry.entered) then
+        KOM_ERR_ALREADY_ENTERED()
+    else if (isresume && !d[p].entry.entered) then
+        KOM_ERR_NOT_ENTERED()
+    else KOM_ERR_SUCCESS()
+}
+
 function smc_enter(pageDbIn: PageDb, dispPage: word, arg1: word, arg2: word, arg3: word)
     : (PageDb, word)
     requires validPageDb(pageDbIn)
 {
-    reveal_validPageDb();
-    var d := pageDbIn; var p := dispPage;
-    if(!(validPageNr(p) && d[p].PageDbEntryTyped? && d[p].entry.Dispatcher?)) then
-        (pageDbIn, KOM_ERR_INVALID_PAGENO())
-    else if(var a := d[p].addrspace; d[a].entry.state != FinalState) then
-        (pageDbIn, KOM_ERR_NOT_FINAL())
-    else if(d[p].entry.entered) then
-        (pageDbIn, KOM_ERR_ALREADY_ENTERED())
-    else
-        (pageDbIn, KOM_ERR_SUCCESS())
+    (pageDbIn, smc_enter_err(pageDbIn, dispPage, false))
 }
 
 function smc_resume(pageDbIn: PageDb, dispPage: word)
     : (PageDb, word)
     requires validPageDb(pageDbIn)
 {
-    reveal_validPageDb();
-    var d := pageDbIn; var p := dispPage;
-    if(!(validPageNr(p) && d[p].PageDbEntryTyped? && d[p].entry.Dispatcher?)) then
-        (pageDbIn, KOM_ERR_INVALID_PAGENO())
-    else if(var a := d[p].addrspace; d[a].entry.state != FinalState) then
-        (pageDbIn, KOM_ERR_NOT_FINAL())
-    else if(!d[p].entry.entered) then
-        (pageDbIn, KOM_ERR_NOT_ENTERED())
-    else
-        (pageDbIn, KOM_ERR_SUCCESS())
+    (pageDbIn, smc_enter_err(pageDbIn, dispPage, true))
 }
 
 function smc_stop(pageDbIn: PageDb, addrspacePage: word)

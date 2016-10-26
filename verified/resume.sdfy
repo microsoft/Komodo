@@ -306,12 +306,11 @@ procedure kom_smc_resume(
 {
     reveal_smc_enter_premium();
     r5 := pagenr;
-    ghost var s_err;
     r4 := 1; // do an error check for resume, not enter
-    s_err := smc_enter_err(@r0,@r1,@r2,@r3,@r4,@r0,s.(hw := this));
+    smc_enter_err(@r0,@r4,@r0,true,s.d);
     if(err != sp_op_const(KOM_ERR_SUCCESS()) ) {
         val := sp_op_const(0);
-        s' := s_err.(hw := this);
+        s' := s.(hw := this);
         assert validSysState'(s');
         assert tuple(s'.d, err) == smc_resume(s.d, pagenr);
         assert err != KOM_ERR_SUCCESS();
@@ -322,7 +321,7 @@ procedure kom_smc_resume(
         ghost var l1p := l1pOfDispatcher(s.d, pagenr);
 
         ghost var s_stash;
-        s_stash := stash_banked_regs(s_err.(hw := this));
+        s_stash := stash_banked_regs(s.(hw := this));
 
         s1 := s_stash.(hw := this);  
 
@@ -487,11 +486,9 @@ procedure kom_smc_resume(
             s'.hw.regs[LR(m)] == s.hw.regs[LR(m)] &&
             s'.hw.regs[SP(m)] == s.hw.regs[SP(m)]
             {
-                assert s_err.hw.regs[LR(m)] == s_stash.g.g_lrs[m];
                 assert s.hw.regs[LR(m)] == s_stash.g.g_lrs[m];
                 assert s'.hw.regs[LR(m)] == pre_unstash.g.g_lrs[m];
 
-                assert s_err.hw.regs[SP(m)] == s_stash.g.g_sps[m];
                 assert s.hw.regs[SP(m)] == s_stash.g.g_sps[m]; 
                 assert s'.hw.regs[SP(m)] == pre_unstash.g.g_sps[m];
             }
