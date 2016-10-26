@@ -126,6 +126,7 @@ requires/ensures
 requires
     t3 == BitwiseXor(b, c);
     //if i == 0 then t2 == 0 else i < 16 ==> t2 == old(Maj(a, b, c));
+    // i >= 16 ==> RotateRight(t0, Sigma1(0)) == Sigma1(e)
 ensures
 //    t2 == BitwiseXor(a, b);
 //    t3 == Maj(a, b, c);
@@ -246,14 +247,30 @@ requires
     EOR(t0,t0,ror(/*t1*/OReg(R2),sigma0(1)));
     EOR(t2,t2,ror(/*t4*/OReg(R1),sigma1(1)));
     EOR(t0,t0,lsr(/*t1*/OReg(R2),sigma0(2)));     // sigma0(X[i+1])
+    forall :: t0 == SSIG0(t1)
+    {
+        reveal SSIG0;
+    }
     LDR(t1, OSP, OConst((i%16)*4));
     EOR(t2,t2,lsr(/*t4*/OReg(R1), sigma1(2)));     // sigma1(X[i+14])
+    forall :: t2 == SSIG1(t4)
+    {
+        reveal SSIG1;
+    }
     LDR(t4, OSP, OConst(((i+9)%16)*4));
 
     ADDWrap(t2,t2,t0);
     EOR(t0,e,ror(/*e*/GetReg(4+((4+i)%8)),Sigma1(1)-Sigma1(0)));    // from BODY_00_15
     ADDWrap(t1,t1,t2);
-    EOR(t0,t0,ror(/*e*/GetReg(4+((4+i)%8)),(Sigma1(2)-Sigma1(0))));  // Sigma1(e)
+    EOR(t0,t0,ror(/*e*/GetReg(4+((4+i)%8)),(Sigma1(2)-Sigma1(0))));  // Sigma1(e)  BP: Almost
+
+    // Prove that we computed Sigma1(e) correctly:
+    forall :: RotateRight(t0, Sigma1(0)) == BSIG1(e)
+    {
+        reveal BSIG1;
+        lemma_RotateRightCommutesXor(e, 6, 11, 25);
+    }
+
     ADDWrap(t1,t1,t4);      // X[i]
 
     Body_00_15(i, t0, t1, t2, t3, t4, inp, a, b, c, d, e, f, g, h);
