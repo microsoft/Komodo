@@ -10,10 +10,8 @@ procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:
         @pagenr != @tmp;
         @phys != OSP;
         @tmp != OSP;
-        @pagenr != OSP;
         @phys != OLR;
         @tmp != OLR;
-        @pagenr != OLR;
         validPageNr(pagenr);
     ensures
         GlobalsInvariant(old(this),this);
@@ -45,10 +43,8 @@ procedure paddr_page_impl(out {:operand} pagenr:int, {:operand} phys:int, out {:
         // NB: @phys == @pagenr is supported
         @phys != @tmp;
         @pagenr != @tmp;
-        @phys != OSP;
         @tmp != OSP;
         @pagenr != OSP;
-        @phys != OLR;
         @tmp != OLR;
         @pagenr != OLR;
         isUInt32(phys);
@@ -85,10 +81,8 @@ procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out
         @virt != @tmp;
         @virt != OSP;
         @tmp != OSP;
-        @pagenr != OSP;
         @virt != OLR;
         @tmp != OLR;
-        @pagenr != OLR;
         validPageNr(pagenr);
     ensures
         GlobalsInvariant(old(this),this);
