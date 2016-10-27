@@ -138,6 +138,10 @@ procedure allocate_page_success(
         == KOM_ERR_SUCCESS();
     pagedb := specPageDb(allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry));
 
+    // unpack DistinctRegOperands to help the verifier
+    assert @tmp != @tmp2 && @tmp != @pagenr && @tmp != @as_va && @tmp != @pagedb_base;
+    assert @tmp2 != @pagenr && @tmp2 != @as_va && @tmp2 != @pagedb_base;
+
     // increment AS refcount
     ghost var pagedb_incref;
     pagedb_incref := addrspace_incref(as_va, tmp, pagedb_in, entry.addrspace);
@@ -201,8 +205,7 @@ procedure allocate_page(
     requires/ensures
         SaneState(this);
     requires
-        @tmp2 != OLR && @tmp != OLR && @as_pagenr != OLR && @err != OLR;
-        @tmp2 != OSP && @tmp != OSP && @as_pagenr != OSP && @err != OSP;
+        @tmp2 != OLR && @tmp != OLR && @err != OLR;
         DistinctRegOperands(set(@pagenr, @as_pagenr, @pagedb_base, @tmp, @tmp2, @err), 6);
         ValidOperand(@typeval) && @typeval is OConst;
         pagedb_base == AddressOfGlobal(PageDb());
@@ -230,6 +233,11 @@ procedure allocate_page(
     ValidPageDbImpliesValidAddrspace(pagedb_in, entry.addrspace);
     pagedb := pagedb_in;
 
+    // unpack DistinctRegOperands to help the verifier
+    assert @tmp != @tmp2 && @tmp != @pagenr && @tmp != @as_pagenr && @tmp != @pagedb_base;
+    assert @tmp2 != @err && @tmp2 != @pagenr && @tmp2 != @as_pagenr && @tmp2 != @pagedb_base;
+    assert @err != @tmp && @err != @pagenr && @err != @as_pagenr && @err != @pagedb_base;
+
     if (pagenr >= sp_op_const(KOM_SECURE_NPAGES())) {
         err := sp_op_const(KOM_ERR_INVALID_PAGENO());
     } else {
@@ -251,8 +259,6 @@ procedure allocate_page(
         if (tmp != sp_op_const(KOM_PAGE_FREE())) {
             err := sp_op_const(KOM_ERR_PAGEINUSE());
         } else {
-            assert DistinctRegOperands(set(@pagenr, @as_pagenr,
-                                           @pagedb_base, @tmp, @tmp2, @err), 6);
             assert RegPreservingExcept(old(this),this, set(@tmp, @tmp2, @err));
             page_monvaddr_impl(tmp2, as_pagenr, err);
 
@@ -266,12 +272,6 @@ procedure allocate_page(
             if (tmp != sp_op_const(KOM_ADDRSPACE_INIT())) {
                 err := sp_op_const(KOM_ERR_ALREADY_FINAL());
             } else {
-                assert pageDbCorresponds(this.m, pagedb);
-                assert DistinctRegOperands(set(@pagenr, @as_pagenr,
-                    @pagedb_base, @tmp, @tmp2, @err), 6);
-                assert DistinctRegOperands(set(@pagenr, @pagedb_base, @tmp,
-                                               @tmp2, @err), 5);
-                assert RegPreservingExcept(old(this),this, set(@tmp, @tmp2, @err));
                 pagedb := allocate_page_success(pagenr, tmp2, typeval,
                                 pagedb_base, tmp, err, pagedb_in, entry);
                 err := sp_op_const(KOM_ERR_SUCCESS());
