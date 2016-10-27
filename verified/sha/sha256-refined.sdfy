@@ -207,56 +207,83 @@ ensures
         lemma_RotateRightCommutesXor(a, 2, 13, 22);
     }
 }
-/*
-procedure Body_16_XX( 
+
+procedure {:refined} Body_16_XX( 
     {:inline} i:SHA_step,
-    inout {:register OReg(R0)} t0:int,
-    inout {:register OReg(R2)} t1:int,
-    inout {:register GetReg(if i % 2 == 0 then 12 else 3)} t2:int,
-    inout {:register GetReg(if i % 2 == 0 then  3 else 12)} t3:int,
-    inout {:register OReg(R1)} t4:int,
-    inout {:register OReg(R1)} inp:int,
-    inout {:register GetReg(4+((0+i)%8))} a:int,
-    inout {:register GetReg(4+((1+i)%8))} b:int,
-    inout {:register GetReg(4+((2+i)%8))} c:int,
-    inout {:register GetReg(4+((3+i)%8))} d:int,
-    inout {:register GetReg(4+((4+i)%8))} e:int,
-    inout {:register GetReg(4+((5+i)%8))} f:int,
-    inout {:register GetReg(4+((6+i)%8))} g:int,
-    inout {:register GetReg(4+((7+i)%8))} h:int,
-    ghost z:SHA256Trace)
+    {:inline} perm:perm_index,
+    {:inline} input_slot:word,
+    {:inline} input_slot_9:word,
+    ghost z:SHA256Trace,
+    inout{:operand} t0:word,
+    inout{:operand} t1:word,
+    inout{:operand} t2:word,
+    inout{:operand} t3:word,
+    inout{:operand} t4:word,
+    //inout{:operand} inp:word,
+    inout{:operand} a:word,
+         {:operand} b:word,
+         {:operand} c:word,
+    inout{:operand} d:word,
+         {:operand} e:word,
+         {:operand} f:word,
+         {:operand} g:word,
+    inout{:operand} h:word)
+
 requires/ensures
-    SaneState(this);
+    //ValidAddr(mem, sp + input_slot);
+reads 
+    sp;
+modifies 
+    mem;
+requires {:refined false}
+    @t0 == OReg(R0);
+    @t1 == OReg(R2);
+    @t2 == OReg(GetReg(if Even(i) then 12 else 3));
+    @t3 == OReg(GetReg(if Even(i) then  3 else 12));
+    @t4 == OReg(R1);
+    //@inp == OReg(R1);
+    @a  == OReg(GetReg(4+ApplyPerm(0, perm)));
+    @b  == OReg(GetReg(4+ApplyPerm(1, perm)));
+    @c  == OReg(GetReg(4+ApplyPerm(2, perm)));
+    @d  == OReg(GetReg(4+ApplyPerm(3, perm)));
+    @e  == OReg(GetReg(4+ApplyPerm(4, perm)));
+    @f  == OReg(GetReg(4+ApplyPerm(5, perm)));
+    @g  == OReg(GetReg(4+ApplyPerm(6, perm)));
+    @h  == OReg(GetReg(4+ApplyPerm(7, perm)));
+
 requires
-    WordAligned(sp);
-    ValidMem(sp + (i%16)*4);
-    ValidMem(sp + ((i+9)%16)*4);
+    i >= 16;
+    input_slot == (i%16)*4;
+    input_slot_9 == ((i+9)%16)*4;
+    ValidAddr(mem, sp + input_slot);
+    ValidAddr(mem, sp + input_slot_9); 
+
     t3 == BitwiseXor(b, c);
+
+    // SHA semantics
+    SeqLength(z.H) > 0;
+    IsSHA256TraceReadyForStep(z, i);
+    last(last(z.atoh)) == atoh_c(a, b, c, d, e, f, g, h);
 {
     //@ ldr  $t1,[sp,#`($i+1)%16`*4]    @ $i
     //@ ldr  $t4,[sp,#`($i+14)%16`*4]
-    MOV(t0, ror(/*t1*/OReg(R2), sigma0(0)));
-    ADDWrap(a, a, t2);  // h+=Maj(a,b,c) from the past
-    MOV(t2, ror(/*t4*/OReg(R1), sigma1(0)));
-    EOR(t0,t0,ror(/*t1*/OReg(R2),sigma0(1)));
-    EOR(t2,t2,ror(/*t4*/OReg(R1),sigma1(1)));
-    EOR(t0,t0,lsr(/*t1*/OReg(R2),sigma0(2)));     // sigma0(X[i+1])
-    forall :: t0 == SSIG0(t1)
-    {
-        reveal SSIG0;
-    }
-    LDR(t1, sp, OConst((i%16)*4));
-    EOR(t2,t2,lsr(/*t4*/OReg(R1), sigma1(2)));     // sigma1(X[i+14])
-    forall :: t2 == SSIG1(t4)
-    {
-        reveal SSIG1;
-    }
-    LDR(t4, sp, OConst(((i+9)%16)*4));
+    rMOVShift(t0, t1, RORShift(sigma0(0)));
+    rADDWrap(a, a, t2);  // h+=Maj(a,b,c) from the past
+    rMOVShift(t2, t4, RORShift(sigma1(0)));
+    rEORShift(t0,t0,t1,RORShift(sigma0(1)));
+    rEORShift(t2,t2,t4,RORShift(sigma1(1)));
+    rEORShift(t0,t0,t1,LSRShift(sigma0(2)));     // sigma0(X[i+1])
+    assert t0 == SSIG0(t1) by { reveal SSIG0; }
 
-    ADDWrap(t2,t2,t0);
-    EOR(t0,e,ror(/*e*/GetReg(4+((4+i)%8)),Sigma1(1)-Sigma1(0)));    // from BODY_00_15
-    ADDWrap(t1,t1,t2);
-    EOR(t0,t0,ror(/*e*/GetReg(4+((4+i)%8)),(Sigma1(2)-Sigma1(0))));  // Sigma1(e)  BP: Almost
+    rLDR(t1, sp, input_slot);
+    rEORShift(t2,t2,t4, LSRShift(sigma1(2)));     // sigma1(X[i+14])
+    assert t2 == SSIG1(t4) by { reveal SSIG1; }
+    rLDR(t4, sp, input_slot_9);
+
+    rADDWrap(t2,t2,t0);
+    rEORShift(t0,e,e,RORShift(Sigma1(1)-Sigma1(0)));    // from BODY_00_15
+    rADDWrap(t1,t1,t2);
+    rEORShift(t0,t0,e,RORShift(Sigma1(2)-Sigma1(0)));  // Sigma1(e)  BP: Almost
 
     // Prove that we computed Sigma1(e) correctly:
     forall :: RotateRight(t0, Sigma1(0)) == BSIG1(e)
@@ -265,8 +292,7 @@ requires
         lemma_RotateRightCommutesXor(e, 6, 11, 25);
     }
 
-    ADDWrap(t1,t1,t4);      // X[i]
+    rADDWrap(t1,t1,t4);      // X[i]
 
-    Body_00_15(i, t0, t1, t2, t3, t4, inp, a, b, c, d, e, f, g, h, z);
+    Body_00_15(i, perm, input_slot, z, t0, t1, t2, t3, t4, a, b, c, d, e, f, g, h);
 }
-*/
