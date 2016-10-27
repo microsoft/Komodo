@@ -65,7 +65,8 @@ $(dir)/kom_common.i.verified: $(dir)/ARMspartan.verified $(dir)/kom_common.s.ver
 $(dir)/smcapi.s.verified: $(dir)/kom_common.s.verified $(dir)/pagedb.s.verified
 $(dir)/smcapi.i.verified: $(dir)/smcapi.s.verified
 $(dir)/pagedb.i.verified: $(dir)/pagedb.s.verified $(dir)/kom_common.i.verified
-$(dir)/ptables.i.verified: $(dir)/pagedb.i.verified $(dir)/entry.s.verified $(dir)/bitvectors.i.verified
+$(dir)/ptables.i.verified: $(dir)/pagedb.i.verified $(dir)/entry.s.verified $(dir)/ptebits.i.verified
+$(dir)/ptebits.i.verified: $(dir)/smcapi.s.verified $(dir)/pagedb.i.verified $(dir)/bitvectors.i.verified
 $(dir)/entry.s.verified:  $(dir)/kom_common.s.verified $(dir)/ARMdef.verified $(dir)/pagedb.s.verified $(dir)/smcapi.s.verified $(dir)/abstate.s.verified
 $(dir)/entry.i.verified: $(dir)/entry.s.verified $(dir)/pagedb.i.verified
 $(dir)/main.i.verified: $(dir)/ARMprint.verified $(dir)/smc_handler.verified
@@ -103,7 +104,7 @@ map_secure_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
 $(dir)/map_secure.verified: $(call mkdeps,map_secure)
 
 map_insecure_dep-sdfy = ARMdecls kom_utils allocate_page init_l2ptable map_secure memset
-map_insecure_dep-dfy  = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
+map_insecure_dep-dfy  = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i ptebits.i
 $(dir)/map_insecure.verified: $(call mkdeps,map_insecure)
 
 enter_dep-sdfy = ARMdecls kom_utils
@@ -146,3 +147,4 @@ $(dir)/smc_handler.verified: $(call mkdeps,smc_handler)
 # file-specific flags (besides /noNLarith)
 DAFNYFLAGS_bitvectors.s = /proverOpt:OPTIMIZE_FOR_BV=true
 DAFNYFLAGS_bitvectors.i = /proverOpt:OPTIMIZE_FOR_BV=true
+DAFNYFLAGS_ptebits.i = /proverOpt:OPTIMIZE_FOR_BV=true
