@@ -117,28 +117,22 @@ requires {:refined false}
     @h  == OReg(GetReg(4+ApplyPerm(7, perm)));
 requires
     input_slot == (i%16)*4;
-//    t3 == BitwiseXor(b, c);
-//    //if i == 0 then t2 == 0 else i < 16 ==> t2 == old(Maj(a, b, c));
-//    // i >= 16 ==> RotateRight(t0, Sigma1(0)) == Sigma1(e)
-//
-//    // SHA semantics
-//    SeqLength(z.H) > 0;
-//    IsSHA256TraceReadyForStep(z, i);
-//    last(last(z.atoh)) == atoh_c(a, b, c, d, e, f, g, h);
+    t3 == BitwiseXor(b, c);
+    if i == 0 then t2 == 0 else i < 16 ==> t2 == old(Maj(a, b, c));
+    i >= 16 ==> RotateRight(t0, Sigma1(0)) == BSIG1(e);
+
+    // SHA semantics
+    SeqLength(z.H) > 0;
+    IsSHA256TraceReadyForStep(z, i);
+    last(last(z.atoh)) == atoh_c(a, b, c, d, e, f, g, h);
 //
 //    // TODO: Need an invariant about the 16-element array X
 //    //       and its relationship with W
 //    //i < 16 ==> forall j :: 0 <= j < i ==> last(z.W)[j] == inp[j];
 ensures
-//    t2 == BitwiseXor(a, b);
-//    t3 == Maj(a, b, c);
-//    a == old(a) + t2;
-//    b == old(b);
-//    c == old(c);
-//
-//    e == old(e);
-//    f == old(f);
-//    g == old(g);
+    t2 == BitwiseXor(a, b);
+    t3 == Maj(a, b, c);
+    a == old(BitwiseAdd32(a, t2));
 //    let T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), BSIG1(e)),
 //                                                     Ch(e,f,g)),
 //                                        K_SHA256(i)),
@@ -169,19 +163,18 @@ ensures
     //assert t0 == BitwiseXor(BitwiseXor(e, RotateRight(e, 5)), RotateRight(e, 19));
     rADDWrapShift(h, h, t0, RORShift(Sigma1(0))); // h += Sigma1(e)
 
-//    // Prove that we computed Sigma1(e) correctly:
-//    forall :: h == (old_h + BSIG1(e)) % 0x1_0000_0000 
-//    {
-//        reveal BSIG1;
-//        lemma_RotateRightCommutesXor(e, 6, 11, 25);
-//    }
+    // Prove that we computed Sigma1(e) correctly:
+    forall :: h == (old_h + BSIG1(e)) % 0x1_0000_0000 
+    {
+        reveal BSIG1;
+        lemma_RotateRightCommutesXor(e, 6, 11, 25);
+    }
 
     rAND(t1, t1, e);
     rADDWrap(h, h, OConst(K_SHA256(i)));      // h += K256(i)
     rEOR(t1, t1, g);     // Ch(e,f,g)
     
-//    lemma_Ch(e, f, g, t1);
-//    assert t1 == Ch(e, f, g);
+    assert t1 == Ch(e, f, g) by { lemma_Ch(e, f, g, t1); }
 
     rEORShift(t0, a, a, RORShift(Sigma0(1) - Sigma0(0)));
     rADDWrap(h, h, t1);  // h += Ch(e,f,g)
@@ -203,16 +196,16 @@ ensures
     rAND(t3,t3,t2);      // (b^c)&=(a^b)
     rADDWrap(d,d,h);     // d+=h
     rEOR(t3,t3,b);       // Maj(a,b,c)
-//    lemma_Maj(a, b, c, t3);
-//    assert t3 == Maj(a,b,c);
+    assert t3 == Maj(a,b,c) by { lemma_Maj(a, b, c, t3); }
     old_h := h;
     rADDWrapShift(h,h,t0, RORShift(Sigma0(0)));   // h+=Sigma0(a)
+
     // Prove we computed Sigma0(a) correctly:
-//    forall :: h == (old_h + BSIG0(a)) % 0x1_0000_0000
-//    {
-//        reveal BSIG0;
-//        lemma_RotateRightCommutesXor(a, 2, 13, 22);
-//    }
+    forall :: h == (old_h + BSIG0(a)) % 0x1_0000_0000
+    {
+        reveal BSIG0;
+        lemma_RotateRightCommutesXor(a, 2, 13, 22);
+    }
 }
 /*
 procedure Body_16_XX( 
