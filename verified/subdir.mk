@@ -1,4 +1,4 @@
-DAFNYTIMELIMIT ?= 90
+DAFNYTIMELIMIT ?= 30
 DAFNYFLAGS = /trace /timeLimit:$(DAFNYTIMELIMIT) /ironDafny \
     $(call mkdafnyflags,$(notdir $(*)),) $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
 
@@ -10,8 +10,8 @@ mkdafnyflags = $(DAFNYFLAGS_$(1)) $(if $(filter nlarith.%,$(1)),,/noNLarith)
 verified: $(dir)/main.S
 
 mkdeps = $(foreach n,$($(notdir $(1))_dep-dfy) $($(notdir $(1))_dep-sdfy),$(dir)/$(n).verified)
-mkdfyincs = $(foreach n,$($(notdir $(1))_dep-dfy),-i $(2)$(n).dfy)
-mksdfyincs = $(foreach n,$($(notdir $(1))_dep-sdfy),-i $(2)$(n).gen.dfy -include $(dir)/$(n).sdfy)
+mkdfyincs = $(foreach n,$($(notdir $(1))_dep-dfy),-i ../$(2)$(n).dfy)
+mksdfyincs = $(foreach n,$($(notdir $(1))_dep-sdfy),-i ../$(2)$(n).gen.dfy -include $(dir)/$(n).sdfy)
 mkincs-dir = $(call mkdfyincs,$(1),$(dir)/) $(call mksdfyincs,$(1),$(dir)/)
 mkincs-nodir = $(call mkdfyincs,$(1),) $(call mksdfyincs,$(1),)
 
@@ -24,12 +24,13 @@ mkincs-nodir = $(call mkdfyincs,$(1),) $(call mksdfyincs,$(1),)
 	$(SPARTAN) $(SPARTANFLAGS) $(call mkincs-nodir,$*) $< -out $@
 	@which dos2unix >/dev/null && dos2unix $@ || true
 
-# Spartan direct verification, including cheesy workaround for broken error code.
-%.verified %.log: %.sdfy %.gen.dfy
-	/bin/bash -c "$(SPARTAN) $(SPARTANFLAGS) $(call mkincs-dir,$*) $< \
-	-dafnyDirect $(DAFNYFLAGS) /compile:0 | tee $*.log; exit \$${PIPESTATUS[0]}"
-	@grep -q "^Dafny program verifier finished with [^0][0-9]* verified, 0 errors$$" $*.log $(if $(DAFNYPROC),,&& touch $*.verified)
-	@$(RM) $*.log
+# Spartan (in)direct verification, including cheesy workaround for broken error code.
+%.verified %.log: %.gen.dfy %.sdfy 
+	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< $(if $(DAFNYPROC),,&& touch $@)
+#	/bin/bash -c "$(SPARTAN) $(SPARTANFLAGS) $(call mkincs-dir,$*) $< \
+#	-dafnyDirect $(DAFNYFLAGS) /compile:0 | tee $*.log; exit \$${PIPESTATUS[0]}"
+#	@grep -q "^Dafny program verifier finished with [^0][0-9]* verified, 0 errors$$" $*.log $(if $(DAFNYPROC),,&& touch $*.verified)
+#	@$(RM) $*.log
 
 %.verified: %.dfy
 	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< $(if $(DAFNYPROC),,&& touch $@)
