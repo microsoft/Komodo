@@ -1,4 +1,4 @@
-DAFNYTIMELIMIT ?= 90
+DAFNYTIMELIMIT ?= 60
 DAFNYFLAGS = /trace /timeLimit:$(DAFNYTIMELIMIT) /ironDafny \
     $(call mkdafnyflags,$(notdir $(*)),) $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
 
