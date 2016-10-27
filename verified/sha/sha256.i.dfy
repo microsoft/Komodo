@@ -136,7 +136,7 @@ predicate{:opaque} TheAToHsAreOK(z:SHA256Trace, blk:int, t:word)
     z.atoh[blk][t+1].a == BitwiseAdd32(T1, T2)
 }
 
-lemma lemma_SHA256TransitionOKAfterSettingAtoHStep1Helper1(z:SHA256Trace, ghost blk:int, t:word)
+lemma lemma_SHA256TransitionOKAfterSettingAtoHStep1Helper1(z:SHA256Trace, blk:int, t:word)
     requires 0 <= t <= 63;
     requires 0 <= blk;
     requires |z.atoh| > blk;
@@ -151,7 +151,7 @@ lemma lemma_SHA256TransitionOKAfterSettingAtoHStep1Helper1(z:SHA256Trace, ghost 
     reveal_PartialSHA256TraceHasCorrectatohsOpaque();
 }
 
-lemma Lemma_TheAToHsAreOKIsStable(z1:SHA256Trace, z2:SHA256Trace, ghost blk:int, t:word)
+lemma Lemma_TheAToHsAreOKIsStable(z1:SHA256Trace, z2:SHA256Trace, blk:int, t:word)
     requires 0 <= t <= 63;
     requires 0 <= blk;
     requires |z1.atoh| == |z2.atoh| > blk as int;

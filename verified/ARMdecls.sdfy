@@ -527,6 +527,23 @@ rADDWrap(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:snd)
     } 
 }
 
+procedure {:refined} {:instruction Ins(AND(dst, src1, src2))}
+rAND(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:word)
+    ensures
+        dst == old(BitwiseAnd(src1, src2));
+{
+    reveal evalCodeOpaque;
+    reveal ValidRegState;
+    reveal ValidMemState;
+    reveal ValidConfig;
+    reveal ValidSRegState;
+
+    if ghost (!(old(this).ok && this.ok)) {
+        this := old(this).(ok := false);
+    } 
+}
+
+
 procedure {:refined} {:instruction Ins(REV(dst, src))}
 rREV(out{:operand} dst:word, {:operand} src:reg)
     ensures

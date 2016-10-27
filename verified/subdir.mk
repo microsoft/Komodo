@@ -120,6 +120,10 @@ sha256_dep-sdfy = ARMdecls
 sha256_dep-dfy = ARMspartan words_and_bytes.s kom_common.s sha/sha256.i sha/bit-vector-lemmas.i
 $(dir)/sha256.verified: $(call mkdeps,sha256)
 
+sha256-refined_dep-sdfy = ARMdecls 
+sha256-refined_dep-dfy = ARMspartan words_and_bytes.s kom_common.s sha/sha256.i sha/bit-vector-lemmas.i
+$(dir)/sha256-refined.verified: $(call mkdeps,sha256)
+
 # All these things depend on entry.i because they need ValidSysState', which 
 # probably needs a better home. Maybe its own silly, small .i file
 finalise_dep-sdfy = ARMdecls kom_utils

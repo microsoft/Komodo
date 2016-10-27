@@ -1,0 +1,267 @@
+///////////////////////////////////////////////////
+//
+//  Based on sha256-armv4.pl form OpenSSL 1.0.2j
+//
+///////////////////////////////////////////////////
+
+
+#verbatim
+
+function method Sigma0(i:int) : word
+    requires 0 <= i < 3;
+{
+    [2, 13, 22][i]
+}
+
+function method Sigma1(i:int) : word
+    requires 0 <= i < 3;
+{
+    [6, 11, 25][i]
+}
+
+function method sigma0(i:int) : word
+    requires 0 <= i < 3;
+{
+    [7, 18, 3][i]
+}
+
+function method sigma1(i:int) : word
+    requires 0 <= i < 3;
+{
+    [17, 19, 10][i]
+}
+
+type SHA_step = i | 0 <= i < 64
+
+function method ror(r:operand, amount:shift_amount) : operand
+    requires r.OReg?;
+{
+    OShift(r.r, RORShift(amount))
+}
+
+function method lsr(r:operand, amount:shift_amount) : operand
+    requires r.OReg?;
+{
+    OShift(r.r, LSRShift(amount))
+}
+
+function method GetReg(r:int) : operand
+    requires 0 <= r <= 12;
+{
+    OReg(     if r ==  0 then R0
+         else if r ==  1 then R1
+         else if r ==  2 then R2
+         else if r ==  3 then R3
+         else if r ==  4 then R4
+         else if r ==  5 then R5
+         else if r ==  6 then R6
+         else if r ==  7 then R7
+         else if r ==  8 then R8
+         else if r ==  9 then R9
+         else if r == 10 then R10
+         else if r == 11 then R11
+         else R12)
+}
+
+#endverbatim
+
+procedure {:refined} Body_00_15(
+    {:inline} i:SHA_step,
+    ghost z:SHA256Trace,
+    {:operand} t0:word,
+    {:operand} t1:word,
+    {:operand} t2:word,
+    {:operand} t3:word,
+    {:operand} t4:word,
+    {:operand} inp:word,
+    {:operand} a:word,
+    {:operand} b:word,
+    {:operand} c:word,
+    {:operand} d:word,
+    {:operand} e:word,
+    {:operand} f:word,
+    {:operand} g:word,
+    {:operand} h:word)
+requires/ensures
+    WordAligned(sp);
+    ValidMem(sp + (i%16)*4);
+modifies 
+    mem;
+requires {:refined false}
+    @t0 == OReg(R0);
+    @t1 == OReg(R2);
+    @t2 == GetReg(if i % 2 == 0 then 12 else 3);
+    @t3 == GetReg(if i % 2 == 0 then  3 else 12);
+    OReg(R1) == @inp;
+    GetReg(4+((0+i)%8)) == @a;
+    GetReg(4+((1+i)%8)) == @b;
+    GetReg(4+((2+i)%8)) == @c;
+    GetReg(4+((3+i)%8)) == @d;
+    GetReg(4+((4+i)%8)) == @e;
+    GetReg(4+((5+i)%8)) == @f;
+    GetReg(4+((6+i)%8)) == @g;
+    GetReg(4+((7+i)%8)) == @h;
+
+requires
+    t3 == BitwiseXor(b, c);
+    //if i == 0 then t2 == 0 else i < 16 ==> t2 == old(Maj(a, b, c));
+    // i >= 16 ==> RotateRight(t0, Sigma1(0)) == Sigma1(e)
+
+    // SHA semantics
+    SeqLength(z.H) > 0;
+    IsSHA256TraceReadyForStep(z, i);
+    last(z.atoh) == atoh_c(a, b, c, d, e, f, g, h);
+
+    // TODO: Need an invariant about the 16-element array X
+    //       and its relationship with W
+    //i < 16 ==> forall j :: 0 <= j < i ==> last(z.W)[j] == inp[j];
+ensures
+//    t2 == BitwiseXor(a, b);
+//    t3 == Maj(a, b, c);
+//    a == old(a) + t2;
+//    b == old(b);
+//    c == old(c);
+//
+//    e == old(e);
+//    f == old(f);
+//    g == old(g);
+//    let T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), BSIG1(e)),
+//                                                     Ch(e,f,g)),
+//                                        K_SHA256(i)),
+//                           W[i]) in
+//        d == BitwiseAdd32(old(d))
+//     && h == BitwiseAdd32(T1, BSIG0(a));
+//     i < 16 ==> forall j :: 0 <= j <= i ==> last(z.W)[j] == inp[j];
+{
+    //if i < 16
+    //  if i == 15
+    //    STR(inp, sp,17*4);
+    //  end if
+
+    rEOR(t0, e, ror(/*e*/GetReg(4+((4+i)%8)), Sigma1(1) - Sigma1(0)));
+    //assert t0 == BitwiseXor(e, RotateRight(e, 5));
+    // TODO: When i = 0, t2 = 0, so this is a no op.  We can skip it.
+    rADDWrap(a, a, t2);  // h += Maj(a,b,c) from the past?
+    rEOR(t0, t0, ror(/*e*/GetReg(4+((4+i)%8)), Sigma1(2) - Sigma1(0)));   // Sigma1(e)
+    rREV(t1, t1);
+
+    // end if--------
+
+    // BP: Skipping this and encoding K256 directly as a const
+    // ldr	$t2,[$Ktbl],#4			@ *K256++
+    rADDWrap(h, h, t2);      //  h+=X[i]  BP: X[i] = input[i]?
+    rSTR(t1, sp, OConst((i%16)*4));  // @ BP: Save a copy of input[i] for use in subsequent W calculations
+    rEOR(t1, f, g);
+    ghost var old_h := h;
+    //assert t0 == BitwiseXor(BitwiseXor(e, RotateRight(e, 5)), RotateRight(e, 19));
+    rADDWrap(h, h, ror(/*t0*/OReg(R0), Sigma1(0))); // h += Sigma1(e)
+
+//    // Prove that we computed Sigma1(e) correctly:
+//    forall :: h == (old_h + BSIG1(e)) % 0x1_0000_0000 
+//    {
+//        reveal BSIG1;
+//        lemma_RotateRightCommutesXor(e, 6, 11, 25);
+//    }
+
+    rAND(t1, t1, e);
+    rADDWrap(h, h, OConst(K_SHA256(i)));      // h += K256(i)
+    rEOR(t1, t1, g);     // Ch(e,f,g)
+    
+//    lemma_Ch(e, f, g, t1);
+//    assert t1 == Ch(e, f, g);
+
+    rEOR(t0, a, ror(/*a*/GetReg(4+((0+i)%8)), Sigma0(1) - Sigma0(0)));
+    rADDWrap(h, h, t1);  // h += Ch(e,f,g)
+
+//    #if $i==31
+//        and  $t2,$t2,#0xff
+//        cmp  $t2,#0xf2      @ done?
+//    #endif
+
+    // if $i<15
+    //   LDR(t1, inp, 0);    // Prefetch
+         EOR(t2, a, b);            //  a^b, b^c in next round
+    // else
+    //   LDR(t1, sp, ((i+2)%16)*4);     // @ from future BODY_16_xx 
+    //   EOR(t2, a, b);            //  a^b, b^c in next round
+    //   LDR(t4, sp, ((i+15)%16)*4);   // @ from future BODY_16_xx
+    // endif
+    rEOR(t0,t0,ror(/*a*/GetReg(4+((0+i)%8)),Sigma0(2)-Sigma0(0))); // Sigma0(a)
+    rAND(t3,t3,t2);      // (b^c)&=(a^b)
+    rADDWrap(d,d,h);     // d+=h
+    rEOR(t3,t3,b);       // Maj(a,b,c)
+//    lemma_Maj(a, b, c, t3);
+//    assert t3 == Maj(a,b,c);
+    old_h := h;
+    rADDWrap(h,h,ror(/*t0*/OReg(R0), Sigma0(0)));   // h+=Sigma0(a)
+    
+    // Prove we computed Sigma0(a) correctly:
+//    forall :: h == (old_h + BSIG0(a)) % 0x1_0000_0000
+//    {
+//        reveal BSIG0;
+//        lemma_RotateRightCommutesXor(a, 2, 13, 22);
+//    }
+}
+/*
+procedure Body_16_XX( 
+    {:inline} i:SHA_step,
+    inout {:register OReg(R0)} t0:int,
+    inout {:register OReg(R2)} t1:int,
+    inout {:register GetReg(if i % 2 == 0 then 12 else 3)} t2:int,
+    inout {:register GetReg(if i % 2 == 0 then  3 else 12)} t3:int,
+    inout {:register OReg(R1)} t4:int,
+    inout {:register OReg(R1)} inp:int,
+    inout {:register GetReg(4+((0+i)%8))} a:int,
+    inout {:register GetReg(4+((1+i)%8))} b:int,
+    inout {:register GetReg(4+((2+i)%8))} c:int,
+    inout {:register GetReg(4+((3+i)%8))} d:int,
+    inout {:register GetReg(4+((4+i)%8))} e:int,
+    inout {:register GetReg(4+((5+i)%8))} f:int,
+    inout {:register GetReg(4+((6+i)%8))} g:int,
+    inout {:register GetReg(4+((7+i)%8))} h:int,
+    ghost z:SHA256Trace)
+requires/ensures
+    SaneState(this);
+requires
+    WordAligned(sp);
+    ValidMem(sp + (i%16)*4);
+    ValidMem(sp + ((i+9)%16)*4);
+    t3 == BitwiseXor(b, c);
+{
+    //@ ldr  $t1,[sp,#`($i+1)%16`*4]    @ $i
+    //@ ldr  $t4,[sp,#`($i+14)%16`*4]
+    MOV(t0, ror(/*t1*/OReg(R2), sigma0(0)));
+    ADDWrap(a, a, t2);  // h+=Maj(a,b,c) from the past
+    MOV(t2, ror(/*t4*/OReg(R1), sigma1(0)));
+    EOR(t0,t0,ror(/*t1*/OReg(R2),sigma0(1)));
+    EOR(t2,t2,ror(/*t4*/OReg(R1),sigma1(1)));
+    EOR(t0,t0,lsr(/*t1*/OReg(R2),sigma0(2)));     // sigma0(X[i+1])
+    forall :: t0 == SSIG0(t1)
+    {
+        reveal SSIG0;
+    }
+    LDR(t1, sp, OConst((i%16)*4));
+    EOR(t2,t2,lsr(/*t4*/OReg(R1), sigma1(2)));     // sigma1(X[i+14])
+    forall :: t2 == SSIG1(t4)
+    {
+        reveal SSIG1;
+    }
+    LDR(t4, sp, OConst(((i+9)%16)*4));
+
+    ADDWrap(t2,t2,t0);
+    EOR(t0,e,ror(/*e*/GetReg(4+((4+i)%8)),Sigma1(1)-Sigma1(0)));    // from BODY_00_15
+    ADDWrap(t1,t1,t2);
+    EOR(t0,t0,ror(/*e*/GetReg(4+((4+i)%8)),(Sigma1(2)-Sigma1(0))));  // Sigma1(e)  BP: Almost
+
+    // Prove that we computed Sigma1(e) correctly:
+    forall :: RotateRight(t0, Sigma1(0)) == BSIG1(e)
+    {
+        reveal BSIG1;
+        lemma_RotateRightCommutesXor(e, 6, 11, 25);
+    }
+
+    ADDWrap(t1,t1,t4);      // X[i]
+
+    Body_00_15(i, t0, t1, t2, t3, t4, inp, a, b, c, d, e, f, g, h, z);
+}
+*/
