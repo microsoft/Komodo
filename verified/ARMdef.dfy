@@ -363,9 +363,16 @@ predicate ValidGlobalDecls(decls:globaldecls)
     forall d :: d in decls ==> d.OSymbol? && decls[d] != 0
 }
 
-predicate ValidGlobalOffset(g:operand, offset:word)
+predicate ValidGlobalAddr(g:operand, addr:int)
 {
-    ValidGlobal(g) && WordAligned(offset) && 0 <= offset < SizeOfGlobal(g)
+    ValidGlobal(g) && WordAligned(addr) 
+ && AddressOfGlobal(g) <= addr < AddressOfGlobal(g) + SizeOfGlobal(g)
+}
+
+predicate ValidGlobalOffset(g:operand, offset:int)
+{
+    ValidGlobal(g) && WordAligned(offset) 
+ && 0 <= offset < SizeOfGlobal(g)
 }
 
 // globals have an unknown (uint32) address, only establised by LDR-reloc
@@ -873,8 +880,8 @@ predicate ValidInstruction(s:state, ins:ins)
         case LDR_global(rd, global, base, ofs) => 
             ValidRegOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
-            AddressOfGlobal(global) == OperandContents(s, base) &&
-            ValidGlobalOffset(global, OperandContents(s, ofs))
+            ValidGlobalOffset(global, OperandContents(s, base) + OperandContents(s, ofs) - AddressOfGlobal(global)) &&
+            ValidGlobalAddr(global, OperandContents(s, base) + OperandContents(s, ofs))
         case LDR_reloc(rd, global) => 
             ValidRegOperand(rd) && ValidGlobal(global)
         case STR(rd, base, ofs) =>
@@ -885,8 +892,8 @@ predicate ValidInstruction(s:state, ins:ins)
         case STR_global(rd, global, base, ofs) => 
             ValidRegOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
-            AddressOfGlobal(global) == OperandContents(s, base) &&
-            ValidGlobalOffset(global, OperandContents(s, ofs))
+            ValidGlobalOffset(global, OperandContents(s, base) + OperandContents(s, ofs) - AddressOfGlobal(global)) &&
+            ValidGlobalAddr(global, OperandContents(s, base) + OperandContents(s, ofs))
         case MOV(dst, src) => ValidRegOperand(dst) &&
             ValidSecondOperand(src)
         case MRS(dst, src) =>
@@ -952,14 +959,14 @@ predicate evalIns(ins:ins, s:state, r:state)
             evalUpdate(s, rd, MemContents(s.m, OperandContents(s, base) +
                 OperandContents(s, ofs)), r)
         case LDR_global(rd, global, base, ofs) => 
-            evalUpdate(s, rd, GlobalWord(s.m, global, OperandContents(s, ofs)), r)
+            evalUpdate(s, rd, GlobalWord(s.m, global, OperandContents(s, base) + OperandContents(s, ofs) - AddressOfGlobal(global)), r)
         case LDR_reloc(rd, name) =>
             evalUpdate(s, rd, AddressOfGlobal(name), r)
         case STR(rd, base, ofs) => 
             evalMemUpdate(s, OperandContents(s, base) +
                 OperandContents(s, ofs), OperandContents(s, rd), r)
         case STR_global(rd, global, base, ofs) => 
-            evalGlobalUpdate(s, global, OperandContents(s, ofs), OperandContents(s, rd), r)
+            evalGlobalUpdate(s, global, OperandContents(s, base) + OperandContents(s, ofs) - AddressOfGlobal(global), OperandContents(s, rd), r)
         case MOV(dst, src) => evalUpdate(s, dst,
             OperandContents(s, src),
             r)

@@ -93,6 +93,7 @@ function method {:opaque} SavedPSRs(): operand { OSymbol("g_saved_psrs") }
 function method {:opaque} PageDb(): operand { OSymbol("g_pagedb") }
 function method {:opaque} SecurePhysBaseOp(): operand { OSymbol("g_secure_physbase") }
 function method {:opaque} CurAddrspaceOp(): operand { OSymbol("g_cur_addrspace") }
+function method {:opaque} K_SHA256s(): operand { OSymbol("g_k_sha256") }
 
 // the phys base is unknown, but never changes
 function method {:axiom} SecurePhysBase(): addr
@@ -103,13 +104,15 @@ function method KomGlobalDecls(): globaldecls
     ensures ValidGlobalDecls(KomGlobalDecls());
 {
     reveal_PageDb(); reveal_SecurePhysBaseOp(); reveal_CurAddrspaceOp();
-    reveal_SavedSPs(); reveal_SavedLRs(); reveal_SavedPSRs();
+    reveal_SavedSPs(); reveal_SavedLRs(); reveal_SavedPSRs(); reveal_K_SHA256s();
     map[SecurePhysBaseOp() := 4, //BytesPerWord() 
         CurAddrspaceOp() := 4,   //BytesPerWord()
         SavedSPs() := 28,        //BytesPerWord() * number of modes
         SavedLRs() := 28,        //BytesPerWord() * number of modes
         SavedPSRs() := 28,        //BytesPerWord() * number of modes
-        PageDb() := G_PAGEDB_SIZE()]
+        PageDb() := G_PAGEDB_SIZE(),
+        K_SHA256s() := 256
+        ]
 }
 
 //-----------------------------------------------------------------------------
@@ -150,20 +153,25 @@ predicate SaneConstants()
     && KomGlobalDecls() == TheGlobalDecls()
     // XXX: workaround so dafny sees that these are distinct
     && SecurePhysBaseOp() != PageDb()
+    && SecurePhysBaseOp() != K_SHA256s()
     && SecurePhysBaseOp() != CurAddrspaceOp()
     && CurAddrspaceOp() != PageDb()
+    && CurAddrspaceOp() != K_SHA256s()
     && SavedSPs() != SavedLRs()
     && SavedSPs() != SecurePhysBaseOp()
     && SavedSPs() != PageDb()
+    && SavedSPs() != K_SHA256s()
     && SavedSPs() != CurAddrspaceOp()
     && SavedSPs() != SavedPSRs()
     && SavedLRs() != SecurePhysBaseOp()
     && SavedLRs() != PageDb()
+    && SavedLRs() != K_SHA256s()
     && SavedLRs() != CurAddrspaceOp()
     && SavedLRs() != SavedPSRs()
     && SavedPSRs() != SecurePhysBaseOp()
     && SavedPSRs() != CurAddrspaceOp()
     && SavedPSRs() != PageDb()
+    && SavedPSRs() != K_SHA256s()
     // && forall s, r | ValidState(s) :: ApplicationUsermodeContinuationInvariant(s, r)
     //     <==> ( s == r)
 }
