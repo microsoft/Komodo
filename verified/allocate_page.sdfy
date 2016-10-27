@@ -129,14 +129,14 @@ procedure allocate_page_success(
         GlobalsPreservingExcept(old(this),this,set(PageDb()));
         StackPreserving(old(this),this);
         RegPreservingExcept(old(this),this, set(@tmp, @tmp2));
-        pagedb == specPageDb(allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry));
-        pageDbCorrespondsExcluding(this.m, pagedb, pagenr);
-        pageDbEntryCorresponds(pagedb[pagenr], extractPageDbEntry(this.m, pagenr));
+        pagedb == specPageDb(allocatePage(pagedb_in, old(pagenr), entry.addrspace, entry.entry));
+        pageDbCorrespondsExcluding(this.m, pagedb, old(pagenr));
+        pageDbEntryCorresponds(pagedb[old(pagenr)], extractPageDbEntry(this.m, old(pagenr)));
 {
     ValidPageDbImpliesValidAddrspace(pagedb_in, entry.addrspace);
-    assert specErr(allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry))
-        == KOM_ERR_SUCCESS();
-    pagedb := specPageDb(allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry));
+    ghost var res := allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry);
+    assert specErr(res) == KOM_ERR_SUCCESS();
+    pagedb := specPageDb(res);
 
     // unpack DistinctRegOperands to help the verifier
     assert @tmp != @tmp2 && @tmp != @pagenr && @tmp != @as_va && @tmp != @pagedb_base;
@@ -154,6 +154,7 @@ procedure allocate_page_success(
     // remember that no other pages changed
     ghost var midway := this;
     AllButOnePagePreserving(entry.addrspace, old(this), midway);
+    assert RegPreservingExcept(old(this), midway, set(@tmp));
 
     // update pagedb
     tmp := typeval;
@@ -168,6 +169,7 @@ procedure allocate_page_success(
 
     // no pages changed across pagedb update
     assert this.m.addresses == midway.m.addresses;
+    assert RegPreservingExcept(midway, this, set(@tmp, @tmp2));
 
     forall :: pageDbEntryCorresponds(pagedb[pagenr], extractPageDbEntry(this.m, pagenr))
     {
@@ -221,13 +223,13 @@ procedure allocate_page(
         StackPreserving(old(this),this);
         RegPreservingExcept(old(this),this, set(@tmp, @tmp2, @err));
         tuple(pagedb, err)
-            == allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry);
+            == allocatePage(pagedb_in, old(pagenr), entry.addrspace, entry.entry);
         // we update all of the pagedb except the target page itself,
         // which is the responsibility of the caller
         if err == KOM_ERR_SUCCESS()
-        then pageDbCorrespondsExcluding(this.m, pagedb, pagenr)
-            && pageDbEntryCorresponds(pagedb[pagenr],
-                                     extractPageDbEntry(this.m, pagenr))
+        then pageDbCorrespondsExcluding(this.m, pagedb, old(pagenr))
+            && pageDbEntryCorresponds(pagedb[old(pagenr)],
+                                     extractPageDbEntry(this.m, old(pagenr)))
         else pagedb == pagedb_in && pageDbCorresponds(this.m, pagedb);
 {
     ValidPageDbImpliesValidAddrspace(pagedb_in, entry.addrspace);
