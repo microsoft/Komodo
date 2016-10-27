@@ -55,6 +55,7 @@ predicate sp_require(b0:codes, c1:code, s0:sp_state, sN:sp_state)
     sp_cHeadIs(b0, c1)
  && s0.ok
  && sp_eval(Block(b0), s0, sN)
+ && ValidState(s0)
 }
 
 predicate sp_ensure(b0:codes, b1:codes, s0:sp_state, s1:sp_state, sN:sp_state)
@@ -63,6 +64,7 @@ predicate sp_ensure(b0:codes, b1:codes, s0:sp_state, s1:sp_state, sN:sp_state)
  && s1.ok
  && sp_eval(sp_cHead(b0), s0, s1)
  && sp_eval(sp_Block(b1), s1, sN)
+ && ValidState(s1)
 }
 
 function method fromOperand(o:operand):operand { o }
@@ -85,6 +87,37 @@ function method sp_get_ifTrue(c:code):code requires c.IfElse? { c.ifTrue }
 function method sp_get_ifFalse(c:code):code requires c.IfElse? { c.ifFalse }
 function method sp_get_whileCond(c:code):obool requires c.While? { c.whileCond }
 function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
+
+//-----------------------------------------------------------------------------
+// Spartan-to-Dafny connections needed for refined mode
+//-----------------------------------------------------------------------------
+function sp_get_ok(s:state):bool { s.ok }
+function sp_get_reg(r:ARMReg, s:state):word requires r in s.regs { s.regs[r] }
+function sp_get_mem(s:state):memmap { s.m.addresses }
+
+function sp_update_ok(sM:state, sK:state):state { sK.(ok := sM.ok) }
+function sp_update_reg(r:ARMReg, sM:state, sK:state):state 
+    requires r in sM.regs 
+{ sK.(regs := sK.regs[r := sM.regs[r]]) }
+function sp_update_mem(sM:state, sK:state):state { 
+    sK.(m := sM.m.(addresses := sM.m.addresses)) 
+}
+
+predicate sp_is_src_word(o:operand) { ValidOperand(o) }
+predicate sp_is_dst_word(o:operand) { ValidRegOperand(o) }
+
+type snd = word
+predicate sp_is_src_snd(o:operand) { ValidSecondOperand(o) }
+
+predicate sp_state_eq(s0:state, s1:state)
+{
+    s0.regs == s1.regs
+ && s0.sregs == s1.sregs
+ && s0.m == s1.m
+ && s0.conf == s1.conf
+ && s0.ok == s1.ok
+ && s0.steps == s1.steps
+}
 
 //-----------------------------------------------------------------------------
 // Useful invariants preserved by instructions

@@ -429,3 +429,67 @@ STRglobal({:operand} rd:int, {:operand} g:string,
 {
     reveal_sp_eval();
 }
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Support for Spartan's refined mode
+//
+////////////////////////////////////////////////////////////////////////////////
+var{:state ok()} ok:bool;
+var{:state mem()}  mem:memmap;
+
+procedure {:refined} {:instruction Ins(LDR(rd, base, ofs))}
+rLDR(out{:operand} rd:word, {:operand} base:word, {:operand} ofs:word)
+    requires
+        ValidMem(base + ofs);
+    reads mem;
+    ensures
+        rd == mem[old(base) + old(offs)];
+{
+    reveal sp_eval;
+}
+
+procedure {:refined} {:instruction Ins(STR(rd, base, ofs))}
+rSTR({:operand} rd:word, out{:operand} base:word, {:operand} ofs:word)
+    requires
+        ValidMem(base + ofs);
+    modifies
+        mem;
+    ensures
+        mem[old(base+ofs)] == rd;
+{
+    reveal sp_eval;
+}
+
+procedure {:refined} {:instruction Ins(MOV(dst, src))}
+rMOV(out{:operand} dst:word, {:operand} src:snd)
+    ensures
+        dst == old(src);
+{
+    reveal sp_eval;
+}
+
+procedure {:instruction Ins(EOR(dst, src1, src2))}
+rEOR(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:snd)
+    ensures
+        dst == BitwiseXor(old(src1), old(src2));
+{
+    reveal sp_eval;
+}
+
+procedure {:instruction Ins(ADD(dst, src1, src2))}
+rADDWrap(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:snd)
+    ensures
+        dst == old(src1 + src2) % 0x1_0000_0000;
+        WordAligned(old(src1)) && WordAligned(old(src2)) ==> WordAligned(dst);
+{
+    reveal sp_eval;
+}
+
+procedure {:refined} {:instruction Ins(REV(dst, src))}
+rREV(out{:operand} dst:word, {:operand} src:word)
+    ensures
+        dst == old(bswap32(src));
+{
+    reveal sp_eval;
+}

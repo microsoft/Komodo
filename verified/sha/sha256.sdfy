@@ -241,7 +241,8 @@ procedure Body_16_XX(
     inout {:register GetReg(4+((4+i)%8))} e:int,
     inout {:register GetReg(4+((5+i)%8))} f:int,
     inout {:register GetReg(4+((6+i)%8))} g:int,
-    inout {:register GetReg(4+((7+i)%8))} h:int)
+    inout {:register GetReg(4+((7+i)%8))} h:int,
+    ghost z:SHA256Trace)
 requires/ensures
     SaneState(this);
 requires
@@ -284,5 +285,5 @@ requires
 
     ADDWrap(t1,t1,t4);      // X[i]
 
-    Body_00_15(i, t0, t1, t2, t3, t4, inp, a, b, c, d, e, f, g, h);
+    Body_00_15(i, t0, t1, t2, t3, t4, inp, a, b, c, d, e, f, g, h, z);
 }
