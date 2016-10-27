@@ -111,11 +111,13 @@ predicate sp_is_src_snd(o:operand) { ValidSecondOperand(o) }
 
 function sp_eval_op_word(s:state, o:operand):word
     requires sp_is_src_word(o);
+    requires ValidState(s)
 {
     OperandContents(s,o)
 }
 function sp_eval_op_snd(s:state, o:operand):snd
     requires sp_is_src_snd(o);
+    requires ValidState(s)
 {
     OperandContents(s,o)
 }
