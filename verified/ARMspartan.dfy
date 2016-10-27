@@ -109,6 +109,17 @@ predicate sp_is_dst_word(o:operand) { ValidRegOperand(o) }
 type snd = word
 predicate sp_is_src_snd(o:operand) { ValidSecondOperand(o) }
 
+function sp_eval_op_word(s:state, o:operand):word
+    requires sp_is_src_word(o);
+{
+    OperandContents(s,o)
+}
+function sp_eval_op_snd(s:state, o:operand):snd
+    requires sp_is_src_snd(o);
+{
+    OperandContents(s,o)
+}
+
 predicate sp_state_eq(s0:state, s1:state)
 {
     s0.regs == s1.regs

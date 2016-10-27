@@ -444,7 +444,7 @@ rLDR(out{:operand} rd:word, {:operand} base:word, {:operand} ofs:word)
         ValidMem(base + ofs);
     reads mem;
     ensures
-        rd == mem[old(base) + old(offs)];
+        rd == mem[old(base) + old(ofs)];
 {
     reveal sp_eval;
 }
