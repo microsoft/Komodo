@@ -110,9 +110,15 @@ function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
 //-----------------------------------------------------------------------------
 // Spartan-to-Dafny connections needed for refined mode
 //-----------------------------------------------------------------------------
+function method sp_op_osp():operand { OSP }
 function sp_get_ok(s:state):bool { s.ok }
 function sp_get_reg(r:ARMReg, s:state):word requires r in s.regs { s.regs[r] }
 function sp_get_mem(s:state):memmap { s.m.addresses }
+function sp_get_osp(s:state):word 
+    requires SP(mode_of_state(s)) in s.regs
+{
+    s.regs[SP(mode_of_state(s))]
+}
 
 function sp_update_ok(sM:state, sK:state):state { sK.(ok := sM.ok, steps := sM.steps) }
 function sp_update_reg(r:ARMReg, sM:state, sK:state):state 
@@ -135,6 +141,8 @@ function sp_update(o:operand, sM:state, sK:state):state
         case OSP => sp_update_reg(SP(mode_of_state(sM)), sM, sK)
 }
 
+function method GetProbableReg(o:operand) : ARMReg { if o.OReg? then o.r else R0 }
+
 predicate sp_is_src_word(o:operand) { ValidOperand(o) }
 predicate sp_is_dst_word(o:operand) { ValidRegOperand(o) }
 
@@ -142,7 +150,7 @@ type reg = word
 predicate sp_is_src_reg(o:operand) { ValidRegOperand(o) }
 
 type snd = word
-predicate sp_is_src_snd(o:operand) { ValidSecondOperand(o) }
+predicate sp_is_src_snd(o:operand) { ValidOperand(o) && o.OReg? }
 
 function sp_eval_op_word(s:state, o:operand):word
     requires sp_is_src_word(o);

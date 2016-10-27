@@ -438,6 +438,7 @@ STRglobal({:operand} rd:int, {:operand} g:string,
 */
 var{:state ok()}  ok:bool;
 var{:state mem()} mem:memmap;
+var{:state osp()} sp:word;
 
 procedure {:refined} {:instruction Ins(LDR(rd, base, ofs))}
 rLDR(out{:operand} rd:word, {:operand} base:word, {:operand} ofs:word)
@@ -479,7 +480,7 @@ rSTR({:operand} rd:reg, {:operand} base:word, {:operand} ofs:word)
 }
 
 procedure {:refined} {:instruction Ins(MOV(dst, src))}
-rMOV(out{:operand} dst:word, {:operand} src:snd)
+rMOV(out{:operand} dst:word, {:operand} src:word)
     ensures
         dst == old(src);
 {
@@ -494,8 +495,24 @@ rMOV(out{:operand} dst:word, {:operand} src:snd)
     } 
 }
 
+procedure {:refined} {:instruction Ins(MOV(dst, OShift(GetProbableReg(src), shift)))}
+rMOVShift(out{:operand} dst:word, {:operand} src:snd, {:inline} shift:Shift)
+    ensures
+        dst == old(EvalShift(old(src), shift));
+{
+    reveal evalCodeOpaque;
+    reveal ValidRegState;
+    reveal ValidMemState;
+    reveal ValidConfig;
+    reveal ValidSRegState;
+
+    if ghost (!(old(this).ok && this.ok)) {
+        this := old(this).(ok := false);
+    } 
+}
+
 procedure {:refined} {:instruction Ins(EOR(dst, src1, src2))}
-rEOR(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:snd)
+rEOR(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:word)
     ensures
         dst == BitwiseXor(old(src1), old(src2));
 {
@@ -510,11 +527,44 @@ rEOR(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:snd)
     } 
 }
 
+procedure {:refined} {:instruction Ins(EOR(dst, src1, OShift(GetProbableReg(src2), shift)))}
+rEORShift(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:snd, {:inline} shift:Shift)
+    ensures
+        dst == BitwiseXor(old(src1), EvalShift(old(src2), shift));
+{
+    reveal evalCodeOpaque;
+    reveal ValidRegState;
+    reveal ValidMemState;
+    reveal ValidConfig;
+    reveal ValidSRegState;
+
+    if ghost (!(old(this).ok && this.ok)) {
+        this := old(this).(ok := false);
+    } 
+}
+
 procedure {:refined} {:instruction Ins(ADD(dst, src1, src2))}
-rADDWrap(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:snd)
+rADDWrap(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:word)
     ensures
         dst == old(src1 + src2) % 0x1_0000_0000;
-        WordAligned(old(src1)) && WordAligned(old(src2)) ==> WordAligned(dst);
+        //WordAligned(old(src1)) && WordAligned(old(src2)) ==> WordAligned(dst);
+{
+    reveal evalCodeOpaque;
+    reveal ValidRegState;
+    reveal ValidMemState;
+    reveal ValidConfig;
+    reveal ValidSRegState;
+
+    if ghost (!(old(this).ok && this.ok)) {
+        this := old(this).(ok := false);
+    } 
+}
+
+procedure {:refined} {:instruction Ins(ADD(dst, src1, OShift(GetProbableReg(src2), shift)))}
+rADDWrapShift(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:snd, {:inline} shift:Shift)
+    ensures
+        dst == old(src1 + EvalShift(old(src2), shift)) % 0x1_0000_0000;
+        //WordAligned(old(src1)) && WordAligned(old(EvalShift(old(src2), shift))) ==> WordAligned(dst);
 {
     reveal evalCodeOpaque;
     reveal ValidRegState;
