@@ -32,89 +32,103 @@ function method sigma1(i:int) : word
 }
 
 type SHA_step = i | 0 <= i < 64
+type perm_index = i | 0 <= i < 8
 
-function method ror(r:operand, amount:shift_amount) : operand
-    requires r.OReg?;
-{
-    OShift(r.r, RORShift(amount))
-}
+//function method ror(r:operand, amount:shift_amount) : operand
+//    requires r.OReg?;
+//{
+//    OShift(r.r, RORShift(amount))
+//}
+//
+//function method lsr(r:operand, amount:shift_amount) : operand
+//    requires r.OReg?;
+//{
+//    OShift(r.r, LSRShift(amount))
+//}
 
-function method lsr(r:operand, amount:shift_amount) : operand
-    requires r.OReg?;
-{
-    OShift(r.r, LSRShift(amount))
-}
-
-function method GetReg(r:int) : operand
+function method GetReg(r:int) : ARMReg
     requires 0 <= r <= 12;
 {
-    OReg(     if r ==  0 then R0
-         else if r ==  1 then R1
-         else if r ==  2 then R2
-         else if r ==  3 then R3
-         else if r ==  4 then R4
-         else if r ==  5 then R5
-         else if r ==  6 then R6
-         else if r ==  7 then R7
-         else if r ==  8 then R8
-         else if r ==  9 then R9
-         else if r == 10 then R10
-         else if r == 11 then R11
-         else R12)
+         if r ==  0 then R0
+    else if r ==  1 then R1
+    else if r ==  2 then R2
+    else if r ==  3 then R3
+    else if r ==  4 then R4
+    else if r ==  5 then R5
+    else if r ==  6 then R6
+    else if r ==  7 then R7
+    else if r ==  8 then R8
+    else if r ==  9 then R9
+    else if r == 10 then R10
+    else if r == 11 then R11
+    else R12 
 }
+
+// Make it as easy as possible for Z3 to see that the registers below are unique
+function ApplyPerm(i:int, perm:perm_index) : int
+{
+    if i + perm >= 8 then i + perm - 8 else i + perm
+}
+
+predicate {:opaque} Even(i:int) { i % 2 == 0 }
 
 #endverbatim
 
 procedure {:refined} Body_00_15(
     {:inline} i:SHA_step,
+    {:inline} perm:perm_index,
+    {:inline} input_slot:word,
     ghost z:SHA256Trace,
-    {:operand} t0:word,
-    {:operand} t1:word,
-    {:operand} t2:word,
-    {:operand} t3:word,
-    {:operand} t4:word,
-    {:operand} inp:word,
-    {:operand} a:word,
-    {:operand} b:word,
-    {:operand} c:word,
-    {:operand} d:word,
-    {:operand} e:word,
-    {:operand} f:word,
-    {:operand} g:word,
-    {:operand} h:word)
+    inout{:operand} t0:word,
+    inout{:operand} t1:word,
+    inout{:operand} t2:word,
+    inout{:operand} t3:word,
+    inout{:operand} t4:word,
+    //inout{:operand} inp:word,
+    inout{:operand} a:word,
+         {:operand} b:word,
+         {:operand} c:word,
+    inout{:operand} d:word,
+         {:operand} e:word,
+         {:operand} f:word,
+         {:operand} g:word,
+    inout{:operand} h:word)
 requires/ensures
-    WordAligned(sp);
-    ValidMem(sp + (i%16)*4);
+    //WordAligned(sp);
+    ValidAddr(mem, sp + input_slot);
+reads 
+    sp;
 modifies 
     mem;
 requires {:refined false}
     @t0 == OReg(R0);
     @t1 == OReg(R2);
-    @t2 == GetReg(if i % 2 == 0 then 12 else 3);
-    @t3 == GetReg(if i % 2 == 0 then  3 else 12);
-    OReg(R1) == @inp;
-    GetReg(4+((0+i)%8)) == @a;
-    GetReg(4+((1+i)%8)) == @b;
-    GetReg(4+((2+i)%8)) == @c;
-    GetReg(4+((3+i)%8)) == @d;
-    GetReg(4+((4+i)%8)) == @e;
-    GetReg(4+((5+i)%8)) == @f;
-    GetReg(4+((6+i)%8)) == @g;
-    GetReg(4+((7+i)%8)) == @h;
-
+    @t2 == OReg(GetReg(if Even(i) then 12 else 3));
+    @t3 == OReg(GetReg(if Even(i) then  3 else 12));
+    @t4 == OReg(R1);
+    //@inp == OReg(R1);
+    @a  == OReg(GetReg(4+ApplyPerm(0, perm)));
+    @b  == OReg(GetReg(4+ApplyPerm(1, perm)));
+    @c  == OReg(GetReg(4+ApplyPerm(2, perm)));
+    @d  == OReg(GetReg(4+ApplyPerm(3, perm)));
+    @e  == OReg(GetReg(4+ApplyPerm(4, perm)));
+    @f  == OReg(GetReg(4+ApplyPerm(5, perm)));
+    @g  == OReg(GetReg(4+ApplyPerm(6, perm)));
+    @h  == OReg(GetReg(4+ApplyPerm(7, perm)));
 requires
-    t3 == BitwiseXor(b, c);
-    //if i == 0 then t2 == 0 else i < 16 ==> t2 == old(Maj(a, b, c));
-    // i >= 16 ==> RotateRight(t0, Sigma1(0)) == Sigma1(e)
-
-    // SHA semantics
-    SeqLength(z.H) > 0;
-    IsSHA256TraceReadyForStep(z, i);
-    last(z.atoh) == atoh_c(a, b, c, d, e, f, g, h);
-
-    // TODO: Need an invariant about the 16-element array X
-    //       and its relationship with W
-    //i < 16 ==> forall j :: 0 <= j < i ==> last(z.W)[j] == inp[j];
+    input_slot == (i%16)*4;
+//    t3 == BitwiseXor(b, c);
+//    //if i == 0 then t2 == 0 else i < 16 ==> t2 == old(Maj(a, b, c));
+//    // i >= 16 ==> RotateRight(t0, Sigma1(0)) == Sigma1(e)
+//
+//    // SHA semantics
+//    SeqLength(z.H) > 0;
+//    IsSHA256TraceReadyForStep(z, i);
+//    last(last(z.atoh)) == atoh_c(a, b, c, d, e, f, g, h);
+//
+//    // TODO: Need an invariant about the 16-element array X
+//    //       and its relationship with W
+//    //i < 16 ==> forall j :: 0 <= j < i ==> last(z.W)[j] == inp[j];
 ensures
 //    t2 == BitwiseXor(a, b);
 //    t3 == Maj(a, b, c);
@@ -138,11 +152,10 @@ ensures
     //    STR(inp, sp,17*4);
     //  end if
 
-    rEOR(t0, e, ror(/*e*/GetReg(4+((4+i)%8)), Sigma1(1) - Sigma1(0)));
-    //assert t0 == BitwiseXor(e, RotateRight(e, 5));
+    rEORShift(t0, e, e, RORShift(Sigma1(1) - Sigma1(0)));
     // TODO: When i = 0, t2 = 0, so this is a no op.  We can skip it.
     rADDWrap(a, a, t2);  // h += Maj(a,b,c) from the past?
-    rEOR(t0, t0, ror(/*e*/GetReg(4+((4+i)%8)), Sigma1(2) - Sigma1(0)));   // Sigma1(e)
+    rEORShift(t0, t0, e, RORShift(Sigma1(2) - Sigma1(0)));   // Sigma1(e)
     rREV(t1, t1);
 
     // end if--------
@@ -150,11 +163,11 @@ ensures
     // BP: Skipping this and encoding K256 directly as a const
     // ldr	$t2,[$Ktbl],#4			@ *K256++
     rADDWrap(h, h, t2);      //  h+=X[i]  BP: X[i] = input[i]?
-    rSTR(t1, sp, OConst((i%16)*4));  // @ BP: Save a copy of input[i] for use in subsequent W calculations
+    rSTR(t1, sp, input_slot);  // @ BP: Save a copy of input[i] for use in subsequent W calculations
     rEOR(t1, f, g);
     ghost var old_h := h;
     //assert t0 == BitwiseXor(BitwiseXor(e, RotateRight(e, 5)), RotateRight(e, 19));
-    rADDWrap(h, h, ror(/*t0*/OReg(R0), Sigma1(0))); // h += Sigma1(e)
+    rADDWrapShift(h, h, t0, RORShift(Sigma1(0))); // h += Sigma1(e)
 
 //    // Prove that we computed Sigma1(e) correctly:
 //    forall :: h == (old_h + BSIG1(e)) % 0x1_0000_0000 
@@ -170,7 +183,7 @@ ensures
 //    lemma_Ch(e, f, g, t1);
 //    assert t1 == Ch(e, f, g);
 
-    rEOR(t0, a, ror(/*a*/GetReg(4+((0+i)%8)), Sigma0(1) - Sigma0(0)));
+    rEORShift(t0, a, a, RORShift(Sigma0(1) - Sigma0(0)));
     rADDWrap(h, h, t1);  // h += Ch(e,f,g)
 
 //    #if $i==31
@@ -180,21 +193,20 @@ ensures
 
     // if $i<15
     //   LDR(t1, inp, 0);    // Prefetch
-         EOR(t2, a, b);            //  a^b, b^c in next round
+         rEOR(t2, a, b);            //  a^b, b^c in next round
     // else
     //   LDR(t1, sp, ((i+2)%16)*4);     // @ from future BODY_16_xx 
     //   EOR(t2, a, b);            //  a^b, b^c in next round
     //   LDR(t4, sp, ((i+15)%16)*4);   // @ from future BODY_16_xx
     // endif
-    rEOR(t0,t0,ror(/*a*/GetReg(4+((0+i)%8)),Sigma0(2)-Sigma0(0))); // Sigma0(a)
+    rEORShift(t0,t0,a, RORShift(Sigma0(2)-Sigma0(0))); // Sigma0(a)
     rAND(t3,t3,t2);      // (b^c)&=(a^b)
     rADDWrap(d,d,h);     // d+=h
     rEOR(t3,t3,b);       // Maj(a,b,c)
 //    lemma_Maj(a, b, c, t3);
 //    assert t3 == Maj(a,b,c);
     old_h := h;
-    rADDWrap(h,h,ror(/*t0*/OReg(R0), Sigma0(0)));   // h+=Sigma0(a)
-    
+    rADDWrapShift(h,h,t0, RORShift(Sigma0(0)));   // h+=Sigma0(a)
     // Prove we computed Sigma0(a) correctly:
 //    forall :: h == (old_h + BSIG0(a)) % 0x1_0000_0000
 //    {
