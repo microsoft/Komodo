@@ -1,75 +1,167 @@
-procedure kom_smc_remove(
-    {:register OReg(R0)} page:int,
-    out {:register OReg(R0)} err:int,
-    ghost s:SysState)
-returns (ghost s':SysState)
-requires
-    this == s.hw;
-    SaneState(this);
-    validSysState'(s);
-ensures
-    this == s'.hw;
-    SaneState(this);
-    validSysState'(s');
-    tuple(s'.d,err) == smc_remove_premium(s.d, page);
+procedure kom_smc_remove_non_addr_success(
+    {:register OReg(R1)} page:int,
+    {:register OReg(R4)} pagedb_addr:int,
+    {:register OReg(R5)} page_type:int,
+    {:register OReg(R6)} as_page_va:int,
+    ghost pagedb_in: PageDb)
+    returns (ghost pagedb: PageDb)
+    requires/ensures
+        SaneState(this);
+    requires
+        validPageDb(pagedb_in);
+        pageDbCorresponds(this.m, pagedb_in);
+        specErr(smc_remove(pagedb_in,page)) == KOM_ERR_SUCCESS();
+        pagedb_in[page] is PageDbEntryTyped && !(pagedb_in[page].entry is Addrspace);
+        pagedb_addr == AddressOfGlobal(PageDb());
+        page_type == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE();
+        as_page_va == page_monvaddr(pagedb_in[page].addrspace);
+    ensures
+        StackPreserving(old(this),this);
+        pagedb == specPageDb(smc_remove_premium(pagedb_in, page));
+        pageDbCorresponds(this.m, pagedb);
 {
     reveal_smc_remove_premium();
-    ghost var specResult := smc_remove_premium(s.d, page);
+    ghost var specResult := smc_remove_premium(pagedb_in, page);
     ghost var specE := specErr(specResult);
     ghost var specD := specPageDb(specResult);
+    ghost var as_page := pagedb_in[page].addrspace;
+    pagedb := pagedb_in;
+
+    forall :: pagedb[as_page] is PageDbEntryTyped &&
+       pagedb[as_page].entry is Addrspace {
+           reveal_validPageDb();
+    }
+    r8 := sp_op_const(KOM_PAGE_FREE());
+    assert r5 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE();
+    STRglobal(r8,PageDb(),r4,r5);
+    assert extractPageDbEntry(this.m, page)[
+       BytesToWords(PAGEDB_ENTRY_TYPE())] == KOM_PAGE_FREE();
+
+    LDR(r7,r6,sp_op_const(ADDRSPACE_REF()));
+    forall :: r7 == pagedb[as_page].entry.refcount {
+       reveal_validPageDb();
+       reveal_pageContentsCorresponds();
+       reveal_pageDbAddrspaceCorresponds();
+    }
+    SUB(r7,r7,1);
+    assert r7 == pagedb[as_page].entry.refcount - 1;
+    STR(r7,r6,sp_op_const(ADDRSPACE_REF()));
+
+    pagedb := specD;
+    assert pageDbCorresponds(this.m, pagedb) by {
+        reveal_validPageDb();
+        forall :: pageDbCorrespondsOnly(this.m, specD, page)
+        {   
+            reveal_pageDbEntryCorresponds(); 
+            reveal_pageContentsCorresponds();
+        }
+
+        forall :: pageDbCorrespondsOnly(this.m, specD, as_page)
+        {
+            reveal_pageDbEntryCorresponds();
+            assert pagedb[as_page].addrspace ==
+                pagedb_in[as_page].addrspace;
+            assert extractPageDbEntry(this.m, as_page) ==
+                extractPageDbEntry(old(this.m), as_page);
+            
+            reveal_pageContentsCorresponds();
+            reveal_pageDbAddrspaceCorresponds();
+            ghost var e := specD[as_page].entry;
+            ghost var base := page_monvaddr(as_page);
+            ghost var page := extractPage(this.m, as_page);
+            assert base == as_page_va;
+            assert page[base + ADDRSPACE_L1PT()] == 
+                page_monvaddr(e.l1ptnr);
+            assert page[base + ADDRSPACE_L1PT_PHYS()] == 
+                page_paddr(e.l1ptnr);
+            assert page[base + ADDRSPACE_REF()] == e.refcount;
+            assert page[base + ADDRSPACE_STATE()] == 
+                pageDbAddrspaceStateVal(e.state);
+        }
+
+        forall p :| validPageNr(p) && p != as_page && p != page ::
+          pageDbCorrespondsOnly(this.m, specD, p)
+        {
+            reveal_pageDbEntryCorresponds();
+            forall p :| validPageNr(p) && p != as_page && p != page ::
+                (extractPage(this.m, p) ==
+                    extractPage(old(this.m), p)) {}
+            reveal_pageContentsCorresponds();
+            forall p :| validPageNr(p) && p != as_page && p != page ::
+                (extractPageDbEntry(this.m, p) ==
+                    extractPageDbEntry(old(this.m), p)) {} 
+            forall p :| validPageNr(p) && p != as_page && p != page ::
+                pagedb[p] == pagedb_in[p] {}
+            assert pageDbCorrespondsOnly(old(this.m), pagedb, p);
+        }
+    }
+}
+
+procedure kom_smc_remove(
+    {:register OReg(R1)} page:int,
+    out {:register OReg(R0)} err:int,
+    ghost pagedb_in: PageDb)
+    returns (ghost pagedb: PageDb)
+    requires/ensures
+        SaneState(this);
+    requires
+        validPageDb(pagedb_in);
+        pageDbCorresponds(this.m, pagedb_in);
+    ensures
+        StackPreserving(old(this),this);
+        tuple(pagedb,err) == smc_remove_premium(pagedb_in, page);
+        pageDbCorresponds(this.m, pagedb);
+{
+    reveal_smc_remove_premium();
+    ghost var specResult := smc_remove_premium(pagedb_in, page);
+    ghost var specE := specErr(specResult);
+    ghost var specD := specPageDb(specResult);
+    pagedb := pagedb_in;
 
     if ( page >= sp_op_const(KOM_SECURE_NPAGES()) ){
         err := sp_op_const(KOM_ERR_INVALID_PAGENO());
-        s' := s.( hw := this ).(d := specD);
         assert err == specE;
-        assert s'.d == specD;
+        assert pagedb == specD;
     } else {
+        assert validPageNr(page);
         LDRglobaladdr(r4,PageDb());
         r5 := sp_op_const(PAGEDB_ENTRY_SIZE());
-        assume isUInt32(page * r5); // TODO FIXME NLARITH 
+        assert page < KOM_SECURE_NPAGES() && r5 == 8; // sigh
         MUL(r5, page, r5);
         assert r5 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE();
         LDRglobal(r6,PageDb(),r4,r5);
-        forall :: r6 == pageDbEntryTypeVal(s.d[page])
-            { reveal_pageDbEntryCorresponds(); }
+        assert r6 == pageDbEntryTypeVal(pagedb[page])
+            by { reveal_pageDbEntryCorresponds();
+            extractPageDbToAbstractOne(this.m, page, PAGEDB_ENTRY_TYPE()); }
         if (r6 == sp_op_const(KOM_PAGE_FREE())) {
-            assert s.d[page] is PageDbEntryFree;
+            assert pagedb[page] is PageDbEntryFree;
             err := sp_op_const(KOM_ERR_SUCCESS());
-            s' := s.(hw:=this);
-            forall :: validSysState'(s')
-                    { reveal_validPageDb(); }
             assert err == specE;
-            assert s'.d == specD;
-            assert validSysState'(s');
         } else {
-            assert s.d[page] is PageDbEntryTyped;
+            assert pagedb[page] is PageDbEntryTyped;
             if( r6 == sp_op_const(KOM_PAGE_ADDRSPACE()) ){
-                assert s.d[page].entry is Addrspace;
+                assert pagedb[page].entry is Addrspace;
                 page_monvaddr_impl(r8,page,r7);
                 assert r8 == page_monvaddr(page);
                 LDR(r7,r8,sp_op_const(ADDRSPACE_REF()));
-                forall :: r7 == s.d[page].entry.refcount {
+                forall :: r7 == pagedb[page].entry.refcount {
                     reveal_validPageDb();
                     reveal_pageContentsCorresponds();
                     reveal_pageDbAddrspaceCorresponds();
                 }
                 if (r7 != 0) {
-                    assert s.d[page].entry.refcount != 0;
+                    assert pagedb[page].entry.refcount != 0;
                     err := sp_op_const(KOM_ERR_PAGEINUSE());
-                    s' := s.(hw:=this).(d:=specD);
                     assert err == specE;
-                    assert s'.d == specD;
-                    assert validSysState'(s');
                 } else {
-                    assert s.d[page].entry.refcount == 0;
-                    r8 := sp_op_const(KOM_PAGE_FREE());
+                    assert pagedb[page].entry.refcount == 0;
+                    assert r7 == KOM_PAGE_FREE(); // FREE is 0
                     assert r5 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE();
-                    STRglobal(r8,PageDb(),r4,r5);
+                    STRglobal(r7,PageDb(),r4,r5);
                     err := sp_op_const(KOM_ERR_SUCCESS());
-                    s' := s.(hw:=this).(d:=specD);
                     assert err == specE;
-                    assert s'.d == specD;
-                    forall :: validSysState'(s') {
+                    pagedb := specD;
+                    assert pageDbCorresponds(this.m, pagedb) by {
                         reveal_validPageDb();
                         reveal_pageDbEntryCorresponds();
                         reveal_pageContentsCorresponds();
@@ -83,34 +175,34 @@ ensures
                             reveal_pageContentsCorresponds();
                             reveal_pageDbAddrspaceCorresponds();
                             ghost var d' := specPageDb(specResult);
-                            assert pageDbCorrespondsExcluding(s.hw.m, s.d, page);
-                            forall :: pageDbCorrespondsExcluding(this.m, s.d, page)
+                            assert pageDbCorrespondsExcluding(old(this).m, pagedb, page);
+                            forall :: pageDbCorrespondsExcluding(this.m, pagedb, page)
                             {
                                 forall p :| validPageNr(p) && p != page ::
-                                extractPage(this.m, p) == extractPage(s.hw.m, p) {}
+                                extractPage(this.m, p) == extractPage(old(this).m, p) {}
                             }
-                            forall p :| validPageNr(p) && p != page :: s.d[p] == d'[p] {}
+                            forall p :| validPageNr(p) && p != page :: pagedb[p] == d'[p] {}
                         }
                     }
                 }
             } else {
-                assert s.d[page] is PageDbEntryTyped;
+                assert pagedb[page] is PageDbEntryTyped;
                 ADD(r6, r5, sp_op_const(PAGEDB_ENTRY_ADDRSPACE()));
                 assert r6 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_ADDRSPACE();
                 LDRglobal(r6,PageDb(),r4,r6);
-                ghost var as_page := s.d[page].addrspace;
+                ghost var as_page := pagedb[page].addrspace;
                 forall :: r6 == page_monvaddr(as_page) {
-                    reveal_validPageDb();
                     reveal_pageDbEntryCorresponds();
+                    extractPageDbToAbstractOne(this.m, as_page, PAGEDB_ENTRY_ADDRSPACE());
                 }
 
-                forall :: s.d[as_page] is PageDbEntryTyped &&
-                    s.d[as_page].entry is Addrspace {
+                forall :: pagedb[as_page] is PageDbEntryTyped &&
+                    pagedb[as_page].entry is Addrspace {
                     reveal_validPageDb();
                 }
                 //page_monvaddr_impl(r7,r6,r8);
                 LDR(r8,r6,sp_op_const(ADDRSPACE_STATE()));
-                forall :: r8 == pageDbAddrspaceStateVal(s.d[as_page].entry.state)
+                forall :: r8 == pageDbAddrspaceStateVal(pagedb[as_page].entry.state)
                 {
                     reveal_pageContentsCorresponds();
                     reveal_pageDbAddrspaceCorresponds();
@@ -118,17 +210,14 @@ ensures
     
                 if ( r8 != sp_op_const(KOM_ADDRSPACE_STOPPED()) ) {
                     err := sp_op_const(KOM_ERR_NOT_STOPPED());
-                    s' := s.(hw:=this).(d:=specD);
-                    assert s'.d == specD;
                     assert err == specE;
                 } else {
                     assert specE == KOM_ERR_SUCCESS();
                     assert r4 == AddressOfGlobal(PageDb());
                     assert r5 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE();
                     assert r6 == page_monvaddr(as_page);
-                    //err := sp_op_const(KOM_ERR_SUCCESS());
-                    s' := kom_smc_remove_non_addr_success(
-                        page,r4,r5,r6,err,s.(hw:=this));
+                    pagedb := kom_smc_remove_non_addr_success(page,r4,r5,r6,pagedb);
+                    err := sp_op_const(KOM_ERR_SUCCESS());
                 }
             }
         }

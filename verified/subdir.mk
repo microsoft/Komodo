@@ -131,12 +131,8 @@ stop_dep-sdfy = ARMdecls kom_utils
 stop_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
 $(dir)/stop.verified: $(call mkdeps,stop)
 
-remove_nonaddr_dep-sdfy = ARMdecls kom_utils
-remove_nonaddr_dep-dfy  = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
-$(dir)/remove_nonaddr.verified: $(call mkdeps,remove_nonaddr)
-
-remove_dep-sdfy = ARMdecls kom_utils remove_nonaddr
-remove_dep-dfy  = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
+remove_dep-sdfy = ARMdecls kom_utils
+remove_dep-dfy  = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/remove.verified: $(call mkdeps,remove)
 
 smc_handler_dep-sdfy = ARMdecls kom_utils init_addrspace init_dispatcher \
