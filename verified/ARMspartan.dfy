@@ -19,9 +19,14 @@ type sp_state = state
 
 function method sp_op(o:sp_operand_lemma):sp_operand_code { o }
 
-predicate{:opaque} sp_eval(c:code, s:state, r:state)
+predicate {:opaque} evalCodeOpaque(c:code, s:state, r:state)
 {
     evalCode(c, s, r)
+}
+
+predicate sp_eval(c:code, s:state, r:state)
+{
+    s.ok ==> evalCodeOpaque(c, s, r)
 }
 
 function sp_eval_op(s:state, o:operand): word
@@ -50,21 +55,35 @@ function sp_cHead(b:codes):code requires b.sp_CCons? { b.hd }
 predicate sp_cHeadIs(b:codes, c:code) { b.sp_CCons? && b.hd == c }
 predicate sp_cTailIs(b:codes, t:codes) { b.sp_CCons? && b.tl == t }
 
+predicate ValidRegState'(regs:map<ARMReg, word>)
+{
+    forall r:ARMReg :: r in regs
+}
+
 predicate sp_require(b0:codes, c1:code, s0:sp_state, sN:sp_state)
 {
     sp_cHeadIs(b0, c1)
- && s0.ok
+// && s0.ok
  && sp_eval(Block(b0), s0, sN)
  && ValidState(s0)
+ && ValidRegState'(s0.regs)
+}
+
+// Weaker form of sp_eval that we can actually ensure generically in instructions
+predicate eval_weak(c:code, s:sp_state, r:sp_state) 
+{ 
+    s.ok && r.ok ==> evalCodeOpaque(c, s, r) 
 }
 
 predicate sp_ensure(b0:codes, b1:codes, s0:sp_state, s1:sp_state, sN:sp_state)
 {
     sp_cTailIs(b0, b1)
- && s1.ok
- && sp_eval(sp_cHead(b0), s0, s1)
+// && s1.ok
+// && sp_eval(sp_cHead(b0), s0, s1)
+ && eval_weak(sp_cHead(b0), s0, s1)
  && sp_eval(sp_Block(b1), s1, sN)
  && ValidState(s1)
+ && ValidRegState'(s1.regs)
 }
 
 function method fromOperand(o:operand):operand { o }
@@ -95,7 +114,7 @@ function sp_get_ok(s:state):bool { s.ok }
 function sp_get_reg(r:ARMReg, s:state):word requires r in s.regs { s.regs[r] }
 function sp_get_mem(s:state):memmap { s.m.addresses }
 
-function sp_update_ok(sM:state, sK:state):state { sK.(ok := sM.ok) }
+function sp_update_ok(sM:state, sK:state):state { sK.(ok := sM.ok, steps := sM.steps) }
 function sp_update_reg(r:ARMReg, sM:state, sK:state):state 
     requires r in sM.regs 
 { sK.(regs := sK.regs[r := sM.regs[r]]) }
@@ -103,14 +122,36 @@ function sp_update_mem(sM:state, sK:state):state {
     sK.(m := sM.m.(addresses := sM.m.addresses)) 
 }
 
+function sp_update(o:operand, sM:state, sK:state):state
+    requires ValidRegOperand(o);
+    requires match o
+                case OReg(r) => r in sM.regs
+                case OLR => LR(mode_of_state(sM)) in sM.regs 
+                case OSP => SP(mode_of_state(sM)) in sM.regs 
+{   
+    match o
+        case OReg(r) => sp_update_reg(o.r, sM, sK)
+        case OLR => sp_update_reg(LR(mode_of_state(sM)), sM, sK)
+        case OSP => sp_update_reg(SP(mode_of_state(sM)), sM, sK)
+}
+
 predicate sp_is_src_word(o:operand) { ValidOperand(o) }
 predicate sp_is_dst_word(o:operand) { ValidRegOperand(o) }
+
+type reg = word
+predicate sp_is_src_reg(o:operand) { ValidRegOperand(o) }
 
 type snd = word
 predicate sp_is_src_snd(o:operand) { ValidSecondOperand(o) }
 
 function sp_eval_op_word(s:state, o:operand):word
     requires sp_is_src_word(o);
+    requires ValidState(s)
+{
+    OperandContents(s,o)
+}
+function sp_eval_op_reg(s:state, o:operand):reg
+    requires sp_is_src_reg(o);
     requires ValidState(s)
 {
     OperandContents(s,o)
@@ -130,6 +171,12 @@ predicate sp_state_eq(s0:state, s1:state)
  && s0.conf == s1.conf
  && s0.ok == s1.ok
  && s0.steps == s1.steps
+}
+
+predicate ValidAddr(m:memmap, addr:int)
+{
+    ValidMem(addr)
+ && addr in m
 }
 
 //-----------------------------------------------------------------------------
@@ -174,11 +221,11 @@ predicate valid_state(s:sp_state) { ValidState(s) }
 
 lemma sp_lemma_empty(s:sp_state, r:sp_state) returns(r':sp_state)
     requires sp_eval(Block(sp_CNil()), s, r)
-    ensures  r.ok == s.ok
+    ensures  s.ok ==> r.ok
     ensures  r' == s
-    ensures  to_state(r) == to_state(s)
+    ensures  s.ok ==> to_state(r) == to_state(s)
 {
-    reveal_sp_eval();
+    reveal_evalCodeOpaque();
     r' := s;
 }
 
@@ -275,16 +322,20 @@ lemma sp_lemma_block(b:codes, s0:sp_state, r:sp_state) returns(r1:sp_state, c0:c
     ensures  sp_eval(c0, s0, r1)
     ensures  sp_eval(Block(b1), r1, r)
 {
-    reveal_sp_eval();
-    assert evalBlock(b, to_state(s0), to_state(r));
-    var r':state :| evalCode(b.hd, to_state(s0), r') && evalBlock(b.tl, r', to_state(r));
+    reveal_evalCodeOpaque();
     c0 := b.hd;
     b1 := b.tl;
-    r1 := r';
-    if ValidState(s0) {
-        code_state_validity(c0, to_state(s0), to_state(r1));
+    if s0.ok {
+        assert evalBlock(b, to_state(s0), to_state(r));
+        var r':state :| evalCode(b.hd, to_state(s0), r') && evalBlock(b.tl, r', to_state(r));
+        r1 := r';
+        if ValidState(s0) {
+            code_state_validity(c0, to_state(s0), to_state(r1));
+        }
+        assert sp_eval(c0, s0, r1);
+    } else {
+        r1 := s0;
     }
-    assert sp_eval(c0, s0, r1);
 }
 
 lemma sp_lemma_ifElse(ifb:obool, ct:code, cf:code, s:sp_state, r:sp_state) returns(cond:bool, s':sp_state)
@@ -297,11 +348,11 @@ lemma sp_lemma_ifElse(ifb:obool, ct:code, cf:code, s:sp_state, r:sp_state) retur
                  && cond == evalOBool(s, ifb)
                  && (if cond then sp_eval(ct, s', r) else sp_eval(cf, s', r))
              else
-                 !r.ok;
+                 true //!r.ok;
 {
-    reveal_sp_eval();
-    assert evalIfElse(ifb, ct, cf, to_state(s), to_state(r));
+    reveal_evalCodeOpaque();
     if s.ok {
+        assert evalIfElse(ifb, ct, cf, to_state(s), to_state(r));
         cond := evalOBool(s, ifb);
         var t:state :| evalGuard(to_state(s), ifb, t) && (if cond then evalCode(ct, t, to_state(r)) else evalCode(cf, t, to_state(r)));
         s' := t;
@@ -310,19 +361,13 @@ lemma sp_lemma_ifElse(ifb:obool, ct:code, cf:code, s:sp_state, r:sp_state) retur
 
 predicate{:opaque} evalWhileOpaque(b:obool, c:code, n:nat, s:state, r:state)
 {
-    evalWhile(b, c, n, s, r)
+    s.ok ==> evalWhile(b, c, n, s, r)
 }
 
 predicate sp_whileInv(b:obool, c:code, n:int, r1:sp_state, r2:sp_state)
 {
     n >= 0 && r1.ok && evalWhileOpaque(b, c, n, to_state(r1), to_state(r2))
 }
-
-// HACK
-lemma unpack_eval_while(b:obool, c:code, s:state, r:state)
-  requires evalCode(While(b, c), s, r)
-  ensures  exists n:nat :: evalWhile(b, c, n, s, r)
-{}
 
 lemma sp_lemma_while(b:obool, c:code, s:sp_state, r:sp_state) returns(n:nat, r':sp_state)
     requires ValidState(s) && ValidOperand(b.o1) && ValidOperand(b.o2)
@@ -332,10 +377,15 @@ lemma sp_lemma_while(b:obool, c:code, s:sp_state, r:sp_state) returns(n:nat, r':
     ensures  ValidState(r');
     ensures  r' == s
 {
-    reveal_sp_eval();
+    reveal_evalCodeOpaque();
     reveal_evalWhileOpaque();
-    unpack_eval_while(b, c, s, r);
-    n :| evalWhile(b, c, n, to_state(s), to_state(r));
+//    unpack_eval_while(b, c, s, r);
+    if s.ok {
+        assert evalCode(While(b, c), to_state(s), to_state(r));
+        n :| evalWhile(b, c, n, to_state(s), to_state(r));
+    } else {
+        n := 0;
+    }
     r' := s;
 }
 
@@ -352,23 +402,23 @@ lemma sp_lemma_whileTrue(b:obool, c:code, n:sp_int, s:sp_state, r:sp_state) retu
                  && sp_eval(c, s', r')
                  && evalWhileOpaque(b, c, n - 1, to_state(r'), to_state(r))
              else
-                 !r.ok;
+                 true //!r.ok;
 {
-    reveal_sp_eval();
+    reveal_evalCodeOpaque();
     reveal_evalWhileOpaque();
-    assert evalWhile(b, c, n, to_state(s), to_state(r)); // TODO: Dafny reveal/opaque issue
 
     if !s.ok {
         return;
     }
+    assert evalWhile(b, c, n, to_state(s), to_state(r)); // TODO: Dafny reveal/opaque issue
 
     var s'', r'':state :| evalGuard(to_state(s), b, s'') && evalOBool(to_state(s), b) && evalCode(c, s'', r'')
         && evalWhile(b, c, n - 1, r'', to_state(r));
     if ValidState(s) {
         code_state_validity(c, s'', r'');
+        s' := s'';
+        r' := r'';
     }
-    s' := s'';
-    r' := r'';
 }
 
 lemma sp_lemma_whileFalse(b:obool, c:code, s:sp_state, r:sp_state) returns(r':sp_state)
@@ -381,9 +431,9 @@ lemma sp_lemma_whileFalse(b:obool, c:code, s:sp_state, r:sp_state) returns(r':sp
                  && r.ok
                  && to_state(r') == to_state(r)
             else
-                !r.ok;
+                true; //!r.ok;
 {
-    reveal_sp_eval();
+    reveal_evalCodeOpaque();
     reveal_evalWhileOpaque();
 
     if !s.ok {

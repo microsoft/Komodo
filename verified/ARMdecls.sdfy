@@ -42,7 +42,7 @@ var{:register OSReg(spsr(Monitor))}    spsr_mon:int;
 procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
 
 function{:operand} sp_op_const(n:word):operand
-
+/*
 procedure {:instruction Ins(ADD(dst, src1, src2))}
 ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
@@ -435,30 +435,47 @@ STRglobal({:operand} rd:int, {:operand} g:string,
 //   Support for Spartan's refined mode
 //
 ////////////////////////////////////////////////////////////////////////////////
-var{:state ok()} ok:bool;
-var{:state mem()}  mem:memmap;
+*/
+var{:state ok()}  ok:bool;
+var{:state mem()} mem:memmap;
 
 procedure {:refined} {:instruction Ins(LDR(rd, base, ofs))}
 rLDR(out{:operand} rd:word, {:operand} base:word, {:operand} ofs:word)
     requires
-        ValidMem(base + ofs);
+        ValidAddr(mem, base + ofs);
     reads mem;
     ensures
         rd == mem[old(base) + old(ofs)];
 {
-    reveal sp_eval;
+    reveal evalCodeOpaque;
+    reveal ValidRegState;
+    reveal ValidMemState;
+    reveal ValidConfig;
+    reveal ValidSRegState;
+
+    if ghost (!(old(this).ok && this.ok)) {
+        this := old(this).(ok := false);
+    } 
 }
 
 procedure {:refined} {:instruction Ins(STR(rd, base, ofs))}
-rSTR({:operand} rd:word, out{:operand} base:word, {:operand} ofs:word)
-    requires
-        ValidMem(base + ofs);
+rSTR({:operand} rd:reg, {:operand} base:word, {:operand} ofs:word)
+    requires/ensures
+        ValidAddr(mem, base + ofs);
     modifies
         mem;
     ensures
-        mem[old(base+ofs)] == rd;
+        mem == old(mem)[old(base+ofs) := rd];
 {
-    reveal sp_eval;
+    reveal evalCodeOpaque;
+    reveal ValidRegState;
+    reveal ValidMemState;
+    reveal ValidConfig;
+    reveal ValidSRegState;
+
+    if ghost (!(old(this).ok && this.ok)) {
+        this := old(this).(ok := false);
+    } 
 }
 
 procedure {:refined} {:instruction Ins(MOV(dst, src))}
@@ -466,30 +483,62 @@ rMOV(out{:operand} dst:word, {:operand} src:snd)
     ensures
         dst == old(src);
 {
-    reveal sp_eval;
+    reveal evalCodeOpaque;
+    reveal ValidRegState;
+    reveal ValidMemState;
+    reveal ValidConfig;
+    reveal ValidSRegState;
+
+    if ghost (!(old(this).ok && this.ok)) {
+        this := old(this).(ok := false);
+    } 
 }
 
-procedure {:instruction Ins(EOR(dst, src1, src2))}
+procedure {:refined} {:instruction Ins(EOR(dst, src1, src2))}
 rEOR(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:snd)
     ensures
         dst == BitwiseXor(old(src1), old(src2));
 {
-    reveal sp_eval;
+    reveal evalCodeOpaque;
+    reveal ValidRegState;
+    reveal ValidMemState;
+    reveal ValidConfig;
+    reveal ValidSRegState;
+
+    if ghost (!(old(this).ok && this.ok)) {
+        this := old(this).(ok := false);
+    } 
 }
 
-procedure {:instruction Ins(ADD(dst, src1, src2))}
+procedure {:refined} {:instruction Ins(ADD(dst, src1, src2))}
 rADDWrap(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:snd)
     ensures
         dst == old(src1 + src2) % 0x1_0000_0000;
         WordAligned(old(src1)) && WordAligned(old(src2)) ==> WordAligned(dst);
 {
-    reveal sp_eval;
+    reveal evalCodeOpaque;
+    reveal ValidRegState;
+    reveal ValidMemState;
+    reveal ValidConfig;
+    reveal ValidSRegState;
+
+    if ghost (!(old(this).ok && this.ok)) {
+        this := old(this).(ok := false);
+    } 
 }
 
 procedure {:refined} {:instruction Ins(REV(dst, src))}
-rREV(out{:operand} dst:word, {:operand} src:word)
+rREV(out{:operand} dst:word, {:operand} src:reg)
     ensures
         dst == old(bswap32(src));
 {
-    reveal sp_eval;
+    reveal evalCodeOpaque;
+    reveal ValidRegState;
+    reveal ValidMemState;
+    reveal ValidConfig;
+    reveal ValidSRegState;
+
+    if ghost (!(old(this).ok && this.ok)) {
+        this := old(this).(ok := false);
+    } 
 }
