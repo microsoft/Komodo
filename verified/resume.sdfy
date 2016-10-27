@@ -15,274 +15,107 @@ procedure pre_entry_resume(
         this == s'.hw;
         validSysState'(s');
         SaneState(s'.hw);
+        AddrMemInvariant(old(this),this);
+        GlobalsPreservingExcept(old(this),this,set(CurAddrspaceOp()));
         preEntryResume(s,s',pagenr);
         spsr_of_state(s'.hw).m == User;
         s'.g.g_sps  == s.g.g_sps;
         s'.g.g_lrs  == s.g.g_lrs;
         s'.g.g_psrs == s.g.g_psrs;
-        OperandContents(s'.hw, OLR) ==
-            s'.d[s'.g.g_cur_dispatcher].entry.ctxt.pc;
+        s'.d == s.d;
+        lr == s'.d[s'.g.g_cur_dispatcher].entry.ctxt.pc;
+        sp == old(sp);
 {
-    reveal_validPageDb();
-    reveal_ValidRegState(); 
-    reveal_ValidSRegState();
     ghost var d := s.d;
-    assert validDispatcherPage(s.d, pagenr);
-    assert !hasStoppedAddrspace(s.d, pagenr);
-    ghost var l1p := l1pOfDispatcher(s.d, pagenr);
-
-    // TODO: read r12, clear lsb, store into MCR
-    // MRC(r12,scr);
-    
-    r10 := 0;
-    MCR(OSReg(scr), r10);
-    forall :: this.conf.scr.ns == Secure
-    {
-        //FIXME
-        assume false;
-        assert BitwiseAnd(r10,1) != 1;
-        assert decode_scr(r10) == SCR(Secure, false, false);
-    }
-  
-    //-------------------------------------------------------------------------
-    // load l1p into ttbr0
-    //-------------------------------------------------------------------------
-    LDRglobaladdr(r12, PageDb());
-    assert validPageNr(pagenr);
-    r11 := sp_op_const(PAGEDB_ENTRY_SIZE());
-    MUL(r10,pagenr,r11);
-    assert r10 == G_PAGEDB_ENTRY(pagenr);
-    ADD(r9, r10, sp_op_const(PAGEDB_ENTRY_ADDRSPACE())); 
-    assert r9 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE();
-    WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE(), r9);
-
-    LDRglobal(r11, PageDb(), r12, r9);
-    ghost var addrspace := s.d[pagenr].addrspace;
-    forall :: r11 == page_monvaddr(addrspace) && WordAligned(r11) 
-        && PageAligned(r11)
-    {
-        reveal_pageDbEntryCorresponds(); reveal_pageContentsCorresponds();
-        reveal_validPageDb();
-        assert validAddrspacePage(s.d, s.d[pagenr].addrspace);
-    }
-
-    forall :: ValidMem(r11 + ADDRSPACE_L1PT_PHYS())
-        { reveal_validPageDb(); } 
-
-    // page_monvaddr_impl(r9,r11,r10); 
-    LDR(r10,r11,sp_op_const(ADDRSPACE_L1PT_PHYS()));
-
-    forall :: r10 == page_paddr(d[addrspace].entry.l1ptnr)
-    {
-        assert pageDbCorrespondsOnly(this.m, d, addrspace);
-        assert validAddrspacePage(d, addrspace);
-        reveal_pageContentsCorresponds();
-        assert pageContentsCorresponds(addrspace, d[addrspace],
-            extractPage(this.m, addrspace));
-        reveal_pageDbAddrspaceCorresponds();
-    }
-    
-    assert r10 == page_paddr(l1p);
-
-    // reveal_pageContentsCorresponds();
-    // reveal_pageDbAddrspaceCorresponds();
-    MSR(OSReg(ttbr0), r10);
-
-    assert isUInt32(r10);
-    assert isUInt32(0xffff_f000);
-    forall :: r10 == BitwiseAnd(r10, 0xffff_f000){
-        assume false;
-    }
-    assert this.conf.ttbr0.ptbase == page_paddr(l1p);
-    //-------------------------------------------------------------------------
+    ghost var pg := pagenr;
+    assert validDispatcherPage(d, pg) by { reveal_validPageDb(); }
 
     //-------------------------------------------------------------------------
-    // Load pc from context into OLR
+    //  Switch addrspace
     //-------------------------------------------------------------------------
-    page_monvaddr_impl(r10,pagenr,r11);
-    assert r10 == page_monvaddr(pagenr);
-    // XXX TODO this should be the offset for the pc from context not the 
-    // entrypoint. Need to impl this in pagedb.i first 
-    assert DISP_CTXT_PC() == 8;
-    assert ValidMem(r10 + DISP_CTXT_PC());
-    LDR(r11,r10,sp_op_const(DISP_CTXT_PC()));
-    forall :: r11 == d[pagenr].entry.ctxt.pc
-    {
-        assert pageDbCorrespondsOnly(this.m,d,pagenr);
-        assert validDispatcherPage(d,pagenr);
-        reveal_pageContentsCorresponds();
-        assert pageContentsCorresponds(pagenr,d[pagenr],
-            extractPage(this.m,pagenr));
-        reveal_pageDbDispatcherCorresponds();
-    }
-    
-    lr := r11;
-    assert OperandContents(this, OLR) ==
-        d[pagenr].entry.ctxt.pc;
-
-
-    //-------------------------------------------------------------------------
-    // Restore SPSR
-    //-------------------------------------------------------------------------
-    LDR(r11,r10,sp_op_const(DISP_CTXT_PSR()));
-    forall :: r11 == d[pagenr].entry.ctxt.cpsr
-    {
-        forall :: pageDbCorrespondsOnly(this.m,d,pagenr)
-            { reveal_PageDb(); }
-        assert validDispatcherPage(d,pagenr);
-        reveal_pageContentsCorresponds();
-        assert pageContentsCorresponds(pagenr,d[pagenr],
-            extractPage(this.m,pagenr));
-        reveal_pageDbDispatcherCorresponds();
-    }
-    MSR(OSReg(spsr(Monitor)),r11);
-    assert this.sregs[spsr(Monitor)] == d[pagenr].entry.ctxt.cpsr;
-    forall :: spsr_of_state(this).m == User
-    {
-        reveal_validPageDb();
-        assert validDispatcherContext(d[pagenr].entry.ctxt);
-    }
-
-    //-------------------------------------------------------------------------
-    // Set SPSR to Usermode
-    //-------------------------------------------------------------------------
-    // TODO properly clear 5 LSBs and set to rx10
-    // r10 := 0x10;
-    //assume psr_mask_mode(r10) == 0x10;
-    //assert decode_mode(psr_mask_mode(r10)) == User;
-    //assert ValidModeChange'(this, User);
-    //assert ValidModeChange(this, r10);
-    //MSR(OSReg(spsr(Monitor)), r10);
-    //assert spsr_of_state(this).m == User;
-    //-------------------------------------------------------------------------
-
-    //-------------------------------------------------------------------------
-    // Restore context
-    //-------------------------------------------------------------------------
-    ghost var disp := d[pagenr].entry;
-   
-    // Just a helpful reminder
-    // assert OperandContents(this, OLR) ==
-    //    d[pagenr].entry.ctxt.pc;
- 
-    r3 := r10;
-    r1 := pagenr;
-    assert r3 == page_monvaddr(pagenr);
-    LDR(r2,r3,sp_op_const(DISP_CTXT_R4()));
-    r4 := r2;
-    LDR(r2,r3,sp_op_const(DISP_CTXT_R5()));
-    r5 := r2;
-    LDR(r2,r3,sp_op_const(DISP_CTXT_R6()));
-    r6 := r2;
-    LDR(r2,r3,sp_op_const(DISP_CTXT_R7()));
-    r7 := r2;
-    forall :: ValidMem(r3 + DISP_CTXT_R8())
-        { reveal_validPageDb(); assert DISP_CTXT_R8() == 40; }
-    LDR(r2,r3,sp_op_const(DISP_CTXT_R8()));
-    r8 := r2;
-    LDR(r2,r3,sp_op_const(DISP_CTXT_R9()));
-    r9 := r2;
-    LDR(r2,r3,sp_op_const(DISP_CTXT_R10()));
-    r10 := r2;
-    forall :: ValidMem(r3 + DISP_CTXT_R11())
-        { reveal_validPageDb(); assert DISP_CTXT_R11() == 52; }
-    LDR(r2,r3,sp_op_const(DISP_CTXT_R11()));
-    r11 := r2;
-    LDR(r2,r3,sp_op_const(DISP_CTXT_R12()));
-    r12 := r2;
-
-    forall :: ValidMem(r3 + DISP_CTXT_LR())
-        { reveal_validPageDb(); assert DISP_CTXT_LR() == 16; }
-    LDR(r2,r3,sp_op_const(DISP_CTXT_LR()));
-    MSR(lr_usr,r2);
-
-    forall :: ValidMem(r3 + DISP_CTXT_SP())
-        { reveal_validPageDb(); assert DISP_CTXT_SP() == 20; }
-    LDR(r2,r3,sp_op_const(DISP_CTXT_SP()));
-    MSR(sp_usr,r2);
-
-    forall :: this.regs[R4] == disp.ctxt.regs[R4] &&
-        this.regs[R5] == disp.ctxt.regs[R5] &&
-        this.regs[R6] == disp.ctxt.regs[R6] &&
-        this.regs[R7] == disp.ctxt.regs[R7] &&
-        this.regs[R8] == disp.ctxt.regs[R8] &&
-        this.regs[R9] == disp.ctxt.regs[R9] &&
-        this.regs[R10] == disp.ctxt.regs[R10] &&
-        this.regs[R11] == disp.ctxt.regs[R11] &&
-        this.regs[R12] == disp.ctxt.regs[R12] &&
-        this.regs[LR(User)] == disp.ctxt.regs[LR(User)] &&
-        this.regs[SP(User)] == disp.ctxt.regs[SP(User)]
-    {
-        forall :: pageDbCorrespondsOnly(this.m,d,pagenr)
-            { reveal_PageDb(); }
-        assert validDispatcherPage(d,pagenr);
-        reveal_pageContentsCorresponds();
-        assert pageContentsCorresponds(pagenr,d[pagenr],
-            extractPage(this.m,pagenr));
-        reveal_pageDbDispatcherCorresponds();
-    }
-    //-------------------------------------------------------------------------
-   
+    switch_addrspace(pagenr, true, d);
 
     //-------------------------------------------------------------------------
     // Update current dispatcher
     //-------------------------------------------------------------------------
-    assert r1 == pagenr;
     LDRglobaladdr(r2, CurAddrspaceOp());
-    STRglobal(r1, CurAddrspaceOp(), r2, 0);
+    STRglobal(pagenr, CurAddrspaceOp(), r2, 0);
+    // help dafny see pagedb invariant
+    globalUnmodifiedImpliesCorrespondingPreserved(d,old(this).m,this.m);
+
     //-------------------------------------------------------------------------
-    
-    s' := s.(g := s.g.(g_cur_dispatcher := pagenr)).(hw := this);
-    assert this == s'.hw;
-    forall :: validSysState'(s')
+    // Restore SPSR
+    //-------------------------------------------------------------------------
+    page_monvaddr_impl(r1,pagenr,r0);
+    lr := r1; // XXX: workaround page_monvaddr not supporting LR as an output
+    assert lr == page_monvaddr(pg);
+
+    LDR(r0,lr,sp_op_const(DISP_CTXT_PSR()));
+    assert r0 == d[pg].entry.ctxt.cpsr by
     {
-        assert s.d == s'.d;
-        assert s'.hw.m.addresses == s.hw.m.addresses;
-        globalUnmodifiedImpliesCorrespondingPreserved(s.d,s.hw.m,s'.hw.m);
-        assert s.g.g_sps == s'.g.g_sps;
-        assert s.g.g_lrs == s'.g.g_lrs;
-        assert s.g.g_psrs == s'.g.g_psrs;
-        assert GlobalFullContents(s.hw.m, SavedSPs()) ==
-            GlobalFullContents(s'.hw.m, SavedSPs());
-        assert GlobalFullContents(s.hw.m, SavedLRs()) ==
-            GlobalFullContents(s'.hw.m, SavedLRs());
-        assert GlobalFullContents(s.hw.m, SavedPSRs()) ==
-            GlobalFullContents(s'.hw.m, SavedPSRs());
+        assert pageDbCorrespondsOnly(this.m,d,pg);
+        reveal_pageContentsCorresponds();
+        assert pageContentsCorresponds(pg,d[pg],
+            extractPage(this.m,pg));
+        reveal_pageDbDispatcherCorresponds();
     }
 
-    forall :: SaneState(s'.hw)
+    MSR(OSReg(spsr(Monitor)),r0);
+    assert this.sregs[spsr(Monitor)] == d[pg].entry.ctxt.cpsr;
+    assert spsr_of_state(this).m == User by
     {
-        assert OperandContents(s'.hw, OSP) ==
-            OperandContents(s.hw, OSP);
-        assert WordAligned(OperandContents(s.hw, OSP));
+        assert validDispatcherContext(d[pg].entry.ctxt);
     }
 
-    assert s'.d == s.d;
-    assert s'.g.g_cur_dispatcher == pagenr;
-    assert OperandContents(s'.hw, OLR) ==
-        s'.d[pagenr].entry.ctxt.pc;
-    assert OperandContents(s'.hw, OLR) ==
-        s'.d[s'.g.g_cur_dispatcher].entry.ctxt.pc;
-    
-    assert s'.hw.conf.ttbr0.ptbase == page_paddr(l1p);
-    assert s'.hw.conf.scr.ns == Secure;
+    //-------------------------------------------------------------------------
+    // Restore integer context
+    //-------------------------------------------------------------------------
+    ghost var disp := d[pg].entry;
 
-    assert s'.g.g_cur_dispatcher == pagenr;
+    LDR(r0,lr,sp_op_const(DISP_CTXT_LR()));
+    MSR(lr_usr,r0);
 
+    LDR(r0,lr,sp_op_const(DISP_CTXT_SP()));
+    MSR(sp_usr,r0);
 
-    assert s'.hw.regs[R4] == disp.ctxt.regs[R4] &&
-    s'.hw.regs[R5] == disp.ctxt.regs[R5] &&
-    s'.hw.regs[R6] == disp.ctxt.regs[R6] &&
-    s'.hw.regs[R7] == disp.ctxt.regs[R7] &&
-    s'.hw.regs[R8] == disp.ctxt.regs[R8] &&
-    s'.hw.regs[R9] == disp.ctxt.regs[R9] &&
-    s'.hw.regs[R10] == disp.ctxt.regs[R10] &&
-    s'.hw.regs[R11] == disp.ctxt.regs[R11] &&
-    s'.hw.regs[R12] == disp.ctxt.regs[R12] &&
-    s'.hw.regs[LR(User)] == disp.ctxt.regs[LR(User)] &&
-    s'.hw.regs[SP(User)] == disp.ctxt.regs[SP(User)];
-   
-    assert WSMemInvariantExceptAddrspaceAtPage(s.hw, s'.hw, s.d, l1p);
+    LDR(r0,lr,sp_op_const(DISP_CTXT_R0()));
+    LDR(r1,lr,sp_op_const(DISP_CTXT_R1()));
+    LDR(r2,lr,sp_op_const(DISP_CTXT_R2()));
+    LDR(r3,lr,sp_op_const(DISP_CTXT_R3()));
+    LDR(r4,lr,sp_op_const(DISP_CTXT_R4()));
+    LDR(r5,lr,sp_op_const(DISP_CTXT_R5()));
+    LDR(r6,lr,sp_op_const(DISP_CTXT_R6()));
+    LDR(r7,lr,sp_op_const(DISP_CTXT_R7()));
+    LDR(r8,lr,sp_op_const(DISP_CTXT_R8()));
+    LDR(r9,lr,sp_op_const(DISP_CTXT_R9()));
+    LDR(r10,lr,sp_op_const(DISP_CTXT_R10()));
+    LDR(r11,lr,sp_op_const(DISP_CTXT_R11()));
+    LDR(r12,lr,sp_op_const(DISP_CTXT_R12()));
+    LDR(lr,lr,sp_op_const(DISP_CTXT_PC()));
+
+    reveal_ValidRegState(); 
+    assert r0 == disp.ctxt.regs[R0] && r1 == disp.ctxt.regs[R1] &&
+           r2 == disp.ctxt.regs[R2] && r3 == disp.ctxt.regs[R3] &&
+           r4 == disp.ctxt.regs[R4] && r5 == disp.ctxt.regs[R5] &&
+           r6 == disp.ctxt.regs[R6] && r7 == disp.ctxt.regs[R7] &&
+           r8 == disp.ctxt.regs[R8] && r9 == disp.ctxt.regs[R9] &&
+           r10 == disp.ctxt.regs[R10] && r11 == disp.ctxt.regs[R11] &&
+           r12 == disp.ctxt.regs[R12]
+           && this.regs[LR(User)] == disp.ctxt.regs[LR(User)]
+           && this.regs[SP(User)] == disp.ctxt.regs[SP(User)]
+           && lr == d[pg].entry.ctxt.pc
+    by {
+        assert pageDbCorrespondsOnly(this.m,d,pg);
+        assert validDispatcherPage(d,pg);
+        reveal_pageContentsCorresponds();
+        assert pageContentsCorresponds(pg,d[pg],
+            extractPage(this.m,pg));
+        reveal_pageDbDispatcherCorresponds();
+    }
+
+    //-------------------------------------------------------------------------
+
+    s' := s.(g := s.g.(g_cur_dispatcher := pg)).(hw := this);
 }
 
 procedure kom_smc_resume(
