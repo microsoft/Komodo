@@ -420,49 +420,28 @@ lemma lemma_scr_entry(pre: word, post: word)
 }
 #endverbatim
 
-procedure pre_entry_enter(
-    {:register OReg(R0)} err:int,
-    {:register OReg(R1)} arg1:int,
-    {:register OReg(R2)} arg2:int,
-    {:register OReg(R3)} arg3:int,
+procedure switch_addrspace(
     {:register OReg(R5)} pagenr:int,
-    ghost s:SysState)
-    returns (ghost s':SysState)
+    ghost isresume:bool,
+    ghost pagedb:PageDb)
+    requires/ensures
+        SaneState(this);
     requires
-        this == s.hw;
-        mode_of_state(s.hw) == Monitor;
-        validSysState'(s);
-        SaneState(s.hw);
-        isUInt32(arg1) && isUInt32(arg2) && isUInt32(arg3);
-        specErr(smc_enter_premium(s.d, pagenr, arg1, arg2, arg3)) == 
-            KOM_ERR_SUCCESS();
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+        validPageNr(pagenr);
+        validDispatcherPage(pagedb, pagenr);
+        !hasStoppedAddrspace(pagedb, pagenr);
     ensures
-        this == s'.hw;
-        validSysState'(s');
-        SaneState(s'.hw);
-        //RegPreservingExcept(old(this),this,set(@));
-        // tuple(s.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
-        // err == KOM_ERR_SUCCESS();
-        preEntryEnter(s,s',pagenr, arg1, arg2, arg3);
-        spsr_of_state(s'.hw).m == User;
-        OperandContents(s'.hw, OLR) == s'.d[s'.g.g_cur_dispatcher].entry.entrypoint;
-        s'.g.g_sps  == s.g.g_sps;
-        s'.g.g_lrs  == s.g.g_lrs;
-        s'.g.g_psrs == s.g.g_psrs;
+        AllMemInvariant(old(this),this);
+        //RegPreservingExcept(old(this),this,set(@r10,@r11,@r12));
+        r0 == old(r0); r1 == old(r1); r2 == old(r2); r3 == old(r3); r4 == old(r4);
+        r5 == old(r5); r6 == old(r6); r7 == old(r7); r8 == old(r8); r9 == old(r9);
+        bankedRegsPreserved(old(this),this);
+        this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, pagenr));
+        this.conf.scr.ns == Secure;
+        this.conf.scr.irq && this.conf.scr.fiq;
 {
-    reveal_smc_enter_premium();
-    //reveal_validPageDb();
-    //reveal_ValidRegState();
-
-    assert validPageNr(pagenr);
-    ghost var addrspace := s.d[pagenr].addrspace;
-    forall :: validAddrspacePage(s.d, addrspace) { reveal_validPageDb(); }
-
-    ghost var d := s.d;
-    assert validDispatcherPage(s.d, pagenr);
-    assert !hasStoppedAddrspace(s.d, pagenr);
-    ghost var l1p := l1pOfDispatcher(s.d, pagenr);
-
     //-------------------------------------------------------------------------
     // update SCR
     //-------------------------------------------------------------------------
@@ -485,31 +464,34 @@ procedure pre_entry_enter(
     //-------------------------------------------------------------------------
     // load l1p into ttbr0
     //-------------------------------------------------------------------------
+    ghost var addrspace := pagedb[pagenr].addrspace;
+    forall :: validAddrspacePage(pagedb, addrspace) { reveal_validPageDb(); }
+    ghost var l1p := l1pOfDispatcher(pagedb, pagenr);
+
     r11 := sp_op_const(PAGEDB_ENTRY_SIZE());
     MUL(r10,pagenr,r11);
     assert r10 == G_PAGEDB_ENTRY(pagenr);
-    ADD(r9, r10, sp_op_const(PAGEDB_ENTRY_ADDRSPACE())); 
-    assert r9 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE();
-    WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE(), r9);
+    ADD(r10, r10, sp_op_const(PAGEDB_ENTRY_ADDRSPACE())); 
+    assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE();
+    WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE(), r10);
 
     LDRglobaladdr(r12, PageDb());
-    LDRglobal(r11, PageDb(), r12, r9);
+    LDRglobal(r11, PageDb(), r12, r10);
     forall :: r11 == page_monvaddr(addrspace)
     {
         reveal_pageDbEntryCorresponds();
-        assert validAddrspacePage(d, addrspace);
+        assert validAddrspacePage(pagedb, addrspace);
     }
 
-    // page_monvaddr_impl(r9,r11,r10); 
     LDR(r10,r11,sp_op_const(ADDRSPACE_L1PT_PHYS()));
 
-    forall :: r10 == page_paddr(d[addrspace].entry.l1ptnr)
+    forall :: r10 == page_paddr(pagedb[addrspace].entry.l1ptnr)
     {
-        forall :: pageDbAddrspaceCorresponds(addrspace, d[addrspace].entry,
+        forall :: pageDbAddrspaceCorresponds(addrspace, pagedb[addrspace].entry,
             extractPage(this.m, addrspace))
         {
-            assert validAddrspacePage(d, addrspace);
-            assert pageDbCorrespondsOnly(this.m, d, addrspace);
+            assert validAddrspacePage(pagedb, addrspace);
+            assert pageDbCorrespondsOnly(this.m, pagedb, addrspace);
             reveal_pageContentsCorresponds();
         }
         reveal_pageDbAddrspaceCorresponds();
@@ -519,8 +501,50 @@ procedure pre_entry_enter(
     assert PageAligned(r10);
     MSR(OSReg(ttbr0), r10);
     assert this.conf.ttbr0.ptbase == page_paddr(l1p);
+}
+
+procedure pre_entry_enter(
+    {:register OReg(R0)} err:int,
+    {:register OReg(R1)} arg1:int,
+    {:register OReg(R2)} arg2:int,
+    {:register OReg(R3)} arg3:int,
+    {:register OReg(R5)} pagenr:int,
+    ghost s:SysState)
+    returns (ghost s':SysState)
+    requires
+        this == s.hw;
+        mode_of_state(s.hw) == Monitor;
+        validSysState'(s);
+        SaneState(s.hw);
+        smc_enter_err(s.d, pagenr, false) == KOM_ERR_SUCCESS();
+    ensures
+        this == s'.hw;
+        validSysState'(s');
+        SaneState(s'.hw);
+        //RegPreservingExcept(old(this),this,set(@));
+        // tuple(s.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
+        // err == KOM_ERR_SUCCESS();
+        preEntryEnter(s,s',pagenr, arg1, arg2, arg3);
+        spsr_of_state(s'.hw).m == User;
+        OperandContents(s'.hw, OLR) == s'.d[s'.g.g_cur_dispatcher].entry.entrypoint;
+        s'.g.g_sps  == s.g.g_sps;
+        s'.g.g_lrs  == s.g.g_lrs;
+        s'.g.g_psrs == s.g.g_psrs;
+{
+    reveal_smc_enter_premium();
+
+    assert validPageNr(pagenr);
+    ghost var d := s.d;
+    assert validDispatcherPage(s.d, pagenr);
+    assert !hasStoppedAddrspace(s.d, pagenr);
+    ghost var l1p := l1pOfDispatcher(s.d, pagenr);
+
     //-------------------------------------------------------------------------
-    
+    //  Switch addrspace
+    //-------------------------------------------------------------------------
+    switch_addrspace(pagenr, false, s.d);
+    assert pagenr == old(pagenr);
+
     //-------------------------------------------------------------------------
     //  Move arguments to regs
     //-------------------------------------------------------------------------
@@ -583,8 +607,6 @@ procedure pre_entry_enter(
     //-------------------------------------------------------------------------
     
     assert s.d == s'.d;
-    assert s'.hw.conf.ttbr0.ptbase == page_paddr(l1p);
-    assert s'.hw.conf.scr.ns == Secure;
     assert s'.g.g_cur_dispatcher == pagenr;
     //assert s'.hw.regs[R0] == arg1 && s'.hw.regs[R1] == arg2 &&
     //    s'.hw.regs[R2] == arg3; 
