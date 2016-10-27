@@ -678,6 +678,7 @@ function RightShift(x:word, amount:word): word
     { BitsAsWord(BitShiftRight(WordAsBits(x), amount)) }
 
 function RotateRight(x:word, amount:shift_amount) : word
+    { BitsAsWord(BitRotateRight(WordAsBits(x), amount)) }
 
 //-----------------------------------------------------------------------------
 // Functions for bytewise operations

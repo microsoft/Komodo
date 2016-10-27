@@ -11,7 +11,7 @@ type word = x | isUInt32(x)
 
 /* ================ Conversions ================ */
 
-lemma lemma_WordAsBits(i:word)
+lemma {:axiom} lemma_WordAsBits(i:word)
     ensures i == 0 ==> i as bv32 == 0
 
 function {:opaque} WordAsBits(i:word): bv32
@@ -21,7 +21,7 @@ function {:opaque} WordAsBits(i:word): bv32
     i as bv32
 }
 
-lemma lemma_BitsAsWord(b:bv32)
+lemma {:axiom} lemma_BitsAsWord(b:bv32)
     ensures isUInt32(b as int)
     ensures b == 0 ==> b as int == 0
 
@@ -109,6 +109,13 @@ function {:opaque} BitShiftRight(x:bv32, amount:int): bv32
     requires 0 <= amount < 32;
 {
     x >> amount
+}
+
+function {:opaque} BitRotateRight(x:bv32, amount:int): bv32
+    requires 0 <= amount < 32;
+{
+    // I assume Dafny doesn't have a builtin operator for this?
+    (x >> amount) | (x << (32 - amount))
 }
 
 /* ================ Axioms relating the primitives ================ */
