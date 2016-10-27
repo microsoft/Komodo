@@ -14,7 +14,7 @@ procedure smc_enter_err(
     ensures
         AllMemInvariant(old(this),this);
         RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
-        //bankedRegsPreserved(s.hw,s'.hw);
+        bankedRegsPreserved(old(this),this);
         err == smc_enter_err(pagedb, old(pagenr), isresumeg);
 {
     if (pagenr >= sp_op_const(KOM_SECURE_NPAGES())) {
@@ -436,7 +436,6 @@ procedure pre_entry_enter(
         isUInt32(arg1) && isUInt32(arg2) && isUInt32(arg3);
         specErr(smc_enter_premium(s.d, pagenr, arg1, arg2, arg3)) == 
             KOM_ERR_SUCCESS();
-        err == KOM_ERR_SUCCESS();
     ensures
         this == s'.hw;
         validSysState'(s');
@@ -601,6 +600,225 @@ procedure pre_entry_enter(
 // TODO this has a very high goop-to-code ratio. Refactor the goop into lemmas 
 // so that the lemmas can be called in smc_enter and smc_resume instead of 
 // just moving the goop around.
+procedure smc_enter_success(
+    {:register OReg(R1)} arg1:int,
+    {:register OReg(R2)} arg2:int,
+    {:register OReg(R3)} arg3:int,
+    {:register OReg(R5)} pagenr:int,
+    out {:register OReg(R0)} err:int,
+    out {:register OReg(R1)} val:int,
+    ghost s:SysState)
+    returns (ghost s':SysState)
+    requires 
+        this == s.hw; 
+        validSysState'(s);
+        mode_of_state(s.hw) == Monitor;
+        SaneState(s.hw);
+        AUCIdef();
+        smc_enter_err(s.d, pagenr, false) == KOM_ERR_SUCCESS();
+    ensures
+        this == s'.hw;
+        validSysState'(s');
+        validEnter(s,s',old(pagenr),old(arg1),old(arg2),old(arg3));
+{
+    ghost var s1;
+    ghost var s2;
+
+    ghost var l1p := l1pOfDispatcher(s.d, pagenr);
+
+    ghost var s_stash;
+    s_stash := stash_banked_regs(s.(hw := this));
+
+    s1 := s_stash.(hw := this);  
+
+    assert errCheck(s, s1);
+
+    assert tuple(s1.d, KOM_ERR_SUCCESS()) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
+    assert validSysState'(s1);
+    assert this == s1.hw;
+    assert SaneState(s1.hw);
+
+    s2 := pre_entry_enter(s1,r5,arg1,arg2,arg3,s1);
+    assert preEntryEnter(s1,s2,pagenr,arg1,arg2,arg3);
+    assert OperandContents(s2.hw, OLR) == 
+        s2.d[s2.g.g_cur_dispatcher].entry.entrypoint;
+
+    assert s2.d == s1.d;
+
+    assert spsr_of_state(s2.hw).m == User;
+
+    MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
+    exists ex, s3, s4, s5 :: ValidState(s3) && ValidState(s4) && ValidState(s5)
+        && evalEnterUserspace(s2.hw, s3)
+        && evalUserspaceExecution(s3, s4)
+        && evalExceptionTaken(s4, ex, s5)
+        && ApplicationUsermodeContinuationInvariant(s5, this);
+
+ 
+    assert validSysState'(s2);
+  
+    ghost var g := s2.g;
+
+    ghost var d := s.d;
+    assert s1.d == d;
+    assert s2.d == d;
+    assert s1.d == specPageDb(smc_enter(s.d, pagenr, arg1, arg2, arg3));
+
+    ghost var ss3 := SysState(s3,d,g);
+    ghost var ss4 := SysState(s4,d,g);
+    ghost var ss5 := SysState(s5,d,g);
+
+    ghost var pre_unstash := ss5.(hw := this);
+
+    assert validSysStates(set(s2,ss3,ss4,ss5));
+    assert preEntryEnter(s1,s2,pagenr,arg1,arg2,arg3);
+
+    forall :: entryTransitionEnter(s2, ss3)
+        && validSysState'(ss3)
+    {
+
+        reveal_validPageDb();
+        reveal_ValidRegState();
+
+        assert ss3.hw.conf.ttbr0.ptbase == s2.hw.conf.ttbr0.ptbase;
+        assert s1.d == s2.d;
+        assert nonStoppedL1(d, securePageFromPhysAddr(s2.hw.conf.ttbr0.ptbase));
+        assert nonStoppedL1(d, securePageFromPhysAddr(ss3.hw.conf.ttbr0.ptbase));
+
+        assert OperandContents(s2.hw, OLR) == 
+            s2.d[s2.g.g_cur_dispatcher].entry.entrypoint;
+    }
+
+    assert ss4.d == ss3.d;
+    assert ss5.d == ss4.d;
+    forall :: userspaceExecution(ss3.hw, ss5.hw, ss3.d)
+        && validSysState'(ss4)
+        && validSysState'(ss5)
+    {
+        assert evalUserspaceExecution(ss3.hw, ss4.hw);
+        assert evalExceptionTaken(ss4.hw, ex, ss5.hw);
+       
+        assert mode_of_state(ss5.hw) != User;
+        forall :: WSMemInvariantExceptAddrspace(ss3.hw, ss5.hw, d) {
+            UserExecutionMemInvariant(ss3.hw,ss4.hw,d,l1p);
+            assert WSMemInvariantExceptAddrspaceAtPage(ss3.hw, ss4.hw, d, l1p); 
+            assert WSMemInvariantExceptAddrspaceAtPage(ss4.hw, ss5.hw, d, l1p); 
+            assert WSMemInvariantExceptAddrspaceAtPage(ss3.hw, ss5.hw, d, l1p); 
+            assert ss5.hw.conf.ttbr0.ptbase == s2.hw.conf.ttbr0.ptbase;
+            assert securePageFromPhysAddr(ss5.hw.conf.ttbr0.ptbase) == l1p;
+        }
+        assert ss4.hw.conf.excount + 1 == ss5.hw.conf.excount;
+        assert ss3.hw.conf.excount == ss4.hw.conf.excount;
+        assert ss3.hw.conf.excount + 1 == ss5.hw.conf.excount;
+        assert ss5.hw.conf.exstep == ss4.hw.steps;
+        assert ss5.hw.steps == ss4.hw.steps;
+        assert ss5.hw.conf.exstep == ss5.hw.steps;
+        userspaceExecutionPreservesPageDb(d,ss3.hw,ss4.hw,l1p);
+        exceptionTakenPreservesPageDb(d,ss4.hw,ex,ss5.hw);
+        assert validSysState'(ss4);
+        assert validSysState'(ss5);
+    }
+    
+    assert mode_of_state(ss5.hw) != User;
+    assert pre_unstash.hw == this;
+    forall :: pre_unstash.hw.regs ?[R0] && pre_unstash.hw.regs ?[R1]
+        && tuple(pre_unstash.hw.regs[R0], pre_unstash.hw.regs[R1], pre_unstash.d) ==
+        exceptionHandled(ss5)
+        && validExceptionTransition(ss5,pre_unstash,ss5.d)
+        && validSysState'(pre_unstash)
+        && mode_of_state(pre_unstash.hw) == Monitor
+    {
+        reveal_ValidRegState();
+        assert AUCIdef();
+        assert validSysState(ss5);
+        assert ApplicationUsermodeContinuationInvariant(ss5.hw, pre_unstash.hw);
+        assert validExceptionTransition(ss5,pre_unstash,ss5.d);
+        assert mode_of_state(ss5.hw) != User;
+        assert tuple(pre_unstash.hw.regs[R0], pre_unstash.hw.regs[R1], pre_unstash.d) ==
+                exceptionHandled_premium(ss5);
+        assert validSysState'(pre_unstash);
+        reveal_validExceptionTransition();
+        assert mode_of_state(pre_unstash.hw) == Monitor;
+    }
+
+    s':= unstash_banked_regs(pre_unstash);
+    assert this == s'.hw;
+
+    forall :: s'.hw.regs ?[R0] && s'.hw.regs ?[R1]
+        && tuple(s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
+        exceptionHandled(ss5)
+        && validExceptionTransition(ss5,s',ss5.d)
+        && validSysState'(s')
+    {
+        reveal_ValidRegState();
+        assert pre_unstash.hw.regs[R0] == s'.hw.regs[R0];
+        assert pre_unstash.hw.regs[R1] == s'.hw.regs[R1];
+        assert pre_unstash.d == s'.d;
+        assert pre_unstash.hw.m.addresses == s'.hw.m.addresses;
+        assert pre_unstash.g.g_cur_dispatcher == s'.g.g_cur_dispatcher;
+        assert pre_unstash.hw.conf.ttbr0 == s'.hw.conf.ttbr0;
+        assert validSysState'(s');
+        assert tuple(pre_unstash.hw.regs[R0], pre_unstash.hw.regs[R1], pre_unstash.d) ==
+                exceptionHandled_premium(ss5);
+        assert tuple(s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
+                exceptionHandled_premium(ss5);
+        reveal_validExceptionTransition();
+        assert validExceptionTransition(ss5,pre_unstash,ss5.d);
+        assert validExceptionTransition(ss5,s',ss5.d);
+    }
+
+    forall :: bankedRegsPreserved(s.hw, s'.hw)
+    {
+        reveal_ValidConfig();
+        reveal_ValidSRegState();
+        assert s2.g.g_sps == s_stash.g.g_sps;
+        assert s2.g.g_lrs == s_stash.g.g_lrs;
+        assert s2.g.g_psrs == s_stash.g.g_psrs;
+        assert pre_unstash.g == s2.g;
+        assert pre_unstash.g.g_sps == s_stash.g.g_sps;
+        assert pre_unstash.g.g_lrs == s_stash.g.g_lrs;
+        assert pre_unstash.g.g_psrs == s_stash.g.g_psrs;
+        assert s.hw.sregs[spsr(Monitor)] == s_stash.g.g_psrs[Monitor];
+        assert s'.hw.sregs[spsr(Monitor)] == pre_unstash.g.g_psrs[Monitor];
+        assert s.hw.sregs[spsr(Monitor)] == s'.hw.sregs[spsr(Monitor)];
+     
+        forall m :| set(FIQ,IRQ,Supervisor,Abort,Undefined,Monitor) ?[m] ::
+        s'.hw.regs ?[LR(m)] && s.hw.regs ?[LR(m)]
+        && s'.hw.regs[LR(m)] == s.hw.regs[LR(m)]
+        && s'.hw.regs ?[SP(m)] && s.hw.regs ?[SP(m)]
+        && s'.hw.regs[SP(m)] == s.hw.regs[SP(m)]
+        {
+            reveal_ValidRegState();
+            assert s.hw.regs[LR(m)] == s_stash.g.g_lrs[m];
+            assert s'.hw.regs[LR(m)] == pre_unstash.g.g_lrs[m];
+
+            assert s.hw.regs[SP(m)] == s_stash.g.g_sps[m]; 
+            assert s'.hw.regs[SP(m)] == pre_unstash.g.g_sps[m];
+        }
+
+    }
+    
+    forall :: SaneState(s'.hw)
+    {
+        reveal_validExceptionTransition();
+        assert ValidStack(s'.hw);
+    }
+
+    assert validSysState(s2);
+    assert validSysState(ss3);
+    assert validSysState(ss5);
+    assert validSysStates(set(s1,s2,ss3,ss5));
+    assert errCheck(s, s1);
+    assert preEntryEnter(s1, s2, pagenr, arg1, arg2, arg3);
+    assert entryTransitionEnter(s2, ss3);
+    assert ss5.d == ss3.d;
+    assert userspaceExecution(ss3.hw, ss5.hw, ss3.d);
+    assert validExceptionTransition(ss5, s',ss5.d);
+    assert mode_of_state(ss5.hw) != User;
+
+    assert validEnter(s,s',pagenr,arg1,arg2,arg3);
+}
+
 procedure kom_smc_enter(
     {:register OReg(R0)} pagenr:int,
     {:register OReg(R1)} arg1:int,
@@ -619,221 +837,33 @@ procedure kom_smc_enter(
     ensures
         this == s'.hw;
         validSysState'(s');
-        specErr(smc_enter_premium(s.d, pagenr, arg1, arg2, arg3)) != KOM_ERR_SUCCESS() ==>
-            tuple(s'.d, err) == smc_enter_premium(s.d, pagenr, arg1, arg2, arg3);
+        specErr(old(smc_enter_premium(s.d, pagenr, arg1, arg2, arg3))) != KOM_ERR_SUCCESS()
+            ==> tuple(s'.d, err) == old(smc_enter_premium(s.d, pagenr, arg1, arg2, arg3));
         //s'.d == specPageDb(smc_enter_premium(s.d, pagenr, arg1, arg2, arg3));
-        validEnter(s,s',pagenr,arg1,arg2,arg3);
+        validEnter(s,s',old(pagenr),old(arg1),old(arg2),old(arg3));
 {
     reveal_smc_enter_premium();
     r5 := pagenr;
     r4 := 0; // do an error check for enter, not resume
     smc_enter_err(@r0,@r4,@r0,false,s.d);
+    assert err == smc_enter_err(s.d, old(pagenr), false);
+    assert tuple(s.d, err) == old(smc_enter(s.d, pagenr, arg1, arg2, arg3));
     if(err != sp_op_const(KOM_ERR_SUCCESS()) ) {
+        assert err != KOM_ERR_SUCCESS();
         val := sp_op_const(0);
         s' := s.(hw := this);
         assert validSysState'(s');
-        assert tuple(s'.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
-        assert err != KOM_ERR_SUCCESS();
+        assert validEnter(s, s', old(pagenr), old(arg1),old(arg2),old(arg3));
     } else {
-        //assert err == specErr(smc_enter(s.d, pagenr, arg1, arg2, arg3));
-        
-        ghost var s1;
-        ghost var s2;
-
-        ghost var l1p := l1pOfDispatcher(s.d, pagenr);
-
-        ghost var s_stash;
-        s_stash := stash_banked_regs(s.(hw := this));
-
-        s1 := s_stash.(hw := this);  
-
-        assert errCheck(s, s1);
-
         assert err == KOM_ERR_SUCCESS();
-        assert tuple(s1.d, err) == smc_enter(s.d, pagenr, arg1, arg2, arg3);
-        assert validSysState'(s1);
-        assert this == s1.hw;
-        assert SaneState(s1.hw);
-
-        assert r5 == pagenr;
-        s2 := pre_entry_enter(s1,r5,arg1,arg2,arg3,s1);
-        assert preEntryEnter(s1,s2,pagenr,arg1,arg2,arg3);
-        assert OperandContents(s2.hw, OLR) == 
-            s2.d[s2.g.g_cur_dispatcher].entry.entrypoint;
-
-        assert s2.d == s1.d;
-
-        assert spsr_of_state(s2.hw).m == User;
-
-        MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
-        exists ex, s3, s4, s5 :: ValidState(s3) && ValidState(s4) && ValidState(s5)
-            && evalEnterUserspace(s2.hw, s3)
-            && evalUserspaceExecution(s3, s4)
-            && evalExceptionTaken(s4, ex, s5)
-            && ApplicationUsermodeContinuationInvariant(s5, this);
-
-     
-        assert validSysState'(s2);
-      
-        ghost var g := s2.g;
-
-        ghost var d := s.d;
-        assert s1.d == d;
-        assert s2.d == d;
-        assert s1.d == specPageDb(smc_enter(s.d, pagenr, arg1, arg2, arg3));
-
-        ghost var ss3 := SysState(s3,d,g);
-        ghost var ss4 := SysState(s4,d,g);
-        ghost var ss5 := SysState(s5,d,g);
-
-        ghost var pre_unstash := ss5.(hw := this);
-
-        assert validSysStates(set(s2,ss3,ss4,ss5));
-        assert preEntryEnter(s1,s2,pagenr,arg1,arg2,arg3);
-
-        forall :: entryTransitionEnter(s2, ss3)
-            && validSysState'(ss3)
-        {
-
-            reveal_validPageDb();
-            reveal_ValidRegState();
-
-            assert ss3.hw.conf.ttbr0.ptbase == s2.hw.conf.ttbr0.ptbase;
-            assert s1.d == s2.d;
-            assert nonStoppedL1(d, securePageFromPhysAddr(s2.hw.conf.ttbr0.ptbase));
-            assert nonStoppedL1(d, securePageFromPhysAddr(ss3.hw.conf.ttbr0.ptbase));
-
-            assert OperandContents(s2.hw, OLR) == 
-                s2.d[s2.g.g_cur_dispatcher].entry.entrypoint;
-        }
-
-        assert ss4.d == ss3.d;
-        assert ss5.d == ss4.d;
-        forall :: userspaceExecution(ss3.hw, ss5.hw, ss3.d)
-            && validSysState'(ss4)
-            && validSysState'(ss5)
-        {
-            assert evalUserspaceExecution(ss3.hw, ss4.hw);
-            assert evalExceptionTaken(ss4.hw, ex, ss5.hw);
-           
-            assert mode_of_state(ss5.hw) != User;
-            forall :: WSMemInvariantExceptAddrspace(ss3.hw, ss5.hw, d) {
-                UserExecutionMemInvariant(ss3.hw,ss4.hw,d,l1p);
-                assert WSMemInvariantExceptAddrspaceAtPage(ss3.hw, ss4.hw, d, l1p); 
-                assert WSMemInvariantExceptAddrspaceAtPage(ss4.hw, ss5.hw, d, l1p); 
-                assert WSMemInvariantExceptAddrspaceAtPage(ss3.hw, ss5.hw, d, l1p); 
-                assert ss5.hw.conf.ttbr0.ptbase == s2.hw.conf.ttbr0.ptbase;
-                assert securePageFromPhysAddr(ss5.hw.conf.ttbr0.ptbase) == l1p;
-            }
-            assert ss4.hw.conf.excount + 1 == ss5.hw.conf.excount;
-            assert ss3.hw.conf.excount == ss4.hw.conf.excount;
-            assert ss3.hw.conf.excount + 1 == ss5.hw.conf.excount;
-            assert ss5.hw.conf.exstep == ss4.hw.steps;
-            assert ss5.hw.steps == ss4.hw.steps;
-            assert ss5.hw.conf.exstep == ss5.hw.steps;
-            userspaceExecutionPreservesPageDb(d,ss3.hw,ss4.hw,l1p);
-            exceptionTakenPreservesPageDb(d,ss4.hw,ex,ss5.hw);
-            assert validSysState'(ss4);
-            assert validSysState'(ss5);
-        }
-        
-        assert mode_of_state(ss5.hw) != User;
-        assert pre_unstash.hw == this;
-        forall :: pre_unstash.hw.regs ?[R0] && pre_unstash.hw.regs ?[R1]
-            && tuple(pre_unstash.hw.regs[R0], pre_unstash.hw.regs[R1], pre_unstash.d) ==
-            exceptionHandled(ss5)
-            && validExceptionTransition(ss5,pre_unstash,ss5.d)
-            && validSysState'(pre_unstash)
-            && mode_of_state(pre_unstash.hw) == Monitor
-        {
-            reveal_ValidRegState();
-            assert AUCIdef();
-            assert validSysState(ss5);
-            assert ApplicationUsermodeContinuationInvariant(ss5.hw, pre_unstash.hw);
-            assert validExceptionTransition(ss5,pre_unstash,ss5.d);
-            assert mode_of_state(ss5.hw) != User;
-            assert tuple(pre_unstash.hw.regs[R0], pre_unstash.hw.regs[R1], pre_unstash.d) ==
-                    exceptionHandled_premium(ss5);
-            assert validSysState'(pre_unstash);
-            reveal_validExceptionTransition();
-            assert mode_of_state(pre_unstash.hw) == Monitor;
-        }
-
-        s':= unstash_banked_regs(pre_unstash);
-        assert this == s'.hw;
-
-        forall :: s'.hw.regs ?[R0] && s'.hw.regs ?[R1]
-            && tuple(s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
-            exceptionHandled(ss5)
-            && validExceptionTransition(ss5,s',ss5.d)
-            && validSysState'(s')
-        {
-            reveal_ValidRegState();
-            assert pre_unstash.hw.regs[R0] == s'.hw.regs[R0];
-            assert pre_unstash.hw.regs[R1] == s'.hw.regs[R1];
-            assert pre_unstash.d == s'.d;
-            assert pre_unstash.hw.m.addresses == s'.hw.m.addresses;
-            assert pre_unstash.g.g_cur_dispatcher == s'.g.g_cur_dispatcher;
-            assert pre_unstash.hw.conf.ttbr0 == s'.hw.conf.ttbr0;
-            assert validSysState'(s');
-            assert tuple(pre_unstash.hw.regs[R0], pre_unstash.hw.regs[R1], pre_unstash.d) ==
-                    exceptionHandled_premium(ss5);
-            assert tuple(s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
-                    exceptionHandled_premium(ss5);
-            reveal_validExceptionTransition();
-            assert validExceptionTransition(ss5,pre_unstash,ss5.d);
-            assert validExceptionTransition(ss5,s',ss5.d);
-        }
-
-        forall :: bankedRegsPreserved(s.hw, s'.hw)
-        {
-            reveal_ValidConfig();
-            reveal_ValidSRegState();
-            assert s2.g.g_sps == s_stash.g.g_sps;
-            assert s2.g.g_lrs == s_stash.g.g_lrs;
-            assert s2.g.g_psrs == s_stash.g.g_psrs;
-            assert pre_unstash.g == s2.g;
-            assert pre_unstash.g.g_sps == s_stash.g.g_sps;
-            assert pre_unstash.g.g_lrs == s_stash.g.g_lrs;
-            assert pre_unstash.g.g_psrs == s_stash.g.g_psrs;
-            assert s.hw.sregs[spsr(Monitor)] == s_stash.g.g_psrs[Monitor];
-            assert s'.hw.sregs[spsr(Monitor)] == pre_unstash.g.g_psrs[Monitor];
-            assert s.hw.sregs[spsr(Monitor)] == s'.hw.sregs[spsr(Monitor)];
-         
-            forall m :| set(FIQ,IRQ,Supervisor,Abort,Undefined,Monitor) ?[m] ::
-            s'.hw.regs ?[LR(m)] && s.hw.regs ?[LR(m)]
-            && s'.hw.regs[LR(m)] == s.hw.regs[LR(m)]
-            && s'.hw.regs ?[SP(m)] && s.hw.regs ?[SP(m)]
-            && s'.hw.regs[SP(m)] == s.hw.regs[SP(m)]
-            {
-                reveal_ValidRegState();
-                assert s.hw.regs[LR(m)] == s_stash.g.g_lrs[m];
-                assert s'.hw.regs[LR(m)] == pre_unstash.g.g_lrs[m];
-
-                assert s.hw.regs[SP(m)] == s_stash.g.g_sps[m]; 
-                assert s'.hw.regs[SP(m)] == pre_unstash.g.g_sps[m];
-            }
-
-        }
-        
-        forall :: SaneState(s'.hw)
-        {
-            reveal_validExceptionTransition();
-            assert ValidStack(s'.hw);
-        }
-
-        assert validSysState(s2);
-        assert validSysState(ss3);
-        assert validSysState(ss5);
-        assert validSysStates(set(s1,s2,ss3,ss5));
-        assert errCheck(s, s1);
-        assert preEntryEnter(s1, s2, pagenr, arg1, arg2, arg3);
-        assert entryTransitionEnter(s2, ss3);
-        assert ss5.d == ss3.d;
-        assert userspaceExecution(ss3.hw, ss5.hw, ss3.d);
-        assert validExceptionTransition(ss5, s',ss5.d);
-        assert mode_of_state(ss5.hw) != User;
-
-        assert validEnter(s,s',pagenr,arg1,arg2,arg3);
+        ghost var s0 := s.(hw := this);
+        assert validSysState'(s0);
+        assert s0.d == s.d;
+        assert smc_enter_err(s0.d, old(pagenr), false) == KOM_ERR_SUCCESS();
+        assert bankedRegsPreserved(old(this), this);
+        assert errCheck(s, s0);
+        s' := smc_enter_success(arg1, arg2, arg3, r5, err, val, s0);
+        assert validEnter(s0, s', old(pagenr), old(arg1),old(arg2),old(arg3));
+        assert validEnter(s, s', old(pagenr), old(arg1),old(arg2),old(arg3));
     }
 }
