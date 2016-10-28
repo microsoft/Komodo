@@ -1,3 +1,4 @@
+/*
 var{:register OReg(R0)}  r0:int;
 var{:register OReg(R1)}  r1:int;
 var{:register OReg(R2)}  r2:int;
@@ -42,7 +43,6 @@ var{:register OSReg(spsr(Monitor))}    spsr_mon:int;
 procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
 
 function{:operand} sp_op_const(n:word):operand
-/*
 procedure {:instruction Ins(ADD(dst, src1, src2))}
 ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
     requires/ensures
@@ -440,6 +440,22 @@ var{:state ok()}  ok:bool;
 var{:state mem()} mem:memmap;
 var{:state globals()} globals:map(operand, seq(word));
 var{:state osp()} sp:word;
+var{:state olr()} lr:word;
+
+var{:state reg(R0)}  r0:int;
+var{:state reg(R1)}  r1:int;
+var{:state reg(R2)}  r2:int;
+var{:state reg(R3)}  r3:int;
+var{:state reg(R4)}  r4:int;
+var{:state reg(R5)}  r5:int;
+var{:state reg(R6)}  r6:int;
+var{:state reg(R7)}  r7:int;
+var{:state reg(R8)}  r8:int;
+var{:state reg(R9)}  r9:int;
+var{:state reg(R10)} r10:int;
+var{:state reg(R11)} r11:int;
+var{:state reg(R12)} r12:int;
+
 
 procedure {:refined} {:instruction Ins(LDR(rd, base, ofs))}
 rLDR(out{:operand} rd:word, {:operand} base:word, {:operand} ofs:word)
@@ -461,7 +477,7 @@ rLDR(out{:operand} rd:word, {:operand} base:word, {:operand} ofs:word)
 }
 
 procedure {:refined} {:instruction Ins(LDR_reloc(rd, g))}
-LDRglobaladdr(out{:operand} rd:word, {:operand} g:global)
+rLDRglobaladdr(out{:operand} rd:word, {:operand} g:global)
     ensures
         rd == AddressOfGlobal(OSymbol(g));
 {
@@ -492,8 +508,8 @@ predicate ValidGlobalsAddr(globals:map<operand, seq<word>>, g:operand, addr:int)
 }
 #endverbatim
 
-procedure {:refined} {:instruction Ins(LDR_global(rd, g, base, ofs))}
-LDRglobal(out{:operand} rd:word, {:operand} g:global,
+procedure {:refined} {:instruction Ins(LDR_global(rd, OSymbol(g), base, ofs))}
+rLDRglobal(out{:operand} rd:word, {:inline} g:global,
           {:operand} base:word, {:operand} ofs:word)
     requires
         ValidGlobalsAddr(globals, OSymbol(g), base + ofs);

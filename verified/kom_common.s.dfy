@@ -93,7 +93,7 @@ function method {:opaque} SavedPSRs(): operand { OSymbol("g_saved_psrs") }
 function method {:opaque} PageDb(): operand { OSymbol("g_pagedb") }
 function method {:opaque} SecurePhysBaseOp(): operand { OSymbol("g_secure_physbase") }
 function method {:opaque} CurAddrspaceOp(): operand { OSymbol("g_cur_addrspace") }
-function method {:opaque} K_SHA256s(): operand { OSymbol("g_k_sha256") }
+function method K_SHA256s(): operand { OSymbol("g_k_sha256") }
 
 // the phys base is unknown, but never changes
 function method {:axiom} SecurePhysBase(): addr
@@ -104,7 +104,7 @@ function method KomGlobalDecls(): globaldecls
     ensures ValidGlobalDecls(KomGlobalDecls());
 {
     reveal_PageDb(); reveal_SecurePhysBaseOp(); reveal_CurAddrspaceOp();
-    reveal_SavedSPs(); reveal_SavedLRs(); reveal_SavedPSRs(); reveal_K_SHA256s();
+    reveal_SavedSPs(); reveal_SavedLRs(); reveal_SavedPSRs(); 
     map[SecurePhysBaseOp() := 4, //BytesPerWord() 
         CurAddrspaceOp() := 4,   //BytesPerWord()
         SavedSPs() := 28,        //BytesPerWord() * number of modes

@@ -74,6 +74,21 @@ predicate {:opaque} Even(i:int) { i % 2 == 0 }
 
 #endverbatim
 
+//procedure {:refined} test(
+//        {:inline} input_slot:word,
+//    ghost z:SHA256Trace,
+//    inout{:operand} t0:word
+//        )
+//    requires/ensures
+//        true;
+//    reads lr; sp;
+//    modifies mem;
+//    requires {:refined false}
+//        @t0 == OReg(R0);
+//    requires lr == 0;
+//{
+//}
+
 procedure {:refined} Body_00_15(
     {:inline} i:SHA_step,
     {:inline} perm:perm_index,
@@ -97,7 +112,7 @@ requires/ensures
     //WordAligned(sp);
     ValidAddr(mem, sp + input_slot);
 reads 
-    sp;
+    lr; sp; globals;
 modifies 
     mem;
 requires {:refined false}
@@ -116,6 +131,11 @@ requires {:refined false}
     @g  == OReg(GetReg(4+ApplyPerm(6, perm)));
     @h  == OReg(GetReg(4+ApplyPerm(7, perm)));
 requires
+    // K table adjusted properly
+    ValidGlobalsAddr(globals, K_SHA256s(), lr);
+    lr == AddressOfGlobal(K_SHA256s()) + 4*i;
+    forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][i] == K_SHA256(i);
+    
     input_slot == (i%16)*4;
     t3 == BitwiseXor(b, c);
     if i == 0 then t2 == 0 else i < 16 ==> t2 == old(Maj(a, b, c));
@@ -124,7 +144,7 @@ requires
     // SHA semantics
     SeqLength(z.H) > 0;
     IsSHA256TraceReadyForStep(z, i);
-    last(last(z.atoh)) == atoh_c(a, b, c, d, e, f, g, h);
+    //last(last(z.atoh)) == atoh_c(a, b, c, d, e, f, g, h);
 //
 //    // TODO: Need an invariant about the 16-element array X
 //    //       and its relationship with W
@@ -156,6 +176,7 @@ ensures
 
     // BP: Skipping this and encoding K256 directly as a const
     // ldr	$t2,[$Ktbl],#4			@ *K256++
+    rLDRglobal(t2, K_SHA256s().sym, lr, 0);
     rADDWrap(h, h, t2);      //  h+=X[i]  BP: X[i] = input[i]?
     rSTR(t1, sp, input_slot);  // @ BP: Save a copy of input[i] for use in subsequent W calculations
     rEOR(t1, f, g);
@@ -232,7 +253,7 @@ procedure {:refined} Body_16_XX(
 requires/ensures
     //ValidAddr(mem, sp + input_slot);
 reads 
-    sp;
+    lr; sp; globals;
 modifies 
     mem;
 requires {:refined false}
@@ -257,6 +278,11 @@ requires
     input_slot_9 == ((i+9)%16)*4;
     ValidAddr(mem, sp + input_slot);
     ValidAddr(mem, sp + input_slot_9); 
+
+    // K table adjusted properly
+    ValidGlobalsAddr(globals, K_SHA256s(), lr);
+    lr == AddressOfGlobal(K_SHA256s()) + 4*i;
+    forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][i] == K_SHA256(i);
 
     t3 == BitwiseXor(b, c);
 

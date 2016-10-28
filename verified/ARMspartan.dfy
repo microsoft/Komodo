@@ -111,6 +111,7 @@ function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
 // Spartan-to-Dafny connections needed for refined mode
 //-----------------------------------------------------------------------------
 function method sp_op_osp():operand { OSP }
+function method sp_op_olr():operand { OLR }
 function sp_get_ok(s:state):bool { s.ok }
 function sp_get_reg(r:ARMReg, s:state):word requires r in s.regs { s.regs[r] }
 function sp_get_mem(s:state):memmap { s.m.addresses }
@@ -119,6 +120,11 @@ function sp_get_osp(s:state):word
     requires SP(mode_of_state(s)) in s.regs
 {
     s.regs[SP(mode_of_state(s))]
+}
+function sp_get_olr(s:state):word 
+    requires LR(mode_of_state(s)) in s.regs
+{
+    s.regs[LR(mode_of_state(s))]
 }
 
 function sp_update_ok(sM:state, sK:state):state { sK.(ok := sM.ok, steps := sM.steps) }
