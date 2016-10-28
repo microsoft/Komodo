@@ -438,6 +438,7 @@ STRglobal({:operand} rd:int, {:operand} g:string,
 */
 var{:state ok()}  ok:bool;
 var{:state mem()} mem:memmap;
+var{:state globals()} globals:map(operand, seq(word));
 var{:state osp()} sp:word;
 
 procedure {:refined} {:instruction Ins(LDR(rd, base, ofs))}
@@ -447,6 +448,60 @@ rLDR(out{:operand} rd:word, {:operand} base:word, {:operand} ofs:word)
     reads mem;
     ensures
         rd == mem[old(base) + old(ofs)];
+{
+    reveal evalCodeOpaque;
+    reveal ValidRegState;
+    reveal ValidMemState;
+    reveal ValidConfig;
+    reveal ValidSRegState;
+
+    if ghost (!(old(this).ok && this.ok)) {
+        this := old(this).(ok := false);
+    } 
+}
+
+procedure {:refined} {:instruction Ins(LDR_reloc(rd, g))}
+LDRglobaladdr(out{:operand} rd:word, {:operand} g:global)
+    ensures
+        rd == AddressOfGlobal(OSymbol(g));
+{
+    reveal evalCodeOpaque;
+    reveal ValidRegState;
+    reveal ValidMemState;
+    reveal ValidConfig;
+    reveal ValidSRegState;
+
+    if ghost (!(old(this).ok && this.ok)) {
+        this := old(this).(ok := false);
+    } 
+}
+
+#verbatim
+
+predicate ValidGlobals(globals:map<operand, seq<word>>)
+{
+      (forall g :: g in TheGlobalDecls() <==> g in globals)
+   && (forall g :: g in TheGlobalDecls()
+        ==> |globals[g]| == BytesToWords(TheGlobalDecls()[g]))
+}
+predicate ValidGlobalsAddr(globals:map<operand, seq<word>>, g:operand, addr:int)
+{
+    ValidGlobals(globals)
+ && ValidGlobal(g) && WordAligned(addr) 
+ && AddressOfGlobal(g) <= addr < AddressOfGlobal(g) + SizeOfGlobal(g)
+}
+#endverbatim
+
+procedure {:refined} {:instruction Ins(LDR_global(rd, g, base, ofs))}
+LDRglobal(out{:operand} rd:word, {:operand} g:global,
+          {:operand} base:word, {:operand} ofs:word)
+    requires
+        ValidGlobalsAddr(globals, OSymbol(g), base + ofs);
+    reads
+        globals;
+    ensures
+        rd == globals[OSymbol(g)][BytesToWords(base + ofs - AddressOfGlobal(OSymbol(g)))];
+        //GlobalWord(this.m, g, base + ofs - g);
 {
     reveal evalCodeOpaque;
     reveal ValidRegState;

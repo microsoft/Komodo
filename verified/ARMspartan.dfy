@@ -114,6 +114,7 @@ function method sp_op_osp():operand { OSP }
 function sp_get_ok(s:state):bool { s.ok }
 function sp_get_reg(r:ARMReg, s:state):word requires r in s.regs { s.regs[r] }
 function sp_get_mem(s:state):memmap { s.m.addresses }
+function sp_get_globals(s:state):map<operand, seq<word>> { s.m.globals }
 function sp_get_osp(s:state):word 
     requires SP(mode_of_state(s)) in s.regs
 {
@@ -152,6 +153,8 @@ predicate sp_is_src_reg(o:operand) { ValidRegOperand(o) }
 type snd = word
 predicate sp_is_src_snd(o:operand) { ValidOperand(o) && o.OReg? }
 
+predicate sp_is_src_global(o:operand) { ValidGlobal(o) }
+
 function sp_eval_op_word(s:state, o:operand):word
     requires sp_is_src_word(o);
     requires ValidState(s)
@@ -169,6 +172,13 @@ function sp_eval_op_snd(s:state, o:operand):snd
     requires ValidState(s)
 {
     OperandContents(s,o)
+}
+
+type global = string
+function sp_eval_op_global(s:state, o:operand):global
+    requires sp_is_src_global(o);
+{
+    o.sym
 }
 
 predicate sp_state_eq(s0:state, s1:state)
