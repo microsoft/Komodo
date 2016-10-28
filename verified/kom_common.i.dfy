@@ -3,6 +3,12 @@ include "kom_common.s.dfy"
 include "pagedb.s.dfy"
 
 //-----------------------------------------------------------------------------
+// Constants
+//-----------------------------------------------------------------------------
+
+function method PAGEDB_ENTRY_SHIFT():int { 3 }
+
+//-----------------------------------------------------------------------------
 // Stack/procedure invariants
 //-----------------------------------------------------------------------------
 
@@ -40,6 +46,7 @@ predicate RegPreservingExcept(s:state, r:state, trashed:set<operand>)
     && (OSP !in trashed ==> OperandContents(s, OSP) == OperandContents(r, OSP))
     && (OLR !in trashed ==> OperandContents(s, OLR) == OperandContents(r, OLR))
     && SRegsInvariant(s, r)
+    && BankedRegsInvariant(s, r)
 }
 
 predicate GlobalsPreservingExcept(s:state, r:state, trashed:set<operand>)
@@ -51,20 +58,24 @@ predicate GlobalsPreservingExcept(s:state, r:state, trashed:set<operand>)
         s.m.globals[glob] == r.m.globals[glob]
 }
 
-predicate NonvolatileRegPreserving(s:state, r:state)
-    requires ValidState(s) && ValidState(r);
+predicate BankedRegsInvariant(s:state, r:state)
+    requires ValidState(s) && ValidState(r)
 {
-    OperandContents(s, OReg(R4)) == OperandContents(r, OReg(R4))
-    && OperandContents(s, OReg(R5)) == OperandContents(r, OReg(R5))
-    && OperandContents(s, OReg(R6)) == OperandContents(r, OReg(R6))
-    && OperandContents(s, OReg(R7)) == OperandContents(r, OReg(R7))
-    && OperandContents(s, OReg(R8)) == OperandContents(r, OReg(R8))
-    && OperandContents(s, OReg(R9)) == OperandContents(r, OReg(R9))
-    && OperandContents(s, OReg(R10)) == OperandContents(r, OReg(R10))
-    && OperandContents(s, OReg(R11)) == OperandContents(r, OReg(R11))
-    && OperandContents(s, OReg(R12)) == OperandContents(r, OReg(R12))
-    && OperandContents(s, OSP) == OperandContents(r, OSP)
-    && OperandContents(s, OLR) == OperandContents(r, OLR)
+    reveal_ValidRegState();
+
+    // LR and SP invariant for all modes other than the current one (i.e. monitor)
+    forall m | m != mode_of_state(s) ::
+        s.regs[LR(m)] == r.regs[LR(m)] && s.regs[SP(m)] == r.regs[SP(m)]
+}
+
+// typical procedure calls used in an SMC handler should preserve this
+predicate SmcProcedureInvariant(s:state, r:state)
+    requires SaneState(s) && SaneState(r);
+{
+    mode_of_state(r) == mode_of_state(s) // implied by SaneState
+        && StackPreserving(s,r)
+        && BankedRegsInvariant(s, r)
+        && SRegsInvariant(s,r)
 }
 
 predicate MemPreservingExcept(s:state, r:state, base:int, limit:int)

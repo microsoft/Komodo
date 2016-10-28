@@ -10,16 +10,12 @@ procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:
         @pagenr != @tmp;
         @phys != OSP;
         @tmp != OSP;
-        @phys != OLR;
-        @tmp != OLR;
         validPageNr(pagenr);
     ensures
-        GlobalsInvariant(old(this),this);
         AllMemInvariant(old(this),this);
         RegPreservingExcept(old(this), this, set(@phys, @tmp));
-        bankedRegsPreserved(old(this), this);
+        SmcProcedureInvariant(old(this), this);
         phys == page_paddr(old(pagenr));
-        isUInt32(phys);
         PageAligned(phys);
 {
     assert pagenr < KOM_SECURE_NPAGES();
@@ -45,16 +41,13 @@ procedure paddr_page_impl(out {:operand} pagenr:int, {:operand} phys:int, out {:
         @pagenr != @tmp;
         @tmp != OSP;
         @pagenr != OSP;
-        @tmp != OLR;
-        @pagenr != OLR;
         isUInt32(phys);
         PageAligned(phys);
         SecurePhysBase() <= phys < SecurePhysBase() + KOM_SECURE_RESERVE();
     ensures
         GlobalsInvariant(old(this),this);
-        AllMemInvariant(old(this),this);
         RegPreservingExcept(old(this), this, set(@pagenr, @tmp));
-        bankedRegsPreserved(old(this), this);
+        SmcProcedureInvariant(old(this), this);
         pagenr == paddr_page(old(phys));
         validPageNr(pagenr);
 {
@@ -81,14 +74,11 @@ procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out
         @virt != @tmp;
         @virt != OSP;
         @tmp != OSP;
-        @virt != OLR;
-        @tmp != OLR;
         validPageNr(pagenr);
     ensures
-        GlobalsInvariant(old(this),this);
         AllMemInvariant(old(this),this);
         RegPreservingExcept(old(this), this, set(@virt, @tmp));
-        bankedRegsPreserved(old(this), this);
+        SmcProcedureInvariant(old(this), this);
         virt == page_monvaddr(old(pagenr));
         isUInt32(virt);
 {
@@ -124,6 +114,8 @@ procedure fcall_prologue(ghost stack_bytes:int)
         MemContents(this.m, sp+36) == old(lr);
 
         GlobalsInvariant(old(this),this);
+        BankedRegsInvariant(old(this),this);
+        SRegsInvariant(old(this),this);
         NonStackMemPreserving(old(this),this);
         ParentStackPreserving(old(this),this);
         StackBytesRemaining(this,stack_bytes-40);
@@ -174,6 +166,8 @@ procedure fcall_epilogue(ghost stack_bytes_left:int)
         r12 == old(MemContents(this.m, sp));
 
         AllMemInvariant(old(this),this);
+        BankedRegsInvariant(old(this),this);
+        SRegsInvariant(old(this),this);
         StackBytesRemaining(this,stack_bytes_left+40);
 {
     //pop r12 down to r4 from stack

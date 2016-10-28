@@ -17,8 +17,7 @@ procedure mkl2pte_insecure(
         nonexec_mapping(abs_mapping) == wordToMapping(mapping);
         RegPreservingExcept(old(this),this,set(@r2,@r6,@r4));
         AllMemInvariant(old(this),this);
-        GlobalsInvariant(old(this),this);
-        
+        SmcProcedureInvariant(old(this), this);        
 {
     lemma_LeftShift12(page);
     LSL(page,page,12);
@@ -47,7 +46,7 @@ procedure phys_page_is_insecure_ram({:register OReg(R3)} phys_page:int)
         r12 == 0 <==> !physPageIsInsecureRam(phys_page);
         RegPreservingExcept(old(this), this, set(@r12)); // TODO FIXME
         AllMemInvariant(old(this),this);
-        GlobalsInvariant(old(this),this);
+        SmcProcedureInvariant(old(this), this);
         r12 != 0 ==> validInsecurePageNr(phys_page);
 {
     LDRglobaladdr(r12, SecurePhysBaseOp());
@@ -84,6 +83,7 @@ procedure kom_smc_map_insecure(
         pageDbCorresponds(this.m, pagedb_in);
     ensures
         GlobalsInvariant(old(this), this);
+        SmcProcedureInvariant(old(this), this);
         tuple(pagedb,err) == old(smc_mapInsecure_premium(pagedb_in, as_page, phys_page, mapping));
         pageDbCorresponds(this.m, pagedb);
 {

@@ -127,6 +127,16 @@ lemma lemma_LeftShift2(x: word)
     lemma_ShiftsAdd(x, 1, 1);
 }
 
+lemma lemma_LeftShift3(x: word)
+    requires x < 0x20000000
+    ensures LeftShift(x, 3) == x * 8
+{
+    var x' := LeftShift(x, 2);
+    lemma_LeftShift2(x);
+    lemma_LeftShift1(x');
+    lemma_ShiftsAdd(x, 2, 1);
+}
+
 lemma lemma_LeftShift4(x: word)
     requires x < 0x10000000
     ensures LeftShift(x, 4) == x * 16

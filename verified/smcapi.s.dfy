@@ -439,24 +439,35 @@ function smchandler(pageDbIn: PageDb, callno: word, arg1: word, arg2: word,
     else (pageDbIn, KOM_ERR_INVALID(), 0)
 }
 
-/* Invariant across SMC handler state */
-predicate smchandlerInvariant(s:state, s':state)
+// non-volatile regs preserved
+predicate nonvolatileRegInvariant(s:state, s':state)
     requires ValidState(s)
 {
     reveal_ValidRegState();
-    reveal_ValidConfig();
     ValidState(s')
-        // non-volatile regs preserved
         && s.regs[R4] == s'.regs[R4] && s.regs[R5] == s'.regs[R5]
         && s.regs[R6] == s'.regs[R6] && s.regs[R7] == s'.regs[R7]
         && s.regs[R8] == s'.regs[R8] && s.regs[R9] == s'.regs[R9]
         && s.regs[R10] == s'.regs[R10] && s.regs[R11] == s'.regs[R11]
         && s.regs[R12] == s'.regs[R12]
-        // banked regs, including SPSR and LR (our return target) are preserved
-        && forall m :: ((m == User || s.conf.spsr[m] == s'.conf.spsr[m])
+    && OperandContents(s, OSP) == OperandContents(s', OSP)
+    && OperandContents(s, OLR) == OperandContents(s', OLR)
+}
+
+/* Overall invariant across SMC handler state */
+predicate smchandlerInvariant(s:state, s':state)
+    requires ValidState(s)
+{
+    reveal_ValidRegState();
+    reveal_ValidConfig();
+    ValidState(s') && nonvolatileRegInvariant(s, s')
+        // all banked regs, including SPSR and LR (our return target) are preserved
+        // TODO: we may need to weaken this to reason about IRQ/FIQ injection.
+        && forall m :: ((m == User || s.conf.spsr[m] == s'.conf.spsr[m]) // (no User SPSR)
                 && s.regs[LR(m)] == s'.regs[LR(m)]
                 && s.regs[SP(m)] == s'.regs[SP(m)])
-        // non-secure world
+        // return in non-secure world, in same (i.e., monitor) mode
+        && mode_of_state(s') == mode_of_state(s)
         && s'.conf.scr == SCR(NotSecure, false, false)
 }
 

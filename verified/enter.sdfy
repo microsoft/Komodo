@@ -14,7 +14,7 @@ procedure smc_enter_err(
     ensures
         AllMemInvariant(old(this),this);
         RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
-        bankedRegsPreserved(old(this),this);
+        SmcProcedureInvariant(old(this), this);
         err == smc_enter_err(pagedb, old(pagenr), isresumeg);
 {
     if (pagenr >= sp_op_const(KOM_SECURE_NPAGES())) {

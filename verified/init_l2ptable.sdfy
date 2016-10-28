@@ -50,12 +50,15 @@ procedure install_l1ptes'(
         @l1base != @l2base;
         @l1base != @l1index;
         @l2base != @l1index;
+        @l1base != @sp;
+        @l2base != @sp;
+        @l1index != @sp;
         PageAligned(l1base) && address_is_secure(l1base);
         validPageNr(l2pg) && l2base == page_paddr(l2pg);
         0 <= l1index < NR_L1PTES();
     ensures
         GlobalsInvariant(old(this),this);
-        StackPreserving(old(this),this);
+        SmcProcedureInvariant(old(this),this);
         RegPreservingExcept(old(this),this, set(@l2base, @l1index));
         MemPreservingExcept(old(this),this, l1base + old(l1index) * 16,
                             l1base + (old(l1index) + 1) * 16);
@@ -113,7 +116,6 @@ procedure install_l1ptes(
         SaneState(this);
     requires
         @l1pt_va != OSP && @l2_pg != OSP && @l1index != OSP && @tmp != OSP;
-        @l1pt_va != OLR && @l2_pg != OLR && @l1index != OLR && @tmp != OLR;
         DistinctRegOperands(set(@l1pt_va, @l2_pg, @l1index, @tmp), 4);
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
@@ -125,7 +127,7 @@ procedure install_l1ptes(
         0 <= l1index < NR_L1PTES();
     ensures
         GlobalsInvariant(old(this),this);
-        StackPreserving(old(this),this);
+        SmcProcedureInvariant(old(this),this);
         MemPreservingExcept(old(this),this, l1pt_va + old(l1index) * 16,
                             l1pt_va + (old(l1index) + 1) * 16);
         RegPreservingExcept(old(this),this, set(@l2_pg, @l1index, @tmp));
@@ -209,7 +211,7 @@ procedure init_l2ptable_success(
         pageDbEntryCorresponds(pagedb_in[l2_pg], extractPageDbEntry(this.m, l2_pg));
     ensures
         GlobalsInvariant(old(this),this);
-        StackPreserving(old(this),this);
+        SmcProcedureInvariant(old(this),this);
         //PagePreservingExcept(old(this),this, set(l1pg, l2_pg));
         RegPreservingExcept(old(this),this, set(@l2_pg, @l1index, @tmp1, @tmp2, @tmp3));
         pagedb == installL1PTEInPageDb(pagedb_in, l1pg, old(l2_pg), old(l1index));
@@ -270,7 +272,7 @@ procedure kom_smc_init_l2ptable(
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
     ensures
-        StackPreserving(old(this),this);
+        SmcProcedureInvariant(old(this),this);
         tuple(pagedb, err)
             == old(smc_initL2PTable_premium(pagedb_in, pagenr, as_page, l1index));
         pageDbCorresponds(this.m, pagedb);

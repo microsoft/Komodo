@@ -11,7 +11,7 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
         base >= StackBase() || base + size <= StackLimit();
     ensures
         GlobalsInvariant(old(this),this);
-        StackPreserving(old(this),this);
+        SmcProcedureInvariant(old(this),this);
         RegPreservingExcept(old(this), this, set(@base,@size));
         MemPreservingExcept(old(this), this, old(base), old(base + size));
         forall i :: old(base) <= i < old(base + size) && WordAligned(i)
@@ -27,7 +27,7 @@ procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand}
         invariant
             SaneState(this);
             GlobalsInvariant(old(this),this);
-            StackPreserving(old(this),this);
+            SmcProcedureInvariant(old(this),this);
             WordAligned(base);
             size == limit;
             lower <= base <= limit;

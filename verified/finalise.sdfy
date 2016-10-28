@@ -9,7 +9,7 @@ procedure kom_smc_finalise(
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
     ensures
-        StackPreserving(old(this),this);
+        SmcProcedureInvariant(old(this),this);
         tuple(pagedb,err) == smc_finalise_premium(pagedb_in, as_page);
         pageDbCorresponds(this.m, pagedb);
 {

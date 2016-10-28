@@ -52,8 +52,8 @@ procedure addrspace_incref(
         as_va == page_monvaddr(pagenr);
         pageDbCorresponds(this.m, pagedb_in);
     ensures
-        GlobalsPreservingExcept(old(this),this,set(PageDb()));
-        StackPreserving(old(this),this);
+        GlobalsInvariant(old(this),this);
+        SmcProcedureInvariant(old(this),this);
         MemPreservingExcept(old(this),this, as_va, as_va + PAGESIZE());
         RegPreservingExcept(old(this),this, set(@tmp));
         pagedb == increfAddrspacePageDb(pagedb_in, pagenr);
@@ -113,7 +113,13 @@ procedure allocate_page_success(
     requires/ensures
         SaneState(this);
     requires
-        DistinctRegOperands(set(@pagenr, @as_va, @pagedb_base, @tmp, @tmp2), 5);
+        //DistinctRegOperands(set(@pagenr, @as_va, @pagedb_base, @tmp, @tmp2), 5);
+        ValidRegOperand(@pagenr) && ValidRegOperand(@as_va) && ValidRegOperand(@pagedb_base);
+        ValidRegOperand(@tmp) && ValidRegOperand(@tmp2);
+        @tmp != @pagenr && @tmp != @as_va && @tmp != @pagedb_base && @tmp != @tmp2;
+        @tmp2 != @pagenr && @tmp2 != @as_va && @tmp2 != @pagedb_base;
+        @tmp != @sp && @tmp2 != @sp && @as_va != @sp;
+
         ValidOperand(@typeval) && @typeval is OConst;
         pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb_in);
@@ -127,7 +133,7 @@ procedure allocate_page_success(
         pagedb_in[entry.addrspace].entry.state == InitState;
     ensures
         GlobalsPreservingExcept(old(this),this,set(PageDb()));
-        StackPreserving(old(this),this);
+        SmcProcedureInvariant(old(this),this);
         RegPreservingExcept(old(this),this, set(@tmp, @tmp2));
         pagenr == old(pagenr); // redundant with the above, but makes life easier
         pagedb == specPageDb(allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry));
@@ -139,14 +145,9 @@ procedure allocate_page_success(
     assert specErr(res) == KOM_ERR_SUCCESS();
     pagedb := specPageDb(res);
 
-    // unpack DistinctRegOperands to help the verifier
-    assert @tmp != @tmp2 && @tmp != @pagenr && @tmp != @as_va && @tmp != @pagedb_base;
-    assert @tmp2 != @pagenr && @tmp2 != @as_va && @tmp2 != @pagedb_base;
-
     // increment AS refcount
     ghost var pagedb_incref;
     pagedb_incref := addrspace_incref(as_va, tmp, pagedb_in, entry.addrspace);
-    assert GlobalsPreservingExcept(old(this),this,set(PageDb()));
     AllocatePageImpliesIncrefAddrspace(pagedb_in, pagenr, entry.addrspace, entry.entry);
     assert pagedb_incref[entry.addrspace] == pagedb[entry.addrspace];
     assert pageDbCorrespondsOnly(this.m, pagedb, entry.addrspace);
@@ -159,9 +160,8 @@ procedure allocate_page_success(
 
     // update pagedb
     tmp := typeval;
-    tmp2 := sp_op_const(PAGEDB_ENTRY_SIZE());
-    assert pagenr < 256 && tmp2 == 8; // sigh.
-    MUL(tmp2,pagenr,tmp2);
+    lemma_LeftShift3(pagenr);
+    LSL(tmp2,pagenr,sp_op_const(PAGEDB_ENTRY_SHIFT()));
     assert tmp2 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_TYPE();
     STRglobal(tmp, PageDb(), pagedb_base, tmp2);
     ADD(tmp2, tmp2, sp_op_const(PAGEDB_ENTRY_ADDRSPACE()));
@@ -208,8 +208,14 @@ procedure allocate_page(
     requires/ensures
         SaneState(this);
     requires
-        @tmp2 != OLR && @tmp != OLR && @err != OLR;
-        DistinctRegOperands(set(@pagenr, @as_pagenr, @pagedb_base, @tmp, @tmp2, @err), 6);
+        //DistinctRegOperands(set(@pagenr, @as_pagenr, @pagedb_base, @tmp, @tmp2, @err), 6);
+        ValidRegOperand(@pagenr) && ValidRegOperand(@as_pagenr) && ValidRegOperand(@pagedb_base);
+        ValidRegOperand(@tmp) && ValidRegOperand(@tmp2) && ValidRegOperand(@err);
+        @tmp != @tmp2 && @tmp != @pagenr && @tmp != @as_pagenr && @tmp != @pagedb_base;
+        @tmp2 != @err && @tmp2 != @pagenr && @tmp2 != @as_pagenr && @tmp2 != @pagedb_base;
+        @err != @tmp && @err != @pagenr && @err != @as_pagenr && @err != @pagedb_base;
+        @tmp != @sp && @tmp2 != @sp && @err != @sp;
+
         ValidOperand(@typeval) && @typeval is OConst;
         pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb_in);
@@ -221,7 +227,7 @@ procedure allocate_page(
         pageDbCorresponds(this.m, pagedb_in);
     ensures
         GlobalsPreservingExcept(old(this),this,set(PageDb()));
-        StackPreserving(old(this),this);
+        SmcProcedureInvariant(old(this),this);
         RegPreservingExcept(old(this),this, set(@tmp, @tmp2, @err));
         pagenr == old(pagenr); // redundant with the above, but makes life easier
         tuple(pagedb, err)
@@ -234,22 +240,25 @@ procedure allocate_page(
                                      extractPageDbEntry(this.m, pagenr))
         else pagedb == pagedb_in && pageDbCorresponds(this.m, pagedb);
 {
-    ValidPageDbImpliesValidAddrspace(pagedb_in, entry.addrspace);
     pagedb := pagedb_in;
+    ghost var specRes := allocatePage(pagedb, pagenr, entry.addrspace, entry.entry);
+    ValidPageDbImpliesValidAddrspace(pagedb, entry.addrspace);
 
     // unpack DistinctRegOperands to help the verifier
+    /*
     assert @tmp != @tmp2 && @tmp != @pagenr && @tmp != @as_pagenr && @tmp != @pagedb_base;
     assert @tmp2 != @err && @tmp2 != @pagenr && @tmp2 != @as_pagenr && @tmp2 != @pagedb_base;
-    assert @err != @tmp && @err != @pagenr && @err != @as_pagenr && @err != @pagedb_base;
+    assert @err != @tmp && @err != @pagenr && @err != @as_pagenr && @err != @pagedb_base; */
 
     if (pagenr >= sp_op_const(KOM_SECURE_NPAGES())) {
+        assert !validPageNr(pagenr);
         err := sp_op_const(KOM_ERR_INVALID_PAGENO());
+        assert err == specErr(specRes);
     } else {
         assert validPageNr(pagenr);
         // NB: using err as a second tmp reg here
-        err := sp_op_const(PAGEDB_ENTRY_SIZE());
-        assert pagenr < 256 && err == 8; // sigh.
-        MUL(err,pagenr,err);
+        lemma_LeftShift3(pagenr);
+        LSL(err,pagenr,sp_op_const(PAGEDB_ENTRY_SHIFT()));
         assert err == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_TYPE();
         assert pagedb_base == old(pagedb_base) == AddressOfGlobal(PageDb());
         LDRglobal(tmp, PageDb(), pagedb_base, err);
@@ -260,26 +269,39 @@ procedure allocate_page(
             PageDbCorrespondsImpliesEntryCorresponds(this.m, pagedb_in, pagenr);
         }
 
-        if (tmp != sp_op_const(KOM_PAGE_FREE())) {
-            err := sp_op_const(KOM_ERR_PAGEINUSE());
-        } else {
-            assert RegPreservingExcept(old(this),this, set(@tmp, @tmp2, @err));
-            page_monvaddr_impl(tmp2, as_pagenr, err);
+        ghost var midway1 := this;
+        assert RegPreservingExcept(old(this), midway1, set(@tmp, @err));
 
+        if (tmp != sp_op_const(KOM_PAGE_FREE())) {
+            assert !pageIsFree(pagedb, pagenr);
+            err := sp_op_const(KOM_ERR_PAGEINUSE());
+            assert err == specErr(specRes);
+        } else {
+            assert pageIsFree(pagedb, pagenr);
+            page_monvaddr_impl(tmp2, as_pagenr, err);
             LDR(tmp, tmp2, sp_op_const(ADDRSPACE_STATE()));
-            forall :: tmp == pageDbAddrspaceStateVal(pagedb[entry.addrspace].entry.state)
+            ghost var addrsp := pagedb[entry.addrspace].entry;
+            forall :: tmp == pageDbAddrspaceStateVal(addrsp.state)
             {
                 reveal_pageContentsCorresponds();
                 reveal_pageDbAddrspaceCorresponds();
             }
 
+            ghost var midway2 := this;
+            assert RegPreservingExcept(midway1, midway2, set(@tmp, @tmp2, @err));
+
             if (tmp != sp_op_const(KOM_ADDRSPACE_INIT())) {
+                assert addrsp.state != InitState;
                 err := sp_op_const(KOM_ERR_ALREADY_FINAL());
+                assert err == specErr(specRes);
             } else {
+                assert addrsp.state == InitState;
                 pagedb := allocate_page_success(pagenr, tmp2, typeval,
                                 pagedb_base, tmp, err, pagedb_in, entry);
                 err := sp_op_const(KOM_ERR_SUCCESS());
             }
+
+            assert RegPreservingExcept(midway2, this, set(@tmp, @tmp2, @err));
         }
     }
 }

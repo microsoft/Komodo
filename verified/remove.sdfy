@@ -16,7 +16,7 @@ procedure kom_smc_remove_non_addr_success(
         page_type == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE();
         as_page_va == page_monvaddr(pagedb_in[page].addrspace);
     ensures
-        StackPreserving(old(this),this);
+        SmcProcedureInvariant(old(this),this);
         pagedb == specPageDb(smc_remove_premium(pagedb_in, page));
         pageDbCorresponds(this.m, pagedb);
 {
@@ -108,7 +108,7 @@ procedure kom_smc_remove(
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
     ensures
-        StackPreserving(old(this),this);
+        SmcProcedureInvariant(old(this),this);
         tuple(pagedb,err) == smc_remove_premium(pagedb_in, page);
         pageDbCorresponds(this.m, pagedb);
 {

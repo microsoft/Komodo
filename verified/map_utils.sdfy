@@ -17,7 +17,7 @@ procedure fetch_l1pte(
         0 <= l1index < NR_L1PTES();
     ensures
         AllMemInvariant(old(this),this);
-        StackPreserving(old(this),this);
+        SmcProcedureInvariant(old(this),this);
         RegPreservingExcept(old(this),this, set(@tmp, @res));
         res == 0 <==> pagedb[l1pg].entry.l1pt[l1index] == Nothing;
         res == mkL1Pte(pagedb[l1pg].entry.l1pt[l1index], 0);
