@@ -134,6 +134,11 @@ function sp_update_reg(r:ARMReg, sM:state, sK:state):state
 function sp_update_mem(sM:state, sK:state):state { 
     sK.(m := sM.m.(addresses := sM.m.addresses)) 
 }
+function sp_update_olr(sM:state, sK:state):state 
+    requires LR(mode_of_state(sM)) in sM.regs                                          
+{ 
+    sp_update_reg(LR(mode_of_state(sM)), sM, sK)
+}
 
 function sp_update(o:operand, sM:state, sK:state):state
     requires ValidRegOperand(o);

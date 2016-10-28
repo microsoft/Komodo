@@ -112,9 +112,9 @@ requires/ensures
     //WordAligned(sp);
     ValidAddr(mem, sp + input_slot);
 reads 
-    lr; sp; globals;
+    sp; globals;
 modifies 
-    mem;
+    mem; lr;
 requires {:refined false}
     @t0 == OReg(R0);
     @t1 == OReg(R2);
@@ -153,6 +153,7 @@ ensures
     t2 == BitwiseXor(a, b);
     t3 == Maj(a, b, c);
     a == old(BitwiseAdd32(a, t2));
+    lr == BitwiseAdd32(old(lr), 4);
 //    let T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), BSIG1(e)),
 //                                                     Ch(e,f,g)),
 //                                        K_SHA256(i)),
@@ -177,6 +178,7 @@ ensures
     // BP: Skipping this and encoding K256 directly as a const
     // ldr	$t2,[$Ktbl],#4			@ *K256++
     rLDRglobal(t2, K_SHA256s().sym, lr, 0);
+    rADDWrap(lr, lr, 4);    // TODO: OpenSSL does this in one instruction with a load-and-increment.  
     rADDWrap(h, h, t2);      //  h+=X[i]  BP: X[i] = input[i]?
     rSTR(t1, sp, input_slot);  // @ BP: Save a copy of input[i] for use in subsequent W calculations
     rEOR(t1, f, g);
@@ -253,9 +255,9 @@ procedure {:refined} Body_16_XX(
 requires/ensures
     //ValidAddr(mem, sp + input_slot);
 reads 
-    lr; sp; globals;
+    sp; globals;
 modifies 
-    mem;
+    mem; lr;
 requires {:refined false}
     @t0 == OReg(R0);
     @t1 == OReg(R2);
