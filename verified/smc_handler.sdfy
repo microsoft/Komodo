@@ -30,10 +30,9 @@ procedure smc_handler(
         StackBytesRemaining(this,120);
     requires
         validPageDb(pagedb_in);
-        // pageDbClosedRefs(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
     ensures
-        NonvolatileRegPreserving(old(this),this);
+        //NonvolatileRegPreserving(old(this),this);
         //TODO: tuple(pagedb, err, retval) == old(smchandler_premium(pagedb_in, callno, arg1, arg2, arg3, arg4));
         //TODO: smchandlerInvariant(old(this),this);
         validPageDb(pagedb);
@@ -60,6 +59,18 @@ procedure smc_handler(
     } else if(callno == sp_op_const(KOM_SMC_INIT_L2PTABLE())) {
         pagedb := kom_smc_init_l2ptable(arg1, arg2, arg3, err, pagedb);
         retval := 0;
+    } else if(callno == sp_op_const(KOM_SMC_MAP_SECURE())) {
+        pagedb := kom_smc_map_secure(arg1, arg2, arg3, arg4, err, pagedb);
+        retval := 0;
+    } else if(callno == sp_op_const(KOM_SMC_MAP_INSECURE())) {
+        pagedb := kom_smc_map_insecure(arg1, arg2, arg3, err, pagedb);
+        retval := 0;
+    } else if(callno == sp_op_const(KOM_SMC_REMOVE())) {
+        pagedb := kom_smc_remove(arg1, err, pagedb);
+        retval := 0;
+    } else if(callno == sp_op_const(KOM_SMC_FINALISE())) {
+        pagedb := kom_smc_finalise(arg1, err, pagedb);
+        retval := 0;
     } else if(callno == sp_op_const(KOM_SMC_ENTER())) {
         // TODO add implemented monitor call. Need to figure out the systate 
         // thing.
@@ -69,6 +80,12 @@ procedure smc_handler(
         // TODO add implemented monitor call. Need to figure out the systate 
         // thing.
         pagedb := pagedb;
+        retval := 0;
+    } else if(callno == sp_op_const(KOM_SMC_STOP())) {
+        pagedb := kom_smc_stop(arg1, err, pagedb);
+        retval := 0;
+    } else {
+        err := sp_op_const(KOM_ERR_INVALID());
         retval := 0;
     }
 

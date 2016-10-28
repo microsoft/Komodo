@@ -79,6 +79,10 @@ kom_utils_dep-sdfy = ARMdecls
 kom_utils_dep-dfy = ARMspartan kom_common.i kom_common.s bitvectors.i
 $(dir)/kom_utils.verified: $(call mkdeps,kom_utils)
 
+map_utils_dep-sdfy = ARMdecls
+map_utils_dep-dfy = ARMspartan kom_common.i kom_common.s bitvectors.i pagedb.i
+$(dir)/map_utils.verified: $(call mkdeps,kom_utils)
+
 memset_dep-sdfy = ARMdecls
 memset_dep-dfy = ARMspartan kom_common.i kom_common.s
 $(dir)/memset.verified: $(call mkdeps,memset)
@@ -95,16 +99,16 @@ init_dispatcher_dep-sdfy = ARMdecls kom_utils allocate_page memset
 init_dispatcher_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/init_dispatcher.verified: $(call mkdeps,init_dispatcher)
 
-init_l2ptable_dep-sdfy = ARMdecls kom_utils allocate_page memset
-init_l2ptable_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i bitvectors.i
+init_l2ptable_dep-sdfy = ARMdecls kom_utils allocate_page memset map_utils
+init_l2ptable_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i bitvectors.i ptebits.i
 $(dir)/init_l2ptable.verified: $(call mkdeps,init_l2ptable)
 
-map_secure_dep-sdfy = ARMdecls kom_utils allocate_page init_l2ptable memset
-map_secure_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
+map_secure_dep-sdfy = ARMdecls kom_utils allocate_page map_utils
+map_secure_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i ptebits.i
 $(dir)/map_secure.verified: $(call mkdeps,map_secure)
 
-map_insecure_dep-sdfy = ARMdecls kom_utils allocate_page init_l2ptable map_secure memset
-map_insecure_dep-dfy  = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i ptebits.i
+map_insecure_dep-sdfy = ARMdecls kom_utils allocate_page map_utils map_secure
+map_insecure_dep-dfy  = ARMspartan kom_common.i pagedb.i smcapi.i ptebits.i
 $(dir)/map_insecure.verified: $(call mkdeps,map_insecure)
 
 enter_dep-sdfy = ARMdecls kom_utils
@@ -121,14 +125,12 @@ sha256_dep-sdfy = ARMdecls
 sha256_dep-dfy = ARMspartan words_and_bytes.s kom_common.s sha/sha256.i sha/bit-vector-lemmas.i
 $(dir)/sha256.verified: $(call mkdeps,sha256)
 
-# All these things depend on entry.i because they need ValidSysState', which 
-# probably needs a better home. Maybe its own silly, small .i file
 finalise_dep-sdfy = ARMdecls kom_utils
-finalise_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
+finalise_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/finalise.verified: $(call mkdeps,finalise)
 
 stop_dep-sdfy = ARMdecls kom_utils
-stop_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
+stop_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/stop.verified: $(call mkdeps,stop)
 
 remove_dep-sdfy = ARMdecls kom_utils

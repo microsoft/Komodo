@@ -9,53 +9,6 @@ lemma SameEntriesImpliesPageDbCorresponds(s:memstate, p: PageNr,
     ensures pageDbCorrespondsOnly(s, db2, p)
 {
 }
-#endverbatim
-
-procedure fetch_l1pte(
-    {:operand} l1pt_va:addr,
-    {:operand} l1index:int,
-    out {:operand} tmp:int,
-    out {:operand} res:int,
-    ghost pagedb:PageDb,
-    ghost l1pg:int)
-    requires/ensures
-        SaneState(this);
-    requires
-        @l1pt_va != OSP && @l1index != OSP && @tmp != OSP && @res != OSP;
-        @l1pt_va != OLR && @l1index != OLR && @tmp != OLR && @res != OLR;
-        DistinctRegOperands(set(@l1pt_va, @l1index, @tmp, @res), 4);
-        validPageDb(pagedb);
-        pageDbCorresponds(this.m, pagedb);
-        validPageNr(l1pg) && pagedb[l1pg] is PageDbEntryTyped
-            && pagedb[l1pg].entry is L1PTable;
-        l1pt_va == page_monvaddr(l1pg);
-        0 <= l1index < NR_L1PTES();
-    ensures
-        AllMemInvariant(old(this),this);
-        StackPreserving(old(this),this);
-        RegPreservingExcept(old(this),this, set(@tmp, @res));
-        res == 0 <==> pagedb[l1pg].entry.l1pt[l1index] == Nothing;
-        res == mkL1Pte(pagedb[l1pg].entry.l1pt[l1index], 0);
-{
-    reveal_pageDbL1PTableCorresponds();
-    reveal_pageContentsCorresponds();
-    tmp := 16;
-    assert l1index < NR_L1PTES(); // sigh.
-    MUL(tmp, l1index, tmp);
-    LDR(res, l1pt_va, tmp);
-    assert res == MemContents(this.m, l1pteoffset(l1pt_va, l1index, 0));
-    assert res == mkL1Pte(pagedb[l1pg].entry.l1pt[l1index], 0);
-    reveal BitOr;
-}
-
-#verbatim
-lemma lemma_ARM_L1PTE_Dual(paddr: word)
-    requires paddr % ARM_L2PTABLE_BYTES() == 0
-    ensures ARM_L1PTE(paddr) == paddr + 1
-{
-    assert paddr % 0x400 == 0 && paddr % 2 == 0;
-    lemma_BitOrOneIsLikePlus(paddr);
-}
 
 lemma lemma_SecurePage(pagebase:word)
     requires SaneConstants()

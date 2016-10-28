@@ -85,6 +85,15 @@ lemma lemma_nonexec_mapping(mapping: Mapping, x: word)
     assert wordToMapping(y) == nonexec_mapping(mapping) by { reveal_wordToMapping(); }
 }
 
+lemma lemma_ARM_L1PTE_Dual(paddr: word)
+    requires paddr % ARM_L2PTABLE_BYTES() == 0
+    ensures ARM_L1PTE(paddr) == paddr + 1
+{
+    assert paddr % 0x400 == 0 && paddr % 2 == 0;
+    lemma_BitOrOneIsLikePlus(paddr);
+}
+
+
 lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
     requires PageAligned(pa) && isUInt32(pa + PhysBase())
     ensures ValidAbsL2PTEWord(ARM_L2PTE(pa, w, x))
