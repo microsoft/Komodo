@@ -72,8 +72,11 @@ $(dir)/entry.i.verified: $(dir)/entry.s.verified $(dir)/pagedb.i.verified
 $(dir)/main.i.verified: $(dir)/ARMprint.verified $(dir)/smc_handler.verified
 
 # variables used to emit deps/includes for all Spartan code
-ARMdecls_dep-dfy = ARMspartan
-$(dir)/ARMdecls.verified: $(call mkdeps,ARMdecls)
+#ARMdecls_dep-dfy = ARMspartan
+#$(dir)/ARMdecls.verified: $(call mkdeps,ARMdecls)
+$(dir)/ARMdecls.verified:
+	$(SPARTAN) $(SPARTANFLAGS) -i ARMspartan.dfy -in verified/ARMdecls.sdfy -out verified/ARMdecls.gen.dfy
+	$(DAFNY) $(DAFNYFLAGS) /compile:0 verified/ARMdecls.gen.dfy $(if $(DAFNYPROC),,&& touch $@)
 
 kom_utils_dep-sdfy = ARMdecls
 kom_utils_dep-dfy = ARMspartan kom_common.i kom_common.s bitvectors.i
