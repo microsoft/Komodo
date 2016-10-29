@@ -4,7 +4,7 @@ include "abstate.s.dfy"
 
 predicate validSysState'(s:SysState)
 {
-    validSysState(s) && pageDbCorresponds(s.hw.m, s.d)
+    validSysState(s) && SaneMem(s.hw.m) && pageDbCorresponds(s.hw.m, s.d)
 }
 
 /*
@@ -27,67 +27,69 @@ predicate AUCIdef()
     reveal_ValidSRegState();
     // It needed to be separated out like this to prove 
     // validExceptionTransition
-    (forall s:SysState, r:SysState | validSysState(s) &&
+    (forall s:SysState, r:SysState, dp:PageNr | validSysState(s) &&
+        validDispatcherPage(s.d, dp) &&
         ApplicationUsermodeContinuationInvariant(s.hw, r.hw) ::
-            validExceptionTransition(s, r, s.d)) &&
-    forall s:SysState, r:SysState | validSysState(s) &&
+            validExceptionTransition(s, r, dp)) &&
+    forall s:SysState, r:SysState, dp:PageNr | validSysState(s) &&
+        validDispatcherPage(s.d, dp) &&
         ApplicationUsermodeContinuationInvariant(s.hw, r.hw) ::
             mode_of_state(s.hw) != User &&
             validSysState'(r) &&
             decode_mode'(psr_mask_mode(
                 s.hw.sregs[spsr(mode_of_state(s.hw))])) == Just(User) &&
             (r.hw.regs[R0], r.hw.regs[R1], r.d) ==
-                exceptionHandled_premium(s)
+                exceptionHandled_premium(s, dp)
 
 }
 
-function exceptionHandled_premium(s:SysState) : (int, int, PageDb)
+function exceptionHandled_premium(s:SysState, dispPg:PageNr) : (int, int, PageDb)
     requires validSysState(s)
     requires mode_of_state(s.hw) != User
     requires 
         (reveal_ValidSRegState();
         decode_mode'(psr_mask_mode(
         s.hw.sregs[spsr(mode_of_state(s.hw))])) == Just(User))
-    ensures var (r0,r1,d) := exceptionHandled_premium(s);
+    requires validDispatcherPage(s.d, dispPg)
+    ensures var (r0,r1,d) := exceptionHandled_premium(s, dispPg);
         validPageDb(d)
 {
-    exceptionHandledValidPageDb(s);
-    exceptionHandled(s)
+    exceptionHandledValidPageDb(s, dispPg);
+    exceptionHandled(s, dispPg)
 }
 
-lemma exceptionHandledValidPageDb(s:SysState) 
+lemma exceptionHandledValidPageDb(s:SysState, dispPg:PageNr)
     requires validSysState(s)
     requires mode_of_state(s.hw) != User
     requires 
         (reveal_ValidSRegState();
         decode_mode'(psr_mask_mode(
         s.hw.sregs[spsr(mode_of_state(s.hw))])) == Just(User))
-    ensures var (r0,r1,d) := exceptionHandled(s);
+    requires validDispatcherPage(s.d, dispPg)
+    ensures var (r0,r1,d) := exceptionHandled(s, dispPg);
         validPageDb(d)
 {
-   reveal_validPageDb();
-   reveal_ValidSRegState();
-   reveal_ValidRegState();
-   var (r0,r1,d') := exceptionHandled(s);
+    reveal_validPageDb();
+    reveal_ValidSRegState();
+    reveal_ValidRegState();
+    var (r0,r1,d') := exceptionHandled(s, dispPg);
 
-   var p := s.g.g_cur_dispatcher;
+    assert validPageDbEntry(d', dispPg);
 
-   assert validPageDbEntry(d', p);
-       
-        forall( p' | validPageNr(p') && d'[p'].PageDbEntryTyped? && p'!=p )
-            ensures validPageDbEntry(d', p');
-        {
-            var e  := s.d[p'].entry;
-            var e' := d'[p'].entry;
-            if(e.Addrspace?){
-                assert e.refcount == e'.refcount;
-                assert addrspaceRefs(d', p') == addrspaceRefs(s.d,p');
-                assert validAddrspace(d',p');
-            }
+    forall( p' | validPageNr(p') && d'[p'].PageDbEntryTyped? && p' != dispPg )
+        ensures validPageDbEntry(d', p');
+    {
+        var e  := s.d[p'].entry;
+        var e' := d'[p'].entry;
+        if(e.Addrspace?){
+            assert e.refcount == e'.refcount;
+            assert addrspaceRefs(d', p') == addrspaceRefs(s.d,p');
+            assert validAddrspace(d',p');
         }
-        assert pageDbEntriesValid(d');
+    }
 
-        assert validPageDb(d');
+    assert pageDbEntriesValid(d');
+    assert validPageDb(d');
 }
 
 lemma enterUserspacePreservesPageDb(d:PageDb,s:state,s':state)
