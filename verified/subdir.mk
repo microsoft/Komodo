@@ -125,7 +125,7 @@ sha256_dep-dfy = ARMspartan words_and_bytes.s kom_common.s sha/sha256.i sha/bit-
 $(dir)/sha256.verified: $(call mkdeps,sha256)
 
 sha256-refined_dep-sdfy = ARMdecls 
-sha256-refined_dep-dfy = ARMspartan words_and_bytes.s kom_common.s sha/sha256.i sha/bit-vector-lemmas.i
+sha256-refined_dep-dfy = ARMspartan words_and_bytes.s kom_common.s sha/sha256.i sha/bit-vector-lemmas.i sha/sha256-refined-helpers.i
 $(dir)/sha256-refined.verified: $(call mkdeps,sha256)
 
 # All these things depend on entry.i because they need ValidSysState', which 

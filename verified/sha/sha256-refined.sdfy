@@ -110,6 +110,8 @@ requires
     forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][i] == K_SHA256(i);
     
     input_slot == (i%16)*4;
+
+    // SHA tactics
     t3 == BitwiseXor(b, c);
     if i == 0 then t2 == 0 else i < 16 ==> t2 == old(Maj(a, b, c));
     i >= 16 ==> RotateRight(t0, Sigma1(0)) == BSIG1(e);
@@ -117,6 +119,7 @@ requires
     // SHA semantics
     SeqLength(z.H) > 0;
     IsSHA256TraceReadyForStep(z, i);
+
     //last(last(z.atoh)) == atoh_c(a, b, c, d, e, f, g, h);
 //
 //    // TODO: Need an invariant about the 16-element array X
@@ -127,12 +130,12 @@ ensures
     t3 == Maj(a, b, c);
     a == old(BitwiseAdd32(a, t2));
     lr == BitwiseAdd32(old(lr), 4);
-//    let T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), BSIG1(e)),
-//                                                     Ch(e,f,g)),
-//                                        K_SHA256(i)),
-//                           W[i]) in
-//        d == BitwiseAdd32(old(d))
-//     && h == BitwiseAdd32(T1, BSIG0(a));
+    let T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), BSIG1(e)),
+                                                     Ch(e,f,g)),
+                                        K_SHA256(i)),
+                           bswap32(old(t1))) in
+        d == BitwiseAdd32(old(d), T1)
+     && h == BitwiseAdd32(T1, BSIG0(a));
 //     i < 16 ==> forall j :: 0 <= j <= i ==> last(z.W)[j] == inp[j];
 {
     //if i < 16
@@ -148,11 +151,10 @@ ensures
 
     // end if--------
 
-    // BP: Skipping this and encoding K256 directly as a const
-    // ldr	$t2,[$Ktbl],#4			@ *K256++
     rLDRglobal(t2, K_SHA256s().sym, lr, 0);
     rADDWrap(lr, lr, 4);    // TODO: OpenSSL does this in one instruction with a load-and-increment.  
-    rADDWrap(h, h, t2);      //  h+=X[i]  BP: X[i] = input[i]?
+    rADDWrap(h, h, t1);      //  h+=X[i]  BP: X[i] = input[i]?
+    assert h == BitwiseAdd32(old(h), bswap32(old(t1)));
     rSTR(t1, sp, input_slot);  // @ BP: Save a copy of input[i] for use in subsequent W calculations
     rEOR(t1, f, g);
     ghost var old_h := h;
@@ -160,7 +162,7 @@ ensures
     rADDWrapShift(h, h, t0, RORShift(Sigma1(0))); // h += Sigma1(e)
 
     // Prove that we computed Sigma1(e) correctly:
-    forall :: h == (old_h + BSIG1(e)) % 0x1_0000_0000 
+    forall :: h == BitwiseAdd32(old_h, BSIG1(e))
     {
         reveal BSIG1;
         lemma_RotateRightCommutesXor(e, 6, 11, 25);
@@ -174,6 +176,9 @@ ensures
 
     rEORShift(t0, a, a, RORShift(Sigma0(1) - Sigma0(0)));
     rADDWrap(h, h, t1);  // h += Ch(e,f,g)
+
+    assert h == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), bswap32(old(t1))), BSIG1(e)), K_SHA256(i)), Ch(e, f, g));
+    lemma_BitwiseAdd32Associates5(old(h), bswap32(old(t1)), BSIG1(e), K_SHA256(i), Ch(e, f, g), h);
 
 //    #if $i==31
 //        and  $t2,$t2,#0xff

@@ -1,5 +1,5 @@
 include "sha256.s.dfy"
-
+include "../bitvectors.i.dfy"
 
 lemma  lemma_Maj(x:word, y:word, z:word, result:word)
     requires result == BitwiseXor(BitwiseAnd(BitwiseXor(y, z), BitwiseXor(x, y)), y);
@@ -34,3 +34,4 @@ lemma lemma_RotateRightCommutesXor(x:word, amt_0:shift_amount, amt_1:shift_amoun
 //    reveal_RotateRight();
 //    lemma_BitsAndWordConversions();
 //}
+
