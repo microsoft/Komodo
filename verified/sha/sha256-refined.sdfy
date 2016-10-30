@@ -34,18 +34,6 @@ function method sigma1(i:int) : word
 type SHA_step = i | 0 <= i < 64
 type perm_index = i | 0 <= i < 8
 
-//function method ror(r:operand, amount:shift_amount) : operand
-//    requires r.OReg?;
-//{
-//    OShift(r.r, RORShift(amount))
-//}
-//
-//function method lsr(r:operand, amount:shift_amount) : operand
-//    requires r.OReg?;
-//{
-//    OShift(r.r, LSRShift(amount))
-//}
-
 function method GetReg(r:int) : ARMReg
     requires 0 <= r <= 12;
 {
@@ -73,21 +61,6 @@ function ApplyPerm(i:int, perm:perm_index) : int
 predicate {:opaque} Even(i:int) { i % 2 == 0 }
 
 #endverbatim
-
-//procedure {:refined} test(
-//        {:inline} input_slot:word,
-//    ghost z:SHA256Trace,
-//    inout{:operand} t0:word
-//        )
-//    requires/ensures
-//        true;
-//    reads lr; sp;
-//    modifies mem;
-//    requires {:refined false}
-//        @t0 == OReg(R0);
-//    requires lr == 0;
-//{
-//}
 
 procedure {:refined} Body_00_15(
     {:inline} i:SHA_step,
