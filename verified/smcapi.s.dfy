@@ -428,7 +428,7 @@ predicate smchandlerInvariant(s:state, s':state)
     requires ValidState(s)
 {
     reveal_ValidRegState();
-    reveal_ValidConfig();
+    reveal_ValidSRegState();
     ValidState(s') && nonvolatileRegInvariant(s, s')
         // all banked regs, including SPSR and LR (our return target) are preserved
         // TODO: we may need to weaken this to reason about IRQ/FIQ injection.

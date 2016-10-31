@@ -94,7 +94,7 @@ function spsr_of_state(s:state): PSR
     requires ValidState(s)
     requires mode_of_state(s) != User
 {
-    reveal_ValidConfig();
+    reveal_ValidSRegState();
     s.conf.spsr[mode_of_state(s)]
 }
 
@@ -132,13 +132,12 @@ function decode_ttbr(v:word): TTBR
     TTBR(ptbase)
 }
 
-function decode_sreg(s:state, sr:SReg, v:word): config
-    requires ValidConfig(s.conf)
+function update_config_from_sreg(s:state, sr:SReg, v:word): config
+    requires ValidSRegState(s.sregs, s.conf)
     requires ValidSpecialOperand(s, OSReg(sr))
     requires (sr.cpsr? || sr.spsr?) ==> ValidModeEncoding(psr_mask_mode(v))
-    ensures ValidConfig(decode_sreg(s, sr, v))
 {
-    reveal_ValidConfig();
+    reveal_ValidSRegState();
     match sr
         case ttbr0 => s.conf.(ttbr0 := decode_ttbr(v))
         case cpsr  => s.conf.(cpsr := decode_psr(v))
@@ -249,8 +248,7 @@ datatype code =
 //-----------------------------------------------------------------------------
 predicate ValidState(s:state)
 {
-    ValidRegState(s.regs) && ValidMemState(s.m) &&
-    ValidConfig(s.conf) && ValidSRegState(s.sregs)
+    ValidRegState(s.regs) && ValidMemState(s.m) && ValidSRegState(s.sregs, s.conf)
 }
 
 predicate {:opaque} ValidRegState(regs:map<ARMReg, word>)
@@ -258,20 +256,17 @@ predicate {:opaque} ValidRegState(regs:map<ARMReg, word>)
     forall r:ARMReg :: r in regs
 }
 
-predicate {:opaque} ValidConfig(c:config)
+predicate {:opaque} ValidSRegState(sregs:map<SReg, word>, c:config)
 {
-    PageAligned(c.ttbr0.ptbase) && User !in c.spsr &&
-    (forall m:mode :: m != User ==> m in c.spsr )
-}
-
-predicate {:opaque} ValidSRegState(sregs:map<SReg, word>)
-{
-    (forall m:mode {:trigger spsr(m)} :: m != User ==> spsr(m) in sregs)
-    && (forall m:mode {:trigger spsr(m)} :: m != User ==>
-        ValidModeEncoding(psr_mask_mode(sregs[spsr(m)])))
-    && spsr(User) !in sregs
-    && ttbr0 in sregs && scr in sregs && cpsr in sregs
+    cpsr in sregs
     && ValidModeEncoding(psr_mask_mode(sregs[cpsr]))
+    && c.cpsr == decode_psr(sregs[cpsr])
+    && (forall m:mode :: (m != User) == (spsr(m) in sregs) == (m in c.spsr))
+    && (forall m:mode :: m != User ==>
+        ValidModeEncoding(psr_mask_mode(sregs[spsr(m)]))
+        && c.spsr[m] == decode_psr(sregs[spsr(m)]))
+    && ttbr0 in sregs && c.ttbr0 == decode_ttbr(sregs[ttbr0])
+    && scr in sregs && c.scr == decode_scr(sregs[scr])
 }
 
 // All valid states have the same memory address domain, but we don't care what 
@@ -319,7 +314,7 @@ predicate ValidBankedRegOperand(s:state, o:operand)
 
 predicate ValidSpecialOperand(s:state, o:operand)
 {
-    o.OSReg? && ValidConfig(s.conf) && mode_of_state(s) != User
+    o.OSReg? && ValidSRegState(s.sregs, s.conf) && mode_of_state(s) != User
     &&( (o.sr.spsr? && mode_of_state(s) == o.sr.m)
      || (o.sr.scr?  && world_of_state(s) == Secure)
      || (!o.sr.spsr? && !o.sr.scr?))
@@ -400,7 +395,6 @@ predicate evalExceptionTaken(s:state, e:exception, r:state)
     ensures evalExceptionTaken(s, e, r) ==> ValidState(r)
 {
     reveal_ValidRegState();
-    // reveal_ValidConfig();
     reveal_ValidSRegState();
     var oldmode := mode_of_state(s);
     var newmode := mode_of_exception(s.conf, e);
@@ -767,11 +761,11 @@ predicate evalUpdate(s:state, o:operand, v:word, r:state)
 predicate evalSRegUpdate(s:state, o:operand, v:word, r:state)
     requires ValidState(s)
     requires ValidSpecialOperand(s, o)
-    requires o.sr.cpsr? || o.sr.spsr? ==> ValidModeEncoding(BitwiseAnd(v,0x1f))
+    requires o.sr.cpsr? || o.sr.spsr? ==> ValidModeEncoding(psr_mask_mode(v))
     ensures  evalSRegUpdate(s, o, v, r) ==> ValidState(r)
 {
     reveal_ValidSRegState();
-    r == takestep(s).( conf := decode_sreg(s, o.sr, v),
+    r == takestep(s).( conf := update_config_from_sreg(s, o.sr, v),
         sregs := s.sregs[ o.sr := v] )
 }
 
