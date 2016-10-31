@@ -1,5 +1,6 @@
 include "kom_common.s.dfy"
 include "pagedb.s.dfy"
+include "entry.s.dfy"
 
 predicate pageIsFree(d:PageDb, pg:PageNr)
 {
@@ -353,36 +354,6 @@ function smc_finalise(pageDbIn: PageDb, addrspacePage: word) : (PageDb, word)
         (d', KOM_ERR_SUCCESS())
 }
 
-// common success/failure checks for enter and resume
-function smc_enter_err(d: PageDb, p: word, isresume: bool): word
-    requires validPageDb(d)
-{
-    reveal_validPageDb();
-    if (!(validPageNr(p) && d[p].PageDbEntryTyped? && d[p].entry.Dispatcher?)) then
-        KOM_ERR_INVALID_PAGENO()
-    else if (var a := d[p].addrspace; d[a].entry.state != FinalState) then
-        KOM_ERR_NOT_FINAL()
-    else if (!isresume && d[p].entry.entered) then
-        KOM_ERR_ALREADY_ENTERED()
-    else if (isresume && !d[p].entry.entered) then
-        KOM_ERR_NOT_ENTERED()
-    else KOM_ERR_SUCCESS()
-}
-
-function smc_enter(pageDbIn: PageDb, dispPage: word, arg1: word, arg2: word, arg3: word)
-    : (PageDb, word)
-    requires validPageDb(pageDbIn)
-{
-    (pageDbIn, smc_enter_err(pageDbIn, dispPage, false))
-}
-
-function smc_resume(pageDbIn: PageDb, dispPage: word)
-    : (PageDb, word)
-    requires validPageDb(pageDbIn)
-{
-    (pageDbIn, smc_enter_err(pageDbIn, dispPage, true))
-}
-
 function smc_stop(pageDbIn: PageDb, addrspacePage: word)
     : (PageDb, word)
     requires validPageDb(pageDbIn)
@@ -399,44 +370,42 @@ function smc_stop(pageDbIn: PageDb, addrspacePage: word)
 //=============================================================================
 // Behavioral Specification of SMC Handler
 //=============================================================================
-function smchandler(pageDbIn: PageDb, callno: word, arg1: word, arg2: word,
-    arg3: word, arg4: word) : (PageDb, word, word) // pageDbOut, err, val
-    requires validPageDb(pageDbIn)
+predicate smchandler(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb)
+    requires ValidState(s) && validPageDb(pageDbIn)
 {
-    if(callno == KOM_SMC_QUERY()) then (pageDbIn, KOM_MAGIC(), 0)
-    else if(callno == KOM_SMC_GETPHYSPAGES()) then
-        (pageDbIn, KOM_ERR_SUCCESS(), KOM_SECURE_NPAGES())
-    else if(callno == KOM_SMC_INIT_ADDRSPACE()) then
-        var ret := smc_initAddrspace(pageDbIn, arg1, arg2);
-        (ret.0, ret.1, 0)
-    else if(callno == KOM_SMC_INIT_DISPATCHER()) then
-        var ret := smc_initDispatcher(pageDbIn, arg1, arg2, arg3);
-        (ret.0, ret.1, 0)
-    else if(callno == KOM_SMC_INIT_L2PTABLE()) then
-        var ret := smc_initL2PTable(pageDbIn, arg1, arg2, arg3);
-        (ret.0, ret.1, 0)
-    else if(callno == KOM_SMC_MAP_SECURE()) then
-        var ret := smc_mapSecure(pageDbIn, arg1, arg2, arg3, arg4);
-        (ret.0, ret.1, 0)
-    else if(callno == KOM_SMC_MAP_INSECURE()) then
-        var ret := smc_mapInsecure(pageDbIn, arg1, arg2, arg3);
-        (ret.0, ret.1, 0)
-    else if(callno == KOM_SMC_REMOVE()) then
-        var ret := smc_remove(pageDbIn, arg1);
-        (ret.0, ret.1, 0)
-    else if(callno == KOM_SMC_FINALISE()) then
-        var ret := smc_finalise(pageDbIn, arg1);
-        (ret.0, ret.1, 0)
-    else if(callno == KOM_SMC_ENTER()) then
-        var ret := smc_enter(pageDbIn, arg1, arg2, arg3, arg4);
-        (ret.0, ret.1, 0)
-    else if(callno == KOM_SMC_RESUME()) then
-        var ret := smc_resume(pageDbIn, arg1);
-        (ret.0, ret.1, 0)
-    else if(callno == KOM_SMC_STOP()) then
-        var ret := smc_stop(pageDbIn, arg1);
-        (ret.0, ret.1, 0)
-    else (pageDbIn, KOM_ERR_INVALID(), 0)
+    smchandlerInvariant(s, s') &&
+
+    (reveal_ValidRegState();
+    var callno, arg1, arg2, arg3, arg4
+        := s.regs[R0], s.regs[R1], s.regs[R2], s.regs[R3], s.regs[R4];
+    var err, val := s'.regs[R0], s'.regs[R1];
+
+    if callno == KOM_SMC_QUERY() then
+        pageDbOut == pageDbIn && err == KOM_MAGIC() && val == 0
+    else if callno == KOM_SMC_GETPHYSPAGES() then
+        pageDbOut == pageDbIn && err == KOM_ERR_SUCCESS() && val == KOM_SECURE_NPAGES()
+    else if callno == KOM_SMC_INIT_ADDRSPACE() then
+        (pageDbOut, err) == smc_initAddrspace(pageDbIn, arg1, arg2) && val == 0
+    else if callno == KOM_SMC_INIT_DISPATCHER() then
+        (pageDbOut, err) == smc_initDispatcher(pageDbIn, arg1, arg2, arg3) && val == 0
+    else if callno == KOM_SMC_INIT_L2PTABLE() then
+        (pageDbOut, err) == smc_initL2PTable(pageDbIn, arg1, arg2, arg3) && val == 0
+    else if callno == KOM_SMC_MAP_SECURE() then
+        (pageDbOut, err) == smc_mapSecure(pageDbIn, arg1, arg2, arg3, arg4) && val == 0
+    else if callno == KOM_SMC_MAP_INSECURE() then
+        (pageDbOut, err) == smc_mapInsecure(pageDbIn, arg1, arg2, arg3) && val == 0
+    else if callno == KOM_SMC_REMOVE() then
+        (pageDbOut, err) == smc_remove(pageDbIn, arg1) && val == 0
+    else if callno == KOM_SMC_FINALISE() then
+        (pageDbOut, err) == smc_finalise(pageDbIn, arg1) && val == 0
+    else if callno == KOM_SMC_ENTER() then
+        smc_enter(s, pageDbIn, s', pageDbOut, arg1, arg2, arg3, arg4)
+    else if callno == KOM_SMC_RESUME() then
+        smc_resume(s, pageDbIn, s', pageDbOut, arg1)
+    else if callno == KOM_SMC_STOP() then
+        (pageDbOut, err) == smc_stop(pageDbIn, arg1) && val == 0
+    else
+        pageDbOut == pageDbIn && err == KOM_ERR_INVALID() && val == 0)
 }
 
 // non-volatile regs preserved

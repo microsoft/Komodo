@@ -70,32 +70,6 @@ function {:opaque} smc_finalise_premium(pageDbIn: PageDb, addrspacePage: word)
     smc_finalise(pageDbIn, addrspacePage)
 }
 
-function {:opaque} smc_enter_premium(pageDbIn: PageDb, dispPage: word, arg1: word,
-    arg2: word, arg3: word) : (PageDb, word)
-    requires validPageDb(pageDbIn) 
-    ensures smc_enter_premium(pageDbIn,dispPage,arg1,arg2,arg3) ==
-        smc_enter(pageDbIn,dispPage,arg1,arg2,arg3)
-    ensures  var db:= smc_enter_premium(pageDbIn, dispPage, arg1, arg2, arg3).0;
-        var err := smc_enter_premium(pageDbIn, dispPage, arg1, arg2, arg3).1;
-        validPageDb(db) && (err == KOM_ERR_SUCCESS() ==> validDispatcherPage(pageDbIn, dispPage))
-{
-    enterPreservesPageDbValidity(pageDbIn, dispPage, arg1, arg2, arg3);
-    smc_enter(pageDbIn, dispPage, arg1, arg2, arg3)
-}
-
-function {:opaque} smc_resume_premium(pageDbIn: PageDb, dispPage: word)
-    : (PageDb, word)
-    requires validPageDb(pageDbIn) 
-    ensures smc_resume_premium(pageDbIn,dispPage) ==
-        smc_resume(pageDbIn,dispPage)
-    ensures  var db:= smc_resume_premium(pageDbIn, dispPage).0;
-        var err := smc_resume_premium(pageDbIn, dispPage).1;
-        validPageDb(db) && (err == KOM_ERR_SUCCESS() ==> validDispatcherPage(pageDbIn, dispPage))
-{
-    resumePreservesPageDbValidity(pageDbIn, dispPage);
-    smc_resume(pageDbIn, dispPage)
-}
-
 function {:opaque} smc_stop_premium(pageDbIn: PageDb, addrspacePage: word)
     : (PageDb, word)
     requires validPageDb(pageDbIn)
@@ -103,15 +77,6 @@ function {:opaque} smc_stop_premium(pageDbIn: PageDb, addrspacePage: word)
 {
     stopPreservesPageDbValidity(pageDbIn, addrspacePage);
     smc_stop(pageDbIn, addrspacePage)
-}
-
-function {:opaque} smchandler_premium(pageDbIn: PageDb, callno: word, arg1: word,
-    arg2: word, arg3: word, arg4: word) : (PageDb, word, word) // pageDbOut, err, val
-    requires validPageDb(pageDbIn)
-    ensures validPageDb(smchandler_premium(pageDbIn, callno, arg1, arg2, arg3, arg4).0)
-{
-    smchandlerPreservesPageDbValidity(pageDbIn, callno, arg1, arg2, arg3, arg4);
-    smchandler(pageDbIn, callno, arg1, arg2, arg3, arg4)
 }
 
 //=============================================================================
@@ -427,14 +392,14 @@ lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word)
     }
 }
 
-lemma enterPreservesPageDbValidity(pageDbIn: PageDb, dispPage: word,
-    arg1: word, arg2: word, arg3: word)
-    requires validPageDb(pageDbIn) 
-    ensures validPageDb(smc_enter(pageDbIn, dispPage, arg1, arg2, arg3).0)
+lemma enterPreservesPageDbValidity(s:state, pageDbIn: PageDb, s':state,
+    pageDbOut: PageDb, dispPage: word, arg1: word, arg2: word, arg3: word)
+    requires ValidState(s) && validPageDb(pageDbIn) && ValidState(s')
+    requires smc_enter(s, pageDbIn, s', pageDbOut, dispPage, arg1, arg2, arg3)
+    ensures validPageDb(pageDbOut)
 {
     reveal_validPageDb();
-    var pageDbOut := smc_enter(pageDbIn, dispPage, arg1, arg2, arg3).0;
-    var err := smc_enter(pageDbIn, dispPage, arg1, arg2, arg3).1;
+    var err := smc_enter_err(pageDbIn, dispPage, false);
 
     if( err != KOM_ERR_SUCCESS() ){
     } else {
@@ -457,13 +422,14 @@ lemma enterPreservesPageDbValidity(pageDbIn: PageDb, dispPage: word,
     }
 }
 
-lemma resumePreservesPageDbValidity(pageDbIn: PageDb, dispPage: word)
-    requires validPageDb(pageDbIn) 
-    ensures validPageDb(smc_resume(pageDbIn, dispPage).0)
+lemma resumePreservesPageDbValidity(s:state, pageDbIn: PageDb, s':state,
+                                    pageDbOut: PageDb, dispPage: word)
+    requires ValidState(s) && validPageDb(pageDbIn) && ValidState(s')
+    requires smc_resume(s, pageDbIn, s', pageDbOut, dispPage)
+    ensures validPageDb(pageDbOut)
 {
     reveal_validPageDb();
-    var pageDbOut := smc_resume(pageDbIn, dispPage).0;
-    var err := smc_resume(pageDbIn, dispPage).1;
+    var err := smc_enter_err(pageDbIn, dispPage, true);
 
     if( err != KOM_ERR_SUCCESS() ){
     } else {
@@ -536,12 +502,19 @@ lemma lemma_allocatePage_preservesMappingGoodness(
 }
 
 
-lemma smchandlerPreservesPageDbValidity(pageDbIn: PageDb, callno: word, arg1: word,
-    arg2: word, arg3: word, arg4: word)
-    requires validPageDb(pageDbIn)
-    ensures validPageDb(smchandler(pageDbIn, callno, arg1, arg2, arg3, arg4).0)
+lemma smchandlerPreservesPageDbValidity(s: state, pageDbIn: PageDb, s':state,
+    pageDbOut: PageDb)
+    requires ValidState(s) && validPageDb(pageDbIn)
+    requires smchandler(s, pageDbIn, s', pageDbOut)
+    ensures validPageDb(pageDbOut)
 {
+    reveal_ValidRegState();
+    var callno, arg1, arg2, arg3, arg4
+        := s.regs[R0], s.regs[R1], s.regs[R2], s.regs[R3], s.regs[R4];
+    var err, val := s'.regs[R0], s'.regs[R1];
+
     reveal_validPageDb();
+
     if (callno == KOM_SMC_INIT_ADDRSPACE()) {
         initAddrspacePreservesPageDBValidity(pageDbIn, arg1, arg2);
     } else if(callno == KOM_SMC_INIT_DISPATCHER()) {
@@ -556,9 +529,9 @@ lemma smchandlerPreservesPageDbValidity(pageDbIn: PageDb, callno: word, arg1: wo
     } else if(callno == KOM_SMC_FINALISE()) {
         finalisePreservesPageDbValidity(pageDbIn, arg1);
     } else if(callno == KOM_SMC_ENTER()) {
-        enterPreservesPageDbValidity(pageDbIn, arg1, arg2, arg3, arg4);
+        enterPreservesPageDbValidity(s, pageDbIn, s', pageDbOut, arg1, arg2, arg3, arg4);
     } else if(callno == KOM_SMC_RESUME()) {
-        resumePreservesPageDbValidity(pageDbIn, arg1);
+        resumePreservesPageDbValidity(s, pageDbIn, s', pageDbOut, arg1);
     } else if(callno == KOM_SMC_STOP()) {
         stopPreservesPageDbValidity(pageDbIn, arg1);
     }

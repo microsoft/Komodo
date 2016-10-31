@@ -87,12 +87,9 @@ function method PAGEDB_ENTRY_SIZE():int { 8 }
 function method G_PAGEDB_SIZE():int
     { KOM_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE() }
 
-function method {:opaque} SavedSPs(): operand { OSymbol("g_saved_sps") }
-function method {:opaque} SavedLRs(): operand { OSymbol("g_saved_lrs") }
-function method {:opaque} SavedPSRs(): operand { OSymbol("g_saved_psrs") }
 function method {:opaque} PageDb(): operand { OSymbol("g_pagedb") }
 function method {:opaque} SecurePhysBaseOp(): operand { OSymbol("g_secure_physbase") }
-function method {:opaque} CurAddrspaceOp(): operand { OSymbol("g_cur_addrspace") }
+function method {:opaque} CurDispatcherOp(): operand { OSymbol("g_cur_dispatcher") }
 
 // the phys base is unknown, but never changes
 function method {:axiom} SecurePhysBase(): addr
@@ -102,13 +99,9 @@ function method {:axiom} SecurePhysBase(): addr
 function method KomGlobalDecls(): globaldecls
     ensures ValidGlobalDecls(KomGlobalDecls());
 {
-    reveal_PageDb(); reveal_SecurePhysBaseOp(); reveal_CurAddrspaceOp();
-    reveal_SavedSPs(); reveal_SavedLRs(); reveal_SavedPSRs();
+    reveal_PageDb(); reveal_SecurePhysBaseOp(); reveal_CurDispatcherOp();
     map[SecurePhysBaseOp() := 4, //BytesPerWord() 
-        CurAddrspaceOp() := 4,   //BytesPerWord()
-        SavedSPs() := 28,        //BytesPerWord() * number of modes
-        SavedLRs() := 28,        //BytesPerWord() * number of modes
-        SavedPSRs() := 28,        //BytesPerWord() * number of modes
+        CurDispatcherOp() := 4,   //BytesPerWord()
         PageDb() := G_PAGEDB_SIZE()]
 }
 
@@ -150,22 +143,8 @@ predicate SaneConstants()
     && KomGlobalDecls() == TheGlobalDecls()
     // XXX: workaround so dafny sees that these are distinct
     && SecurePhysBaseOp() != PageDb()
-    && SecurePhysBaseOp() != CurAddrspaceOp()
-    && CurAddrspaceOp() != PageDb()
-    && SavedSPs() != SavedLRs()
-    && SavedSPs() != SecurePhysBaseOp()
-    && SavedSPs() != PageDb()
-    && SavedSPs() != CurAddrspaceOp()
-    && SavedSPs() != SavedPSRs()
-    && SavedLRs() != SecurePhysBaseOp()
-    && SavedLRs() != PageDb()
-    && SavedLRs() != CurAddrspaceOp()
-    && SavedLRs() != SavedPSRs()
-    && SavedPSRs() != SecurePhysBaseOp()
-    && SavedPSRs() != CurAddrspaceOp()
-    && SavedPSRs() != PageDb()
-    // && forall s, r | ValidState(s) :: ApplicationUsermodeContinuationInvariant(s, r)
-    //     <==> ( s == r)
+    && SecurePhysBaseOp() != CurDispatcherOp()
+    && CurDispatcherOp() != PageDb()
 }
 
 predicate SaneState(s:state)
@@ -177,33 +156,3 @@ predicate SaneState(s:state)
     && mode_of_state(s) == Monitor
 }
 
-
-
-predicate bankedRegsPreserved(hw:state, hw':state)
-    requires ValidState(hw) && ValidState(hw')
-{
-    reveal_ValidRegState();
-    reveal_ValidSRegState();
-    reveal_ValidConfig();
-    // It would probably be better if we had a lemma that proved that these 
-    // were the same thing... but for now both seem equally trustworth, so 
-    // let's use the one that's easier to prove
-    // hw.conf.spsr[Monitor] == hw'.conf.spsr[Monitor] &&
-    hw.sregs[spsr(Monitor)] == hw'.sregs[spsr(Monitor)] &&
-
-    // Sadly this has to be unrolled
-    hw.regs[LR(FIQ)] == hw'.regs[LR(FIQ)] &&
-    hw.regs[LR(IRQ)] == hw'.regs[LR(IRQ)] &&
-    hw.regs[LR(Supervisor)] == hw'.regs[LR(Supervisor)] &&
-    hw.regs[LR(Abort)] == hw'.regs[LR(Abort)] &&
-    hw.regs[LR(Undefined)] == hw'.regs[LR(Undefined)] &&
-    hw.regs[LR(Monitor)] == hw'.regs[LR(Monitor)] &&
-
-    hw.regs[SP(FIQ)] == hw'.regs[SP(FIQ)] &&
-    hw.regs[SP(IRQ)] == hw'.regs[SP(IRQ)] &&
-    hw.regs[SP(Supervisor)] == hw'.regs[SP(Supervisor)] &&
-    hw.regs[SP(Abort)] == hw'.regs[SP(Abort)] &&
-    hw.regs[SP(Undefined)] == hw'.regs[SP(Undefined)] &&
-    hw.regs[SP(Monitor)] == hw'.regs[SP(Monitor)]
-
-}

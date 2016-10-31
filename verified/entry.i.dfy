@@ -1,6 +1,5 @@
 include "entry.s.dfy"
 include "ptables.i.dfy"
-include "abstate.s.dfy"
 
 predicate validSysState'(s:SysState)
 {
@@ -39,51 +38,51 @@ predicate AUCIdef()
             decode_mode'(psr_mask_mode(
                 s.hw.sregs[spsr(mode_of_state(s.hw))])) == Just(User) &&
             (r.hw.regs[R0], r.hw.regs[R1], r.d) ==
-                exceptionHandled_premium(s, dp)
+                exceptionHandled_premium(s.hw, s.d, dp)
 
 }
 
-function exceptionHandled_premium(s:SysState, dispPg:PageNr) : (int, int, PageDb)
-    requires validSysState(s)
-    requires mode_of_state(s.hw) != User
+function exceptionHandled_premium(s:state, d:PageDb, dispPg:PageNr) : (int, int, PageDb)
+    requires ValidState(s) && validPageDb(d)
+    requires mode_of_state(s) != User
     requires 
         (reveal_ValidSRegState();
         decode_mode'(psr_mask_mode(
-        s.hw.sregs[spsr(mode_of_state(s.hw))])) == Just(User))
-    requires validDispatcherPage(s.d, dispPg)
-    ensures var (r0,r1,d) := exceptionHandled_premium(s, dispPg);
+        s.sregs[spsr(mode_of_state(s))])) == Just(User))
+    requires validDispatcherPage(d, dispPg)
+    ensures var (r0,r1,d) := exceptionHandled_premium(s, d, dispPg);
         validPageDb(d)
 {
-    exceptionHandledValidPageDb(s, dispPg);
-    exceptionHandled(s, dispPg)
+    exceptionHandledValidPageDb(s, d, dispPg);
+    exceptionHandled(s, d, dispPg)
 }
 
-lemma exceptionHandledValidPageDb(s:SysState, dispPg:PageNr)
-    requires validSysState(s)
-    requires mode_of_state(s.hw) != User
+lemma exceptionHandledValidPageDb(s:state, d:PageDb, dispPg:PageNr)
+    requires ValidState(s) && validPageDb(d)
+    requires mode_of_state(s) != User
     requires 
         (reveal_ValidSRegState();
         decode_mode'(psr_mask_mode(
-        s.hw.sregs[spsr(mode_of_state(s.hw))])) == Just(User))
-    requires validDispatcherPage(s.d, dispPg)
-    ensures var (r0,r1,d) := exceptionHandled(s, dispPg);
+        s.sregs[spsr(mode_of_state(s))])) == Just(User))
+    requires validDispatcherPage(d, dispPg)
+    ensures var (r0,r1,d) := exceptionHandled(s, d, dispPg);
         validPageDb(d)
 {
     reveal_validPageDb();
     reveal_ValidSRegState();
     reveal_ValidRegState();
-    var (r0,r1,d') := exceptionHandled(s, dispPg);
+    var (r0,r1,d') := exceptionHandled(s, d, dispPg);
 
     assert validPageDbEntry(d', dispPg);
 
     forall( p' | validPageNr(p') && d'[p'].PageDbEntryTyped? && p' != dispPg )
         ensures validPageDbEntry(d', p');
     {
-        var e  := s.d[p'].entry;
+        var e  := d[p'].entry;
         var e' := d'[p'].entry;
         if(e.Addrspace?){
             assert e.refcount == e'.refcount;
-            assert addrspaceRefs(d', p') == addrspaceRefs(s.d,p');
+            assert addrspaceRefs(d', p') == addrspaceRefs(d,p');
             assert validAddrspace(d',p');
         }
     }
