@@ -191,7 +191,7 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
 {
     var base := page_monvaddr(p);
     assert base in page;
-    assert validDispatcherContext(e.ctxt);
+    assert wellformedDispatcherContext(e.ctxt);
     page[base + DISPATCHER_ENTERED()] == to_i(e.entered)
     && page[base + DISPATCHER_ENTRYPOINT()] == e.entrypoint
     && page[base + DISP_CTXT_PC()]  == e.ctxt.pc
