@@ -291,7 +291,8 @@ procedure {:refined} Body_16_XX(
     {:inline} perm:perm_index,
     {:inline} input_slot:word,
     {:inline} input_slot_9:word,
-    ghost z:SHA256Trace,
+    ghost trace_in:SHA256Trace,
+    ghost input:seq(word),
     inout{:operand} t0:word,
     inout{:operand} t1:word,
     inout{:operand} t2:word,
@@ -308,7 +309,8 @@ procedure {:refined} Body_16_XX(
     inout{:operand} h:word)
 
 requires/ensures
-    //ValidAddr(mem, sp + input_slot);
+    // Stack is accessible
+    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 18 ==> ValidAddr(mem, sp + j*4);
 reads 
     sp; globals;
 modifies 
@@ -341,12 +343,19 @@ requires
     lr == AddressOfGlobal(K_SHA256s()) + 4*i;
     forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][i] == K_SHA256(i);
 
+    // t4 doesn't alias the stack
+    t4 < sp || t4 > sp + 18*4;
+
     t3 == BitwiseXor(b, c);
 
     // SHA semantics
-    SeqLength(z.H) > 0;
-    IsSHA256TraceReadyForStep(z, i);
-    last(last(z.atoh)) == atoh_c(a, b, c, d, e, f, g, h);
+    SeqLength(trace_in.H) > 0;
+    IsSHA256TraceReadyForStep(trace_in, i);
+    last(last(trace_in.atoh)) == atoh_c(BitwiseAdd32(a, t2), b, c, d, e, f, g, h);
+
+    //t1 == (if (i < 16) then input[i] else last(trace_in.W)[i]);
+    forall j :: i - 16 <= j < i ==> last(trace_in.W)[j] == mem[sp + CheapMod16(j)*4];
+
 {
     //@ ldr  $t1,[sp,#`($i+1)%16`*4]    @ $i
     //@ ldr  $t4,[sp,#`($i+14)%16`*4]
@@ -377,6 +386,90 @@ requires
 
     rADDWrap(t1,t1,t4);      // X[i]
 
-    Body_00_15(i, perm, input_slot, z, t0, t1, t2, t3, t4, a, b, c, d, e, f, g, h);
+    Body_00_15(i, perm, input_slot, trace_in, t0, t1, t2, t3, t4, a, b, c, d, e, f, g, h);
 }
 */
+
+procedure {:refined} sha256_block_data_order(
+    ghost trace_in:SHA256Trace,
+    ghost input:seq(word)
+    )
+requires/ensures
+    // Stack is accessible
+    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 18 ==> ValidAddr(mem, sp + j*4);
+    
+requires
+    IsSHA256TraceReadyForStep(trace_in, 0);
+    
+//    // K table adjusted properly
+//    ValidGlobalsAddr(globals, K_SHA256s(), lr);
+//    lr == AddressOfGlobal(K_SHA256s()) + 4*i;
+    ValidGlobals(globals);
+    ValidGlobal(K_SHA256s());
+    SeqLength(globals[K_SHA256s()]) == 64;
+    forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][j] == K_SHA256(j);
+
+    let ctx := r0 in
+    let input_ptr := r1 in
+    let num_blocks := r2 in // Number of 64-byte blocks to process
+
+     // Old H values are laid out in memory pointed at by ctx
+        (forall j {ValidAddr(mem, ctx+j*4)} { mem?[ctx+j*4] } :: 0 <= j < 8 ==> ValidAddr(mem, ctx + j*4))
+     && last(trace_in.H)[0] == mem[ctx + 0*4]
+     && last(trace_in.H)[1] == mem[ctx + 1*4]
+     && last(trace_in.H)[2] == mem[ctx + 2*4]
+     && last(trace_in.H)[3] == mem[ctx + 3*4]
+     && last(trace_in.H)[4] == mem[ctx + 4*4]
+     && last(trace_in.H)[5] == mem[ctx + 5*4]
+     && last(trace_in.H)[6] == mem[ctx + 6*4]
+     && last(trace_in.H)[7] == mem[ctx + 7*4]
+
+     // Ghost input matches in-memory input
+     && SeqLength(input) == num_blocks*16
+     && input_ptr + num_blocks*16 < 0x1_0000_0000
+     && (forall j {ValidAddr(mem, input_ptr+j*4)} { mem?[input_ptr+j*4] } :: 
+            0 <= j < num_blocks*16 ==> ValidAddr(mem, input_ptr + j*4)
+                                   && mem[input_ptr + j*4] == input[j]
+         )
+     // Anti-aliasing
+     && (ctx < input_ptr || ctx > input_ptr + num_blocks*16)     // input_ptr != ctx
+     && (ctx < sp || ctx >= sp + 18*4)                           // ctx != sp
+     && (input_ptr < sp || input_ptr >= sp + 18*4);              // input_ptr != sp
+     
+reads
+    sp; globals;
+modifies
+    mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
+ensures
+//    exists trace_out:SHA256Trace ::
+//        IsSHA256TraceReadyForStep(trace_out, 64)
+//     && trace_out.M == trace_in.M
+//     && trace_out.H == trace_in.H
+//     && trace_out.W == trace_in.W;
+{
+    // TODO: Need to save the value in R2 to the stack
+
+    rLDR( r4, r0, 0);       // a
+    rLDR( r5, r0, 4);       // b
+    rLDR( r6, r0, 8);       // c
+    rLDR( r7, r0, 12);      // d
+    rLDR( r8, r0, 16);      // e
+    rLDR( r9, r0, 20);      // f
+    rLDR(r10, r0, 24);      // g
+    rLDR(r11, r0, 28);      // h
+
+    rLDRglobaladdr(lr, K_SHA256s().sym);
+
+    // Set up the initial conditions for BODY_00_15
+    rLDR(r2, r1, 0);        // t1 <- input[0]
+    rADDWrap(r1, r1, 4);        // TODO: OpenSSL does this with a single LDR instruction
+    rEOR(r3, r5, r6);       // t3 <- B xor C  "@magic"
+    rEOR(r12, r12, r12);    // TODO: Remove this unnecessary clear once we have if/else in Body_00_15
+
+    Body_00_15(0, 0, 0, trace_in, input, r0, r2, r12, r3, r1, 
+               r4, r5, r6, r7, r8, r9, r10, r11);
+
+
+
+
+}

@@ -112,6 +112,7 @@ function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
 //-----------------------------------------------------------------------------
 function method sp_op_osp():operand { OSP }
 function method sp_op_olr():operand { OLR }
+function method sp_op_reg(r:ARMReg):operand { OReg(r) }
 function sp_get_ok(s:state):bool { s.ok }
 function sp_get_reg(r:ARMReg, s:state):word requires r in s.regs { s.regs[r] }
 function sp_get_mem(s:state):memmap { s.m.addresses }
