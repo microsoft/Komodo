@@ -133,7 +133,7 @@ function sp_update_reg(r:ARMReg, sM:state, sK:state):state
     requires r in sM.regs 
 { sK.(regs := sK.regs[r := sM.regs[r]]) }
 function sp_update_mem(sM:state, sK:state):state { 
-    sK.(m := sM.m.(addresses := sM.m.addresses)) 
+    sK.(m := sK.m.(addresses := sM.m.addresses)) 
 }
 function sp_update_olr(sM:state, sK:state):state 
     requires LR(mode_of_state(sM)) in sM.regs                                          
