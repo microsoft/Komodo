@@ -131,7 +131,7 @@ requires
     input_slot == (i%16)*4;
 
     // t4 doesn't alias the stack
-    t4 < sp || t4 > sp + 18*4;
+    t4 < sp || t4 >= sp + 18*4;
 
     // SHA semantics
     SeqLength(trace_in.H) > 0;
@@ -415,14 +415,15 @@ requires
 
      // Old H values are laid out in memory pointed at by ctx
         (forall j {ValidAddr(mem, ctx+j*4)} { mem?[ctx+j*4] } :: 0 <= j < 8 ==> ValidAddr(mem, ctx + j*4))
-     && last(trace_in.H)[0] == mem[ctx + 0*4]
-     && last(trace_in.H)[1] == mem[ctx + 1*4]
-     && last(trace_in.H)[2] == mem[ctx + 2*4]
-     && last(trace_in.H)[3] == mem[ctx + 3*4]
-     && last(trace_in.H)[4] == mem[ctx + 4*4]
-     && last(trace_in.H)[5] == mem[ctx + 5*4]
-     && last(trace_in.H)[6] == mem[ctx + 6*4]
-     && last(trace_in.H)[7] == mem[ctx + 7*4]
+     && last(trace_in.H)[0] == mem[ctx + 0*4] == last(last(trace_in.atoh)).a
+     && last(trace_in.H)[1] == mem[ctx + 1*4] == last(last(trace_in.atoh)).b
+     && last(trace_in.H)[2] == mem[ctx + 2*4] == last(last(trace_in.atoh)).c
+     && last(trace_in.H)[3] == mem[ctx + 3*4] == last(last(trace_in.atoh)).d
+     && last(trace_in.H)[4] == mem[ctx + 4*4] == last(last(trace_in.atoh)).e
+     && last(trace_in.H)[5] == mem[ctx + 5*4] == last(last(trace_in.atoh)).f
+     && last(trace_in.H)[6] == mem[ctx + 6*4] == last(last(trace_in.atoh)).g
+     && last(trace_in.H)[7] == mem[ctx + 7*4] == last(last(trace_in.atoh)).h
+    //ConvertAtoHToSeq(last(trace_in.atoh)[0]) == last(trace_in.H);
 
      // TODO: Remove this once we have a while loop over num_blocks
      && num_blocks > 0
@@ -434,11 +435,13 @@ requires
             0 <= j < num_blocks*16 ==> ValidAddr(mem, input_ptr + j*4)
                                    && mem[input_ptr + j*4] == input[j]
          )
+     && (forall j :: 0 <= j < 16 ==> last(trace_in.W)[j] == bswap32(input[j]))
+
      // Anti-aliasing
-     && (ctx < input_ptr || ctx > input_ptr + num_blocks*16)     // input_ptr != ctx
-     && (ctx < sp || ctx >= sp + 18*4)                           // ctx != sp
-     && (input_ptr < sp || input_ptr >= sp + 18*4);              // input_ptr != sp
-     
+     && (ctx + 7*4 < input_ptr || ctx > input_ptr + num_blocks*16)     // input_ptr != ctx
+     && (ctx + 7*4 < sp || ctx >= sp + 18*4)                           // ctx != sp
+     && (input_ptr + num_blocks*16 < sp || input_ptr >= sp + 18*4);              // input_ptr != sp
+
 reads
     sp; globals;
 modifies
@@ -465,11 +468,14 @@ ensures
 
     // Set up the initial conditions for BODY_00_15
     rLDR(r2, r1, 0);        // t1 <- input[0]
+    assert r2 == input[0];
     rADDWrap(r1, r1, 4);        // TODO: OpenSSL does this with a single LDR instruction
     rEOR(r3, r5, r6);       // t3 <- B xor C  "@magic"
     rEOR(r12, r12, r12);    // TODO: Remove this unnecessary clear once we have if/else in Body_00_15
-
-    Body_00_15(0, 0, 0, trace_in, SeqDrop(input, 16), r0, r2, r12, r3, r1, 
+    assert r12 == 0 by { lemma_XorSelfIsZero(); }
+    
+    Body_00_15(0, 0, 0, trace_in, SeqDrop(input, 16), 
+               r0, r2, r12, r3, r1, 
                r4, r5, r6, r7, r8, r9, r10, r11);
 
 

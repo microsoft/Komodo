@@ -35,3 +35,13 @@ lemma lemma_RotateRightCommutesXor(x:word, amt_0:shift_amount, amt_1:shift_amoun
 //    lemma_BitsAndWordConversions();
 //}
 
+lemma lemma_XorSelfIsZero()
+    ensures forall x:word :: BitwiseXor(x, x) == 0;
+{
+    forall x:word 
+        ensures BitwiseXor(x, x) == 0;
+    {
+        reveal_BitXor();
+        lemma_BitsAndWordConversions();
+    }
+}
