@@ -269,27 +269,11 @@ ensures
     ghost var old_atoh := old(atoh_c(old_a, b, c, d, e, f, g, h));
     //assert last(last(trace_in.atoh)) == old_atoh;                                   
     ghost var new_atoh := atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g));
-
-//    assert new_atoh.h == old_atoh.g;
-//    assert new_atoh.g == old_atoh.f;
-//    assert new_atoh.f == old_atoh.e;
-//    //assert new_atoh.e == old_atoh.g;
-//    assert new_atoh.d == old_atoh.c;
-//    assert new_atoh.c == old_atoh.b;
-//    assert new_atoh.b == old_atoh.a;
-//    assert new_atoh.a == BitwiseAdd32(T1, BitwiseAdd32(BSIG0(a), t3));
-
     assert BitwiseAdd32(old(a), 0) == old(a);   // OBSERVE
     assert old_atoh.a == a;     // OBSERVE
-//    assert old_atoh.b == b;
-//    assert old_atoh.c == c;
-//    assert t3 == Maj(old_atoh.a, old_atoh.b, old_atoh.c);
      
 
-//    assert SeqLength(last(trace_in.atoh)) == i+1;
     ghost var new_atoh_list := last(trace_in.atoh) + seq(new_atoh);
-//    assert SeqLength(new_atoh_list) == i+2;
-    //ghost var trace_out:SHA256Trace := trace_in.(atoh := trace_in.atoh[SeqLength(trace_in.atoh)-1 := new_atoh_list]);
     ghost var trace_out:SHA256Trace := trace_in.(atoh := SeqDrop(trace_in.atoh, SeqLength(trace_in.H)-1) + seq(trace_in.atoh[SeqLength(trace_in.H)-1] + seq(new_atoh)));
 
     // OBSERVE: Triggers gallore!
@@ -299,13 +283,6 @@ ensures
     lemma_SHA256TransitionOKAfterSettingAtoH(trace_in, superfluous_state_in, trace_out, superfluous_state_out, i);
 
     assert IsSHA256TraceReadyForStep(trace_out, i+1);
-//    assert trace_out.M == trace_in.M;
-//    assert trace_out.H == trace_in.H;
-//    assert trace_out.W == trace_in.W;
-//    assert t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 < 64 then last(trace_out.W)[i + 1] else t1);
-//    assert (i + 1 < 16 ==> (forall j :: 0 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + j*4]));
-//    assert (16 <= i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + CheapMod16(j)*4]));
-//    assert last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), a, b, c, d, e, f, g);
 }
 
 /*
