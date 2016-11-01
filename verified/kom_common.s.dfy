@@ -112,11 +112,12 @@ function method KomGlobalDecls(): globaldecls
 // up our execution environment so they are ensured on SMC handler entry.
 //-----------------------------------------------------------------------------
 
-predicate ValidStack(s:state)
+predicate SaneStack(s:state)
     requires ValidState(s)
 {
-    WordAligned(OperandContents(s, OSP))
-    && StackLimit() < OperandContents(s, OSP) <= StackBase()
+    reveal_ValidRegState();
+    var sp := s.regs[SP(Monitor)];
+    WordAligned(sp) && StackLimit() < sp <= StackBase()
 }
 
 predicate SaneMem(s:memstate)
@@ -151,7 +152,7 @@ predicate SaneState(s:state)
 {
     SaneConstants()
     && ValidState(s) 
-    && ValidStack(s)
+    && SaneStack(s)
     && SaneMem(s.m)
     && mode_of_state(s) == Monitor
 }

@@ -14,22 +14,26 @@ function method PAGEDB_ENTRY_SHIFT():int { 3 }
 
 predicate StackBytesRemaining(s:state,bytes:int)
 {
-    ValidState(s) && ValidStack(s) &&
-    (StackLimit() + bytes < OperandContents(s, OSP) <= StackBase())
+    ValidState(s) && SaneStack(s) &&
+    (reveal_ValidRegState();
+    var sp := s.regs[SP(Monitor)];
+    StackLimit() + bytes < sp <= StackBase())
 }
 
 predicate ParentStackPreserving(s:state, r:state)
-    requires SaneState(s) && SaneState(r)
+    requires ValidState(s) && ValidState(r) && SaneConstants()
 {
-    forall m:addr :: OperandContents(s, OSP) <= m < StackBase()
-        ==> MemContents(r.m, m) == MemContents(s.m, m)
+    reveal_ValidRegState();
+    var sp := s.regs[SP(Monitor)];
+    SaneStack(s) &&
+    forall a:addr | sp <= a < StackBase() :: MemContents(s.m, a) == MemContents(r.m, a)
 }
 
 predicate StackPreserving(s:state, r:state)
-    requires SaneState(s) && SaneState(r)
+    requires ValidState(s) && ValidState(r) && SaneConstants()
 {
-    OperandContents(s, OSP) == OperandContents(r, OSP)
-    && ParentStackPreserving(s, r)
+    reveal_ValidRegState();
+    s.regs[SP(Monitor)] == r.regs[SP(Monitor)] && ParentStackPreserving(s, r)
 }
 
 predicate DistinctRegOperands(operands:set<operand>, count:nat)
@@ -115,10 +119,13 @@ function paddr_page(p:addr): PageNr
     (p - SecurePhysBase()) / PAGESIZE()
 }
 
-
 // workarounds for Spartan's lack of Dafny language features
 function specPageDb(t: (PageDb, int)): PageDb { t.0 }
 function specErr(t: (PageDb, int)): int { t.1 }
+
+//-----------------------------------------------------------------------------
+// Common lemmas
+//-----------------------------------------------------------------------------
 
 // FIXME: delete
 lemma WordAlignedAdd(x1:int,x2:int)
