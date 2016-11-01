@@ -65,7 +65,8 @@ function CheapMod16(j:int) : int
     if j < 16 then j 
     else if j < 32 then j - 16 
     else if j < 48 then j - 32 
-    else j - 48 
+    else if j < 64 then j - 48 
+    else j - 64
 }
 
 #endverbatim
@@ -125,15 +126,15 @@ requires
     forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][i] == K_SHA256(i);
 
     // TODO: Remove this when we have if/else
-    requires i == 15;
+    requires i >= 16;
     
     SeqLength(input) == 16;
 
     i < 15 ==> ValidAddr(mem, t4) && mem[t4] == input[i+1];
-    input_slot == (i%16)*4;
+    input_slot == CheapMod16(i)*4;
 
-    i >= 15 ==> i_plus_2  == ((i+ 2)%16)*4 && ValidAddr(mem, sp+i_plus_2);
-    i >= 15 ==> i_plus_15 == ((i+15)%16)*4 && ValidAddr(mem, sp+i_plus_15);
+    i >= 15 ==> i_plus_2  == CheapMod16(i+ 2)*4 && ValidAddr(mem, sp+i_plus_2);
+    i >= 15 ==> i_plus_15 == CheapMod16(i+15)*4 && ValidAddr(mem, sp+i_plus_15);
 
     // t4 doesn't alias the stack
     t4 < sp || t4 >= sp + 18*4;
@@ -141,7 +142,7 @@ requires
     // SHA semantics
     SeqLength(trace_in.H) > 0;
     IsSHA256TraceReadyForStep(trace_in, i);
-    if i == 0 then last(last(trace_in.atoh)) == atoh_c(a, b, c, d, e, f, g, h)
+    if i == 0 || i >= 16 then last(last(trace_in.atoh)) == atoh_c(a, b, c, d, e, f, g, h)
     else last(last(trace_in.atoh)) == atoh_c(BitwiseAdd32(a, t2), b, c, d, e, f, g, h);
 
     // t1 holds the current value of W
@@ -164,7 +165,7 @@ requires
 ensures
     t2 == BitwiseXor(a, b);
     t3 == Maj(a, b, c);
-    a == old(BitwiseAdd32(a, t2));
+    i < 16 ==> a == old(BitwiseAdd32(a, t2));
     lr == BitwiseAdd32(old(lr), 4);
 
     // Updated input ptr
@@ -186,33 +187,33 @@ ensures
      && trace_out.H == trace_in.H
      && trace_out.W == trace_in.W
      // t1 holds the next value of W
-     && t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 < 64 then mem[sp + CheapMod16(i+2)*4] else t1) //last(trace_out.W)[i + 1] else t1)
+     && t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 < 64 then mem[sp + i_plus_2] else t1) //last(trace_out.W)[i + 1] else t1)
      // Initial Ws are laid out in memory
      && (i + 1 < 16 ==> (forall j :: 0 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + j*4]))
      // Remaining Ws are laid out in memory
      && (16 <= i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + CheapMod16(j)*4]))
      // The atohs almost match the outgoing variables
-     && (let old_a := (if i == 0 then old(a) else old(BitwiseAdd32(a, t2))) in
+     && (let old_a := (if i == 0 || i >= 16 then old(a) else old(BitwiseAdd32(a, t2))) in
          last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g)));
 {
-    //if i < 16
-    //  if i == 15
-          assert 68 == 17*4;    // OBSERVE
-          rSTR(t4, sp, 68 /*== 17*4*/);     // Save a copy of the incremented input pointer, so we can free up t4
-    //  end if
-
-    rEORShift(t0, e, e, RORShift(Sigma1(1) - Sigma1(0)));
-    // TODO: When i = 0, t2 = 0, so this is a no op.  We can skip it.  We can also remove the XOR that clears t2
-    rADDWrap(a, a, t2);  // h += Maj(a,b,c) from the past?
-    rEORShift(t0, t0, e, RORShift(Sigma1(2) - Sigma1(0)));   // Sigma1(e)
-    rREV(t1, t1);
-
-    //end if--------
+//    //if i < 16
+//    //  if i == 15
+////          assert 68 == 17*4;    // OBSERVE
+////          rSTR(t4, sp, 68 /*== 17*4*/);     // Save a copy of the incremented input pointer, so we can free up t4
+//    //  end if
+//
+//    rEORShift(t0, e, e, RORShift(Sigma1(1) - Sigma1(0)));
+//    // TODO: When i = 0, t2 = 0, so this is a no op.  We can skip it.  We can also remove the XOR that clears t2
+//    rADDWrap(a, a, t2);  // h += Maj(a,b,c) from the past?
+//    rEORShift(t0, t0, e, RORShift(Sigma1(2) - Sigma1(0)));   // Sigma1(e)
+//    rREV(t1, t1);
+//
+//    //end if--------
 
     rLDRglobal(t2, K_SHA256s().sym, lr, 0);
     rADDWrap(lr, lr, 4);    // TODO: OpenSSL does this in one instruction with a load-and-increment.  
     rADDWrap(h, h, t1);      //  h+=X[i]  BP: X[i] = input[i]?
-    assert h == BitwiseAdd32(old(h), bswap32(old(t1)));
+    //assert h == BitwiseAdd32(old(h), bswap32(old(t1)));
     rSTR(t1, sp, input_slot);  // @ BP: Save a copy of input[i] for use in subsequent W calculations
     rEOR(t1, f, g);
     ghost var old_h := h;
@@ -235,8 +236,9 @@ ensures
     rEORShift(t0, a, a, RORShift(Sigma0(1) - Sigma0(0)));
     rADDWrap(h, h, t1);  // h += Ch(e,f,g)
 
-    assert h == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), bswap32(old(t1))), BSIG1(e)), K_SHA256(i)), Ch(e, f, g));
-    lemma_BitwiseAdd32Associates5(old(h), bswap32(old(t1)), BSIG1(e), K_SHA256(i), Ch(e, f, g), h);
+    ghost var old_t1 := if i < 16 then bswap32(old(t1)) else old(t1);
+    assert h == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), old_t1), BSIG1(e)), K_SHA256(i)), Ch(e, f, g));
+    lemma_BitwiseAdd32Associates5(old(h), old_t1, BSIG1(e), K_SHA256(i), Ch(e, f, g), h);
 
 //    #if $i==31
 //        and  $t2,$t2,#0xff
@@ -277,13 +279,13 @@ ensures
     ghost var T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), BSIG1(e)),
                                                            Ch(e,f,g)),
                                               K_SHA256(i)),
-                                 bswap32(old(t1)));
+                                 old_t1);
     //assert h == BitwiseAdd32(T1, BSIG0(a));
     assert BitwiseAdd32(h, t3) == BitwiseAdd32(T1, BitwiseAdd32(BSIG0(a), t3)) by
            { lemma_BitwiseAdd32Associates3'(T1, BSIG0(a), t3); }
 
     // Construct a trace_out
-    ghost var old_a := if i == 0 then old(a) else old(BitwiseAdd32(a, t2));
+    ghost var old_a := if i == 0 || i >= 16 then old(a) else old(BitwiseAdd32(a, t2));
     ghost var old_atoh := old(atoh_c(old_a, b, c, d, e, f, g, h));
     //assert last(last(trace_in.atoh)) == old_atoh;                                   
     ghost var new_atoh := atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g));
@@ -305,14 +307,15 @@ ensures
      assert trace_out.H == trace_in.H;
      assert trace_out.W == trace_in.W;
      // t1 holds the next value of W
-     assert t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 < 64 then mem[sp + CheapMod16(i+2)*4] else t1);
+     assert t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 < 64 then mem[sp + i_plus_2] else t1);
              //last(trace_out.W)[i + 1] else t1);
      // Initial Ws are laid out in memory
      assert (i + 1 < 16 ==> (forall j :: 0 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + j*4]));
      // Remaining Ws are laid out in memory
+     assert input_slot == CheapMod16(i)*4;
      assert (16 <= i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + CheapMod16(j)*4]));
      // The atohs almost match the outgoing variables
-     assert (let old_a := (if i == 0 then old(a) else old(BitwiseAdd32(a, t2))) in
+     assert (let old_a := (if i == 0 || i >= 16 then old(a) else old(BitwiseAdd32(a, t2))) in
          last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g)));
 }
 
