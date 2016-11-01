@@ -58,7 +58,7 @@ function ApplyPerm(i:int, perm:perm_index) : int
     if i + perm >= 8 then i + perm - 8 else i + perm
 }
 
-predicate {:opaque} Even(i:int) { i % 2 == 0 }
+predicate Even(i:int) { i % 2 == 0 }
 
 function CheapMod16(j:int) : int
 {
@@ -424,6 +424,9 @@ requires
      && last(trace_in.H)[6] == mem[ctx + 6*4]
      && last(trace_in.H)[7] == mem[ctx + 7*4]
 
+     // TODO: Remove this once we have a while loop over num_blocks
+     && num_blocks > 0
+
      // Ghost input matches in-memory input
      && SeqLength(input) == num_blocks*16
      && input_ptr + num_blocks*16 < 0x1_0000_0000
@@ -466,7 +469,7 @@ ensures
     rEOR(r3, r5, r6);       // t3 <- B xor C  "@magic"
     rEOR(r12, r12, r12);    // TODO: Remove this unnecessary clear once we have if/else in Body_00_15
 
-    Body_00_15(0, 0, 0, trace_in, input, r0, r2, r12, r3, r1, 
+    Body_00_15(0, 0, 0, trace_in, SeqDrop(input, 16), r0, r2, r12, r3, r1, 
                r4, r5, r6, r7, r8, r9, r10, r11);
 
 
