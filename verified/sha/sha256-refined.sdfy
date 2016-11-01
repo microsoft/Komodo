@@ -74,6 +74,8 @@ procedure {:refined} Body_00_15(
     {:inline} i:SHA_step,
     {:inline} perm:perm_index,
     {:inline} input_slot:word,
+    {:inline} i_plus_2:word,
+    {:inline} i_plus_15:word,
     ghost trace_in:SHA256Trace,
     ghost input:seq(word),
     inout{:operand} t0:word,
@@ -118,17 +120,20 @@ requires/ensures
 
 requires
     // K table adjusted properly
-    ValidGlobalsAddr(globals, K_SHA256s(), lr);
+    ValidGlobalsAddr(globals, K_SHA256s().sym, lr);
     lr == AddressOfGlobal(K_SHA256s()) + 4*i;
     forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][i] == K_SHA256(i);
 
     // TODO: Remove this when we have if/else
-    requires i < 15;
+    requires i == 15;
     
     SeqLength(input) == 16;
 
     i < 15 ==> ValidAddr(mem, t4) && mem[t4] == input[i+1];
     input_slot == (i%16)*4;
+
+    i >= 15 ==> i_plus_2  == ((i+ 2)%16)*4 && ValidAddr(mem, sp+i_plus_2);
+    i >= 15 ==> i_plus_15 == ((i+15)%16)*4 && ValidAddr(mem, sp+i_plus_15);
 
     // t4 doesn't alias the stack
     t4 < sp || t4 >= sp + 18*4;
@@ -164,8 +169,8 @@ ensures
 
     // Updated input ptr
     if i < 15 then t4 == BitwiseAdd32(old(t4), 4)   // Advanced input ptr
-    else if i == 15 then mem[sp+17*4] == BitwiseAdd32(old(t4), 4) // We stored the advanced input ptr on the stack
-    else mem[sp+17*4] == old(mem[sp+17*4]);     // We preserved the input ptr on the stack
+    else if i == 15 then mem[sp+17*4] == old(t4)    // We stored the advanced input ptr on the stack
+    else mem[sp+17*4] == old(mem[sp+17*4]);         // We preserved the input ptr on the stack
 
 // No longer need this in the ensures, since it's implied by the clauses below
 //    let T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), BSIG1(e)),
@@ -181,7 +186,7 @@ ensures
      && trace_out.H == trace_in.H
      && trace_out.W == trace_in.W
      // t1 holds the next value of W
-     && t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 < 64 then last(trace_out.W)[i + 1] else t1)
+     && t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 < 64 then mem[sp + CheapMod16(i+2)*4] else t1) //last(trace_out.W)[i + 1] else t1)
      // Initial Ws are laid out in memory
      && (i + 1 < 16 ==> (forall j :: 0 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + j*4]))
      // Remaining Ws are laid out in memory
@@ -192,7 +197,8 @@ ensures
 {
     //if i < 16
     //  if i == 15
-    //    STR(inp, sp,17*4);
+          assert 68 == 17*4;    // OBSERVE
+          rSTR(t4, sp, 68 /*== 17*4*/);     // Save a copy of the incremented input pointer, so we can free up t4
     //  end if
 
     rEORShift(t0, e, e, RORShift(Sigma1(1) - Sigma1(0)));
@@ -201,7 +207,7 @@ ensures
     rEORShift(t0, t0, e, RORShift(Sigma1(2) - Sigma1(0)));   // Sigma1(e)
     rREV(t1, t1);
 
-    // end if--------
+    //end if--------
 
     rLDRglobal(t2, K_SHA256s().sym, lr, 0);
     rADDWrap(lr, lr, 4);    // TODO: OpenSSL does this in one instruction with a load-and-increment.  
@@ -238,13 +244,13 @@ ensures
 //    #endif
 
     // if $i<15
-         rLDR(t1, t4, 0);    // Prefetch
-         rADDWrap(t4, t4, 4);   // Advance to the next input  // TODO: OpenSSL does this in one instruction with a load-and-increment
-         rEOR(t2, a, b);            //  a^b, b^c in next round
+//         rLDR(t1, t4, 0);    // Prefetch
+//         rADDWrap(t4, t4, 4);   // Advance to the next input  // TODO: OpenSSL does this in one instruction with a load-and-increment
+//         rEOR(t2, a, b);            //  a^b, b^c in next round
     // else
-    //   rLDR(t1, sp, ((i+2)%16)*4);     // @ from future BODY_16_xx 
-    //   rEOR(t2, a, b);            //  a^b, b^c in next round
-    //   rLDR(t4, sp, ((i+15)%16)*4);   // @ from future BODY_16_xx
+       rLDR(t1, sp, i_plus_2);     // @ from future BODY_16_xx 
+       rEOR(t2, a, b);             //  a^b, b^c in next round
+       rLDR(t4, sp, i_plus_15);    // @ from future BODY_16_xx
     // endif
     rEORShift(t0,t0,a, RORShift(Sigma0(2)-Sigma0(0))); // Sigma0(a)
     rAND(t3,t3,t2);      // (b^c)&=(a^b)
@@ -281,7 +287,7 @@ ensures
     ghost var old_atoh := old(atoh_c(old_a, b, c, d, e, f, g, h));
     //assert last(last(trace_in.atoh)) == old_atoh;                                   
     ghost var new_atoh := atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g));
-    assert BitwiseAdd32(old(a), 0) == old(a);   // OBSERVE
+    assert i == 0 ==> BitwiseAdd32(old(a), 0) == old(a);   // OBSERVE
     assert old_atoh.a == a;     // OBSERVE
      
 
@@ -295,6 +301,19 @@ ensures
     lemma_SHA256TransitionOKAfterSettingAtoH(trace_in, superfluous_state_in, trace_out, superfluous_state_out, i);
 
     assert IsSHA256TraceReadyForStep(trace_out, i+1);
+     assert trace_out.M == trace_in.M;
+     assert trace_out.H == trace_in.H;
+     assert trace_out.W == trace_in.W;
+     // t1 holds the next value of W
+     assert t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 < 64 then mem[sp + CheapMod16(i+2)*4] else t1);
+             //last(trace_out.W)[i + 1] else t1);
+     // Initial Ws are laid out in memory
+     assert (i + 1 < 16 ==> (forall j :: 0 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + j*4]));
+     // Remaining Ws are laid out in memory
+     assert (16 <= i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + CheapMod16(j)*4]));
+     // The atohs almost match the outgoing variables
+     assert (let old_a := (if i == 0 then old(a) else old(BitwiseAdd32(a, t2))) in
+         last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g)));
 }
 
 /*
@@ -351,7 +370,7 @@ requires
     ValidAddr(mem, sp + input_slot_9); 
 
     // K table adjusted properly
-    ValidGlobalsAddr(globals, K_SHA256s(), lr);
+    ValidGlobalsAddr(globals, K_SHA256s().sym, lr);
     lr == AddressOfGlobal(K_SHA256s()) + 4*i;
     forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][i] == K_SHA256(i);
 
@@ -414,7 +433,7 @@ requires
     IsSHA256TraceReadyForStep(trace_in, 0);
     
 //    // K table adjusted properly
-//    ValidGlobalsAddr(globals, K_SHA256s(), lr);
+//    ValidGlobalsAddr(globals, K_SHA256s().sym, lr);
 //    lr == AddressOfGlobal(K_SHA256s()) + 4*i;
     ValidGlobals(globals);
     ValidGlobal(K_SHA256s());
@@ -486,7 +505,7 @@ ensures
     rEOR(r12, r12, r12);    // TODO: Remove this unnecessary clear once we have if/else in Body_00_15
     assert r12 == 0 by { lemma_XorSelfIsZero(); }
     
-    Body_00_15(0, 0, 0, trace_in, SeqDrop(input, 16), 
+    Body_00_15(0, 0, 0, 2, 15, trace_in, SeqDrop(input, 16), 
                r0, r2, r12, r3, r1, 
                r4, r5, r6, r7, r8, r9, r10, r11);
 
