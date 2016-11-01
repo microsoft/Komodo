@@ -139,8 +139,13 @@ requires
     if i == 0 then last(last(trace_in.atoh)) == atoh_c(a, b, c, d, e, f, g, h)
     else last(last(trace_in.atoh)) == atoh_c(BitwiseAdd32(a, t2), b, c, d, e, f, g, h);
 
+    // t1 holds the current value of W
     t1 == (if (i < 16) then input[i] else last(trace_in.W)[i]);
+
+    // The first 16 values in W are the byte-swapped version of the input words
     forall j :: 0 <= j < 16 ==> last(trace_in.W)[j] == bswap32(input[j]);
+
+    // All previous Ws are in memory where we expect them
     i < 16 ==> (forall j :: 0 <= j < i ==> last(trace_in.W)[j] == mem[sp + j*4]);
     16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(trace_in.W)[j] == mem[sp + CheapMod16(j)*4]);
 
@@ -149,10 +154,6 @@ requires
 
     // SHA tactics
     t3 == BitwiseXor(b, c);
-//    if i == 0 then t2 == 0 
-//    else i < 16 ==> 
-//        let atoh_prev := last(trace_in.atoh)[i - 1] in
-//            t2 == Maj(atoh_prev.a, atoh_prev.b, atoh_prev.c));
     i >= 16 ==> RotateRight(t0, Sigma1(0)) == BSIG1(e);
 
 ensures
@@ -160,21 +161,32 @@ ensures
     t3 == Maj(a, b, c);
     a == old(BitwiseAdd32(a, t2));
     lr == BitwiseAdd32(old(lr), 4);
-    let T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), BSIG1(e)),
-                                                     Ch(e,f,g)),
-                                        K_SHA256(i)),
-                           bswap32(old(t1))) in
-        d == BitwiseAdd32(old(d), T1)
-     && h == BitwiseAdd32(T1, BSIG0(a));
-//     i < 16 ==> forall j :: 0 <= j <= i ==> last(z.W)[j] == inp[j];
+
+    // Updated input ptr
+    if i < 15 then t4 == BitwiseAdd32(old(t4), 4)   // Advanced input ptr
+    else if i == 15 then mem[sp+17*4] == BitwiseAdd32(old(t4), 4) // We stored the advanced input ptr on the stack
+    else mem[sp+17*4] == old(mem[sp+17*4]);     // We preserved the input ptr on the stack
+
+// No longer need this in the ensures, since it's implied by the clauses below
+//    let T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), BSIG1(e)),
+//                                                     Ch(e,f,g)),
+//                                        K_SHA256(i)),
+//                           bswap32(old(t1))) in
+//        d == BitwiseAdd32(old(d), T1)
+//     && h == BitwiseAdd32(T1, BSIG0(a));
+
     exists trace_out:SHA256Trace ::
         IsSHA256TraceReadyForStep(trace_out, i+1)
      && trace_out.M == trace_in.M
      && trace_out.H == trace_in.H
      && trace_out.W == trace_in.W
+     // t1 holds the next value of W
      && t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 < 64 then last(trace_out.W)[i + 1] else t1)
+     // Initial Ws are laid out in memory
      && (i + 1 < 16 ==> (forall j :: 0 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + j*4]))
+     // Remaining Ws are laid out in memory
      && (16 <= i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + CheapMod16(j)*4]))
+     // The atohs almost match the outgoing variables
      && (let old_a := (if i == 0 then old(a) else old(BitwiseAdd32(a, t2))) in
          last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g)));
 {
