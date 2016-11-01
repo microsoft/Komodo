@@ -75,7 +75,11 @@ lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
             calc {
                 ExtractAbsL1PTable(s, l1base)[k];
                 Just(ExtractAbsL2PTable(s, absl1pte.v + PhysBase()));
-                { reveal_l2tablesmatch_opaque(); }
+                {
+                    assert absl1pte.v + PhysBase()
+                            == page_monvaddr(l2p) + j * ARM_L2PTABLE_BYTES();
+                    reveal_l2tablesmatch_opaque();
+                }
                 Just(mkAbsL2PTable(d[l2p].entry, j));
                 mkAbsPTable(d, l1p)[k];
             }
@@ -183,10 +187,11 @@ lemma lemma_l2tablesmatch(s:memstate, p:PageNr, e:PageDbEntryTyped)
     requires PhysBase() == KOM_DIRECTMAP_VBASE()
     requires e.L2PTable? && wellFormedPageDbEntryTyped(e)
     requires pageDbL2PTableCorresponds(p, e, extractPage(s, p))
-    ensures l2tablesmatch(s, p, e)
+    ensures l2tablesmatch_opaque(s, p, e)
 {
     var l2pt := e.l2pt;
     var base := page_monvaddr(p);
+    reveal_l2tablesmatch_opaque();
 
     assert ARM_L2PTES() * 4 == NR_L2PTES();
 
