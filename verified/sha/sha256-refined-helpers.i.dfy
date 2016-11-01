@@ -5,10 +5,22 @@ include "../sha/sha256.i.dfy"
 include "../sha/bit-vector-lemmas.i.dfy"
 include "../ARMdecls.gen.dfy"
 
+lemma lemma_BitwiseAdd32Associates3'(x1:word, x2:word, x3:word)
+    ensures BitwiseAdd32(BitwiseAdd32(x1, x2), x3) == BitwiseAdd32(x1, BitwiseAdd32(x2, x3));
+{
+}
 
 lemma lemma_BitwiseAdd32Associates3(x1:word, x2:word, x3:word)
     ensures BitwiseAdd32(BitwiseAdd32(x1, x2), x3) == BitwiseAdd32(BitwiseAdd32(x1, x3), x2);
 {
+    calc {
+        BitwiseAdd32(BitwiseAdd32(x1, x2), x3);
+            { lemma_BitwiseAdd32Associates3'(x1, x2, x3); }
+        BitwiseAdd32(x1, BitwiseAdd32(x2, x3));
+        BitwiseAdd32(x1, BitwiseAdd32(x3, x2));
+            { lemma_BitwiseAdd32Associates3'(x1, x3, x2); }
+        BitwiseAdd32(BitwiseAdd32(x1, x3), x2);
+    }
 }
 
 lemma lemma_BitwiseAdd32Associates5(x1:word, x2:word, x3:word, x4:word, x5:word, result:word)
