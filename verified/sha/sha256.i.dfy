@@ -94,8 +94,7 @@ predicate IsSHA256TraceReadyForStep(z:SHA256Trace, nextStep:int)
     requires 0 <= nextStep <= 64;
 {
        PartialSHA256TraceIsCorrect(z)
-    && |z.W| == |z.H|
-    && |z.atoh| == |z.H|
+    && |z.W| == |z.H| == |z.atoh| 
     && (forall blk {:trigger |z.atoh[blk]|}:: 0 <= blk < |z.H|-1 ==> |z.atoh[blk]| == 65)
     && |z.atoh[|z.H|-1]| == nextStep+1
 }

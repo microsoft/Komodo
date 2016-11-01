@@ -60,13 +60,22 @@ function ApplyPerm(i:int, perm:perm_index) : int
 
 predicate {:opaque} Even(i:int) { i % 2 == 0 }
 
+function CheapMod16(j:int) : int
+{
+    if j < 16 then j 
+    else if j < 32 then j - 16 
+    else if j < 48 then j - 32 
+    else j - 48 
+}
+
 #endverbatim
 
-procedure {:refined} Body_00_15(
+procedure {:refined} {:timeLimitMultiplier 2} Body_00_15(
     {:inline} i:SHA_step,
     {:inline} perm:perm_index,
     {:inline} input_slot:word,
-    ghost z:SHA256Trace,
+    ghost trace_in:SHA256Trace,
+    ghost input:seq(word),
     inout{:operand} t0:word,
     inout{:operand} t1:word,
     inout{:operand} t2:word,
@@ -103,28 +112,46 @@ requires {:refined false}
     @f  == OReg(GetReg(4+ApplyPerm(5, perm)));
     @g  == OReg(GetReg(4+ApplyPerm(6, perm)));
     @h  == OReg(GetReg(4+ApplyPerm(7, perm)));
+requires/ensures
+    // Stack is accessible
+    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 18 ==> ValidAddr(mem, sp + j*4);
+
 requires
     // K table adjusted properly
     ValidGlobalsAddr(globals, K_SHA256s(), lr);
     lr == AddressOfGlobal(K_SHA256s()) + 4*i;
     forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][i] == K_SHA256(i);
+
+    // TODO: Remove this when we have if/else
+    requires i < 15;
     
+    SeqLength(input) == 16;
+
+    i < 15 ==> ValidAddr(mem, t4) && mem[t4] == input[i+1];
     input_slot == (i%16)*4;
+
+    // t4 doesn't alias the stack
+    t4 < sp || t4 > sp + 18*4;
+
+    // SHA semantics
+    SeqLength(trace_in.H) > 0;
+    IsSHA256TraceReadyForStep(trace_in, i);
+    if i == 0 then last(last(trace_in.atoh)) == atoh_c(a, b, c, d, e, f, g, h)
+    else last(last(trace_in.atoh)) == atoh_c((a - t2) % 0x1_0000_0000, b, c, d, e, f, g, h);
+
+    t1 == (if (i < 16) then input[i] else last(trace_in.W)[i]);
+    forall j :: 0 <= j < 16 ==> last(trace_in.W)[j] == bswap32(input[j]);
+    i < 16 ==> (forall j :: 0 <= j < i ==> last(trace_in.W)[j] == mem[sp + j*4]);
+    16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(trace_in.W)[j] == mem[sp + CheapMod16(j)*4]);
 
     // SHA tactics
     t3 == BitwiseXor(b, c);
-    if i == 0 then t2 == 0 else i < 16 ==> t2 == old(Maj(a, b, c));
+//    if i == 0 then t2 == 0 
+//    else i < 16 ==> 
+//        let atoh_prev := last(trace_in.atoh)[i - 1] in
+//            t2 == Maj(atoh_prev.a, atoh_prev.b, atoh_prev.c));
     i >= 16 ==> RotateRight(t0, Sigma1(0)) == BSIG1(e);
 
-    // SHA semantics
-    SeqLength(z.H) > 0;
-    IsSHA256TraceReadyForStep(z, i);
-
-    //last(last(z.atoh)) == atoh_c(a, b, c, d, e, f, g, h);
-//
-//    // TODO: Need an invariant about the 16-element array X
-//    //       and its relationship with W
-//    //i < 16 ==> forall j :: 0 <= j < i ==> last(z.W)[j] == inp[j];
 ensures
     t2 == BitwiseXor(a, b);
     t3 == Maj(a, b, c);
@@ -137,6 +164,15 @@ ensures
         d == BitwiseAdd32(old(d), T1)
      && h == BitwiseAdd32(T1, BSIG0(a));
 //     i < 16 ==> forall j :: 0 <= j <= i ==> last(z.W)[j] == inp[j];
+    exists trace_out:SHA256Trace ::
+        IsSHA256TraceReadyForStep(trace_out, i+1)
+     && trace_out.M == trace_in.M
+     && trace_out.H == trace_in.H
+     && trace_out.W == trace_in.W
+     && t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 < 64 then last(trace_out.W)[i + 1] else t1)
+     && (i + 1 < 16 ==> (forall j :: 0 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + j*4]))
+     && (16 <= i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + CheapMod16(j)*4]))
+     && last(last(trace_out.atoh)) == atoh_c((a - t2) % 0x1_0000_0000, b, c, d, e, f, g, h);
 {
     //if i < 16
     //  if i == 15
@@ -144,7 +180,7 @@ ensures
     //  end if
 
     rEORShift(t0, e, e, RORShift(Sigma1(1) - Sigma1(0)));
-    // TODO: When i = 0, t2 = 0, so this is a no op.  We can skip it.
+    // TODO: When i = 0, t2 = 0, so this is a no op.  We can skip it.  We can also remove the XOR that clears t2
     rADDWrap(a, a, t2);  // h += Maj(a,b,c) from the past?
     rEORShift(t0, t0, e, RORShift(Sigma1(2) - Sigma1(0)));   // Sigma1(e)
     rREV(t1, t1);
@@ -186,12 +222,13 @@ ensures
 //    #endif
 
     // if $i<15
-    //   LDR(t1, inp, 0);    // Prefetch
+         rLDR(t1, t4, 0);    // Prefetch
+         rADDWrap(t4, t4, 4);   // Advance to the next input  // TODO: OpenSSL does this in one instruction with a load-and-increment
          rEOR(t2, a, b);            //  a^b, b^c in next round
     // else
-    //   LDR(t1, sp, ((i+2)%16)*4);     // @ from future BODY_16_xx 
-    //   EOR(t2, a, b);            //  a^b, b^c in next round
-    //   LDR(t4, sp, ((i+15)%16)*4);   // @ from future BODY_16_xx
+    //   rLDR(t1, sp, ((i+2)%16)*4);     // @ from future BODY_16_xx 
+    //   rEOR(t2, a, b);            //  a^b, b^c in next round
+    //   rLDR(t4, sp, ((i+15)%16)*4);   // @ from future BODY_16_xx
     // endif
     rEORShift(t0,t0,a, RORShift(Sigma0(2)-Sigma0(0))); // Sigma0(a)
     rAND(t3,t3,t2);      // (b^c)&=(a^b)
@@ -207,8 +244,40 @@ ensures
         reveal BSIG0;
         lemma_RotateRightCommutesXor(a, 2, 13, 22);
     }
+
+    // Prove that stack is still valid
+    forall j :| 0 <= j < 18 
+        :: ValidAddr(mem, sp + j * 4)
+    {
+        assert ValidAddr(old(mem), sp + j * 4);
+    }
+
+    // Construct a trace_out
+
+    ghost var old_atoh := old(atoh_c((a - t2) % 0x1_0000_0000, b, c, d, e, f, g, h));
+    ghost var new_atoh := atoh_c((h - t2) % 0x1_0000_0000, a, b, c, d, e, f, g);
+    assert SeqLength(last(trace_in.atoh)) == i+1;
+    ghost var new_atoh_list := last(trace_in.atoh) + seq(new_atoh);
+    assert SeqLength(new_atoh_list) == i+2;
+    ghost var trace_out:SHA256Trace := trace_in.(atoh := trace_in.atoh[SeqLength(trace_in.atoh)-1 := new_atoh_list]);
+
+    // OBSERVE: Triggers gallore!
+    assert TBlk(SeqLength(trace_in.H)-1) && TBlk(SeqLength(trace_in.H)) && TStep(i) && TStep(i + 1);
+    ghost var superfluous_state_in  := SHA256_state_c(last(trace_in.H), last(trace_in.W), old_atoh);
+    ghost var superfluous_state_out := SHA256_state_c(last(trace_out.H), last(trace_out.W), new_atoh);
+    lemma_SHA256TransitionOKAfterSettingAtoH(trace_in, superfluous_state_in, trace_out, superfluous_state_out, i);
+
+    assert IsSHA256TraceReadyForStep(trace_out, i+1);
+    assert trace_out.M == trace_in.M;
+    assert trace_out.H == trace_in.H;
+    assert trace_out.W == trace_in.W;
+    assert t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 < 64 then last(trace_out.W)[i + 1] else t1);
+    assert (i + 1 < 16 ==> (forall j :: 0 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + j*4]));
+    assert (16 <= i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + CheapMod16(j)*4]));
+    assert last(last(trace_out.atoh)) == atoh_c((a - t2) % 0x1_0000_0000, b, c, d, e, f, g, h);
 }
 
+/*
 procedure {:refined} Body_16_XX( 
     {:inline} i:SHA_step,
     {:inline} perm:perm_index,
@@ -302,3 +371,4 @@ requires
 
     Body_00_15(i, perm, input_slot, z, t0, t1, t2, t3, t4, a, b, c, d, e, f, g, h);
 }
+*/
