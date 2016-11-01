@@ -416,7 +416,7 @@ predicate evalExceptionTaken(s:state, e:exception, r:state)
 predicate evalEnterUserspace(s:state, r:state)
     requires ValidState(s)
     // ensures  evalEnterUserspace(s, r) ==> AlwaysInvariant(s, r)
-    ensures evalEnterUserspace(s, r) ==> mode_of_state(r) == User
+    ensures evalEnterUserspace(s, r) ==> ValidState(r) && mode_of_state(r) == User
 {
     mode_of_state(s) != User && ValidModeChange'(s, User) &&
     var spsr := OSReg(spsr(mode_of_state(s)));
@@ -454,17 +454,10 @@ function havocPages(pages:set<addr>, s:memmap, r:memmap): memmap
     (map a:addr | ValidMem(a) && a in TheValidAddresses() :: if BitwiseMaskHigh(a, 12) in pages then r[a] else s[a])
 }
 
-// XXX: To be defined by application code
+// XXX: To be defined by "application" (exception-handling) code
 predicate ApplicationUsermodeContinuationInvariant(s:state, r:state)
     requires ValidState(s)
-    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> ValidState(r)
-    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> r.ok
-   //  ensures  ApplicationUsermodeContinuationInvariant(s, r) ==>
-   //     s.m.globals == r.m.globals
-    // XXX This will most likely need to be relaxed later. For now
-    // this lets us prove evalMOVSPCLRUCPreservesPageDb
-   // ensures  ApplicationUsermodeContinuationInvariant(s, r) ==>
-   //     s.m.addresses == r.m.addresses
+    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> ValidState(r) && r.ok
 
 //-----------------------------------------------------------------------------
 // Model of page tables for userspace execution
