@@ -388,9 +388,6 @@ requires
     IsSHA256TraceReadyForStep(trace_in, i);
     last(last(trace_in.atoh)) == atoh_c(BitwiseAdd32(a, t2), b, c, d, e, f, g, h);
 
-    // TODO: Need something about t1 here
-    //t1 == (if (i < 16) then input[i] else last(trace_in.W)[i]);
-
     // The first 16 values in W are the byte-swapped version of the input words
     forall j :: 0 <= j < 16 ==> last(trace_in.W)[j] == bswap32(input[j]);
 
@@ -402,27 +399,28 @@ requires
     t1 == mem[sp + CheapMod16(i+1)*4];
     t4 == mem[sp + CheapMod16(i+14)*4];
 ensures 
-//    t2 == BitwiseXor(a, b);
-//    t3 == Maj(a, b, c);
-//    a == old(BitwiseAdd32(a, t2));
-//    lr == BitwiseAdd32(old(lr), 4);
-//
-//    mem[sp+17*4] == old(mem[sp+17*4]);         // We preserved the input ptr on the stack
+    t2 == BitwiseXor(a, b);
+    t3 == Maj(a, b, c);
+    //a == old(BitwiseAdd32(a, t2));
+    lr == BitwiseAdd32(old(lr), 4);
 
-//    exists trace_out:SHA256Trace ::
-//        IsSHA256TraceReadyForStep(trace_out, i+1)
-//     && trace_out.M == trace_in.M
-//     && trace_out.H == trace_in.H
-//     && trace_out.W == trace_in.W
-//     // t1 holds the next value of W
-//     && t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 < 64 then mem[sp + i_plus_2] else t1) //last(trace_out.W)[i + 1] else t1)
-//     // Initial Ws are laid out in memory
-//     && (i + 1 < 16 ==> (forall j :: 0 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + j*4]))
-//     // Remaining Ws are laid out in memory
-//     && (16 <= i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + CheapMod16(j)*4]))
-//     // The atohs almost match the outgoing variables
-//     && (let old_a := (if i == 0 || i >= 16 then old(a) else old(BitwiseAdd32(a, t2))) in
-//         last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g)));
+    mem[sp+17*4] == old(mem[sp+17*4]);         // We preserved the input ptr on the stack
+
+    exists trace_out:SHA256Trace ::
+        IsSHA256TraceReadyForStep(trace_out, i+1)
+     && trace_out.M == trace_in.M
+     && trace_out.H == trace_in.H
+     && trace_out.W == trace_in.W
+     // t1 holds the next value of W
+     && t1 == (if i + 1 < 64 then mem[sp + CheapMod16(i + 2)*4] else t1) 
+
+     // Remaining Ws are laid out in memory
+     && (i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + CheapMod16(j)*4]))
+
+     // The atohs almost match the outgoing variables
+     //&& (let old_a := (if i == 0 || i >= 16 then old(a) else old(BitwiseAdd32(a, t2))) in
+     && (let old_a := old(BitwiseAdd32(a, t2)) in
+         last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g)));
 {
     //@ ldr  $t1,[sp,#`($i+1)%16`*4]    @ $i
     //@ ldr  $t4,[sp,#`($i+14)%16`*4]
