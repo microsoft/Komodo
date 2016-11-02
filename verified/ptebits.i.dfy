@@ -2,98 +2,6 @@ include "smcapi.s.dfy"
 include "pagedb.i.dfy"
 include "bitvectors.i.dfy"
 
-function nonexec_mapping(mapping: Mapping): Mapping
-{
-    mapping.(perm := mapping.perm.(x := false))
-}
-
-function method NOT_KOM_MAPPING_X(): word
-    ensures NOT_KOM_MAPPING_X() == BitwiseNot(KOM_MAPPING_X())
-    ensures NOT_KOM_MAPPING_X() == BitsAsWord(0xfffffffb)
-{
-    assert 0xfffffffb == BitsAsWord(0xfffffffb) by { reveal_BitsAsWord(); }
-    assert WordAsBits(KOM_MAPPING_X()) == 4 by { reveal_WordAsBits(); }
-    reveal_BitNot();
-    0xfffffffb
-}
-
-lemma lemma_nonexec_mapping(mapping: Mapping, x: word)
-    requires mapping == wordToMapping(x)
-    ensures wordToMapping(BitwiseAnd(x, NOT_KOM_MAPPING_X()))
-                == nonexec_mapping(mapping)
-{
-    var y := BitwiseAnd(x, NOT_KOM_MAPPING_X());
-    lemma_WordBitEquiv(NOT_KOM_MAPPING_X(), 0xfffffffb);
-    var xb := WordAsBits(x);
-    lemma_WordBitEquiv(x, xb);
-    var yb := BitAnd(xb, 0xfffffffb);
-    assert y == BitsAsWord(yb);
-    lemma_WordBitEquiv(y, yb);
-    lemma_BitsAsWordAsBits(yb);
-
-    assert l1indexFromMapping(y) == l1indexFromMapping(x) by {
-        assert RightShift(y,20) == RightShift(x,20) by {
-            reveal_BitAnd(); reveal_BitShiftRight();
-        }
-    }
-
-    assert l2indexFromMapping(y) == l2indexFromMapping(x) by {
-        assert RightShift(y,12) == RightShift(x,12) by {
-            reveal_BitAnd(); reveal_BitShiftRight();
-        }
-    }
-
-    assert permFromMapping(y) == permFromMapping(x).(x := false) by {
-        assert WordAsBits(KOM_MAPPING_R()) == 1 && WordAsBits(KOM_MAPPING_W()) == 2
-            && WordAsBits(KOM_MAPPING_X()) == 4 by { reveal_WordAsBits(); }
-
-        calc {
-            BitwiseAnd(y, KOM_MAPPING_R());
-            BitsAsWord(BitAnd(yb, 1));
-            BitsAsWord(BitAnd(BitAnd(xb, 0xfffffffb), 1));
-            { lemma_BitAndAssociative(xb, 0xfffffffb, 1); }
-            BitsAsWord(BitAnd(xb, BitAnd(0xfffffffb, 1)));
-            { assert BitAnd(0xfffffffb, 1) == 1 by { reveal_BitAnd(); } }
-            BitsAsWord(BitAnd(xb, 1));
-            BitwiseAnd(x, KOM_MAPPING_R());
-        }
-
-        calc {
-            BitwiseAnd(y, KOM_MAPPING_W());
-            BitsAsWord(BitAnd(yb, 2));
-            BitsAsWord(BitAnd(BitAnd(xb, 0xfffffffb), 2));
-            { lemma_BitAndAssociative(xb, 0xfffffffb, 2); }
-            BitsAsWord(BitAnd(xb, BitAnd(0xfffffffb, 2)));
-            { assert BitAnd(0xfffffffb, 2) == 2 by { reveal_BitAnd(); } }
-            BitsAsWord(BitAnd(xb, 2));
-            BitwiseAnd(x, KOM_MAPPING_W());
-        }
-
-        calc {
-            BitwiseAnd(y, KOM_MAPPING_X());
-            BitsAsWord(BitAnd(yb, 4));
-            BitsAsWord(BitAnd(BitAnd(xb, 0xfffffffb), 4));
-            { lemma_BitAndAssociative(xb, 0xfffffffb, 4); }
-            BitsAsWord(BitAnd(xb, BitAnd(0xfffffffb, 4)));
-            { assert BitAnd(0xfffffffb, 4) == 0 by { reveal_BitAnd(); } }
-            BitsAsWord(BitAnd(xb, 0));
-            { reveal_BitAnd(); }
-            0;
-        }
-    }
-
-    assert wordToMapping(y) == nonexec_mapping(mapping) by { reveal_wordToMapping(); }
-}
-
-lemma lemma_ARM_L1PTE_Dual(paddr: word)
-    requires paddr % ARM_L2PTABLE_BYTES() == 0
-    ensures ARM_L1PTE(paddr) == paddr + 1
-{
-    assert paddr % 0x400 == 0 && paddr % 2 == 0;
-    lemma_BitOrOneIsLikePlus(paddr);
-}
-
-
 lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
     requires PageAligned(pa) && isUInt32(pa + PhysBase())
     ensures ValidAbsL2PTEWord(ARM_L2PTE(pa, w, x))
@@ -247,6 +155,97 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
             robit;
         }
     }
+}
+
+function nonexec_mapping(mapping: Mapping): Mapping
+{
+    mapping.(perm := mapping.perm.(x := false))
+}
+
+function method NOT_KOM_MAPPING_X(): word
+    ensures NOT_KOM_MAPPING_X() == BitwiseNot(KOM_MAPPING_X())
+    ensures NOT_KOM_MAPPING_X() == BitsAsWord(0xfffffffb)
+{
+    assert 0xfffffffb == BitsAsWord(0xfffffffb) by { reveal_BitsAsWord(); }
+    assert WordAsBits(KOM_MAPPING_X()) == 4 by { reveal_WordAsBits(); }
+    reveal_BitNot();
+    0xfffffffb
+}
+
+lemma lemma_nonexec_mapping(mapping: Mapping, x: word)
+    requires mapping == wordToMapping(x)
+    ensures wordToMapping(BitwiseAnd(x, NOT_KOM_MAPPING_X()))
+                == nonexec_mapping(mapping)
+{
+    var y := BitwiseAnd(x, NOT_KOM_MAPPING_X());
+    lemma_WordBitEquiv(NOT_KOM_MAPPING_X(), 0xfffffffb);
+    var xb := WordAsBits(x);
+    lemma_WordBitEquiv(x, xb);
+    var yb := BitAnd(xb, 0xfffffffb);
+    assert y == BitsAsWord(yb);
+    lemma_WordBitEquiv(y, yb);
+    lemma_BitsAsWordAsBits(yb);
+
+    assert l1indexFromMapping(y) == l1indexFromMapping(x) by {
+        assert RightShift(y,20) == RightShift(x,20) by {
+            reveal_BitAnd(); reveal_BitShiftRight();
+        }
+    }
+
+    assert l2indexFromMapping(y) == l2indexFromMapping(x) by {
+        assert RightShift(y,12) == RightShift(x,12) by {
+            reveal_BitAnd(); reveal_BitShiftRight();
+        }
+    }
+
+    assert permFromMapping(y) == permFromMapping(x).(x := false) by {
+        assert WordAsBits(KOM_MAPPING_R()) == 1 && WordAsBits(KOM_MAPPING_W()) == 2
+            && WordAsBits(KOM_MAPPING_X()) == 4 by { reveal_WordAsBits(); }
+
+        calc {
+            BitwiseAnd(y, KOM_MAPPING_R());
+            BitsAsWord(BitAnd(yb, 1));
+            BitsAsWord(BitAnd(BitAnd(xb, 0xfffffffb), 1));
+            { lemma_BitAndAssociative(xb, 0xfffffffb, 1); }
+            BitsAsWord(BitAnd(xb, BitAnd(0xfffffffb, 1)));
+            { assert BitAnd(0xfffffffb, 1) == 1 by { reveal_BitAnd(); } }
+            BitsAsWord(BitAnd(xb, 1));
+            BitwiseAnd(x, KOM_MAPPING_R());
+        }
+
+        calc {
+            BitwiseAnd(y, KOM_MAPPING_W());
+            BitsAsWord(BitAnd(yb, 2));
+            BitsAsWord(BitAnd(BitAnd(xb, 0xfffffffb), 2));
+            { lemma_BitAndAssociative(xb, 0xfffffffb, 2); }
+            BitsAsWord(BitAnd(xb, BitAnd(0xfffffffb, 2)));
+            { assert BitAnd(0xfffffffb, 2) == 2 by { reveal_BitAnd(); } }
+            BitsAsWord(BitAnd(xb, 2));
+            BitwiseAnd(x, KOM_MAPPING_W());
+        }
+
+        calc {
+            BitwiseAnd(y, KOM_MAPPING_X());
+            BitsAsWord(BitAnd(yb, 4));
+            BitsAsWord(BitAnd(BitAnd(xb, 0xfffffffb), 4));
+            { lemma_BitAndAssociative(xb, 0xfffffffb, 4); }
+            BitsAsWord(BitAnd(xb, BitAnd(0xfffffffb, 4)));
+            { assert BitAnd(0xfffffffb, 4) == 0 by { reveal_BitAnd(); } }
+            BitsAsWord(BitAnd(xb, 0));
+            { reveal_BitAnd(); }
+            0;
+        }
+    }
+
+    assert wordToMapping(y) == nonexec_mapping(mapping) by { reveal_wordToMapping(); }
+}
+
+lemma lemma_ARM_L1PTE_Dual(paddr: word)
+    requires paddr % ARM_L2PTABLE_BYTES() == 0
+    ensures ARM_L1PTE(paddr) == paddr + 1
+{
+    assert paddr % 0x400 == 0 && paddr % 2 == 0;
+    lemma_BitOrOneIsLikePlus(paddr);
 }
 
 function mkAbsL1PTE(e: Maybe<PageNr>, subpage:int): Maybe<addr>
