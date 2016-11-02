@@ -37,7 +37,6 @@ function method sigma1(i:int) : word
 }
 
 type SHA_step = i | 0 <= i < 64
-type perm_index = i | 0 <= i < 8
 
 function method GetReg(r:int) : ARMReg
     requires 0 <= r <= 12;
@@ -56,14 +55,6 @@ function method GetReg(r:int) : ARMReg
     else if r == 11 then R11
     else R12 
 }
-
-// Make it as easy as possible for Z3 to see that the registers below are unique
-function method ApplyPerm(i:int, perm:perm_index) : int
-{
-    if i + perm >= 8 then i + perm - 8 else i + perm
-}
-
-predicate method Even(i:int) { i % 2 == 0 }
 
 function method CheapMod16(j:int) : int
 {
@@ -127,8 +118,9 @@ requires/ensures
 requires
     // K table adjusted properly
     ValidGlobalsAddr(globals, K_SHA256s().sym, lr);
+    AddressOfGlobal(K_SHA256s()) + 4*64 < 0x1_0000_0000;    // We won't wrap around while accessing K_SHA256s
     lr == AddressOfGlobal(K_SHA256s()) + 4*i;
-    SeqLength(globals[K_SHA256s()]) == 64;
+    SeqLength(globals[K_SHA256s()]) == 256;
     forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][j] == K_SHA256(j);
 
     // TODO: Remove this when we have if/else
@@ -172,7 +164,8 @@ ensures
     t2 == BitwiseXor(a, b);
     t3 == Maj(a, b, c);
     i < 16 ==> a == old(BitwiseAdd32(a, t2));
-    lr == BitwiseAdd32(old(lr), 4);
+    i >= 15 ==> t4 == old(mem)[sp+i_plus_15];
+    lr == old(lr) + 4;
 
     // Updated input ptr
     if i < 15 then t4 == BitwiseAdd32(old(t4), 4)   // Advanced input ptr
@@ -193,14 +186,14 @@ ensures
      && trace_out.H == trace_in.H
      && trace_out.W == trace_in.W
      // t1 holds the next value of W
-     && t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 < 64 then mem[sp + i_plus_2] else t1) //last(trace_out.W)[i + 1] else t1)
+     && t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 <= 64 then mem[sp + i_plus_2] else t1) //last(trace_out.W)[i + 1] else t1)
      // Initial Ws are laid out in memory
      && (i + 1 < 16 ==> (forall j :: 0 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + j*4]))
      // Remaining Ws are laid out in memory
      && (16 <= i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + CheapMod16(j)*4]))
      // The atohs almost match the outgoing variables
      && (let old_a := (if i == 0 || i >= 16 then old(a) else old(BitwiseAdd32(a, t2))) in
-         last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g)));
+         last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, b, c, d, e, f, g));
 {
 //    //if i < 16
 //    //  if i == 15
@@ -313,7 +306,7 @@ ensures
      assert trace_out.H == trace_in.H;
      assert trace_out.W == trace_in.W;
      // t1 holds the next value of W
-     assert t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 < 64 then mem[sp + i_plus_2] else t1);
+     assert t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 <= 64 then mem[sp + i_plus_2] else t1);
              //last(trace_out.W)[i + 1] else t1);
      // Initial Ws are laid out in memory
      assert (i + 1 < 16 ==> (forall j :: 0 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + j*4]));
@@ -390,8 +383,9 @@ requires
 
     // K table adjusted properly
     ValidGlobalsAddr(globals, K_SHA256s().sym, lr);
+    AddressOfGlobal(K_SHA256s()) + 4*64 < 0x1_0000_0000;    // We won't wrap around while accessing K_SHA256s
     lr == AddressOfGlobal(K_SHA256s()) + 4*i;
-    SeqLength(globals[K_SHA256s()]) == 64;
+    SeqLength(globals[K_SHA256s()]) == 256;
     forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][j] == K_SHA256(j);
 
     SeqLength(input) == 16;
@@ -419,7 +413,8 @@ ensures
     t2 == BitwiseXor(a, b);
     t3 == Maj(a, b, c);
     //a == old(BitwiseAdd32(a, t2));
-    lr == BitwiseAdd32(old(lr), 4);
+    lr == old(lr) + 4;
+    t4 == mem[sp+CheapMod16(i + 15)*4];
 
     mem[sp+17*4] == old(mem[sp+17*4]);         // We preserved the input ptr on the stack
 
@@ -429,15 +424,16 @@ ensures
      && trace_out.H == trace_in.H
      && trace_out.W == trace_in.W
      // t1 holds the next value of W
-     && t1 == (if i + 1 < 64 then mem[sp + CheapMod16(i + 2)*4] else t1) 
+     && t1 == (if i + 1 <= 64 then mem[sp + CheapMod16(i + 2)*4] else t1) 
 
      // Remaining Ws are laid out in memory
      && (i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + CheapMod16(j)*4]))
 
      // The atohs almost match the outgoing variables
      //&& (let old_a := (if i == 0 || i >= 16 then old(a) else old(BitwiseAdd32(a, t2))) in
-     && (let old_a := old(BitwiseAdd32(a, t2)) in
-         last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g)));
+     && last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), a, b, c, d, e, f, g);
+//     && (let old_a := old(BitwiseAdd32(a, t2)) in
+//         last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g)));
 {
     rMOVShift(t0, t1, RORShift(sigma0(0)));
     rADDWrap(a, a, t2);  // h+=Maj(a,b,c) from the past
@@ -563,9 +559,10 @@ predicate Body_16_XXLoopStateInvariantBreakdown(
  && ValidAddr(mem, sp + CheapMod16(i+9)*4)
 
     // K table adjusted properly
- && ValidGlobalsAddr(globals, K_SHA256s().sym, lr)
+ && (i < 64 ==> ValidGlobalsAddr(globals, K_SHA256s().sym, lr))
+ && AddressOfGlobal(K_SHA256s()) + 4*64 < 0x1_0000_0000    // We won't wrap around while accessing K_SHA256s
  && lr == AddressOfGlobal(K_SHA256s()) + 4*i
- && |globals[K_SHA256s()]| == 64
+ && |globals[K_SHA256s()]| == 256
  && (forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][j] == K_SHA256(j))
 
  && SeqLength(input) == 16
@@ -587,10 +584,10 @@ predicate Body_16_XXLoopStateInvariantBreakdown(
  && (forall j :: 0 <= j < 16 ==> last(current_trace.W)[j] == bswap32(input[j]))
 
     // All previous Ws are in memory where we expect them
- && 16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(current_trace.W)[j] == mem[sp + CheapMod16(j)*4])
+ && (16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(current_trace.W)[j] == mem[sp + CheapMod16(j)*4]))
 
     // t1 and t4 should already hold previous W values
- && t1 == mem[sp + CheapMod16(i+1)*4]
+ && (i < 64 ==> t1 == mem[sp + CheapMod16(i+1)*4])
  && t4 == mem[sp + CheapMod16(i+14)*4]
 
  // Additional postconditions
@@ -658,34 +655,85 @@ lemma sp_lemma_GenericIterationPreservesInvariants(
     sp_sM:sp_state
     )
 {
-    assume false;                           /****************************************** TODO *************/
-//    reveal_x86_ValidState();
-//    reveal_evalCodeOpaque();
-//
-//    var K1 := K_SHA256(2*i);
-//    var K2 := K_SHA256(2*i+1);
-//    var W_offset1 := 4*(2*i);
-//    var W_offset2 := 4*(2*i+1);
-//    var W_taint := p.W_taint;
-//    sp_bM, sp_sM := sp_refined_ComputeTwoSteps_SHA256_core(sp_b0, sp_s0, sp_sN, K1, K2, W_offset1, W_offset2, W_taint);
-//
-//    forall sp_id:sp_int, c:GenericConstantState, aux0:GenericAuxiliaryState {:trigger sp_trigger_GenericUnrolledChunk(sp_id, c, aux0)}
-//        | sp_trigger_GenericUnrolledChunk(sp_id, c, aux0)
-//        ensures sp_spec_GenericUnrolledChunk(c, aux0, sp_s0, sp_sM, i, i+1, p);
-//    {
-//        reveal_sp_spec_ComputeTwoSteps_SHA256_core();
-//        assert sp_trigger_ComputeTwoSteps_SHA256_core(1, i, c.W_id, aux0.current_atoh, aux0.current_z, 2*i, aux0.current_state);
-//        reveal_sp_spec_GenericUnrolledChunk();
-//        assert sp_trigger_GenericUnrolledChunk(sp_id, c, aux0);
-//        if sp_s0.ok && GenericStateInvariant(c, sp_s0, aux0, i, p) {
-//            assert sp_sM.ok;
-//            ghost var stack := sp_get_stack(sp_sM);
-//            ghost var final_atoh, final_z :| final_atoh == atoh_c(sp_get_reg(X86Ebp, sp_sM), stack[0][0], stack[0][1], stack[0][2], stack[0][3], stack[0][4], stack[0][5], stack[0][6]) && IsSHA256ReadyForStep(final_z, aux0.current_state.(atoh := final_atoh), 2*i + 2) && |final_z.H| == |aux0.current_z.H| && final_z.M == aux0.current_z.M;
-//            ghost var final_state := aux0.current_state.(atoh := final_atoh);
-//            var auxM := aux0.(current_atoh := final_atoh, current_z := final_z, current_state := final_state);
-//            assert GenericStateInvariant(c, sp_sM, auxM, i+1, p);
-//        }
-//    }
+    reveal_evalCodeOpaque();
+    reveal_ValidRegState();
+    reveal_ValidMemState();
+    reveal_ValidConfig();
+    reveal_ValidSRegState();
+
+    var perm := i % 8;
+
+    var old_sp := sp_get_osp(sp_s0);
+    var old_t0 := sp_get_reg(R0, sp_s0);
+    var old_t1 := sp_get_reg(R2, sp_s0);
+    var old_t2 := sp_get_reg(GetReg(if Even(i) then 12 else 3), sp_s0);
+    var old_t3 := sp_get_reg(GetReg(if Even(i) then  3 else 12), sp_s0);
+    var old_t4 := sp_get_reg(R1, sp_s0);
+    var old_a := sp_get_reg(GetReg(4+ApplyPerm(0, perm)), sp_s0);
+    var old_b := sp_get_reg(GetReg(4+ApplyPerm(1, perm)), sp_s0);
+    var old_c := sp_get_reg(GetReg(4+ApplyPerm(2, perm)), sp_s0);
+    var old_d := sp_get_reg(GetReg(4+ApplyPerm(3, perm)), sp_s0);
+    var old_e := sp_get_reg(GetReg(4+ApplyPerm(4, perm)), sp_s0);
+    var old_f := sp_get_reg(GetReg(4+ApplyPerm(5, perm)), sp_s0);
+    var old_g := sp_get_reg(GetReg(4+ApplyPerm(6, perm)), sp_s0);
+    var old_h := sp_get_reg(GetReg(4+ApplyPerm(7, perm)), sp_s0);
+
+
+    sp_bM, sp_sM := sp_refined_Body_16_XX(sp_b0, sp_s0, sp_sN, i, perm, CheapMod16(i)*4, CheapMod16(i+9)*4, 
+                                          OReg(R0),
+                                          OReg(R2),
+                                          OReg(GetReg(if Even(i) then 12 else 3)),
+                                          OReg(GetReg(if Even(i) then  3 else 12)),
+                                          OReg(R1),
+                                          OReg(GetReg(4+ApplyPerm(0, perm))),
+                                          OReg(GetReg(4+ApplyPerm(1, perm))),
+                                          OReg(GetReg(4+ApplyPerm(2, perm))),
+                                          OReg(GetReg(4+ApplyPerm(3, perm))),
+                                          OReg(GetReg(4+ApplyPerm(4, perm))),
+                                          OReg(GetReg(4+ApplyPerm(5, perm))),
+                                          OReg(GetReg(4+ApplyPerm(6, perm))),
+                                          OReg(GetReg(4+ApplyPerm(7, perm))));
+
+    // Help Z3 see some properties about how our registers permute
+    lemma_Even_properties(i);
+    lemma_perm_implications(i);
+
+    forall sp_id:sp_int, c:GenericConstantState, aux0:GenericAuxiliaryState {:trigger sp_trigger_GenericUnrolledChunk(sp_id, c, aux0)}
+        | sp_trigger_GenericUnrolledChunk(sp_id, c, aux0)
+        ensures sp_spec_GenericUnrolledChunk(c, aux0, sp_s0, sp_sM, i, i+1, p);
+    {
+        reveal_sp_spec_Body_16_XX();
+        assert sp_trigger_Body_16_XX(1, aux0.current_trace, c.input);
+        reveal_sp_spec_GenericUnrolledChunk();
+        assert sp_trigger_GenericUnrolledChunk(sp_id, c, aux0);
+        if sp_s0.ok && GenericStateInvariant(c, sp_s0, aux0, i, p) {
+            assert sp_sM.ok;
+
+            var mem := sp_get_mem(sp_sM);
+            var t1 := sp_get_reg(R2, sp_sM); 
+            var t3 := sp_get_reg(GetReg(if Even(i) then  3 else 12), sp_sM);
+
+            var new_a := sp_get_reg(GetReg(4+ApplyPerm(0, perm)), sp_sM);
+            var new_b := sp_get_reg(GetReg(4+ApplyPerm(1, perm)), sp_sM);
+            var new_c := sp_get_reg(GetReg(4+ApplyPerm(2, perm)), sp_sM);
+            var new_d := sp_get_reg(GetReg(4+ApplyPerm(3, perm)), sp_sM);
+            var new_e := sp_get_reg(GetReg(4+ApplyPerm(4, perm)), sp_sM);
+            var new_f := sp_get_reg(GetReg(4+ApplyPerm(5, perm)), sp_sM);
+            var new_g := sp_get_reg(GetReg(4+ApplyPerm(6, perm)), sp_sM);
+            var new_h := sp_get_reg(GetReg(4+ApplyPerm(7, perm)), sp_sM);
+
+            var trace_out :| IsSHA256TraceReadyForStep(trace_out, i + 1) 
+                          && trace_out.M == aux0.current_trace.M 
+                          && trace_out.H == aux0.current_trace.H 
+                          && trace_out.W == aux0.current_trace.W 
+                          && t1 == (if (i + 1 <= 64) then mem[(old_sp + CheapMod16(i + 2) * 4)] else t1) 
+                          && (i + 1 < 64 ==> (forall j :: i + 1 - 16 <= j < i + 1 ==> last(trace_out.W)[j] == mem[(old_sp + CheapMod16(j) * 4)])) 
+                          && last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(new_h, t3), new_a, new_b, new_c, new_d, new_e, new_f, new_g);
+            var auxM := Body_16_XXLoopAuxiliaryState(trace_out);
+
+            assert GenericStateInvariant(c, sp_sM, auxM, i+1, p);
+        }
+    }
 }
 
 function method sp_code_Body_16_XXLoopUnrolled() : code
@@ -839,7 +887,7 @@ requires
 //    lr == AddressOfGlobal(K_SHA256s()) + 4*i;
     ValidGlobals(globals);
     ValidGlobal(K_SHA256s());
-    SeqLength(globals[K_SHA256s()]) == 64;
+    SeqLength(globals[K_SHA256s()]) == 256;
     forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][j] == K_SHA256(j);
 
     let ctx := r0 in

@@ -14,6 +14,14 @@ import opened sha256_refined_helpers_i_sha256_i = sha256_i
 import opened sha256_refined_helpers_i_bit_vector_lemmas_i = bit_vector_lemmas_i
 import opened sha256_refined_helpers_i_ARMdecls = ARMdecls 
 
+predicate method Even(i:int) { i % 2 == 0 }
+
+type perm_index = i | 0 <= i < 8
+function method ApplyPerm(i:int, perm:perm_index) : int
+{
+    //if i + perm >= 8 then i + perm - 8 else i + perm
+    if i - perm >= 0 then i - perm else i - perm + 8
+}
 
 lemma lemma_BitwiseAdd32Associates3'(x1:word, x2:word, x3:word)
     ensures BitwiseAdd32(BitwiseAdd32(x1, x2), x3) == BitwiseAdd32(x1, BitwiseAdd32(x2, x3));
@@ -65,6 +73,28 @@ lemma lemma_BitwiseAdd32Associates4(x1:word, x2:word, x3:word, x4:word, result:w
             { lemma_BitwiseAdd32Associates3(x1, x3, x2); }
         BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(x1, x2), x3), x4);
     }
+}
+
+lemma lemma_Even_properties(i:int)
+    ensures Even(i) == !Even(i + 1);
+{
+}
+
+lemma lemma_perm_properties(i:int, perm:perm_index)
+    ensures 0 <= i < 8 ==> ApplyPerm(i, perm) == (i-perm)%8;
+{
+}
+
+lemma lemma_perm_implications(i:int)
+    ensures ApplyPerm(0, (i+1)%8) == ApplyPerm(7, i%8);
+    ensures ApplyPerm(1, (i+1)%8) == ApplyPerm(0, i%8);
+    ensures ApplyPerm(2, (i+1)%8) == ApplyPerm(1, i%8);
+    ensures ApplyPerm(3, (i+1)%8) == ApplyPerm(2, i%8);
+    ensures ApplyPerm(4, (i+1)%8) == ApplyPerm(3, i%8);
+    ensures ApplyPerm(5, (i+1)%8) == ApplyPerm(4, i%8);
+    ensures ApplyPerm(6, (i+1)%8) == ApplyPerm(5, i%8);
+    ensures ApplyPerm(7, (i+1)%8) == ApplyPerm(6, i%8);
+{
 }
 
 }
