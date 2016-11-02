@@ -961,7 +961,7 @@ predicate evalIns(ins:ins, s:state, r:state)
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE => evalMOVSPCLRUC(s, r)
 }
 
-predicate evalMOVSPCLRUC(s:state, r:state)
+predicate {:opaque} evalMOVSPCLRUC(s:state, r:state)
     requires ValidState(s)
     ensures  evalMOVSPCLRUC(s, r) ==> ValidState(r) && r.ok
 {

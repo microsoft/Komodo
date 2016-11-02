@@ -1,4 +1,5 @@
 include "smcapi.s.dfy"
+include "entry.i.dfy"
 
 //=============================================================================
 // Hoare Specification of Monitor Calls
@@ -398,27 +399,15 @@ lemma enterPreservesPageDbValidity(s:state, pageDbIn: PageDb, s':state,
     requires smc_enter(s, pageDbIn, s', pageDbOut, dispPage, arg1, arg2, arg3)
     ensures validPageDb(pageDbOut)
 {
-    reveal_validPageDb();
-    var err := smc_enter_err(pageDbIn, dispPage, false);
-
-    if( err != KOM_ERR_SUCCESS() ){
-    } else {
-        var a := pageDbOut[dispPage].addrspace;
-        assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
-        assert addrspaceRefs(pageDbOut, a) == addrspaceRefs(pageDbIn, a);
-
-        forall ( n | validPageNr(n) 
-            && pageDbOut[n].PageDbEntryTyped?
-            && n != a )
-            ensures validPageDbEntry(pageDbOut, n)
-        {
-            if( pageDbOut[n].entry.Addrspace? ){
-                assert pageDbOut[n].entry.refcount == pageDbIn[n].entry.refcount;
-                assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
-            } else {
-            }
-
-        }
+    if (smc_enter_err(pageDbIn, dispPage, false) == KOM_ERR_SUCCESS()) {
+        assert validEnter(SysState(s, pageDbIn), SysState(s', pageDbOut),
+                          dispPage, arg1, arg2, arg3);
+        assert validDispatcherPage(pageDbIn, dispPage) by { reveal_validPageDb(); }
+        reveal_validEnter();
+        var us, ex, es :| ValidState(us) && mode_of_state(us) == User
+            && evalExceptionTaken(us, ex, es)
+            && pageDbOut == exceptionHandled(es, pageDbIn, dispPage).2;
+        exceptionHandledValidPageDb(us, ex, es, pageDbIn, dispPage);
     }
 }
 
@@ -428,28 +417,15 @@ lemma resumePreservesPageDbValidity(s:state, pageDbIn: PageDb, s':state,
     requires smc_resume(s, pageDbIn, s', pageDbOut, dispPage)
     ensures validPageDb(pageDbOut)
 {
-    reveal_validPageDb();
-    var err := smc_enter_err(pageDbIn, dispPage, true);
-
-    if( err != KOM_ERR_SUCCESS() ){
-    } else {
-        var a := pageDbOut[dispPage].addrspace;
-        assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
-        assert addrspaceRefs(pageDbOut, a) == addrspaceRefs(pageDbIn, a);
-
-        forall ( n | validPageNr(n) 
-            && pageDbOut[n].PageDbEntryTyped?
-            && n != a )
-            ensures validPageDbEntry(pageDbOut, n)
-        {
-            if( pageDbOut[n].entry.Addrspace? ){
-                assert pageDbOut[n].entry.refcount == pageDbIn[n].entry.refcount;
-                assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
-            } else {
-            }
-
-        }
-
+    if (smc_enter_err(pageDbIn, dispPage, true) == KOM_ERR_SUCCESS()) {
+        assert validResume(SysState(s, pageDbIn), SysState(s', pageDbOut), dispPage);
+        assert validDispatcherPage(pageDbIn, dispPage) by { reveal_validPageDb(); }
+        reveal_validResume();
+        var us, ex, es :| ValidState(us) && mode_of_state(us) == User
+            && evalExceptionTaken(us, ex, es)
+            && (assert mode_of_state(es) != User;
+            pageDbOut == exceptionHandled(es, pageDbIn, dispPage).2);
+        exceptionHandledValidPageDb(us, ex, es, pageDbIn, dispPage);
     }
 }
 

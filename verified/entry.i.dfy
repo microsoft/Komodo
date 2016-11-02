@@ -6,67 +6,49 @@ predicate validSysState'(s:SysState)
     validSysState(s) && SaneMem(s.hw.m) && pageDbCorresponds(s.hw.m, s.d)
 }
 
-/*
-predicate AUCIdef_inner(s:state, r:state)
-    requires ValidState(s) 
+predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr)
+    requires ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
+    requires validPageDb(sd) && pageDbCorresponds(s.m, sd) && validDispatcherPage(sd, dp)
 {
     reveal_ValidRegState();
-    SaneMem(s.m) && SaneMem(r.m) &&
-    exists ss : SysState :: ss.hw == s && validSysState'(ss)
-    && exists rr : SysState :: rr.hw == r && validSysState'(rr) && 
-        mode_of_state(ss.hw) != User
-    && (rr.hw.regs[R0], rr.hw.regs[R1], rr.d) ==
-            exceptionHandled_premium(ss)
+    var rd := exceptionHandled(s, sd, dp).2;
+    validExceptionTransition(SysState(s, sd), SysState(r, rd), dp)
+    && SaneState(r)
+    && StackPreserving(s, r)
+    && (forall a:addr | ValidMem(a) && !(StackLimit() <= a < StackBase()) &&
+        !addrInPage(a, dp) :: MemContents(s.m, a) == MemContents(r.m, a))
+    && GlobalsInvariant(s, r)
+    && pageDbCorresponds(r.m, rd)
+    && (r.regs[R0], r.regs[R1], rd) == exceptionHandled(s, sd, dp)
 }
-*/
 
-predicate AUCIdef()
+predicate {:opaque} AUCIdef()
+    requires SaneConstants()
 {
     reveal_ValidRegState();
-    reveal_ValidSRegState();
-    // It needed to be separated out like this to prove 
-    // validExceptionTransition
-    (forall s:SysState, r:SysState, dp:PageNr | validSysState(s) &&
-        validDispatcherPage(s.d, dp) &&
-        ApplicationUsermodeContinuationInvariant(s.hw, r.hw) ::
-            validExceptionTransition(s, r, dp)) &&
-    forall s:SysState, r:SysState, dp:PageNr | validSysState(s) &&
-        validDispatcherPage(s.d, dp) &&
-        ApplicationUsermodeContinuationInvariant(s.hw, r.hw) ::
-            mode_of_state(s.hw) != User &&
-            validSysState'(r) &&
-            decode_mode'(psr_mask_mode(
-                s.hw.sregs[spsr(mode_of_state(s.hw))])) == Just(User) &&
-            (r.hw.regs[R0], r.hw.regs[R1], r.d) ==
-                exceptionHandled_premium(s.hw, s.d, dp)
-
+    forall s:state, r:state, sd: PageDb, dp:PageNr
+        | ValidState(s) && mode_of_state(s) != User && SaneMem(s.m) && validPageDb(sd)
+            && pageDbCorresponds(s.m, sd) && validDispatcherPage(sd, dp)
+        :: ApplicationUsermodeContinuationInvariant(s, r)
+        ==> KomExceptionHandlerInvariant(s, sd, r, dp)
 }
 
-function exceptionHandled_premium(s:state, d:PageDb, dispPg:PageNr) : (int, int, PageDb)
-    requires ValidState(s) && validPageDb(d)
-    requires mode_of_state(s) != User
-    requires 
-        (reveal_ValidSRegState();
-        decode_mode'(psr_mask_mode(
-        s.sregs[spsr(mode_of_state(s))])) == Just(User))
-    requires validDispatcherPage(d, dispPg)
-    ensures var (r0,r1,d) := exceptionHandled_premium(s, d, dispPg);
+function exceptionHandled_premium(us:state, ex:exception, s:state, d:PageDb, dispPg:PageNr) : (int, int, PageDb)
+    requires ValidState(us) && mode_of_state(us) == User
+    requires evalExceptionTaken(us, ex, s)
+    requires validPageDb(d) && validDispatcherPage(d, dispPg)
+    ensures var (r0,r1,d) := exceptionHandled_premium(us, ex, s, d, dispPg);
         validPageDb(d)
 {
-    exceptionHandledValidPageDb(s, d, dispPg);
+    exceptionHandledValidPageDb(us, ex, s, d, dispPg);
     exceptionHandled(s, d, dispPg)
 }
 
-lemma exceptionHandledValidPageDb(s:state, d:PageDb, dispPg:PageNr)
-    requires ValidState(s) && validPageDb(d)
-    requires mode_of_state(s) != User
-    requires 
-        (reveal_ValidSRegState();
-        decode_mode'(psr_mask_mode(
-        s.sregs[spsr(mode_of_state(s))])) == Just(User))
-    requires validDispatcherPage(d, dispPg)
-    ensures var (r0,r1,d) := exceptionHandled(s, d, dispPg);
-        validPageDb(d)
+lemma exceptionHandledValidPageDb(us:state, ex:exception, s:state, d:PageDb, dispPg:PageNr)
+    requires ValidState(us) && mode_of_state(us) == User
+    requires evalExceptionTaken(us, ex, s)
+    requires validPageDb(d) && validDispatcherPage(d, dispPg)
+    ensures validPageDb(exceptionHandled(s, d, dispPg).2)
 {
     reveal_validPageDb();
     reveal_ValidSRegState();
@@ -91,14 +73,14 @@ lemma exceptionHandledValidPageDb(s:state, d:PageDb, dispPg:PageNr)
     assert validPageDb(d');
 }
 
-lemma enterUserspacePreservesPageDb(d:PageDb,s:state,s':state)
+lemma enterUserspacePreservesStuff(d:PageDb,s:state,s':state)
     requires SaneMem(s.m) && SaneMem(s'.m) && validPageDb(d)
         && ValidState(s) && ValidState(s')
     requires evalEnterUserspace(s, s')
     requires pageDbCorresponds(s.m, d)
-    ensures  pageDbCorresponds(s'.m, d)
+    ensures AllMemInvariant(s,s')
+    ensures pageDbCorresponds(s'.m, d)
 {
-    reveal_PageDb();
     reveal_ValidMemState();
     reveal_pageDbEntryCorresponds();
     reveal_pageContentsCorresponds();
@@ -192,7 +174,6 @@ lemma userspaceExecutionPreservesPageDb(d:PageDb,s:state,s':state, l1:PageNr)
     requires nonStoppedL1(d, l1);
     ensures  pageDbCorresponds(s'.m, d)
 {
-    reveal_PageDb();
     reveal_ValidMemState();
     reveal_pageDbEntryCorresponds();
     reveal_pageContentsCorresponds();
@@ -233,67 +214,107 @@ lemma userspaceExecutionPreservesPageDb(d:PageDb,s:state,s':state, l1:PageNr)
     }
 }
 
-lemma exceptionTakenPreservesPageDb(d:PageDb,s:state,ex:exception,s':state)
+lemma userspaceExecutionPreservesPrivState(s:state,s':state)
+    requires ValidState(s) && ValidState(s')
+    requires evalUserspaceExecution(s,s')
+    ensures GlobalsInvariant(s,s')
+    ensures (reveal_ValidRegState(); s.regs[SP(Monitor)] == s'.regs[SP(Monitor)])
+{
+}
+
+lemma exceptionTakenPreservesStuff(d:PageDb,s:state,ex:exception,s':state)
     requires SaneMem(s.m) && SaneMem(s'.m) && validPageDb(d)
         && ValidState(s) && ValidState(s')
     requires evalExceptionTaken(s, ex, s')
     requires pageDbCorresponds(s.m, d)
-    ensures  pageDbCorresponds(s'.m, d)
+    ensures AllMemInvariant(s,s')
+    ensures mode_of_state(s') != User
+    ensures (reveal_ValidRegState(); s.regs[SP(Monitor)] == s'.regs[SP(Monitor)])
+    ensures pageDbCorresponds(s'.m, d)
 {
-    reveal_PageDb();
     reveal_ValidMemState();
     reveal_pageDbEntryCorresponds();
     reveal_pageContentsCorresponds();
 }
 
-// This is actually not true
-
-/*
-lemma appInvariantPreservesPageDb(d:PageDb,s:state,s':state)
-    requires SaneMem(s.m) && SaneMem(s'.m) && validPageDb(d)
-        && ValidState(s) && ValidState(s')
-    requires ApplicationUsermodeContinuationInvariant(s, s')
-    requires pageDbCorresponds(s.m , d)
-    requires AUCIdef();
-    ensures  pageDbCorresponds(s'.m, d)
-{
-    reveal_PageDb();
-    reveal_ValidMemState();
-    reveal_pageDbEntryCorresponds();
-    reveal_pageContentsCorresponds();
-    // TODO FIXME after defining
-}
-*/
-
-
-// This is actually not true!
-/*
-lemma evalMOVSPCLRUCPreservesPageDb(d:PageDb, d':PageDb, s:state, r:state, l1:PageNr)
-    requires ValidState(s) && ValidState(r)
-    requires SaneMem(s.m) && SaneMem(r.m) && validPageDb(d)
-    requires evalMOVSPCLRUC(s, r) && pageDbCorresponds(s.m, d)
-    requires s.conf.ttbr0.ptbase == page_paddr(l1);
-    requires nonStoppedL1(d, l1);
+lemma lemma_evalMOVSPCLRUC(s:state, r:state, d:PageDb, dp:PageNr)
+    requires SaneState(s)
+    requires validPageDb(d) && pageDbCorresponds(s.m, d) && nonStoppedDispatcher(d, dp)
+    requires s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(d, dp))
+    requires evalMOVSPCLRUC(s, r)
     requires AUCIdef()
+    ensures SaneState(r)
+    ensures OperandContents(r, OSP) == OperandContents(s, OSP)
+    ensures StackPreserving(s, r)
+    ensures GlobalsInvariant(s,  r)
 {
-    reveal_PageDb();
-    reveal_ValidMemState();
-    reveal_pageDbEntryCorresponds();
-    reveal_pageContentsCorresponds();
-
-    forall ( ex, s2, s3, s4 | ValidState(s2) && ValidState(s3) && ValidState(s4)
+    var l1p := l1pOfDispatcher(d, dp);
+    reveal_evalMOVSPCLRUC();
+    var s2, s3, ex, s4 :| ValidState(s2) && ValidState(s3) && ValidState(s4)
         && evalEnterUserspace(s, s2)
         && evalUserspaceExecution(s2, s3)
         && evalExceptionTaken(s3, ex, s4)
-        && ApplicationUsermodeContinuationInvariant(s4, r)
-        && r.ok )
-        ensures  pageDbCorresponds(r.m, d)
-    {
-        enterUserspacePreservesPageDb(d, s,  s2);
-        userspaceExecutionPreservesPageDb(d, s2, s3, l1); 
-        exceptionTakenPreservesPageDb(d, s3, ex, s4);
-        appInvariantPreservesPageDb(d, s4, r);
+        && ApplicationUsermodeContinuationInvariant(s4, r);
+
+    enterUserspacePreservesStuff(d, s,  s2);
+    userspaceExecutionPreservesPrivState(s2, s3);
+    userspaceExecutionPreservesPageDb(d, s2, s3, l1p);
+    exceptionTakenPreservesStuff(d, s3, ex, s4);
+    assert KomExceptionHandlerInvariant(s4, d, r, dp) by { reveal_AUCIdef(); }
+    assert SaneState(r);
+    reveal_ValidRegState();
+    calc {
+        OperandContents(s, OSP);
+        s.regs[SP(Monitor)];
+        s2.regs[SP(Monitor)];
+        s3.regs[SP(Monitor)];
+        s4.regs[SP(Monitor)];
+        r.regs[SP(Monitor)];
+        OperandContents(r, OSP);
     }
 }
-*/
 
+lemma lemma_validEnter(s0:state, s1:state, r:state, sd:PageDb,
+                       dp:word, a1:word, a2:word, a3:word)
+    returns (exs:state, rd:PageDb)
+    requires SaneState(s0) && SaneState(s1)
+    requires validPageDb(sd) && pageDbCorresponds(s0.m, sd) && pageDbCorresponds(s1.m, sd)
+    requires smc_enter_err(sd, dp, false) == KOM_ERR_SUCCESS()
+    requires preEntryEnter(s0, s1, sd, dp, a1, a2, a3)
+    requires evalMOVSPCLRUC(s1, r)
+    requires AUCIdef()
+    ensures ValidState(exs) && mode_of_state(exs) != User
+    ensures (reveal_ValidRegState();
+        (r.regs[R0], r.regs[R1], rd) == exceptionHandled(exs, sd, dp))
+    ensures validPageDb(rd) && SaneMem(r.m) && pageDbCorresponds(r.m, rd)
+    ensures validEnter(SysState(s0, sd), SysState(r, rd), dp, a1, a2, a3)
+{
+    assert nonStoppedDispatcher(sd, dp);
+    var l1p := l1pOfDispatcher(sd, dp);
+
+    reveal_evalMOVSPCLRUC();
+    var s2, s3, ex, s4 :| ValidState(s2) && ValidState(s3) && ValidState(s4)
+        && evalEnterUserspace(s1, s2)
+        && evalUserspaceExecution(s2, s3)
+        && evalExceptionTaken(s3, ex, s4)
+        && ApplicationUsermodeContinuationInvariant(s4, r);
+
+    assert entryTransition(s1, s2);
+    assert userspaceExecutionAndException(s2, s3, ex, s4);
+
+    enterUserspacePreservesStuff(sd, s1,  s2);
+    userspaceExecutionPreservesPrivState(s2, s3);
+    userspaceExecutionPreservesPageDb(sd, s2, s3, l1p);
+    exceptionTakenPreservesStuff(sd, s3, ex, s4);
+    assert KomExceptionHandlerInvariant(s4, sd, r, dp) by { reveal_AUCIdef(); }
+
+    exs := s4;
+    rd := exceptionHandled(exs, sd, dp).2;
+    exceptionHandledValidPageDb(s3, ex, s4, sd, dp);
+
+    assert validExceptionTransition(SysState(s4, sd), SysState(r, rd), dp);
+    assert (reveal_ValidRegState();
+        (r.regs[R0], r.regs[R1], rd) == exceptionHandled(exs, sd, dp));
+
+    reveal_validEnter();
+}

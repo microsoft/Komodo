@@ -2,99 +2,82 @@
 // Top-level SMC handler
 //=============================================================================
 
-#verbatim
-lemma SameMemAndGlobalsImpliesSamePageDb(s:state, s':state, pagedb:PageDb)
-    requires SaneState(s) && SaneState(s')
-    requires validPageDb(pagedb)
-    requires pageDbCorresponds(s.m, pagedb)
-    requires NonStackMemPreserving(s,s')
-    requires GlobalsInvariant(s,s')
-    ensures pageDbCorresponds(s'.m, pagedb)
-{
-    assert GlobalFullContents(s.m, PageDb()) == GlobalFullContents(s'.m, PageDb());
-    assert forall p :: validPageNr(p) ==> extractPage(s.m, p) == extractPage(s'.m, p);
-}
-#endverbatim
-
 procedure smc_handler(
-    {:register OReg(R0)} callno:int,
+    inout {:register OReg(R0)} callno:int,
     inout {:register OReg(R1)} arg1:int,
     inout {:register OReg(R2)} arg2:int,
     inout {:register OReg(R3)} arg3:int,
     inout {:register OReg(R4)} arg4:int,
     out {:register OReg(R0)} err:int,
     out {:register OReg(R1)} retval:int,
+    ghost stack_bytes: int,
     ghost pagedb_in: PageDb) returns (ghost pagedb: PageDb)
     requires/ensures
         SaneState(this);
-        StackBytesRemaining(this,120);
+        StackBytesRemaining(this, stack_bytes);
     requires
+        stack_bytes >= 120;
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
+        AUCIdef(); // FIXME
     ensures
-        //TODO: tuple(pagedb, err, retval) == old(smchandler_premium(pagedb_in, callno, arg1, arg2, arg3, arg4));
-        SmcProcedureInvariant(old(this),this); // TODO: smcHandlerInvariant
+        smchandler(old(this), pagedb_in, this, pagedb);
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
-    ghost var stack_bytes := 120;
-    pagedb := pagedb_in;
+    ghost var stack_bytes_local;
+    stack_bytes_local := stack_nonvolatiles(stack_bytes);
+    lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb_in);
 
-    fcall_prologue(stack_bytes);
-    SameMemAndGlobalsImpliesSamePageDb(old(this), this, pagedb);
-
-    if(callno == sp_op_const(KOM_SMC_QUERY())) {
+    if (callno == sp_op_const(KOM_SMC_QUERY())) {
+        pagedb := pagedb_in;
         retval := 0;
         err := sp_op_const(KOM_MAGIC());
-    } else if(callno == sp_op_const(KOM_SMC_GETPHYSPAGES())) {
+    } else if (callno == sp_op_const(KOM_SMC_GETPHYSPAGES())) {
+        pagedb := pagedb_in;
         retval := sp_op_const(KOM_SECURE_NPAGES());
         err := sp_op_const(KOM_ERR_SUCCESS());
-    } else if(callno == sp_op_const(KOM_SMC_INIT_ADDRSPACE())) {
-        pagedb := kom_smc_init_addrspace(arg1, arg2, err, pagedb);
+    } else if (callno == sp_op_const(KOM_SMC_INIT_ADDRSPACE())) {
+        pagedb := kom_smc_init_addrspace(arg1, arg2, err, pagedb_in);
         retval := 0;
-    } else if(callno == sp_op_const(KOM_SMC_INIT_DISPATCHER())) {
-        pagedb := kom_smc_init_dispatcher(arg1, arg2, arg3, err, pagedb);
+    } else if (callno == sp_op_const(KOM_SMC_INIT_DISPATCHER())) {
+        pagedb := kom_smc_init_dispatcher(arg1, arg2, arg3, err, pagedb_in);
         retval := 0;
-    } else if(callno == sp_op_const(KOM_SMC_INIT_L2PTABLE())) {
-        pagedb := kom_smc_init_l2ptable(arg1, arg2, arg3, err, pagedb);
+    } else if (callno == sp_op_const(KOM_SMC_INIT_L2PTABLE())) {
+        pagedb := kom_smc_init_l2ptable(arg1, arg2, arg3, err, pagedb_in);
         retval := 0;
-    } else if(callno == sp_op_const(KOM_SMC_MAP_SECURE())) {
-        pagedb := kom_smc_map_secure(arg1, arg2, arg3, arg4, err, pagedb);
+    } else if (callno == sp_op_const(KOM_SMC_MAP_SECURE())) {
+        pagedb := kom_smc_map_secure(arg1, arg2, arg3, arg4, err, pagedb_in);
         retval := 0;
-    } else if(callno == sp_op_const(KOM_SMC_MAP_INSECURE())) {
-        pagedb := kom_smc_map_insecure(arg1, arg2, arg3, err, pagedb);
+    } else if (callno == sp_op_const(KOM_SMC_MAP_INSECURE())) {
+        pagedb := kom_smc_map_insecure(arg1, arg2, arg3, err, pagedb_in);
         retval := 0;
-    } else if(callno == sp_op_const(KOM_SMC_REMOVE())) {
-        pagedb := kom_smc_remove(arg1, err, pagedb);
+    } else if (callno == sp_op_const(KOM_SMC_REMOVE())) {
+        pagedb := kom_smc_remove(arg1, err, pagedb_in);
         retval := 0;
-    } else if(callno == sp_op_const(KOM_SMC_FINALISE())) {
-        pagedb := kom_smc_finalise(arg1, err, pagedb);
+    } else if (callno == sp_op_const(KOM_SMC_FINALISE())) {
+        pagedb := kom_smc_finalise(arg1, err, pagedb_in);
         retval := 0;
-    } else if(callno == sp_op_const(KOM_SMC_ENTER())) {
-        // TODO add implemented monitor call. Need to figure out the systate 
-        // thing.
-        pagedb := pagedb;
-        retval := 0;
-    } else if(callno == sp_op_const(KOM_SMC_RESUME())) {
-        // TODO add implemented monitor call. Need to figure out the systate 
-        // thing.
-        pagedb := pagedb;
-        retval := 0;
-    } else if(callno == sp_op_const(KOM_SMC_STOP())) {
-        pagedb := kom_smc_stop(arg1, err, pagedb);
+    } else if (callno == sp_op_const(KOM_SMC_ENTER())) {
+        pagedb := kom_smc_enter(arg1, arg2, arg3, arg4, err, retval,
+                                pagedb_in, local_stack_bytes);
+    } else if (callno == sp_op_const(KOM_SMC_RESUME())) {
+        pagedb := kom_smc_resume(arg1, err, retval, pagedb_in, local_stack_bytes);
+    } else if (callno == sp_op_const(KOM_SMC_STOP())) {
+        pagedb := kom_smc_stop(arg1, err, pagedb_in);
         retval := 0;
     } else {
+        pagedb := pagedb_in;
         err := sp_op_const(KOM_ERR_INVALID());
         retval := 0;
     }
 
     ghost var prePopThis := this;
-    fcall_epilogue(stack_bytes-40);
-    SameMemAndGlobalsImpliesSamePageDb(prePopThis, this, pagedb);
+    stack_bytes_local := unstack_nonvolatiles(stack_bytes_local);
+    assert stack_bytes_local == stack_bytes;
+    lemma_SameMemAndGlobalsPreservesPageDb(prePopThis, this, pagedb);
 
     // zero other volatiles to prevent information leakage
     r2 := 0;
     r3 := 0;
-
-    // TODO: return path (movs pc, lr etc.)
 }

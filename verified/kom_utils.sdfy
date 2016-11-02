@@ -41,7 +41,6 @@ procedure paddr_page_impl(out {:operand} pagenr:int, {:operand} phys:int, out {:
         @pagenr != @tmp;
         @tmp != OSP;
         @pagenr != OSP;
-        isUInt32(phys);
         PageAligned(phys);
         SecurePhysBase() <= phys < SecurePhysBase() + KOM_SECURE_RESERVE();
     ensures
@@ -86,7 +85,7 @@ procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out
     ADD(virt, virt, sp_op_const(KOM_DIRECTMAP_VBASE()));
 }
 
-procedure fcall_prologue(ghost stack_bytes:int)
+procedure stack_nonvolatiles(ghost stack_bytes:int) returns (ghost stack_bytes_ret:int)
     requires/ensures
         SaneState(this);
     requires
@@ -118,7 +117,9 @@ procedure fcall_prologue(ghost stack_bytes:int)
         SRegsInvariant(old(this),this);
         NonStackMemPreserving(old(this),this);
         ParentStackPreserving(old(this),this);
-        StackBytesRemaining(this,stack_bytes-40);
+
+        stack_bytes_ret == stack_bytes-40;
+        StackBytesRemaining(this,stack_bytes_ret);
 {
     SUB(sp, sp, 40);
 
@@ -135,15 +136,17 @@ procedure fcall_prologue(ghost stack_bytes:int)
     STR(r10, sp, 8);
     STR(r11, sp, 4);
     STR(r12, sp, 0);
+
+    stack_bytes_ret := stack_bytes - 40;
 }
 
-procedure fcall_epilogue(ghost stack_bytes_left:int)
+procedure unstack_nonvolatiles(ghost stack_bytes:int) returns (ghost stack_bytes_ret:int)
     requires/ensures
         SaneState(this);
     requires
         isUInt32(sp + 40);
         sp + 40 <= StackBase();
-        StackBytesRemaining(this,stack_bytes_left);
+        StackBytesRemaining(this, stack_bytes);
     ensures
         sp == old(sp+40);
        
@@ -168,7 +171,9 @@ procedure fcall_epilogue(ghost stack_bytes_left:int)
         AllMemInvariant(old(this),this);
         BankedRegsInvariant(old(this),this);
         SRegsInvariant(old(this),this);
-        StackBytesRemaining(this,stack_bytes_left+40);
+
+        stack_bytes_ret == stack_bytes + 40;
+        StackBytesRemaining(this, stack_bytes_ret);
 {
     //pop r12 down to r4 from stack
     LDR(r12, sp, 0);
@@ -184,4 +189,6 @@ procedure fcall_epilogue(ghost stack_bytes_left:int)
     //pop link register from stack
     LDR(lr, sp, 36);
     ADD(sp, sp, 40);
+
+    stack_bytes_ret := stack_bytes + 40;
 }

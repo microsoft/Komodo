@@ -390,3 +390,25 @@ lemma allOnlyCorrespondImpliesCorresponds(s:memstate,d:PageDb)
     reveal_pageDbEntryCorresponds
 }
 */
+
+lemma lemma_SameMemAndGlobalsPreservesPageDb(s:state, s':state, pagedb:PageDb)
+    requires SaneState(s) && SaneState(s')
+    requires validPageDb(pagedb)
+    requires pageDbCorresponds(s.m, pagedb)
+    requires NonStackMemPreserving(s,s')
+    requires GlobalsInvariant(s,s')
+    ensures pageDbCorresponds(s'.m, pagedb)
+{
+    lemma_SameMemAndGlobalsPreservesPageDb'(s,s',pagedb);
+}
+
+lemma lemma_SameMemAndGlobalsPreservesPageDb'(s:state, s':state, pagedb:PageDb)
+    requires SaneState(s) && SaneState(s')
+    requires validPageDb(pagedb)
+    requires pageDbCorresponds(s.m, pagedb)
+    requires NonStackMemPreserving(s,s')
+    requires GlobalFullContents(s.m, PageDb()) == GlobalFullContents(s'.m, PageDb())
+    ensures pageDbCorresponds(s'.m, pagedb)
+{
+    assert forall p :: validPageNr(p) ==> extractPage(s.m, p) == extractPage(s'.m, p);
+}

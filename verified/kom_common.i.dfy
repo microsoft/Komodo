@@ -41,7 +41,7 @@ predicate DistinctRegOperands(operands:set<operand>, count:nat)
     |operands| == count && forall o :: o in operands ==> ValidRegOperand(o) && o != OSP
 }
 
-predicate RegPreservingExcept(s:state, r:state, trashed:set<operand>)
+predicate CoreRegPreservingExcept(s:state, r:state, trashed:set<operand>)
     requires ValidState(s) && ValidState(r);
     requires forall o :: o in trashed ==> ValidRegOperand(o);
 {
@@ -49,6 +49,13 @@ predicate RegPreservingExcept(s:state, r:state, trashed:set<operand>)
         ==> OperandContents(s, OReg(reg)) == OperandContents(r, OReg(reg))
     && (OSP !in trashed ==> OperandContents(s, OSP) == OperandContents(r, OSP))
     && (OLR !in trashed ==> OperandContents(s, OLR) == OperandContents(r, OLR))
+}
+
+predicate RegPreservingExcept(s:state, r:state, trashed:set<operand>)
+    requires ValidState(s) && ValidState(r);
+    requires forall o :: o in trashed ==> ValidRegOperand(o);
+{
+    CoreRegPreservingExcept(s, r, trashed)
     && SRegsInvariant(s, r)
     && BankedRegsInvariant(s, r)
 }
