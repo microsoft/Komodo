@@ -397,6 +397,32 @@ requires
     // All previous Ws are in memory where we expect them
     i < 16 ==> (forall j :: 0 <= j < i ==> last(trace_in.W)[j] == mem[sp + j*4]);
     16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(trace_in.W)[j] == mem[sp + CheapMod16(j)*4]);
+
+    // t1 and t4 should already hold previous W values
+    t1 == mem[sp + CheapMod16(i+1)*4];
+    t4 == mem[sp + CheapMod16(i+14)*4];
+ensures 
+//    t2 == BitwiseXor(a, b);
+//    t3 == Maj(a, b, c);
+//    a == old(BitwiseAdd32(a, t2));
+//    lr == BitwiseAdd32(old(lr), 4);
+//
+//    mem[sp+17*4] == old(mem[sp+17*4]);         // We preserved the input ptr on the stack
+
+//    exists trace_out:SHA256Trace ::
+//        IsSHA256TraceReadyForStep(trace_out, i+1)
+//     && trace_out.M == trace_in.M
+//     && trace_out.H == trace_in.H
+//     && trace_out.W == trace_in.W
+//     // t1 holds the next value of W
+//     && t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 < 64 then mem[sp + i_plus_2] else t1) //last(trace_out.W)[i + 1] else t1)
+//     // Initial Ws are laid out in memory
+//     && (i + 1 < 16 ==> (forall j :: 0 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + j*4]))
+//     // Remaining Ws are laid out in memory
+//     && (16 <= i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + CheapMod16(j)*4]))
+//     // The atohs almost match the outgoing variables
+//     && (let old_a := (if i == 0 || i >= 16 then old(a) else old(BitwiseAdd32(a, t2))) in
+//         last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g)));
 {
     //@ ldr  $t1,[sp,#`($i+1)%16`*4]    @ $i
     //@ ldr  $t4,[sp,#`($i+14)%16`*4]
@@ -429,20 +455,20 @@ requires
 
     // From the spec (and PartialSHA256TraceHasCorrectWs):  (TODO: Probably need to trigger z.W[blk] and TStep(i))
     ghost var W := last(trace_in.W);
+    assert TStep(i);
     assert W[i] == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(SSIG1(W[i-2]), W[i-7]), SSIG0(W[i-15])), W[i-16]);
-
     assert W[i- 2] == mem[sp + CheapMod16(i + 14)*4];
     assert W[i- 7] == mem[sp + CheapMod16(i +  9)*4];
     assert W[i-15] == mem[sp + CheapMod16(i +  1)*4];
-    assert W[i-16] == mem[sp + CheapMod16(i +  0)*4] == mem[sp + input_ptr];
+    assert W[i-16] == mem[sp + CheapMod16(i +  0)*4] == mem[sp + input_slot];
 
  // TODO: Call a lemma about BitwiseAdd32 associates
-    assert t1 == BitwiseAdd32(BitwiseAdd32(input_slot=X[i]==W[i-16], BitwiseAdd32(SSIG1(t4=X[i+14]=X[i-2]), SSIG0(t1=X[i+1]=W[i-15]))), t4=input_slot_9 = W[i-7])
-
-
-
-    
-    assert t1 == last(trace_in.W)[i];       // TODO: Make this true
+    //assert t1 == BitwiseAdd32(BitwiseAdd32(input_slot=X[i]==W[i-16], BitwiseAdd32(SSIG1(t4=X[i+14]=X[i-2]), SSIG0(t1=X[i+1]=W[i-15]))), t4=input_slot_9 = W[i-7])
+    assert t1 == W[i] by {
+//    assert W[i] == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(A = SSIG1(W[i-2]), B = W[i-7]), C=SSIG0(W[i-15])), D=W[i-16]);
+    //assert t1 == BitwiseAdd32(BitwiseAdd32(D, BitwiseAdd32(A, C)), B)
+        lemma_BitwiseAdd32Associates4(SSIG1(W[i-2]), W[i-7], SSIG0(W[i-15]), W[i-16], t1);
+    }
 
     Body_00_15(i, perm, input_slot, CheapMod16(i + 2)*4, CheapMod16(i + 15)*4, trace_in, input,
                t0, t1, t2, t3, t4, 

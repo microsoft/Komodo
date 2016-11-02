@@ -40,3 +40,19 @@ lemma lemma_BitwiseAdd32Associates5(x1:word, x2:word, x3:word, x4:word, x5:word,
         BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(x1, x3), x5), x4), x2);
     }
 }
+
+lemma lemma_BitwiseAdd32Associates4(x1:word, x2:word, x3:word, x4:word, result:word)
+    requires result == BitwiseAdd32(BitwiseAdd32(x4, BitwiseAdd32(x1, x3)), x2);
+    ensures  result == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(x1, x2), x3), x4);
+{
+    calc {
+        result ;
+        BitwiseAdd32(BitwiseAdd32(x4, BitwiseAdd32(x1, x3)), x2);
+            { assert BitwiseAdd32(BitwiseAdd32(x1, x3), x4) == BitwiseAdd32(x4, BitwiseAdd32(x1, x3)); }
+        BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(x1, x3), x4), x2);
+            { lemma_BitwiseAdd32Associates3(BitwiseAdd32(x1, x3), x4, x2); }
+        BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(x1, x3), x2), x4);
+            { lemma_BitwiseAdd32Associates3(x1, x3, x2); }
+        BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(x1, x2), x3), x4);
+    }
+}
