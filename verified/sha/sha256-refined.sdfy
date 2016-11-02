@@ -320,7 +320,13 @@ ensures
 
 #verbatim
 } // end module sha256_refined_Body_00_15 
+#endverbatim
 
+#verbatim
+// TODO: Copy/paste the Body_16_XX code here and replace with Body_00_15
+#endverbatim
+
+#verbatim
 module sha256_refined_Body_16_XX {
 import opened sha256_refined_Body_16_XX_ARMdecls = ARMdecls
 import opened sha256_refined_Body_16_XX_sha256_refined_Body_00_15 = sha256_refined_Body_00_15
