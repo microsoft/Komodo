@@ -5,6 +5,10 @@
 include "../words_and_bytes.s.dfy"
 include "../ARMdef.dfy"
 
+module sha_common_s {
+import opened sha_common_s_words_and_bytes_s = words_and_bytes_s
+import opened sha_common_s_ARMdef = ARMdef
+
 function method{:axiom} BitwiseAdd32(x:word, y:word):word
     ensures BitwiseAdd32(x, y) == (((x as int) + (y as int)) % 0x100000000) as word;
 
@@ -83,3 +87,5 @@ predicate WordSeqIsProperlySHAPaddedByteSeq(ws:seq<word>, bytes:seq<byte>)
 function TBlk(blk:int):bool { true }
 function TStep(t:word):bool { true }
 
+
+}

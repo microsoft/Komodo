@@ -1,3 +1,4 @@
+module nlarith_s {
 lemma {:axiom} lemma_MulModZero(a:int, b:int)
     requires b > 0
     ensures (a * b) % b == 0
@@ -33,3 +34,5 @@ lemma lemma_MulSign(a:int, b:int)
     requires a >= 0 && b >= 0
     ensures a * b >= 0
 {}
+
+}

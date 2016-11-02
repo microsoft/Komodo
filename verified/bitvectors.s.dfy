@@ -1,5 +1,7 @@
 include "nlarith.s.dfy"
 
+module bitvectors_s {
+import opened bitvector_s_nlarith_s = nlarith_s 
 predicate isUInt32(i:int) { 0 <= i < 0x1_0000_0000 }
 type word = x | isUInt32(x)
 
@@ -275,4 +277,6 @@ function {:opaque} BitwiseMaskHigh(i:word, bitpos:int): word
     lemma_BitmaskAsWord(i, bitpos);
     lemma_pow2_properties(bitpos);
     BitsAsWord(BitAnd(WordAsBits(i), BitmaskHigh(bitpos)))
+}
+
 }

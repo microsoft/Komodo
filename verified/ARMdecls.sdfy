@@ -436,6 +436,12 @@ STRglobal({:operand} rd:int, {:operand} g:string,
 //
 ////////////////////////////////////////////////////////////////////////////////
 */
+
+#verbatim
+module ARMdecls {
+import opened ARMdecls_ARMspartan = ARMspartan
+#endverbatim
+
 var{:state ok()}  ok:bool;
 var{:state mem()} mem:memmap;
 var{:state globals()} globals:map(operand, seq(word));
@@ -681,3 +687,8 @@ rREV(out{:operand} dst:word, {:operand} src:reg)
         this := old(this).(ok := false);
     } 
 }
+
+#verbatim
+} // end module ARMdecls
+#endverbatim
+

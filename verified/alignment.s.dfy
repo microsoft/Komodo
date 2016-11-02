@@ -1,5 +1,5 @@
 // FIXME: this stuff is here because it's very unstable elsewhere
-
+module alignment_s {
 lemma lemma_PageAlignedImplies1KAligned(addr:int)
     requires addr % 0x1000 == 0
     ensures addr % 0x400 == 0
@@ -22,4 +22,5 @@ lemma lemma_PageAlignedImpliesWordAligned(addr:int)
         lemma_PageAlignedImplies1KAligned(addr);
         lemma_1KAlignedImpliesWordAligned(addr);
     }
+}
 }

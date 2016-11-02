@@ -4,6 +4,10 @@
 include "sha_common.s.dfy"
 include "hmac_common.s.dfy"
 
+module sha256_s {
+import opened sha256_s_sha_common_s = sha_common_s 
+import opened sha256_s_hmac_common_s = hmac_common_s 
+
 function method{:opaque} K_SHA256(t:word) : word
     requires 0 <= t <= 63;
 {
@@ -135,3 +139,5 @@ function {:autoReq} HMAC_SHA256(key:seq<word>, message:seq<byte>) : seq<word>
 //    requires IsWordSeqOfLen(hash, 8);
 //    requires IsSHA256(messageBits, hash);
 //    ensures SHA256(messageBits) == hash;
+
+}

@@ -1,5 +1,8 @@
 include "ARMdef.dfy"
 
+module ARMspartan {
+
+import opened ARM_spartan_ARMdef = ARMdef
 //-----------------------------------------------------------------------------
 // Spartan Types
 //-----------------------------------------------------------------------------
@@ -471,4 +474,6 @@ lemma sp_lemma_whileFalse(b:obool, c:code, s:sp_state, r:sp_state) returns(r':sp
     }
 
     r' := r;
+}
+
 }

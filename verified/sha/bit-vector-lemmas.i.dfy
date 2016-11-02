@@ -1,6 +1,10 @@
 include "sha256.s.dfy"
 include "../bitvectors.i.dfy"
 
+module bit_vector_lemmas_i {
+import opened bit_vector_lemmas_i_sha256_s = sha256_s
+import opened bit_vector_lemmas_i_bitvectors_i = bitvectors_i
+
 lemma  lemma_Maj(x:word, y:word, z:word, result:word)
     requires result == BitwiseXor(BitwiseAnd(BitwiseXor(y, z), BitwiseXor(x, y)), y);
     ensures  result == Maj(x, y, z);
@@ -44,4 +48,6 @@ lemma lemma_XorSelfIsZero()
         reveal_BitXor();
         lemma_BitsAndWordConversions();
     }
+}
+
 }

@@ -1,6 +1,10 @@
 include "bitvectors.s.dfy"
 include "ARMdef.dfy"
 
+module bitvectors_i {
+import opened bitvectors_i_bitvectors_s = bitvectors_s
+import opened bitvectors_i_ARMdef = ARMdef
+
 lemma lemma_BitPos12()
     ensures BitsAsWord(BitAtPos(12)) == 0x1000
 {
@@ -289,3 +293,4 @@ lemma lemma_BitsAndWordConversions()
     }
 }
 
+}

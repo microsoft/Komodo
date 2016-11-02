@@ -4,6 +4,10 @@
 include "../words_and_bytes.s.dfy"
 include "../ARMdef.dfy"
 
+module hmac_common_s {
+import opened hmac_common_s_words_and_bytes_s = words_and_bytes_s
+import opened hmac_common_s_ARMdef = ARMdef
+
 //-////////////////////////////////////////////////////////////////////////////
 //- HMAC specification based on:
 //- http://csrc.nist.gov/publications/fips/fips198-1/FIPS-198-1_final.pdf
@@ -25,4 +29,6 @@ function {:autoReq} Opad(len:int) : seq<word>
 function {:autoReq} Ipad(len:int) : seq<word>
 {
     RepeatValue<word>(0x36363636 as word, len)
+}
+
 }

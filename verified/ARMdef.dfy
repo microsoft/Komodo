@@ -4,6 +4,12 @@ include "bitvectors.s.dfy"
 include "alignment.s.dfy"
 include "words_and_bytes.s.dfy"
 
+module ARMdef {
+import opened ARMdef_Maybe = Maybe
+import opened ARMdef_Seq = Seq
+import opened ARMdef_bitvectors_s = bitvectors_s
+import opened ARMdef_alignment_s = alignment_s
+import opened ARMdef_words_and_bytes_s = words_and_bytes_s 
 //-----------------------------------------------------------------------------
 // Core types (for a 32-bit word-aligned machine)
 //-----------------------------------------------------------------------------
@@ -1029,4 +1035,6 @@ predicate evalCode(c:code, s:state, r:state)
         case Block(block) => evalBlock(block, s, r)
         case IfElse(cond, ifT, ifF) => evalIfElse(cond, ifT, ifF, s, r)
         case While(cond, body) => exists n:nat :: evalWhile(cond, body, n, s, r)
+}
+
 }

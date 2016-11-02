@@ -2,6 +2,10 @@
 // RUN: %DAFNY /compile:0 %s %DARGS
 
 include "bitvectors.s.dfy"  // For the definition of word
+
+module words_and_bytes_s {
+import opened words_and_bytes_s_bitvectors_s = bitvectors_s
+
 type byte = i | 0 <= i < 256
 type uint64 = i | 0 <= i < 0x1_0000_0000_0000_0000
 
@@ -79,4 +83,6 @@ function RepeatValue<T>(n:T, count:int) : seq<T>
 function ConcatenateSeqs<T>(ss:seq<seq<T>>) : seq<T>
 {
     if |ss| == 0 then [] else ss[0] + ConcatenateSeqs(ss[1..])
+}
+
 }

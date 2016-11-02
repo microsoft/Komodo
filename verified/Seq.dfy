@@ -1,6 +1,7 @@
 //-----------------------------------------------------------------------------
 // Sequence Utilities
 //-----------------------------------------------------------------------------
+module Seq {
 
 function SeqLength<T>(s:seq<T>) : int { |s| }
 function SeqDrop<T>(s:seq<T>, tail:int) : seq<T> 
@@ -43,4 +44,6 @@ function SeqOfNumbersInRightExclusiveRange(a:int, b:int):seq<int>
     decreases b-a;
 {
     if a == b then [] else [a] + SeqOfNumbersInRightExclusiveRange(a+1, b)
+}
+
 }

@@ -4,6 +4,10 @@
 include "sha256.s.dfy"
 include "Seqs.s.dfy"
 
+module sha256_i {
+import opened sha256_i_sha256_s = sha256_s 
+import opened sha256_i_Seqs_s = Seqs_s
+
 datatype SHA256_state = SHA256_state_c(H:seq<word>, W:seq<word>, atoh:atoh_Type)
 
 predicate PartialSHA256TraceHasCorrectWs(z:SHA256Trace)
@@ -336,4 +340,6 @@ lemma lemma_SHA256TransitionOKAfterSettingAtoH(
         }
         assert CorrectlyAccumulatedHsForBlock(z2, blk);
     }
+}
+
 }

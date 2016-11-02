@@ -1,4 +1,6 @@
 include "ARMdef.dfy"
+module kom_common_s {
+import opened kom_common_s_ARMdef = ARMdef 
 
 function method KOM_MAGIC():int { 0x4b6d646f }
 
@@ -213,5 +215,7 @@ predicate bankedRegsPreserved(hw:state, hw':state)
     hw.regs[SP(Abort)] == hw'.regs[SP(Abort)] &&
     hw.regs[SP(Undefined)] == hw'.regs[SP(Undefined)] &&
     hw.regs[SP(Monitor)] == hw'.regs[SP(Monitor)]
+
+}
 
 }
