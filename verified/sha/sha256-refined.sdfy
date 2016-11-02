@@ -60,7 +60,7 @@ function ApplyPerm(i:int, perm:perm_index) : int
 
 predicate Even(i:int) { i % 2 == 0 }
 
-function CheapMod16(j:int) : int
+function method CheapMod16(j:int) : int
 {
     if j < 16 then j 
     else if j < 32 then j - 16 
@@ -137,7 +137,7 @@ requires
     i >= 15 ==> i_plus_15 == CheapMod16(i+15)*4 && ValidAddr(mem, sp+i_plus_15);
 
     // t4 doesn't alias the stack
-    t4 < sp || t4 >= sp + 18*4;
+    i < 16 ==> t4 < sp || t4 >= sp + 18*4;
 
     // SHA semantics
     SeqLength(trace_in.H) > 0;
@@ -319,7 +319,6 @@ ensures
          last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g)));
 }
 
-/*
 procedure {:refined} Body_16_XX( 
     {:inline} i:SHA_step,
     {:inline} perm:perm_index,
@@ -367,8 +366,8 @@ requires {:refined false}
 
 requires
     i >= 16;
-    input_slot == (i%16)*4;
-    input_slot_9 == ((i+9)%16)*4;
+    input_slot == CheapMod16(i)*4;
+    input_slot_9 == CheapMod16(i+9)*4;
     ValidAddr(mem, sp + input_slot);
     ValidAddr(mem, sp + input_slot_9); 
 
@@ -377,8 +376,10 @@ requires
     lr == AddressOfGlobal(K_SHA256s()) + 4*i;
     forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][i] == K_SHA256(i);
 
-    // t4 doesn't alias the stack
-    t4 < sp || t4 > sp + 18*4;
+    SeqLength(input) == 16;
+
+    ValidAddr(mem, sp + CheapMod16(i +  2)*4);
+    ValidAddr(mem, sp + CheapMod16(i + 15)*4);
 
     t3 == BitwiseXor(b, c);
 
@@ -387,9 +388,15 @@ requires
     IsSHA256TraceReadyForStep(trace_in, i);
     last(last(trace_in.atoh)) == atoh_c(BitwiseAdd32(a, t2), b, c, d, e, f, g, h);
 
+    // TODO: Need something about t1 here
     //t1 == (if (i < 16) then input[i] else last(trace_in.W)[i]);
-    forall j :: i - 16 <= j < i ==> last(trace_in.W)[j] == mem[sp + CheapMod16(j)*4];
 
+    // The first 16 values in W are the byte-swapped version of the input words
+    forall j :: 0 <= j < 16 ==> last(trace_in.W)[j] == bswap32(input[j]);
+
+    // All previous Ws are in memory where we expect them
+    i < 16 ==> (forall j :: 0 <= j < i ==> last(trace_in.W)[j] == mem[sp + j*4]);
+    16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(trace_in.W)[j] == mem[sp + CheapMod16(j)*4]);
 {
     //@ ldr  $t1,[sp,#`($i+1)%16`*4]    @ $i
     //@ ldr  $t4,[sp,#`($i+14)%16`*4]
@@ -420,9 +427,27 @@ requires
 
     rADDWrap(t1,t1,t4);      // X[i]
 
-    Body_00_15(i, perm, input_slot, trace_in, t0, t1, t2, t3, t4, a, b, c, d, e, f, g, h);
+    // From the spec (and PartialSHA256TraceHasCorrectWs):  (TODO: Probably need to trigger z.W[blk] and TStep(i))
+    ghost var W := last(trace_in.W);
+    assert W[i] == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(SSIG1(W[i-2]), W[i-7]), SSIG0(W[i-15])), W[i-16]);
+
+    assert W[i- 2] == mem[sp + CheapMod16(i + 14)*4];
+    assert W[i- 7] == mem[sp + CheapMod16(i +  9)*4];
+    assert W[i-15] == mem[sp + CheapMod16(i +  1)*4];
+    assert W[i-16] == mem[sp + CheapMod16(i +  0)*4] == mem[sp + input_ptr];
+
+ // TODO: Call a lemma about BitwiseAdd32 associates
+    assert t1 == BitwiseAdd32(BitwiseAdd32(input_slot=X[i]==W[i-16], BitwiseAdd32(SSIG1(t4=X[i+14]=X[i-2]), SSIG0(t1=X[i+1]=W[i-15]))), t4=input_slot_9 = W[i-7])
+
+
+
+    
+    assert t1 == last(trace_in.W)[i];       // TODO: Make this true
+
+    Body_00_15(i, perm, input_slot, CheapMod16(i + 2)*4, CheapMod16(i + 15)*4, trace_in, input,
+               t0, t1, t2, t3, t4, 
+               a, b, c, d, e, f, g, h);
 }
-*/
 
 procedure {:refined} sha256_block_data_order(
     ghost trace_in:SHA256Trace,
