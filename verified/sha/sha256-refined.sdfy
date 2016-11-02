@@ -422,8 +422,6 @@ ensures
      && (let old_a := old(BitwiseAdd32(a, t2)) in
          last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g)));
 {
-    //@ ldr  $t1,[sp,#`($i+1)%16`*4]    @ $i
-    //@ ldr  $t4,[sp,#`($i+14)%16`*4]
     rMOVShift(t0, t1, RORShift(sigma0(0)));
     rADDWrap(a, a, t2);  // h+=Maj(a,b,c) from the past
     rMOVShift(t2, t4, RORShift(sigma1(0)));
@@ -455,16 +453,12 @@ ensures
     ghost var W := last(trace_in.W);
     assert TStep(i);
     assert W[i] == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(SSIG1(W[i-2]), W[i-7]), SSIG0(W[i-15])), W[i-16]);
-    assert W[i- 2] == mem[sp + CheapMod16(i + 14)*4];
-    assert W[i- 7] == mem[sp + CheapMod16(i +  9)*4];
-    assert W[i-15] == mem[sp + CheapMod16(i +  1)*4];
-    assert W[i-16] == mem[sp + CheapMod16(i +  0)*4] == mem[sp + input_slot];
+//    assert W[i- 2] == mem[sp + CheapMod16(i + 14)*4];
+//    assert W[i- 7] == mem[sp + CheapMod16(i +  9)*4];
+//    assert W[i-15] == mem[sp + CheapMod16(i +  1)*4];
+//    assert W[i-16] == mem[sp + CheapMod16(i +  0)*4] == mem[sp + input_slot];
 
- // TODO: Call a lemma about BitwiseAdd32 associates
-    //assert t1 == BitwiseAdd32(BitwiseAdd32(input_slot=X[i]==W[i-16], BitwiseAdd32(SSIG1(t4=X[i+14]=X[i-2]), SSIG0(t1=X[i+1]=W[i-15]))), t4=input_slot_9 = W[i-7])
     assert t1 == W[i] by {
-//    assert W[i] == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(A = SSIG1(W[i-2]), B = W[i-7]), C=SSIG0(W[i-15])), D=W[i-16]);
-    //assert t1 == BitwiseAdd32(BitwiseAdd32(D, BitwiseAdd32(A, C)), B)
         lemma_BitwiseAdd32Associates4(SSIG1(W[i-2]), W[i-7], SSIG0(W[i-15]), W[i-16], t1);
     }
 
