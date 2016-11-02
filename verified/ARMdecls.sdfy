@@ -71,7 +71,7 @@ ADDWrap(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
         ValidRegOperand(@dst);
     ensures
         evalUpdate(old(this), @dst, old(src1 + src2) % 0x1_0000_0000, this);
-        WordAligned(old(src1)) && WordAligned(old(src2)) ==> WordAligned(dst);
+        //WordAligned(old(src1)) && WordAligned(old(src2)) ==> WordAligned(dst);
         SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
