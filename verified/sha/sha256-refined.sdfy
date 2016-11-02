@@ -515,8 +515,25 @@ function method GenericIterationCount() : int { 48 }
 
 predicate GenericFramingInvariant(sp_s0:sp_state, sp_sM:sp_state)
 {
-    sp_state_eq(sp_sM, sp_s0)
+//    sp_state_eq(sp_sM, sp_s0)
 // TODO: How do we specify generic updates to changing operands?  Or do say that all of them may change?
+    reveal_ValidRegState();
+    ValidState(sp_sM)
+ && sp_state_eq(sp_sM, sp_update_olr(sp_sM, sp_update_mem(sp_sM, sp_update_ok(sp_sM, 
+                sp_update_reg(R0, sp_sM, 
+                sp_update_reg(R1, sp_sM, 
+                sp_update_reg(R2, sp_sM, 
+                sp_update_reg(R3, sp_sM, 
+                sp_update_reg(R4, sp_sM, 
+                sp_update_reg(R5, sp_sM, 
+                sp_update_reg(R6, sp_sM, 
+                sp_update_reg(R7, sp_sM, 
+                sp_update_reg(R8, sp_sM, 
+                sp_update_reg(R9, sp_sM, 
+                sp_update_reg(R10, sp_sM, 
+                sp_update_reg(R11, sp_sM, 
+                sp_update_reg(R12, sp_sM, sp_s0)))))))))))))))))
+
 //    sp_state_eq(sp_sM, sp_update_olr(sp_sM, sp_update_mem(sp_sM, sp_update_ok(sp_sM, sp_update(h, sp_sM, sp_update(d, sp_sM, sp_update(a, sp_sM, sp_update(t4, sp_sM, sp_update(t3, sp_sM, sp_update(t2, sp_sM, sp_update(t1, sp_sM, sp_update(t0, sp_sM, sp_s0))))))))))))
 }
 
