@@ -300,25 +300,14 @@ MRS({:operand} dst:int, {:operand} src:int)
     requires
         priv_of_state(this) == PL1;
         ValidRegOperand(@dst);
-        ValidSpecialOperand(this, @src) && !ValidMcrMrcOperand(this, @src) || ValidBankedRegOperand(this, @src);
+        ValidMrsMsrOperand(this, @src);
     ensures
-        evalUpdate(old(this), @dst, if @src is OSReg then SpecialOperandContents(old(this), @src) else old(src), this);
+        evalUpdate(old(this), @dst, old(src), this);
         SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
 }
-
-#verbatim
-predicate is_psr(o:sp_operand)
-{ // true if cpsr
-    o.OSReg? && o.sr.cpsr?
-}
-predicate is_spsr(o:sp_operand)
-{
-    o.OSReg? && o.sr.spsr?
-}
-#endverbatim
 
 procedure {:instruction Ins(MSR(dst, src))}
 MSR({:operand} dst:int, {:operand} src:int)
@@ -327,12 +316,11 @@ MSR({:operand} dst:int, {:operand} src:int)
     requires
         priv_of_state(this) == PL1;
         ValidRegOperand(@src);
-        ValidSpecialOperand(this, @dst) && !ValidMcrMrcOperand(this, @dst) || ValidBankedRegOperand(this, @dst);
-        is_psr(@dst) ==> ValidModeChange(this, src);
-        is_spsr(@dst) ==> ValidModeEncoding(psr_mask_mode(src));
+        ValidMrsMsrOperand(this, @dst);
+        @dst is OSReg && @dst.sr is cpsr ==> ValidModeChange(this, src);
+        @dst is OSReg && @dst.sr is spsr ==> ValidModeEncoding(psr_mask_mode(src));
     ensures
-        if @dst is OSReg then evalSRegUpdate(old(this), @dst, old(src), this)
-            else evalUpdate(old(this), @dst, old(src), this);
+        evalUpdate(old(this), @dst, old(src), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();
@@ -342,10 +330,11 @@ procedure {:instruction Ins(MRC(dst, src))}
 MRC({:operand} dst:int, {:operand} src:int)
     requires/ensures
         ValidState(this);
+    requires
         ValidRegOperand(@dst);
         ValidMcrMrcOperand(this, @src);
     ensures
-        evalUpdate(old(this), @dst, SpecialOperandContents(old(this), @src), this);
+        evalUpdate(old(this), @dst, old(src), this);
         SRegsInvariant(old(this), this);
         AllMemInvariant(old(this), this);
 {
@@ -356,11 +345,11 @@ procedure {:instruction Ins(MCR(dst, src))}
 MCR({:operand} dst:int, {:operand} src:int)
     requires/ensures
         ValidState(this);
-        ValidRegOperand(@src);
     requires
+        ValidRegOperand(@src);
         ValidMcrMrcOperand(this, @dst);
     ensures
-        evalSRegUpdate(old(this), OSReg(scr), src, this);
+        evalUpdate(old(this), @dst, old(src), this);
         AllMemInvariant(old(this), this);
 {
     reveal_sp_eval();

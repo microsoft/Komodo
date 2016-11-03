@@ -132,9 +132,13 @@ function decode_ttbr(v:word): TTBR
     TTBR(ptbase)
 }
 
+predicate ValidSReg(sr:SReg)
+{
+    sr.spsr? ==> sr.m != User
+}
+
 function update_config_from_sreg(s:state, sr:SReg, v:word): config
-    requires ValidSRegState(s.sregs, s.conf)
-    requires ValidSpecialOperand(s, OSReg(sr))
+    requires ValidSRegState(s.sregs, s.conf) && ValidSReg(sr)
     requires (sr.cpsr? || sr.spsr?) ==> ValidModeEncoding(psr_mask_mode(v))
 {
     reveal_ValidSRegState();
@@ -301,28 +305,31 @@ predicate ValidSecondOperand(o:operand)
  || (o.OShift? && !(o.reg.SP? || o.reg.LR?))
 }
 
-// Except for those times that banked regs *are* used directly...
-// PSRs can already be accessed with the special operand instructions
-// so this is just for LRs and SPs
 predicate ValidBankedRegOperand(s:state, o:operand)
 {
-    // TODO check ARM ref manual and add comment indicating section that says 
-    // this is right.
-    priv_of_state(s) == PL1 &&
-    o.OReg? && ( o.r.SP? || o.r.LR?)
+    // See B9.2.2 Usage restrictions on the Banked register transfer instructions
+    // to simplify the spec, we only consider secure PL1 modes
+    priv_of_state(s) == PL1 && world_of_state(s) == Secure
+    && ( (o.OReg? && (
+            (o.r.SP? && o.r.spm != mode_of_state(s))
+            || (o.r.LR? && o.r.lrm != mode_of_state(s))
+            ) )
+       || (o.OSReg? && ValidSReg(o.sr) && o.sr.spsr? && o.sr.m != mode_of_state(s))
+      )
 }
 
-predicate ValidSpecialOperand(s:state, o:operand)
+predicate ValidMrsMsrOperand(s:state,o:operand)
 {
-    o.OSReg? && ValidSRegState(s.sregs, s.conf) && mode_of_state(s) != User
-    &&( (o.sr.spsr? && mode_of_state(s) == o.sr.m)
-     || (o.sr.scr?  && world_of_state(s) == Secure)
-     || (!o.sr.spsr? && !o.sr.scr?))
+    ValidBankedRegOperand(s,o)
+        || (o.OSReg? && ValidSReg(o.sr)
+            && (o.sr.cpsr? || (o.sr.spsr? && mode_of_state(s) == o.sr.m)))
 }
 
 predicate ValidMcrMrcOperand(s:state,o:operand)
 {
-    ValidSpecialOperand(s,o) && o.sr.scr?
+    // to simplify the spec, we only consider secure PL1 modes
+    o.OSReg? && priv_of_state(s) == PL1 && world_of_state(s) == Secure
+    && (o.sr.scr? || o.sr.ttbr0?)
 }
 
 predicate ValidMem(addr:int)
@@ -415,14 +422,13 @@ predicate evalExceptionTaken(s:state, e:exception, r:state)
 
 predicate evalEnterUserspace(s:state, r:state)
     requires ValidState(s)
-    // ensures  evalEnterUserspace(s, r) ==> AlwaysInvariant(s, r)
     ensures evalEnterUserspace(s, r) ==> ValidState(r) && mode_of_state(r) == User
 {
     mode_of_state(s) != User && ValidModeChange'(s, User) &&
     var spsr := OSReg(spsr(mode_of_state(s)));
-    assert ValidSpecialOperand(s, spsr);
-    decode_mode'(psr_mask_mode(SpecialOperandContents(s, spsr))) == Just(User) &&
-    evalSRegUpdate(s, OSReg(cpsr), SpecialOperandContents(s,spsr), r)
+    assert ValidSReg(spsr.sr);
+    decode_mode'(psr_mask_mode(OperandContents(s, spsr))) == Just(User) &&
+    evalUpdate(s, OSReg(cpsr), OperandContents(s, spsr), r)
 }
 
 predicate evalUserspaceExecution(s:state, r:state)
@@ -689,25 +695,19 @@ function EvalShift(w:word, shift:Shift) : word
 }
 
 function OperandContents(s:state, o:operand): word
-    requires ValidOperand(o) || ValidBankedRegOperand(s,o) || ValidSecondOperand(o)
+    requires ValidOperand(o) || ValidSecondOperand(o)
+        || ValidBankedRegOperand(s,o) || ValidMrsMsrOperand(s,o) || ValidMcrMrcOperand(s,o)
     requires ValidState(s)
 {
     reveal_ValidRegState();
+    reveal_ValidSRegState();
     match o
         case OConst(n) => n
         case OReg(r) => s.regs[r]
+        case OSReg(sr) => s.sregs[sr] 
         case OShift(r, amount) => EvalShift(s.regs[r], amount)
         case OSP => s.regs[SP(mode_of_state(s))]
         case OLR => s.regs[LR(mode_of_state(s))]
-}
-
-function SpecialOperandContents(s:state, o:operand): word
-    requires ValidSpecialOperand(s, o)
-    requires ValidState(s)
-{
-    reveal_ValidSRegState();
-    match o
-        case OSReg(sr) => s.sregs[sr] 
 }
 
 function MemContents(s:memstate, m:addr): word
@@ -742,24 +742,19 @@ function takestep(s:state): state
 predicate evalUpdate(s:state, o:operand, v:word, r:state)
     requires ValidState(s)
     requires ValidRegOperand(o) || ValidBankedRegOperand(s,o)
+        || ValidMrsMsrOperand(s,o) || ValidMcrMrcOperand(s,o)
+    requires o.OSReg? ==> (ValidSReg(o.sr)
+        && (o.sr.cpsr? || o.sr.spsr? ==> ValidModeEncoding(psr_mask_mode(v))))
     ensures evalUpdate(s, o, v, r) ==> ValidState(r)
 {
     reveal_ValidRegState();
+    reveal_ValidSRegState();
     match o
         case OReg(reg) => r == takestep(s).(regs := s.regs[o.r := v])
         case OLR => r == takestep(s).(regs := s.regs[LR(mode_of_state(s)) := v])
         case OSP => r == takestep(s).(regs := s.regs[SP(mode_of_state(s)) := v])
-}
-
-predicate evalSRegUpdate(s:state, o:operand, v:word, r:state)
-    requires ValidState(s)
-    requires ValidSpecialOperand(s, o)
-    requires o.sr.cpsr? || o.sr.spsr? ==> ValidModeEncoding(psr_mask_mode(v))
-    ensures  evalSRegUpdate(s, o, v, r) ==> ValidState(r)
-{
-    reveal_ValidSRegState();
-    r == takestep(s).( conf := update_config_from_sreg(s, o.sr, v),
-        sregs := s.sregs[ o.sr := v] )
+        case OSReg(sr) => r == takestep(s).(sregs := s.sregs[sr := v],
+                                conf := update_config_from_sreg(s, sr, v))
 }
 
 predicate evalMemUpdate(s:state, m:addr, v:word, r:state)
@@ -878,17 +873,13 @@ predicate ValidInstruction(s:state, ins:ins)
         case MOV(dst, src) => ValidRegOperand(dst) &&
             ValidSecondOperand(src)
         case MRS(dst, src) =>
-            priv_of_state(s) == PL1 && ValidRegOperand(dst)
-            && ((ValidSpecialOperand(s, src) && !ValidMcrMrcOperand(s, src))
-                || ValidBankedRegOperand(s,src))
+            ValidRegOperand(dst) && ValidMrsMsrOperand(s,src)
         case MSR(dst, src) =>
-            priv_of_state(s) == PL1 && ValidRegOperand(src)
-            && ((ValidSpecialOperand(s, dst) && !ValidMcrMrcOperand(s, dst) &&
-                (dst.sr.spsr? ==>
-                    ValidModeEncoding(psr_mask_mode(OperandContents(s, src)))) &&
-                (dst.sr.cpsr? ==>
-                    ValidModeChange(s, OperandContents(s, src))))
-                || ValidBankedRegOperand(s,dst))
+            ValidRegOperand(src) && ValidMrsMsrOperand(s,dst)
+            && (dst.OSReg? && dst.sr.spsr? ==>
+                ValidModeEncoding(psr_mask_mode(OperandContents(s, src))))
+            && (dst.OSReg? && dst.sr.cpsr? ==>
+                ValidModeChange(s, OperandContents(s, src)))
         case MRC(dst, src) =>
             ValidMcrMrcOperand(s, src) &&
             ValidRegOperand(dst) 
@@ -948,16 +939,11 @@ predicate evalIns(ins:ins, s:state, r:state)
                 OperandContents(s, ofs), OperandContents(s, rd), r)
         case STR_global(rd, global, base, ofs) => 
             evalGlobalUpdate(s, global, OperandContents(s, ofs), OperandContents(s, rd), r)
-        case MOV(dst, src) => evalUpdate(s, dst,
-            OperandContents(s, src),
-            r)
-        case MRS(dst, src) =>
-            evalUpdate(s, dst, if src.OSReg? then SpecialOperandContents(s, src) else OperandContents(s,src), r)
-        case MSR(dst, src) =>
-            if dst.OSReg? then evalSRegUpdate(s, dst, OperandContents(s, src), r)
-            else evalUpdate(s,dst,OperandContents(s,src),r)
-        case MRC(dst, src) => evalUpdate(s, dst, SpecialOperandContents(s, OSReg(scr)), r)
-        case MCR(dst, src) => evalSRegUpdate(s, dst, OperandContents(s, src), r)
+        case MOV(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
+        case MRS(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
+        case MSR(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
+        case MRC(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
+        case MCR(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE => evalMOVSPCLRUC(s, r)
 }
 
@@ -965,8 +951,8 @@ predicate {:opaque} evalMOVSPCLRUC(s:state, r:state)
     requires ValidState(s)
     ensures  evalMOVSPCLRUC(s, r) ==> ValidState(r) && r.ok
 {
-    exists ex, s2, s3, s4 :: ValidState(s2) && ValidState(s3) && ValidState(s4)
-        && evalEnterUserspace(s, s2)
+    exists ex, s2, s3, s4 ::
+        evalEnterUserspace(s, s2)
         && evalUserspaceExecution(s2, s3)
         && evalExceptionTaken(s3, ex, s4)
         && ApplicationUsermodeContinuationInvariant(s4, r)

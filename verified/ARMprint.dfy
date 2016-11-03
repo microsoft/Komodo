@@ -154,13 +154,25 @@ method printInsFixed(instr:string, ops:string)
     nl();
 }
 
-method printMcrMsr(instr:string,op:operand)
+method printMcr(instr:string, sro:operand, op:operand)
 {
+
     print("  ");
     print(instr);
-    print(" p15, 0, ");
-    printOperand(op);
-    print(", c1, c1, 0");
+
+    if (sro.OSReg?) {
+        var sr := sro.sr;
+        print(" p15, 0, ");
+        printOperand(op);
+        if (sr.scr?) {
+            print(", c1, c1, 0");
+        } else if (sr.ttbr0?) {
+            print(", c2, c0, 0");
+        }
+    } else {
+        print("XXX-invalid-sreg");
+    }
+    nl();
 }
 
 method printInsLdStr(instr:string, dest:operand, base:operand, offset:operand)
@@ -202,10 +214,8 @@ method printIns(ins:ins)
         case MOV(dst, src) => printIns2Op("MOV", dst, src);
         case MRS(dst, src) => printIns2Op("MRS", dst, src);
         case MSR(dst, src) => printIns2Op("MSR", dst, src);
-        case MRC(dst, src) => if(src.OSReg? && src.sr.scr?) { printMcrMsr("MRC",dst); }
-            else { print("MRC for non SCR not impl.");nl(); }
-        case MCR(dst,src) => if(dst.OSReg? && dst.sr.scr?) { printMcrMsr("MCR",src); }
-            else { print("MCR for non SCR not impl.");nl(); }
+        case MRC(dst, src) => printMcr("MRC", src, dst);
+        case MCR(dst,src) => printMcr("MCR", dst, src);
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE =>
             printInsFixed("MOVS", "pc, lr");
             print(user_continue_label()); print(":"); nl();
