@@ -163,8 +163,8 @@ requires
 ensures
     t2 == BitwiseXor(a, b);
     t3 == Maj(a, b, c);
-    i < 16 ==> a == old(BitwiseAdd32(a, t2));
-    i >= 15 ==> t4 == old(mem)[sp+i_plus_15];
+    a == (if i < 16 then old(BitwiseAdd32(a, t2)) else old(a));
+    i >= 15 ==> t4 == mem[sp+i_plus_15];
     lr == old(lr) + 4;
 
     // Updated input ptr
@@ -315,7 +315,8 @@ ensures
      assert (16 <= i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + CheapMod16(j)*4]));
      // The atohs almost match the outgoing variables
      assert (let old_a := (if i == 0 || i >= 16 then old(a) else old(BitwiseAdd32(a, t2))) in
-         last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g)));
+         //last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g)));
+         last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, b, c, d, e, f, g));
 }
 
 #verbatim
@@ -481,9 +482,27 @@ ensures
         lemma_BitwiseAdd32Associates4(SSIG1(W[i-2]), W[i-7], SSIG0(W[i-15]), W[i-16], t1);
     }
 
+    ghost var mid_a := a;
+    ghost var mid_t2 := t2;
     Body_00_15(i, perm, input_slot, CheapMod16(i + 2)*4, CheapMod16(i + 15)*4, trace_in, input,
                t0, t1, t2, t3, t4, 
                a, b, c, d, e, f, g, h);
+
+    exists trace_out:SHA256Trace ::
+        IsSHA256TraceReadyForStep(trace_out, i+1)
+     && trace_out.M == trace_in.M
+     && trace_out.H == trace_in.H
+     && trace_out.W == trace_in.W
+     // t1 holds the next value of W
+     && t1 == (if i + 1 < 16 then input[i + 1] else if i + 1 <= 64 then mem[sp + CheapMod16(i + 2)*4] else t1) //last(trace_out.W)[i + 1] else t1)
+     // Initial Ws are laid out in memory
+     && (i + 1 < 16 ==> (forall j :: 0 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + j*4]))
+     // Remaining Ws are laid out in memory
+     && (16 <= i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out.W)[j] == mem[sp + CheapMod16(j)*4]))
+     // The atohs almost match the outgoing variables
+     && (let old_a := (if i == 0 || i >= 16 then mid_a else BitwiseAdd32(mid_a, mid_t2)) in
+         last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, b, c, d, e, f, g));
+    assert a == mid_a;
 }
 
 #verbatim
@@ -566,6 +585,7 @@ predicate Body_16_XXLoopStateInvariantBreakdown(
 
     // K table adjusted properly
  && (i < 64 ==> ValidGlobalsAddr(globals, K_SHA256s().sym, lr))
+ && K_SHA256s() in globals
  && AddressOfGlobal(K_SHA256s()) + 4*64 < 0x1_0000_0000    // We won't wrap around while accessing K_SHA256s
  && lr == AddressOfGlobal(K_SHA256s()) + 4*i
  && |globals[K_SHA256s()]| == 256
@@ -604,7 +624,8 @@ predicate GenericStateInvariant(c:GenericConstantState, s:sp_state, aux:GenericA
 {
        reveal_ValidRegState();
        ValidState(s)
-    && var perm := i % 8;
+    && var i := i + 16;        // Confusingly, the i arg above goes 0 <= i < 48, but we want i to be 16 <= i < 64
+       var perm := i % 8;
        Body_16_XXLoopStateInvariantBreakdown(
             c.orig_mem, sp_get_mem(s), 
             c.orig_trace, aux.current_trace, 
@@ -629,6 +650,7 @@ predicate GenericStateInvariant(c:GenericConstantState, s:sp_state, aux:GenericA
 
 function method GenericCodeIteration(i:int, p:GenericCodeParameters) : code
 {
+    var i := i + 16;        // Confusingly, the i arg above goes 0 <= i < 48, but we want i to be 16 <= i < 64
     var perm := i % 8;
     sp_code_Body_16_XX(i, perm, CheapMod16(i)*4, CheapMod16(i+9)*4, 
                        OReg(R0),
@@ -661,6 +683,8 @@ lemma sp_lemma_GenericIterationPreservesInvariants(
     sp_sM:sp_state
     )
 {
+    var old_i := i;
+    var i := old_i + 16;
     reveal_evalCodeOpaque();
     reveal_ValidRegState();
     reveal_ValidMemState();
@@ -683,7 +707,7 @@ lemma sp_lemma_GenericIterationPreservesInvariants(
     var old_f := sp_get_reg(GetReg(4+ApplyPerm(5, perm)), sp_s0);
     var old_g := sp_get_reg(GetReg(4+ApplyPerm(6, perm)), sp_s0);
     var old_h := sp_get_reg(GetReg(4+ApplyPerm(7, perm)), sp_s0);
-
+    var old_lr := sp_get_olr(sp_s0);
 
     sp_bM, sp_sM := sp_refined_Body_16_XX(sp_b0, sp_s0, sp_sN, i, perm, CheapMod16(i)*4, CheapMod16(i+9)*4, 
                                           OReg(R0),
@@ -706,14 +730,19 @@ lemma sp_lemma_GenericIterationPreservesInvariants(
 
     forall sp_id:sp_int, c:GenericConstantState, aux0:GenericAuxiliaryState {:trigger sp_trigger_GenericUnrolledChunk(sp_id, c, aux0)}
         | sp_trigger_GenericUnrolledChunk(sp_id, c, aux0)
-        ensures sp_spec_GenericUnrolledChunk(c, aux0, sp_s0, sp_sM, i, i+1, p);
+        ensures sp_spec_GenericUnrolledChunk(c, aux0, sp_s0, sp_sM, old_i, old_i+1, p);
     {
         reveal_sp_spec_Body_16_XX();
         assert sp_trigger_Body_16_XX(1, aux0.current_trace, c.input);
         reveal_sp_spec_GenericUnrolledChunk();
         assert sp_trigger_GenericUnrolledChunk(sp_id, c, aux0);
-        if sp_s0.ok && GenericStateInvariant(c, sp_s0, aux0, i, p) {
+        if sp_s0.ok && GenericStateInvariant(c, sp_s0, aux0, old_i, p) {
             assert sp_sM.ok;
+
+            if i < 64 {
+                lemma_obvious_WordAligned(old_lr);
+            }
+
 
             var mem := sp_get_mem(sp_sM);
             var t1 := sp_get_reg(R2, sp_sM); 
@@ -737,7 +766,7 @@ lemma sp_lemma_GenericIterationPreservesInvariants(
                           && last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(new_h, t3), new_a, new_b, new_c, new_d, new_e, new_f, new_g);
             var auxM := Body_16_XXLoopAuxiliaryState(trace_out);
 
-            assert GenericStateInvariant(c, sp_sM, auxM, i+1, p);
+            assert GenericStateInvariant(c, sp_sM, auxM, old_i+1, p);
         }
     }
 }
@@ -783,7 +812,7 @@ function method sp_code_Body_16_XXLoopUnrolled() : code
 //    }
 //}
 
-lemma sp_refined_Body_16_XXLoopUnrolled(sp_b0:sp_codes, sp_s0:sp_state, sp_sN:sp_state)
+lemma {:timeLimitMultiplier 5} sp_refined_Body_16_XXLoopUnrolled(sp_b0:sp_codes, sp_s0:sp_state, sp_sN:sp_state)
   returns (sp_bM:sp_codes, sp_sM:sp_state)
   requires sp_require(sp_b0, sp_code_Body_16_XXLoopUnrolled(), sp_s0, sp_sN)
   ensures  sp_ensure(sp_b0, sp_bM, sp_s0, sp_sM, sp_sN)
@@ -820,6 +849,33 @@ lemma sp_refined_Body_16_XXLoopUnrolled(sp_b0:sp_codes, sp_s0:sp_state, sp_sN:sp
         if sp_s0.ok && GenericStateInvariant(c, sp_s0, aux0, 0, p)
         {
             var auxM :| GenericStateInvariant(c, sp_sM, auxM, GenericIterationCount(), p);
+            var i := 64;
+            var perm := i % 8;
+            lemma_obvious_mod_with_constants(i);
+            assert perm == 0;
+
+//            assert   c.orig_mem == sp_get_mem(sp_s0);
+//            assert  sp_get_mem(sp_sM) ==  sp_get_mem(sp_sM);
+//            assert  c.orig_trace ==  trace_in;
+//            assert  auxM.current_trace ==  auxM.current_trace;
+//            assert  i ==  64;
+//            assert  sp_get_osp(sp_sM) ==  sp_get_osp(sp_sM);
+//            assert  sp_get_globals(sp_sM) ==  sp_get_globals(sp_sM);
+//            assert  sp_get_olr(sp_sM) ==  sp_get_olr(sp_sM);
+//            assert  sp_get_reg(R2, sp_sM) ==  sp_get_reg(R2, sp_sM);
+//            assert  sp_get_reg(if Even(i) then R12 else R3, sp_sM) ==  sp_get_reg(R12, sp_sM);
+//            assert  sp_get_reg(if Even(i) then R3  else R12, sp_sM) ==  sp_get_reg(R3, sp_sM);
+//            assert  sp_get_reg(R1, sp_sM) ==  sp_get_reg(R1, sp_sM);
+//            assert  c.input ==  input;
+//            assert  sp_get_reg(GetReg(4+ApplyPerm(0, perm)), sp_sM) ==  sp_get_reg(R4, sp_sM);
+//            assert  sp_get_reg(GetReg(4+ApplyPerm(1, perm)), sp_sM) ==  sp_get_reg(R5, sp_sM);
+//            assert  sp_get_reg(GetReg(4+ApplyPerm(2, perm)), sp_sM) ==  sp_get_reg(R6, sp_sM);
+//            assert  sp_get_reg(GetReg(4+ApplyPerm(3, perm)), sp_sM) ==  sp_get_reg(R7, sp_sM);
+//            assert  sp_get_reg(GetReg(4+ApplyPerm(4, perm)), sp_sM) ==  sp_get_reg(R8, sp_sM);
+//            assert  sp_get_reg(GetReg(4+ApplyPerm(5, perm)), sp_sM) ==  sp_get_reg(R9, sp_sM);
+//            assert  sp_get_reg(GetReg(4+ApplyPerm(6, perm)), sp_sM) ==  sp_get_reg(R10, sp_sM);
+//            assert  sp_get_reg(GetReg(4+ApplyPerm(7, perm)), sp_sM) ==  sp_get_reg(R11, sp_sM);
+//
             assert Body_16_XXLoopStateInvariantBreakdown(
                        sp_get_mem(sp_s0),
                        sp_get_mem(sp_sM),
@@ -875,6 +931,7 @@ import opened sha256_refined_Body_16_XX_sha256_refined_helpers_i = sha256_refine
 
 #endverbatim
 
+/*
 procedure {:refined} sha256_one_block(
     ghost trace_in:SHA256Trace,
     ghost input:seq(word)
@@ -1047,21 +1104,21 @@ ensures
     rADDWrap(b, b, t1);
     rLDR(t1, t3, 16);
     rADDWrap(c, c, t2);
-	rLDR(t2,t3,20);
-	rADDWrap(D,D,t0);
-	rLDR(t0,t3,24);
-	rADDWrap(E,E,t1);
-	rLDR(t1,t3,28);
-	rADDWrap(F,F,t2);
-	rLDR(inp,sp,17*4);  //		@ pull inp
-	rLDR(t2,sp,18*4);   //		@ pull inp+len
-	rADDWrap(G,G,t0);
-	rADDWrap(H,H,t1);
+    rLDR(t2,t3,20);
+    rADDWrap(D,D,t0);
+    rLDR(t0,t3,24);
+    rADDWrap(E,E,t1);
+    rLDR(t1,t3,28);
+    rADDWrap(F,F,t2);
+    rLDR(inp,sp,17*4);  //        @ pull inp
+    rLDR(t2,sp,18*4);   //        @ pull inp+len
+    rADDWrap(G,G,t0);
+    rADDWrap(H,H,t1);
 
     // Decide whether to loop around again if inp != t2
 }
 
-
+*/
 #verbatim
 }
 #endverbatim
