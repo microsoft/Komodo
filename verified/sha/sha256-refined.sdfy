@@ -132,7 +132,7 @@ requires
     i >= 15 ==> i_plus_15 == CheapMod16(i+15)*4 && ValidAddr(mem, sp+i_plus_15);
 
     // t4 doesn't alias the stack
-    i < 16 ==> t4 < sp || t4 >= sp + 18*4;
+    i < 15 ==> t4 < sp || t4 >= sp + 18*4;
 
     // SHA semantics
     SeqLength(trace_in.H) > 0;
@@ -246,9 +246,9 @@ ensures
          rADDWrap(t4, t4, 4);   // Advance to the next input  // TODO: OpenSSL does this in one instruction with a load-and-increment
          rEOR(t2, a, b);            //  a^b, b^c in next round
     } else {
-       rLDR(t1, sp, i_plus_2);     // @ from future BODY_16_xx 
-       rEOR(t2, a, b);             //  a^b, b^c in next round
-       rLDR(t4, sp, i_plus_15);    // @ from future BODY_16_xx
+         rLDR(t1, sp, i_plus_2);     // @ from future BODY_16_xx 
+         rEOR(t2, a, b);             //  a^b, b^c in next round
+         rLDR(t4, sp, i_plus_15);    // @ from future BODY_16_xx
     }
     rEORShift(t0,t0,a, RORShift(Sigma0(2)-Sigma0(0))); // Sigma0(a)
     rAND(t3,t3,t2);      // (b^c)&=(a^b)
@@ -333,7 +333,7 @@ import opened sha256_refined_Body_00_15
 export provides sp_refined_Body_00_15LoopUnrolled, sp_code_Body_00_15LoopUnrolled, sha256_refined_Body_00_15 //, sha256_i, x86def_s, x86spartan 
        reveals sp_trigger_Body_00_15LoopUnrolled, sp_spec_Body_00_15LoopUnrolled, Body_00_15LoopStateInvariantBreakdown
 
-datatype Body_00_15LoopConstantState = Body_00_15LoopConstantState(orig_mem:memmap, orig_trace:SHA256Trace, input:seq<word>) 
+datatype Body_00_15LoopConstantState = Body_00_15LoopConstantState(orig_mem:memmap, orig_trace:SHA256Trace, orig_t4:word, input:seq<word>) 
 datatype Body_00_15LoopCodeParameters = Body_00_15LoopCodeParameters()
 datatype Body_00_15LoopAuxiliaryState = Body_00_15LoopAuxiliaryState(current_trace:SHA256Trace)
 
@@ -367,6 +367,7 @@ predicate Body_00_15LoopStateInvariantBreakdown(
     orig_mem:memmap,
     mem:memmap,
     orig_trace:SHA256Trace,
+    orig_t4:word,
     current_trace:SHA256Trace,
     i:int,
     sp:word,
@@ -390,7 +391,7 @@ predicate Body_00_15LoopStateInvariantBreakdown(
  && ValidAddr(mem, sp + CheapMod16(i+9)*4)
 
     // K table adjusted properly
- && (i < 64 ==> ValidGlobalsAddr(globals, K_SHA256s().sym, lr))
+ && ValidGlobalsAddr(globals, K_SHA256s().sym, lr)
  && K_SHA256s() in globals
  && AddressOfGlobal(K_SHA256s()) + 4*64 < 0x1_0000_0000    // We won't wrap around while accessing K_SHA256s
  && lr == AddressOfGlobal(K_SHA256s()) + 4*i
@@ -403,6 +404,7 @@ predicate Body_00_15LoopStateInvariantBreakdown(
  && ValidAddr(mem, sp + CheapMod16(i + 15)*4)
 
  && t3 == BitwiseXor(b, c)
+ && t2 == Maj(a, b, c)
 
     // SHA semantics
  && SeqLength(current_trace.H) > 0
@@ -410,20 +412,29 @@ predicate Body_00_15LoopStateInvariantBreakdown(
  && current_trace.M == orig_trace.M
  && current_trace.H == orig_trace.H
  && current_trace.W == orig_trace.W
- && last(last(current_trace.atoh)) == atoh_c(BitwiseAdd32(a, t2), b, c, d, e, f, g, h)
+ && (if i == 0 || i == 16 then last(last(current_trace.atoh)) == atoh_c(a, b, c, d, e, f, g, h)
+     else last(last(current_trace.atoh)) == atoh_c(BitwiseAdd32(a, t2), b, c, d, e, f, g, h))
+
+    // t1 holds the current value of W
+ && t1 == (if (i < 16) then input[i] else last(current_trace.W)[i])
 
     // The first 16 values in W are the byte-swapped version of the input words
  && (forall j :: 0 <= j < 16 ==> last(current_trace.W)[j] == bswap32(input[j]))
 
     // All previous Ws are in memory where we expect them
  && (16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(current_trace.W)[j] == mem[sp + CheapMod16(j)*4]))
+ && (i < 16 ==> (forall j :: 0 <= j < i ==> last(trace_in.W)[j] == mem[sp + j*4]))
+ && (i < 15  ==> ValidAddr(mem, t4) && mem[t4] == input[i+1])
+ && (i >= 15 ==> ValidAddr(mem, sp+CheapMod16(i+ 2)*4))
+ && (i >= 15 ==> ValidAddr(mem, sp+CheapMod16(i+15)*4))
 
-    // t1 and t4 should already hold previous W values
- && (i < 64 ==> t1 == mem[sp + CheapMod16(i+1)*4])
- && t4 == mem[sp + CheapMod16(i+14)*4]
+     // Updated input ptr
+ && (if i < 15 then t4 == orig_t4 + 4*i              // Correctly advanced input ptr
+     else mem[sp+17*4] == orig_t4 + 4*16)             // We preserved the advanced input ptr on the stack
 
- // Additional postconditions
- && mem[sp+17*4] == orig_mem[sp+17*4]         // We preserved the input ptr on the stack
+    // t4 doesn't alias the stack
+ && (orig_t4 + 4*16 < sp || orig_t4 >= sp + 18*4)
+
 }
 
 predicate GenericStateInvariant(c:GenericConstantState, s:sp_state, aux:GenericAuxiliaryState, i:int, p:GenericCodeParameters)
@@ -433,7 +444,7 @@ predicate GenericStateInvariant(c:GenericConstantState, s:sp_state, aux:GenericA
     && var perm := i % 8;
        Body_00_15LoopStateInvariantBreakdown(
             c.orig_mem, sp_get_mem(s), 
-            c.orig_trace, aux.current_trace, 
+            c.orig_trace, c.orig_t4, aux.current_trace, 
             i, sp_get_osp(s), sp_get_globals(s), sp_get_olr(s), 
            /*t1*/sp_get_reg(R2, s), 
            /*t2*/sp_get_reg(if Even(i) then R12 else R3, s), 
@@ -564,9 +575,11 @@ lemma sp_lemma_GenericIterationPreservesInvariants(
                           && trace_out.M == aux0.current_trace.M 
                           && trace_out.H == aux0.current_trace.H 
                           && trace_out.W == aux0.current_trace.W 
-                          && t1 == (if (i + 1 <= 64) then mem[(old_sp + CheapMod16(i + 2) * 4)] else t1) 
-                          && (i + 1 < 64 ==> (forall j :: i + 1 - 16 <= j < i + 1 ==> last(trace_out.W)[j] == mem[(old_sp + CheapMod16(j) * 4)])) 
-                          && last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(new_h, t3), new_a, new_b, new_c, new_d, new_e, new_f, new_g);
+                          && t1 == (if i + 1 < 16 then c.input[i + 1] else if i + 1 <= 64 then mem[old_sp + CheapMod16(i + 2) * 4] else t1)
+                          && (16 <= i + 1 < 64 ==> (forall j :: i + 1 - 16 <= j < i + 1 ==> last(trace_out.W)[j] == mem[(old_sp + CheapMod16(j) * 4)])) 
+                          && last(last(trace_out.atoh)) == 
+                             var mid_a := (if i == 0 || i >= 16 then old_a else BitwiseAdd32(old_a, old_t2));
+                             atoh_c(BitwiseAdd32(new_h, t3), mid_a, new_b, new_c, new_d, new_e, new_f, new_g);
             var auxM := Body_00_15LoopAuxiliaryState(trace_out);
 
             assert GenericStateInvariant(c, sp_sM, auxM, i+1, p);
@@ -597,7 +610,7 @@ lemma  sp_refined_Body_00_15LoopUnrolled(sp_b0:sp_codes, sp_s0:sp_state, sp_sN:s
         | sp_trigger_Body_00_15LoopUnrolled(sp_id, trace_in, input) 
         ensures sp_spec_Body_00_15LoopUnrolled(trace_in, input, sp_get_ok(sp_s0), sp_get_ok(sp_sM), sp_get_osp(sp_s0), sp_get_globals(sp_s0), sp_get_mem(sp_s0), sp_get_mem(sp_sM), sp_get_olr(sp_s0), sp_get_olr(sp_sM), sp_get_reg(R0, sp_s0), sp_get_reg(R0, sp_sM), sp_get_reg(R1, sp_s0), sp_get_reg(R1, sp_sM), sp_get_reg(R2, sp_s0), sp_get_reg(R2, sp_sM), sp_get_reg(R3, sp_s0), sp_get_reg(R3, sp_sM), sp_get_reg(R4, sp_s0), sp_get_reg(R4, sp_sM), sp_get_reg(R5, sp_s0), sp_get_reg(R5, sp_sM), sp_get_reg(R6, sp_s0), sp_get_reg(R6, sp_sM), sp_get_reg(R7, sp_s0), sp_get_reg(R7, sp_sM), sp_get_reg(R8, sp_s0), sp_get_reg(R8, sp_sM), sp_get_reg(R9, sp_s0), sp_get_reg(R9, sp_sM), sp_get_reg(R10, sp_s0), sp_get_reg(R10, sp_sM), sp_get_reg(R11, sp_s0), sp_get_reg(R11, sp_sM), sp_get_reg(R12, sp_s0), sp_get_reg(R12, sp_sM))
     {
-        var c := Body_00_15LoopConstantState(sp_get_mem(sp_s0), trace_in, input);
+        var c := Body_00_15LoopConstantState(sp_get_mem(sp_s0), trace_in, sp_get_reg(R1, sp_s0), input);
         var aux0 := Body_00_15LoopAuxiliaryState(trace_in);
 
         assert sp_trigger_GenericUnrolledChunk(sp_id, c, aux0);
@@ -617,6 +630,7 @@ lemma  sp_refined_Body_00_15LoopUnrolled(sp_b0:sp_codes, sp_s0:sp_state, sp_sN:s
                        sp_get_mem(sp_s0),
                        sp_get_mem(sp_sM),
                        trace_in,
+                       sp_get_reg(R1, sp_s0),   // t4
                        auxM.current_trace,
                        64,
                        sp_get_osp(sp_sM),
@@ -647,13 +661,13 @@ procedure {:refined} Body_00_15LoopUnrolled(
     ghost trace_in:SHA256Trace,
     ghost input:seq(word)
     )
-    requires Body_00_15LoopStateInvariantBreakdown(old(mem), mem, trace_in, trace_in, 0, sp, globals, lr, 
+    requires Body_00_15LoopStateInvariantBreakdown(old(mem), mem, trace_in, r1, trace_in, 0, sp, globals, lr, 
                                                    r2, r12, r3, r1, input,
                                                    r4, r5, r6, r7, r8, r9, r10, r11);
     reads  sp; globals;
     modifies mem; lr; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12;
     ensures  exists trace_out :: 
-             Body_00_15LoopStateInvariantBreakdown(old(mem), mem, trace_in, trace_out, 16, sp, globals, lr,
+             Body_00_15LoopStateInvariantBreakdown(old(mem), mem, trace_in, old(r1), trace_out, 16, sp, globals, lr,
                                                    r2, r12, r3, r1, input,
                                                    r4, r5, r6, r7, r8, r9, r10, r11);
 #verbatim
