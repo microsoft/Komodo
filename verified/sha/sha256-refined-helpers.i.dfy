@@ -104,7 +104,7 @@ lemma lemma_obvious_WordAligned(i:int)
 }
 
 lemma lemma_obvious_mod_with_constants(i:int)
-    requires i == 64;
+    requires i == 64 || i == 16;
     ensures i % 8 == 0;
 {
 }

@@ -82,12 +82,12 @@ procedure {:refined} Body_00_15(
     inout operand t4:word,
     //inout operand inp:word,
     inout operand a:word,
-         operand b:word,
-         operand c:word,
+          operand b:word,
+          operand c:word,
     inout operand d:word,
-         operand e:word,
-         operand f:word,
-         operand g:word,
+          operand e:word,
+          operand f:word,
+          operand g:word,
     inout operand h:word)
 requires/ensures
     //WordAligned(sp);
@@ -189,6 +189,8 @@ ensures
      && (let old_a := (if i == 0 || i >= 16 then old(a) else old(BitwiseAdd32(a, t2))) in
          last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, b, c, d, e, f, g));
 {
+    assume false;
+    /*
     inline if (i < 16) {
         inline if (i == 15) {
             // Save a copy of the incremented input pointer, so we can free up t4
@@ -312,6 +314,8 @@ ensures
      assert (let old_a := (if i == 0 || i >= 16 then old(a) else old(BitwiseAdd32(a, t2))) in
          //last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g)));
          last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, b, c, d, e, f, g));
+
+  */
 }
 
 #verbatim
@@ -319,7 +323,341 @@ ensures
 #endverbatim
 
 #verbatim
-// TODO: Copy/paste the Body_16_XX code here and replace with Body_00_15
+//////////////////////////////////////////////
+// Code to specify unrolling Body_00_15
+//////////////////////////////////////////////
+
+module Body_00_15LoopUnrollableCode refines UnrollableCode {
+
+import opened sha256_refined_Body_00_15
+export provides sp_refined_Body_00_15LoopUnrolled, sp_code_Body_00_15LoopUnrolled, sha256_refined_Body_00_15 //, sha256_i, x86def_s, x86spartan 
+       reveals sp_trigger_Body_00_15LoopUnrolled, sp_spec_Body_00_15LoopUnrolled, Body_00_15LoopStateInvariantBreakdown
+
+datatype Body_00_15LoopConstantState = Body_00_15LoopConstantState(orig_mem:memmap, orig_trace:SHA256Trace, input:seq<word>) 
+datatype Body_00_15LoopCodeParameters = Body_00_15LoopCodeParameters()
+datatype Body_00_15LoopAuxiliaryState = Body_00_15LoopAuxiliaryState(current_trace:SHA256Trace)
+
+type GenericConstantState = Body_00_15LoopConstantState
+type GenericCodeParameters = Body_00_15LoopCodeParameters
+type GenericAuxiliaryState = Body_00_15LoopAuxiliaryState
+
+function method GenericIterationCount() : int { 16 }
+
+predicate GenericFramingInvariant(sp_s0:sp_state, sp_sM:sp_state)
+{
+    reveal_ValidRegState();
+    ValidState(sp_sM)
+ && sp_state_eq(sp_sM, sp_update_olr(sp_sM, sp_update_mem(sp_sM, sp_update_ok(sp_sM, 
+                sp_update_reg(R0, sp_sM, 
+                sp_update_reg(R1, sp_sM, 
+                sp_update_reg(R2, sp_sM, 
+                sp_update_reg(R3, sp_sM, 
+                sp_update_reg(R4, sp_sM, 
+                sp_update_reg(R5, sp_sM, 
+                sp_update_reg(R6, sp_sM, 
+                sp_update_reg(R7, sp_sM, 
+                sp_update_reg(R8, sp_sM, 
+                sp_update_reg(R9, sp_sM, 
+                sp_update_reg(R10, sp_sM, 
+                sp_update_reg(R11, sp_sM, 
+                sp_update_reg(R12, sp_sM, sp_s0)))))))))))))))))
+}
+
+predicate Body_00_15LoopStateInvariantBreakdown(
+    orig_mem:memmap,
+    mem:memmap,
+    orig_trace:SHA256Trace,
+    current_trace:SHA256Trace,
+    i:int,
+    sp:word,
+    globals:map<operand,seq<word>>,
+    lr:word,
+    t1:word,
+    t2:word,
+    t3:word,
+    t4:word,
+    input:seq<word>,
+    a:word, b:word, c:word, d:word, e:word, f:word, g:word, h:word
+    )
+{
+    0 <= i <= 16
+ // Stack is accessible in both old and new mem
+ && (forall j {:trigger ValidAddr(orig_mem, sp+j*4)} {:trigger sp+j*4 in orig_mem } :: 
+         0 <= j < 18 ==> ValidAddr(orig_mem, sp + j*4))
+ && (forall j {:trigger ValidAddr(mem, sp+j*4)} {:trigger sp+j*4 in mem } :: 
+         0 <= j < 18 ==> ValidAddr(mem, sp + j*4))
+ && ValidAddr(mem, sp + CheapMod16(i)*4)
+ && ValidAddr(mem, sp + CheapMod16(i+9)*4)
+
+    // K table adjusted properly
+ && (i < 64 ==> ValidGlobalsAddr(globals, K_SHA256s().sym, lr))
+ && K_SHA256s() in globals
+ && AddressOfGlobal(K_SHA256s()) + 4*64 < 0x1_0000_0000    // We won't wrap around while accessing K_SHA256s
+ && lr == AddressOfGlobal(K_SHA256s()) + 4*i
+ && |globals[K_SHA256s()]| == 256
+ && (forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][j] == K_SHA256(j))
+
+ && SeqLength(input) == 16
+
+ && ValidAddr(mem, sp + CheapMod16(i +  2)*4)
+ && ValidAddr(mem, sp + CheapMod16(i + 15)*4)
+
+ && t3 == BitwiseXor(b, c)
+
+    // SHA semantics
+ && SeqLength(current_trace.H) > 0
+ && IsSHA256TraceReadyForStep(current_trace, i)
+ && current_trace.M == orig_trace.M
+ && current_trace.H == orig_trace.H
+ && current_trace.W == orig_trace.W
+ && last(last(current_trace.atoh)) == atoh_c(BitwiseAdd32(a, t2), b, c, d, e, f, g, h)
+
+    // The first 16 values in W are the byte-swapped version of the input words
+ && (forall j :: 0 <= j < 16 ==> last(current_trace.W)[j] == bswap32(input[j]))
+
+    // All previous Ws are in memory where we expect them
+ && (16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(current_trace.W)[j] == mem[sp + CheapMod16(j)*4]))
+
+    // t1 and t4 should already hold previous W values
+ && (i < 64 ==> t1 == mem[sp + CheapMod16(i+1)*4])
+ && t4 == mem[sp + CheapMod16(i+14)*4]
+
+ // Additional postconditions
+ && mem[sp+17*4] == orig_mem[sp+17*4]         // We preserved the input ptr on the stack
+}
+
+predicate GenericStateInvariant(c:GenericConstantState, s:sp_state, aux:GenericAuxiliaryState, i:int, p:GenericCodeParameters)
+{
+       reveal_ValidRegState();
+       ValidState(s)
+    && var perm := i % 8;
+       Body_00_15LoopStateInvariantBreakdown(
+            c.orig_mem, sp_get_mem(s), 
+            c.orig_trace, aux.current_trace, 
+            i, sp_get_osp(s), sp_get_globals(s), sp_get_olr(s), 
+           /*t1*/sp_get_reg(R2, s), 
+           /*t2*/sp_get_reg(if Even(i) then R12 else R3, s), 
+           /*t3*/sp_get_reg(if Even(i) then R3  else R12, s), 
+           /*t4*/sp_get_reg(R1, s), 
+           c.input,
+           sp_get_reg(GetReg(4+ApplyPerm(0, perm)), s),
+           sp_get_reg(GetReg(4+ApplyPerm(1, perm)), s),
+           sp_get_reg(GetReg(4+ApplyPerm(2, perm)), s),
+           sp_get_reg(GetReg(4+ApplyPerm(3, perm)), s),
+           sp_get_reg(GetReg(4+ApplyPerm(4, perm)), s),
+           sp_get_reg(GetReg(4+ApplyPerm(5, perm)), s),
+           sp_get_reg(GetReg(4+ApplyPerm(6, perm)), s),
+           sp_get_reg(GetReg(4+ApplyPerm(7, perm)), s) 
+           )
+}
+
+ 
+
+function method GenericCodeIteration(i:int, p:GenericCodeParameters) : code
+{
+    var perm := i % 8;
+    sp_code_Body_00_15(i, perm, CheapMod16(i)*4, CheapMod16(i+2)*4, CheapMod16(i+15)*4, 
+                       OReg(R0),
+                       OReg(R2),
+                       OReg(GetReg(if Even(i) then 12 else 3)),
+                       OReg(GetReg(if Even(i) then  3 else 12)),
+                       OReg(R1),
+                       OReg(GetReg(4+ApplyPerm(0, perm))),
+                       OReg(GetReg(4+ApplyPerm(1, perm))),
+                       OReg(GetReg(4+ApplyPerm(2, perm))),
+                       OReg(GetReg(4+ApplyPerm(3, perm))),
+                       OReg(GetReg(4+ApplyPerm(4, perm))),
+                       OReg(GetReg(4+ApplyPerm(5, perm))),
+                       OReg(GetReg(4+ApplyPerm(6, perm))),
+                       OReg(GetReg(4+ApplyPerm(7, perm)))) 
+}
+
+lemma lemma_GenericFramingInvariantTransitivity(sp_s1:sp_state, sp_s2:sp_state, sp_s3:sp_state)
+{
+}
+
+lemma sp_lemma_GenericIterationPreservesInvariants(
+    sp_b0:sp_codes,
+    sp_s0:sp_state,
+    sp_sN:sp_state,
+    i:int,
+    p:GenericCodeParameters
+    ) returns (
+    sp_bM:sp_codes,
+    sp_sM:sp_state
+    )
+{
+    reveal_evalCodeOpaque();
+    reveal_ValidRegState();
+    reveal_ValidMemState();
+    reveal_ValidConfig();
+    reveal_ValidSRegState();
+
+    var perm := i % 8;
+
+    var old_sp := sp_get_osp(sp_s0);
+    var old_t0 := sp_get_reg(R0, sp_s0);
+    var old_t1 := sp_get_reg(R2, sp_s0);
+    var old_t2 := sp_get_reg(GetReg(if Even(i) then 12 else 3), sp_s0);
+    var old_t3 := sp_get_reg(GetReg(if Even(i) then  3 else 12), sp_s0);
+    var old_t4 := sp_get_reg(R1, sp_s0);
+    var old_a := sp_get_reg(GetReg(4+ApplyPerm(0, perm)), sp_s0);
+    var old_b := sp_get_reg(GetReg(4+ApplyPerm(1, perm)), sp_s0);
+    var old_c := sp_get_reg(GetReg(4+ApplyPerm(2, perm)), sp_s0);
+    var old_d := sp_get_reg(GetReg(4+ApplyPerm(3, perm)), sp_s0);
+    var old_e := sp_get_reg(GetReg(4+ApplyPerm(4, perm)), sp_s0);
+    var old_f := sp_get_reg(GetReg(4+ApplyPerm(5, perm)), sp_s0);
+    var old_g := sp_get_reg(GetReg(4+ApplyPerm(6, perm)), sp_s0);
+    var old_h := sp_get_reg(GetReg(4+ApplyPerm(7, perm)), sp_s0);
+    var old_lr := sp_get_olr(sp_s0);
+
+    sp_bM, sp_sM := sp_refined_Body_00_15(sp_b0, sp_s0, sp_sN, i, perm, 
+                                          CheapMod16(i)*4, CheapMod16(i+2)*4, CheapMod16(i+15)*4, 
+                                          OReg(R0),
+                                          OReg(R2),
+                                          OReg(GetReg(if Even(i) then 12 else 3)),
+                                          OReg(GetReg(if Even(i) then  3 else 12)),
+                                          OReg(R1),
+                                          OReg(GetReg(4+ApplyPerm(0, perm))),
+                                          OReg(GetReg(4+ApplyPerm(1, perm))),
+                                          OReg(GetReg(4+ApplyPerm(2, perm))),
+                                          OReg(GetReg(4+ApplyPerm(3, perm))),
+                                          OReg(GetReg(4+ApplyPerm(4, perm))),
+                                          OReg(GetReg(4+ApplyPerm(5, perm))),
+                                          OReg(GetReg(4+ApplyPerm(6, perm))),
+                                          OReg(GetReg(4+ApplyPerm(7, perm))));
+
+    // Help Z3 see some properties about how our registers permute
+    lemma_Even_properties(i);
+    lemma_perm_implications(i);
+
+    forall sp_id:sp_int, c:GenericConstantState, aux0:GenericAuxiliaryState {:trigger sp_trigger_GenericUnrolledChunk(sp_id, c, aux0)}
+        | sp_trigger_GenericUnrolledChunk(sp_id, c, aux0)
+        ensures sp_spec_GenericUnrolledChunk(c, aux0, sp_s0, sp_sM, i, i+1, p);
+    {
+        reveal_sp_spec_Body_00_15();
+        assert sp_trigger_Body_00_15(1, aux0.current_trace, c.input);
+        reveal_sp_spec_GenericUnrolledChunk();
+        assert sp_trigger_GenericUnrolledChunk(sp_id, c, aux0);
+        if sp_s0.ok && GenericStateInvariant(c, sp_s0, aux0, i, p) {
+            assert sp_sM.ok;
+
+            if i < 64 {
+                lemma_obvious_WordAligned(old_lr);
+            }
+
+
+            var mem := sp_get_mem(sp_sM);
+            var t1 := sp_get_reg(R2, sp_sM); 
+            var t3 := sp_get_reg(GetReg(if Even(i) then  3 else 12), sp_sM);
+
+            var new_a := sp_get_reg(GetReg(4+ApplyPerm(0, perm)), sp_sM);
+            var new_b := sp_get_reg(GetReg(4+ApplyPerm(1, perm)), sp_sM);
+            var new_c := sp_get_reg(GetReg(4+ApplyPerm(2, perm)), sp_sM);
+            var new_d := sp_get_reg(GetReg(4+ApplyPerm(3, perm)), sp_sM);
+            var new_e := sp_get_reg(GetReg(4+ApplyPerm(4, perm)), sp_sM);
+            var new_f := sp_get_reg(GetReg(4+ApplyPerm(5, perm)), sp_sM);
+            var new_g := sp_get_reg(GetReg(4+ApplyPerm(6, perm)), sp_sM);
+            var new_h := sp_get_reg(GetReg(4+ApplyPerm(7, perm)), sp_sM);
+
+            var trace_out :| IsSHA256TraceReadyForStep(trace_out, i + 1) 
+                          && trace_out.M == aux0.current_trace.M 
+                          && trace_out.H == aux0.current_trace.H 
+                          && trace_out.W == aux0.current_trace.W 
+                          && t1 == (if (i + 1 <= 64) then mem[(old_sp + CheapMod16(i + 2) * 4)] else t1) 
+                          && (i + 1 < 64 ==> (forall j :: i + 1 - 16 <= j < i + 1 ==> last(trace_out.W)[j] == mem[(old_sp + CheapMod16(j) * 4)])) 
+                          && last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(new_h, t3), new_a, new_b, new_c, new_d, new_e, new_f, new_g);
+            var auxM := Body_00_15LoopAuxiliaryState(trace_out);
+
+            assert GenericStateInvariant(c, sp_sM, auxM, i+1, p);
+        }
+    }
+}
+
+function method sp_code_Body_00_15LoopUnrolled() : code
+{
+    Block(sp_code_GenericUnrolledChunk(0, GenericIterationCount(), Body_00_15LoopCodeParameters()))
+}
+
+// The signature for the following lemma was generated by giving procedure Body_00_15LoopUnrolled a body and running Spartan on it.
+
+lemma  sp_refined_Body_00_15LoopUnrolled(sp_b0:sp_codes, sp_s0:sp_state, sp_sN:sp_state)
+  returns (sp_bM:sp_codes, sp_sM:sp_state)
+  requires sp_require(sp_b0, sp_code_Body_00_15LoopUnrolled(), sp_s0, sp_sN)
+  ensures  sp_ensure(sp_b0, sp_bM, sp_s0, sp_sM, sp_sN)
+  ensures  forall sp_id:sp_int, trace_in:SHA256Trace, input:seq<word>{:trigger sp_trigger_Body_00_15LoopUnrolled(sp_id, trace_in, input)} :: sp_trigger_Body_00_15LoopUnrolled(sp_id, trace_in, input) ==> sp_spec_Body_00_15LoopUnrolled(trace_in, input, sp_get_ok(sp_s0), sp_get_ok(sp_sM), sp_get_osp(sp_s0), sp_get_globals(sp_s0), sp_get_mem(sp_s0), sp_get_mem(sp_sM), sp_get_olr(sp_s0), sp_get_olr(sp_sM), sp_get_reg(R0, sp_s0), sp_get_reg(R0, sp_sM), sp_get_reg(R1, sp_s0), sp_get_reg(R1, sp_sM), sp_get_reg(R2, sp_s0), sp_get_reg(R2, sp_sM), sp_get_reg(R3, sp_s0), sp_get_reg(R3, sp_sM), sp_get_reg(R4, sp_s0), sp_get_reg(R4, sp_sM), sp_get_reg(R5, sp_s0), sp_get_reg(R5, sp_sM), sp_get_reg(R6, sp_s0), sp_get_reg(R6, sp_sM), sp_get_reg(R7, sp_s0), sp_get_reg(R7, sp_sM), sp_get_reg(R8, sp_s0), sp_get_reg(R8, sp_sM), sp_get_reg(R9, sp_s0), sp_get_reg(R9, sp_sM), sp_get_reg(R10, sp_s0), sp_get_reg(R10, sp_sM), sp_get_reg(R11, sp_s0), sp_get_reg(R11, sp_sM), sp_get_reg(R12, sp_s0), sp_get_reg(R12, sp_sM))
+  ensures  sp_state_eq(sp_sM, sp_update_reg(R12, sp_sM, sp_update_reg(R11, sp_sM, sp_update_reg(R10, sp_sM, sp_update_reg(R9, sp_sM, sp_update_reg(R8, sp_sM, sp_update_reg(R7, sp_sM, sp_update_reg(R6, sp_sM, sp_update_reg(R5, sp_sM, sp_update_reg(R4, sp_sM, sp_update_reg(R3, sp_sM, sp_update_reg(R2, sp_sM, sp_update_reg(R1, sp_sM, sp_update_reg(R0, sp_sM, sp_update_olr(sp_sM, sp_update_mem(sp_sM, sp_update_ok(sp_sM, sp_s0)))))))))))))))))
+{
+    var n := GenericIterationCount();
+    var p := Body_00_15LoopCodeParameters();
+    sp_bM, sp_sM := sp_lemma_GenericUnrolled(sp_b0, sp_s0, sp_sN, p);
+
+    //reveal_x86_ValidState();
+    forall sp_id:sp_int, trace_in:SHA256Trace, input:seq<word>{:trigger sp_trigger_Body_00_15LoopUnrolled(sp_id, trace_in, input)} 
+        | sp_trigger_Body_00_15LoopUnrolled(sp_id, trace_in, input) 
+        ensures sp_spec_Body_00_15LoopUnrolled(trace_in, input, sp_get_ok(sp_s0), sp_get_ok(sp_sM), sp_get_osp(sp_s0), sp_get_globals(sp_s0), sp_get_mem(sp_s0), sp_get_mem(sp_sM), sp_get_olr(sp_s0), sp_get_olr(sp_sM), sp_get_reg(R0, sp_s0), sp_get_reg(R0, sp_sM), sp_get_reg(R1, sp_s0), sp_get_reg(R1, sp_sM), sp_get_reg(R2, sp_s0), sp_get_reg(R2, sp_sM), sp_get_reg(R3, sp_s0), sp_get_reg(R3, sp_sM), sp_get_reg(R4, sp_s0), sp_get_reg(R4, sp_sM), sp_get_reg(R5, sp_s0), sp_get_reg(R5, sp_sM), sp_get_reg(R6, sp_s0), sp_get_reg(R6, sp_sM), sp_get_reg(R7, sp_s0), sp_get_reg(R7, sp_sM), sp_get_reg(R8, sp_s0), sp_get_reg(R8, sp_sM), sp_get_reg(R9, sp_s0), sp_get_reg(R9, sp_sM), sp_get_reg(R10, sp_s0), sp_get_reg(R10, sp_sM), sp_get_reg(R11, sp_s0), sp_get_reg(R11, sp_sM), sp_get_reg(R12, sp_s0), sp_get_reg(R12, sp_sM))
+    {
+        var c := Body_00_15LoopConstantState(sp_get_mem(sp_s0), trace_in, input);
+        var aux0 := Body_00_15LoopAuxiliaryState(trace_in);
+
+        assert sp_trigger_GenericUnrolledChunk(sp_id, c, aux0);
+        assert sp_spec_GenericUnrolledChunk(c, aux0, sp_s0, sp_sM, 0, n, p);
+        reveal_sp_spec_GenericUnrolledChunk();
+        reveal_sp_spec_Body_00_15LoopUnrolled();
+
+        if sp_s0.ok && GenericStateInvariant(c, sp_s0, aux0, 0, p)
+        {
+            var auxM :| GenericStateInvariant(c, sp_sM, auxM, GenericIterationCount(), p);
+            var i := 16;
+            var perm := i % 8;
+            lemma_obvious_mod_with_constants(i);
+            assert perm == 0;
+
+            assert Body_00_15LoopStateInvariantBreakdown(
+                       sp_get_mem(sp_s0),
+                       sp_get_mem(sp_sM),
+                       trace_in,
+                       auxM.current_trace,
+                       64,
+                       sp_get_osp(sp_sM),
+                       sp_get_globals(sp_sM),
+                       sp_get_olr(sp_sM),
+                       sp_get_reg(R2, sp_sM),   // t1
+                       sp_get_reg(R12, sp_sM),  // t2
+                       sp_get_reg(R3, sp_sM),   // t3
+                       sp_get_reg(R1, sp_sM),   // t4
+                       input,
+                       sp_get_reg(R4, sp_sM),   // a
+                       sp_get_reg(R5, sp_sM),   // b
+                       sp_get_reg(R6, sp_sM),   // c
+                       sp_get_reg(R7, sp_sM),   // d
+                       sp_get_reg(R8, sp_sM),   // e
+                       sp_get_reg(R9, sp_sM),   // f
+                       sp_get_reg(R10, sp_sM),  // g
+                       sp_get_reg(R11, sp_sM)); // h
+        }
+    }
+}
+
+
+#endverbatim
+
+//// Spartan-level declaration of the compact loop, so that other Spartan procedures can call it
+procedure {:refined} Body_00_15LoopUnrolled(
+    ghost trace_in:SHA256Trace,
+    ghost input:seq(word)
+    )
+    requires Body_00_15LoopStateInvariantBreakdown(old(mem), mem, trace_in, trace_in, 0, sp, globals, lr, 
+                                                   r2, r12, r3, r1, input,
+                                                   r4, r5, r6, r7, r8, r9, r10, r11);
+    reads  sp; globals;
+    modifies mem; lr; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12;
+    ensures  exists trace_out :: 
+             Body_00_15LoopStateInvariantBreakdown(old(mem), mem, trace_in, trace_out, 16, sp, globals, lr,
+                                                   r2, r12, r3, r1, input,
+                                                   r4, r5, r6, r7, r8, r9, r10, r11);
+#verbatim
+} // end module Body_00_15LoopUnrollableCode
 #endverbatim
 
 #verbatim
