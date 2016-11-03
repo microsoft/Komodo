@@ -406,6 +406,47 @@ lemma lemma_scr_entry(pre: word, post: word)
         BitsAsWord(0);
     }
 }
+
+lemma lemma_scr_exit(pre: word, post: word)
+    requires post == BitwiseOr(BitwiseAnd(pre, 0xfffffff9), 1)
+    ensures decode_scr(post) == SCR(NotSecure, false, false)
+{
+    assert WordAsBits(1) == 1 && WordAsBits(2) == 2 && WordAsBits(4) == 4
+           && WordAsBits(0xfffffff9) == 0xfffffff9
+        by { reveal_WordAsBits(); }
+    lemma_WordBitEquiv(1,1);
+
+    calc {
+        post;
+        BitwiseOr(BitwiseAnd(pre, 0xfffffff9), 1);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitOr(BitAnd(WordAsBits(pre), 0xfffffff9), 1));
+    }
+
+    calc {
+        BitwiseAnd(post, 1);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffff9), 1), 1));
+        { reveal_BitAnd(); reveal_BitOr(); }
+        BitsAsWord(1);
+    }
+
+    calc {
+        BitwiseAnd(post, 2);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffff9), 1), 2));
+        { reveal_BitAnd(); reveal_BitOr(); }
+        BitsAsWord(0);
+    }
+
+    calc {
+        BitwiseAnd(post, 4);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffff9), 1), 4));
+        { reveal_BitAnd(); reveal_BitOr(); }
+        BitsAsWord(0);
+    }
+}
 #endverbatim
 
 procedure switch_addrspace(
@@ -484,6 +525,33 @@ procedure switch_addrspace(
     assert PageAligned(r10);
     MCR(OSReg(ttbr0), r10);
     assert this.conf.ttbr0.ptbase == page_paddr(l1p);
+}
+
+procedure leave_secure_world({:operand} tmp:int)
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidRegOperand(@tmp) && @tmp != @sp;
+    ensures
+        AllMemInvariant(old(this),this);
+        CoreRegPreservingExcept(old(this), this, set(@tmp));
+        BankedRegsInvariant(old(this),this);
+        SpsrsInvariant(old(this), this);
+        this.conf.scr.ns == NotSecure && !this.conf.scr.irq && !this.conf.scr.fiq;
+{
+    // read SCR
+    MRC(tmp, OSReg(scr));
+    ghost var old_scr := tmp;
+
+    // clear IRQ and FIQ bits
+    AND(tmp, tmp, 0xfffffff9);
+
+    // set NS bit
+    ORR(tmp, tmp, 1);
+
+    // write SCR
+    lemma_scr_exit(old_scr, tmp);
+    MCR(OSReg(scr), tmp);
 }
 
 procedure pre_entry_enter(
@@ -677,6 +745,11 @@ procedure smc_enter_success(
     assert stack_bytes_local == stack_bytes;
     lemma_SameMemAndGlobalsPreservesPageDb(s6, this, pagedb);
 
+    assert StackPreserving(old(this), this);
+    lemma_stackunstack_banked_regs(old(this), s0.m, this, s6.m, s6_sp);
+
+    leave_secure_world(r2);
+
     lemma_validEnterPre(old(this), s0, pagedb_in, s6, pagedb, dispPg,
                         old(arg1), old(arg2), old(arg3));
 
@@ -684,10 +757,6 @@ procedure smc_enter_success(
         by { reveal_validExceptionTransition(); }
     lemma_validEnterPost(old(this), pagedb_in, s6, pagedb, this,
                          dispPg, old(arg1), old(arg2), old(arg3));
-
-    assert StackPreserving(old(this), this);
-    lemma_stackunstack_banked_regs(old(this), s0.m, this, s6.m, s6_sp);
-    assume this.conf.scr == SCR(NotSecure, false, false); // TODO: implement!
 }
 
 procedure kom_smc_enter(
