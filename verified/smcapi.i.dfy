@@ -393,6 +393,11 @@ lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word)
     }
 }
 
+lemma lemma_evalExceptionTaken_NonUser(s:state, e:exception, r:state)
+    requires ValidState(s) && evalExceptionTaken(s, e, r)
+    ensures mode_of_state(r) != User
+{}
+
 lemma enterPreservesPageDbValidity(s:state, pageDbIn: PageDb, s':state,
     pageDbOut: PageDb, dispPage: word, arg1: word, arg2: word, arg3: word)
     requires ValidState(s) && validPageDb(pageDbIn) && ValidState(s')
@@ -406,7 +411,8 @@ lemma enterPreservesPageDbValidity(s:state, pageDbIn: PageDb, s':state,
         reveal_validEnter();
         var us, ex, es :| ValidState(us) && mode_of_state(us) == User
             && evalExceptionTaken(us, ex, es)
-            && pageDbOut == exceptionHandled(es, pageDbIn, dispPage).2;
+            && (lemma_evalExceptionTaken_NonUser(us, ex, es);
+            pageDbOut == exceptionHandled(es, pageDbIn, dispPage).2);
         exceptionHandledValidPageDb(us, ex, es, pageDbIn, dispPage);
     }
 }
@@ -423,7 +429,7 @@ lemma resumePreservesPageDbValidity(s:state, pageDbIn: PageDb, s':state,
         reveal_validResume();
         var us, ex, es :| ValidState(us) && mode_of_state(us) == User
             && evalExceptionTaken(us, ex, es)
-            && (assert mode_of_state(es) != User;
+            && (lemma_evalExceptionTaken_NonUser(us, ex, es);
             pageDbOut == exceptionHandled(es, pageDbIn, dispPage).2);
         exceptionHandledValidPageDb(us, ex, es, pageDbIn, dispPage);
     }
