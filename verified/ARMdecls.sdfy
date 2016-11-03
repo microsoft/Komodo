@@ -40,11 +40,11 @@ var{:register OSReg(spsr(Undefined))}  spsr_und:int;
 var{:register OSReg(spsr(Monitor))}    spsr_mon:int;
 
 
-procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
+procedure operator(:=) (out operand dst:int, operand src:int) := MOV
 
-function{:operand} sp_op_const(n:word):operand
+functionoperand sp_op_const(n:word):operand
 procedure {:instruction Ins(ADD(dst, src1, src2))}
-ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+ADD(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -62,7 +62,7 @@ ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(ADD(dst, src1, src2))}
-ADDWrap(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+ADDWrap(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -79,7 +79,7 @@ ADDWrap(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(SUB(dst, src1, src2))}
-SUB(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+SUB(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -96,7 +96,7 @@ SUB(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(MUL(dst, src1, src2))}
-MUL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+MUL(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -113,7 +113,7 @@ MUL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(UDIV(dst, src1, src2))}
-UDIV(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+UDIV(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -131,7 +131,7 @@ UDIV(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(AND(dst, src1, src2))}
-AND(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+AND(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -147,7 +147,7 @@ AND(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(ORR(dst, src1, src2))}
-ORR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+ORR(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -163,7 +163,7 @@ ORR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(EOR(dst, src1, src2))}
-EOR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+EOR(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -179,7 +179,7 @@ EOR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(LSL(dst, src1, src2))}
-LSL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+LSL(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -197,7 +197,7 @@ LSL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(LSR(dst, src1, src2))}
-LSR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+LSR(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -215,7 +215,7 @@ LSR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(REV(dst, src))}
-REV(out{:operand} dst:int, {:operand} src:int)
+REV(out operand dst:int, operand src:int)
     requires/ensures
         ValidState(this);
     requires
@@ -230,7 +230,7 @@ REV(out{:operand} dst:int, {:operand} src:int)
 }
 
 procedure {:instruction Ins(MVN(dst, src))}
-MVN(out{:operand} dst:int, {:operand} src:int)
+MVN(out operand dst:int, operand src:int)
     requires/ensures
         ValidState(this);
     requires
@@ -245,7 +245,7 @@ MVN(out{:operand} dst:int, {:operand} src:int)
 }
 
 procedure {:instruction Ins(MOV(dst, src))}
-MOV(out{:operand} dst:int, {:operand} src:int)
+MOV(out operand dst:int, operand src:int)
     requires/ensures
         ValidState(this);
     requires
@@ -260,7 +260,7 @@ MOV(out{:operand} dst:int, {:operand} src:int)
 }
 
 procedure {:instruction Ins(LDR(rd, base, ofs))}
-LDR(out{:operand} rd:int, {:operand} base:int, {:operand} ofs:int)
+LDR(out operand rd:int, operand base:int, operand ofs:int)
     requires/ensures
         ValidState(this);
     requires
@@ -277,7 +277,7 @@ LDR(out{:operand} rd:int, {:operand} base:int, {:operand} ofs:int)
 }
 
 procedure {:instruction Ins(STR(rd, base, ofs))}
-STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
+STR(operand rd:int, out operand base:int, operand ofs:int)
     requires/ensures
         ValidState(this);
     requires
@@ -294,7 +294,7 @@ STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
 }
 
 procedure {:instruction Ins(MRS(dst, src))}
-MRS({:operand} dst:int, {:operand} src:int)
+MRS(operand dst:int, operand src:int)
     requires/ensures
         ValidState(this);
     requires
@@ -321,7 +321,7 @@ predicate is_spsr(o:sp_operand)
 #endverbatim
 
 procedure {:instruction Ins(MSR(dst, src))}
-MSR({:operand} dst:int, {:operand} src:int)
+MSR(operand dst:int, operand src:int)
     requires/ensures
         ValidState(this);
     requires
@@ -339,7 +339,7 @@ MSR({:operand} dst:int, {:operand} src:int)
 }
 
 procedure {:instruction Ins(MRC(dst, src))}
-MRC({:operand} dst:int, {:operand} src:int)
+MRC(operand dst:int, operand src:int)
     requires/ensures
         ValidState(this);
         ValidRegOperand(@dst);
@@ -353,7 +353,7 @@ MRC({:operand} dst:int, {:operand} src:int)
 }
 
 procedure {:instruction Ins(MCR(dst, src))}
-MCR({:operand} dst:int, {:operand} src:int)
+MCR(operand dst:int, operand src:int)
     requires/ensures
         ValidState(this);
         ValidRegOperand(@src);
@@ -380,7 +380,7 @@ MOVS_PCLR_TO_USERMODE_AND_CONTINUE()
 }
 
 procedure {:instruction Ins(LDR_reloc(rd, g))}
-LDRglobaladdr(out{:operand} rd:int, {:operand} g:string)
+LDRglobaladdr(out operand rd:int, operand g:string)
     requires
         ValidState(this);
         ValidRegOperand(@rd);
@@ -394,8 +394,8 @@ LDRglobaladdr(out{:operand} rd:int, {:operand} g:string)
 }
 
 procedure {:instruction Ins(LDR_global(rd, g, base, ofs))}
-LDRglobal(out{:operand} rd:int, {:operand} g:string,
-          {:operand} base:int, {:operand} ofs:int)
+LDRglobal(out operand rd:int, operand g:string,
+          operand base:int, operand ofs:int)
     requires
         ValidState(this);
         ValidRegOperand(@rd);
@@ -412,8 +412,8 @@ LDRglobal(out{:operand} rd:int, {:operand} g:string,
 }
 
 procedure {:instruction Ins(STR_global(rd, g, base, ofs))}
-STRglobal({:operand} rd:int, {:operand} g:string,
-          {:operand} base:int, {:operand} ofs:int)
+STRglobal(operand rd:int, operand g:string,
+          operand base:int, operand ofs:int)
     requires
         ValidState(this);
         ValidRegOperand(@rd);
@@ -444,7 +444,7 @@ import opened ARMdecls_ARMspartan = ARMspartan
 
 var{:state ok()}  ok:bool;
 var{:state mem()} mem:memmap;
-var{:state globals()} globals:map(operand, seq(word));
+var{:state globals()} globals:map(sp_operand, seq(word));
 var{:state osp()} sp:word;
 var{:state olr()} lr:word;
 
@@ -464,7 +464,7 @@ var{:state reg(R12)} r12:word;
 
 
 procedure {:refined} {:instruction Ins(LDR(rd, base, ofs))}
-rLDR(out{:operand} rd:word, {:operand} base:word, {:operand} ofs:word)
+rLDR(out operand rd:word, operand base:word, operand ofs:word)
     requires
         ValidAddr(mem, base + ofs);
     reads mem;
@@ -477,13 +477,13 @@ rLDR(out{:operand} rd:word, {:operand} base:word, {:operand} ofs:word)
     reveal ValidConfig;
     reveal ValidSRegState;
 
-    if ghost (!(old(this).ok && this.ok)) {
+    ghost if (!(old(this).ok && this.ok)) {
         this := old(this).(ok := false);
     } 
 }
 
 procedure {:refined} {:instruction Ins(LDR_reloc(rd, OSymbol(g)))}
-rLDRglobaladdr(out{:operand} rd:word, {:inline} g:global)
+rLDRglobaladdr(out operand rd:word, inline g:global)
     requires ValidGlobal(OSymbol(g));
     ensures
         rd == AddressOfGlobal(OSymbol(g));
@@ -494,7 +494,7 @@ rLDRglobaladdr(out{:operand} rd:word, {:inline} g:global)
     reveal ValidConfig;
     reveal ValidSRegState;
 
-    if ghost (!(old(this).ok && this.ok)) {
+    ghost if (!(old(this).ok && this.ok)) {
         this := old(this).(ok := false);
     } 
 }
@@ -516,8 +516,8 @@ predicate ValidGlobalsAddr(globals:map<operand, seq<word>>, g:global, addr:int)
 #endverbatim
 
 procedure {:refined} {:instruction Ins(LDR_global(rd, OSymbol(g), base, ofs))}
-rLDRglobal(out{:operand} rd:word, {:inline} g:global,
-          {:operand} base:word, {:operand} ofs:word)
+rLDRglobal(out operand rd:word, inline g:global,
+          operand base:word, operand ofs:word)
     requires
         ValidGlobalsAddr(globals, g, base + ofs);
     reads
@@ -532,13 +532,13 @@ rLDRglobal(out{:operand} rd:word, {:inline} g:global,
     reveal ValidConfig;
     reveal ValidSRegState;
 
-    if ghost (!(old(this).ok && this.ok)) {
+    ghost if (!(old(this).ok && this.ok)) {
         this := old(this).(ok := false);
     } 
 }
 
 procedure {:refined} {:instruction Ins(STR(rd, base, ofs))}
-rSTR({:operand} rd:reg, {:operand} base:word, {:operand} ofs:word)
+rSTR(operand rd:reg, operand base:word, operand ofs:word)
     requires/ensures
         ValidAddr(mem, base + ofs);
     modifies
@@ -552,13 +552,13 @@ rSTR({:operand} rd:reg, {:operand} base:word, {:operand} ofs:word)
     reveal ValidConfig;
     reveal ValidSRegState;
 
-    if ghost (!(old(this).ok && this.ok)) {
+    ghost if (!(old(this).ok && this.ok)) {
         this := old(this).(ok := false);
     } 
 }
 
 procedure {:refined} {:instruction Ins(MOV(dst, src))}
-rMOV(out{:operand} dst:word, {:operand} src:word)
+rMOV(out operand dst:word, operand src:word)
     ensures
         dst == old(src);
 {
@@ -568,13 +568,13 @@ rMOV(out{:operand} dst:word, {:operand} src:word)
     reveal ValidConfig;
     reveal ValidSRegState;
 
-    if ghost (!(old(this).ok && this.ok)) {
+    ghost if (!(old(this).ok && this.ok)) {
         this := old(this).(ok := false);
     } 
 }
 
 procedure {:refined} {:instruction Ins(MOV(dst, OShift(GetProbableReg(src), shift)))}
-rMOVShift(out{:operand} dst:word, {:operand} src:snd, {:inline} shift:Shift)
+rMOVShift(out operand dst:word, operand src:snd, inline shift:Shift)
     ensures
         dst == old(EvalShift(old(src), shift));
 {
@@ -584,13 +584,13 @@ rMOVShift(out{:operand} dst:word, {:operand} src:snd, {:inline} shift:Shift)
     reveal ValidConfig;
     reveal ValidSRegState;
 
-    if ghost (!(old(this).ok && this.ok)) {
+    ghost if (!(old(this).ok && this.ok)) {
         this := old(this).(ok := false);
     } 
 }
 
 procedure {:refined} {:instruction Ins(EOR(dst, src1, src2))}
-rEOR(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:word)
+rEOR(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == BitwiseXor(old(src1), old(src2));
 {
@@ -600,13 +600,13 @@ rEOR(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:word)
     reveal ValidConfig;
     reveal ValidSRegState;
 
-    if ghost (!(old(this).ok && this.ok)) {
+    ghost if (!(old(this).ok && this.ok)) {
         this := old(this).(ok := false);
     } 
 }
 
 procedure {:refined} {:instruction Ins(EOR(dst, src1, OShift(GetProbableReg(src2), shift)))}
-rEORShift(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:snd, {:inline} shift:Shift)
+rEORShift(out operand dst:word, operand src1:word, operand src2:snd, inline shift:Shift)
     ensures
         dst == BitwiseXor(old(src1), EvalShift(old(src2), shift));
 {
@@ -616,13 +616,13 @@ rEORShift(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:snd, {:i
     reveal ValidConfig;
     reveal ValidSRegState;
 
-    if ghost (!(old(this).ok && this.ok)) {
+    ghost if (!(old(this).ok && this.ok)) {
         this := old(this).(ok := false);
     } 
 }
 
 procedure {:refined} {:instruction Ins(ADD(dst, src1, src2))}
-rADDWrap(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:word)
+rADDWrap(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == old(src1 + src2) % 0x1_0000_0000;
         //WordAligned(old(src1)) && WordAligned(old(src2)) ==> WordAligned(dst);
@@ -633,13 +633,13 @@ rADDWrap(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:word)
     reveal ValidConfig;
     reveal ValidSRegState;
 
-    if ghost (!(old(this).ok && this.ok)) {
+    ghost if (!(old(this).ok && this.ok)) {
         this := old(this).(ok := false);
     } 
 }
 
 procedure {:refined} {:instruction Ins(ADD(dst, src1, OShift(GetProbableReg(src2), shift)))}
-rADDWrapShift(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:snd, {:inline} shift:Shift)
+rADDWrapShift(out operand dst:word, operand src1:word, operand src2:snd, inline shift:Shift)
     ensures
         dst == old(src1 + EvalShift(old(src2), shift)) % 0x1_0000_0000;
         //WordAligned(old(src1)) && WordAligned(old(EvalShift(old(src2), shift))) ==> WordAligned(dst);
@@ -650,13 +650,13 @@ rADDWrapShift(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:snd,
     reveal ValidConfig;
     reveal ValidSRegState;
 
-    if ghost (!(old(this).ok && this.ok)) {
+    ghost if (!(old(this).ok && this.ok)) {
         this := old(this).(ok := false);
     } 
 }
 
 procedure {:refined} {:instruction Ins(AND(dst, src1, src2))}
-rAND(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:word)
+rAND(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == old(BitwiseAnd(src1, src2));
 {
@@ -666,14 +666,14 @@ rAND(out{:operand} dst:word, {:operand} src1:word, {:operand} src2:word)
     reveal ValidConfig;
     reveal ValidSRegState;
 
-    if ghost (!(old(this).ok && this.ok)) {
+    ghost if (!(old(this).ok && this.ok)) {
         this := old(this).(ok := false);
     } 
 }
 
 
 procedure {:refined} {:instruction Ins(REV(dst, src))}
-rREV(out{:operand} dst:word, {:operand} src:reg)
+rREV(out operand dst:word, operand src:reg)
     ensures
         dst == old(bswap32(src));
 {
@@ -683,7 +683,7 @@ rREV(out{:operand} dst:word, {:operand} src:reg)
     reveal ValidConfig;
     reveal ValidSRegState;
 
-    if ghost (!(old(this).ok && this.ok)) {
+    ghost if (!(old(this).ok && this.ok)) {
         this := old(this).(ok := false);
     } 
 }

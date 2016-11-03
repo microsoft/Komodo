@@ -68,27 +68,27 @@ function method CheapMod16(j:int) : int
 #endverbatim
 
 procedure {:refined} Body_00_15(
-    {:inline} i:SHA_step,
-    {:inline} perm:perm_index,
-    {:inline} input_slot:word,
-    {:inline} i_plus_2:word,
-    {:inline} i_plus_15:word,
+    inline i:SHA_step,
+    inline perm:perm_index,
+    inline input_slot:word,
+    inline i_plus_2:word,
+    inline i_plus_15:word,
     ghost trace_in:SHA256Trace,
     ghost input:seq(word),
-    inout{:operand} t0:word,
-    inout{:operand} t1:word,
-    inout{:operand} t2:word,
-    inout{:operand} t3:word,
-    inout{:operand} t4:word,
-    //inout{:operand} inp:word,
-    inout{:operand} a:word,
-         {:operand} b:word,
-         {:operand} c:word,
-    inout{:operand} d:word,
-         {:operand} e:word,
-         {:operand} f:word,
-         {:operand} g:word,
-    inout{:operand} h:word)
+    inout operand t0:word,
+    inout operand t1:word,
+    inout operand t2:word,
+    inout operand t3:word,
+    inout operand t4:word,
+    //inout operand inp:word,
+    inout operand a:word,
+         operand b:word,
+         operand c:word,
+    inout operand d:word,
+         operand e:word,
+         operand f:word,
+         operand g:word,
+    inout operand h:word)
 requires/ensures
     //WordAligned(sp);
     ValidAddr(mem, sp + input_slot);
@@ -337,26 +337,26 @@ import opened sha256_refined_Body_16_XX_sha256_refined_helpers_i = sha256_refine
 #endverbatim
 
 procedure {:refined} Body_16_XX( 
-    {:inline} i:SHA_step,
-    {:inline} perm:perm_index,
-    {:inline} input_slot:word,
-    {:inline} input_slot_9:word,
+    inline i:SHA_step,
+    inline perm:perm_index,
+    inline input_slot:word,
+    inline input_slot_9:word,
     ghost trace_in:SHA256Trace,
     ghost input:seq(word),
-    inout{:operand} t0:word,
-    inout{:operand} t1:word,
-    inout{:operand} t2:word,
-    inout{:operand} t3:word,
-    inout{:operand} t4:word,
-    //inout{:operand} inp:word,
-    inout{:operand} a:word,
-         {:operand} b:word,
-         {:operand} c:word,
-    inout{:operand} d:word,
-         {:operand} e:word,
-         {:operand} f:word,
-         {:operand} g:word,
-    inout{:operand} h:word)
+    inout operand t0:word,
+    inout operand t1:word,
+    inout operand t2:word,
+    inout operand t3:word,
+    inout operand t4:word,
+    //inout operand inp:word,
+    inout operand a:word,
+          operand b:word,
+          operand c:word,
+    inout operand d:word,
+          operand e:word,
+          operand f:word,
+          operand g:word,
+    inout operand h:word)
 
 requires/ensures
     // Stack is accessible

@@ -66,7 +66,7 @@ function method GetReg(r:int) : operand
 #endverbatim
 
 procedure Body_00_15_NoOp(
-    {:inline} i:SHA_step,
+    inline i:SHA_step,
     inout {:register OReg(R0)} t0:int,
     inout {:register OReg(R2)} t1:int,
     inout {:register GetReg(if i % 2 == 0 then 12 else 3)} t2:int,
@@ -104,7 +104,7 @@ requires/ensures
 }
 
 procedure Body_00_15(
-    {:inline} i:SHA_step,
+    inline i:SHA_step,
     inout {:register OReg(R0)} t0:int,
     inout {:register OReg(R2)} t1:int,
     inout {:register GetReg(if i % 2 == 0 then 12 else 3)} t2:int,
@@ -227,7 +227,7 @@ ensures
 }
 
 procedure Body_16_XX( 
-    {:inline} i:SHA_step,
+    inline i:SHA_step,
     inout {:register OReg(R0)} t0:int,
     inout {:register OReg(R2)} t1:int,
     inout {:register GetReg(if i % 2 == 0 then 12 else 3)} t2:int,
