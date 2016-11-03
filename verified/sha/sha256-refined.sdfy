@@ -123,9 +123,6 @@ requires
     SeqLength(globals[K_SHA256s()]) == 256;
     forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][j] == K_SHA256(j);
 
-    // TODO: Remove this when we have if/else
-    requires i >= 16;
-    
     SeqLength(input) == 16;
 
     i < 15 ==> ValidAddr(mem, t4) && mem[t4] == input[i+1];
@@ -152,9 +149,6 @@ requires
     // All previous Ws are in memory where we expect them
     i < 16 ==> (forall j :: 0 <= j < i ==> last(trace_in.W)[j] == mem[sp + j*4]);
     16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(trace_in.W)[j] == mem[sp + CheapMod16(j)*4]);
-
-    // TODO: Remove when we have if/else and can skip the add of t2 when i == 0
-    requires i == 0 ==> t2 == 0;
 
     // SHA tactics
     t3 == BitwiseXor(b, c);
@@ -195,19 +189,20 @@ ensures
      && (let old_a := (if i == 0 || i >= 16 then old(a) else old(BitwiseAdd32(a, t2))) in
          last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, b, c, d, e, f, g));
 {
-//    //if i < 16
-//    //  if i == 15
-////          assert 68 == 17*4;    // OBSERVE
-////          rSTR(t4, sp, 68 /*== 17*4*/);     // Save a copy of the incremented input pointer, so we can free up t4
-//    //  end if
-//
-//    rEORShift(t0, e, e, RORShift(Sigma1(1) - Sigma1(0)));
-//    // TODO: When i = 0, t2 = 0, so this is a no op.  We can skip it.  We can also remove the XOR that clears t2
-//    rADDWrap(a, a, t2);  // h += Maj(a,b,c) from the past?
-//    rEORShift(t0, t0, e, RORShift(Sigma1(2) - Sigma1(0)));   // Sigma1(e)
-//    rREV(t1, t1);
-//
-//    //end if--------
+    inline if (i < 16) {
+        inline if (i == 15) {
+            // Save a copy of the incremented input pointer, so we can free up t4
+            rSTR(t4, sp, 68 /*== 17*4*/);     
+        }
+
+        rEORShift(t0, e, e, RORShift(Sigma1(1) - Sigma1(0)));
+        // Optimize the first case.  This is an optimization that OpenSSL misses! 
+        inline if (i != 0) {
+            rADDWrap(a, a, t2);  // h += Maj(a,b,c) from the past?
+        }
+        rEORShift(t0, t0, e, RORShift(Sigma1(2) - Sigma1(0)));   // Sigma1(e)
+        rREV(t1, t1);
+    }
 
     rLDRglobal(t2, K_SHA256s().sym, lr, 0);
     rADDWrap(lr, lr, 4);    // TODO: OpenSSL does this in one instruction with a load-and-increment.  
@@ -244,15 +239,15 @@ ensures
 //        cmp  $t2,#0xf2      @ done?
 //    #endif
 
-    // if $i<15
-//         rLDR(t1, t4, 0);    // Prefetch
-//         rADDWrap(t4, t4, 4);   // Advance to the next input  // TODO: OpenSSL does this in one instruction with a load-and-increment
-//         rEOR(t2, a, b);            //  a^b, b^c in next round
-    // else
+    inline if (i < 15) {    
+         rLDR(t1, t4, 0);    // Prefetch
+         rADDWrap(t4, t4, 4);   // Advance to the next input  // TODO: OpenSSL does this in one instruction with a load-and-increment
+         rEOR(t2, a, b);            //  a^b, b^c in next round
+    } else {
        rLDR(t1, sp, i_plus_2);     // @ from future BODY_16_xx 
        rEOR(t2, a, b);             //  a^b, b^c in next round
        rLDR(t4, sp, i_plus_15);    // @ from future BODY_16_xx
-    // endif
+    }
     rEORShift(t0,t0,a, RORShift(Sigma0(2)-Sigma0(0))); // Sigma0(a)
     rAND(t3,t3,t2);      // (b^c)&=(a^b)
     rADDWrap(d,d,h);     // d+=h
@@ -931,8 +926,8 @@ ensures
     assert r2 == input[0];
     rADDWrap(r1, r1, 4);        // TODO: OpenSSL does this with a single LDR instruction
     rEOR(r3, r5, r6);       // t3 <- B xor C  "@magic"
-    rEOR(r12, r12, r12);    // TODO: Remove this unnecessary clear once we have if/else in Body_00_15
-    assert r12 == 0 by { lemma_XorSelfIsZero(); }
+    //rEOR(r12, r12, r12);    // Note: OpenSSL includes this unnecessarily, since for i=0, we clobber r12
+    //assert r12 == 0 by { lemma_XorSelfIsZero(); }
 
     // Call Body_00_15Unrolled
     
