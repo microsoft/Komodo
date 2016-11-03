@@ -66,7 +66,7 @@ $(dir)/smcapi.s.verified: $(dir)/kom_common.s.verified $(dir)/pagedb.s.verified 
 $(dir)/smcapi.i.verified: $(dir)/smcapi.s.verified $(dir)/entry.i.verified
 $(dir)/pagedb.i.verified: $(dir)/pagedb.s.verified $(dir)/kom_common.i.verified
 $(dir)/ptables.i.verified: $(dir)/pagedb.i.verified $(dir)/entry.s.verified $(dir)/ptebits.i.verified
-$(dir)/ptebits.i.verified: $(dir)/smcapi.s.verified $(dir)/pagedb.i.verified $(dir)/bitvectors.i.verified
+$(dir)/ptebits.i.verified: $(dir)/pagedb.i.verified $(dir)/bitvectors.i.verified
 $(dir)/entry.s.verified: $(dir)/ARMdef.verified $(dir)/pagedb.s.verified $(dir)/abstate.s.verified
 $(dir)/entry.i.verified: $(dir)/entry.s.verified $(dir)/ptables.i.verified
 $(dir)/main.i.verified: $(dir)/ARMprint.verified $(dir)/smc_handler.verified

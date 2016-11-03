@@ -20,43 +20,6 @@ predicate l1indexInUse(d: PageDb, a: PageNr, l1index: int)
     l1pt.l1pt[l1index].Just?
 }
 
-//=============================================================================
-// Mapping
-//=============================================================================
-datatype Mapping = Mapping(l1index: word, l2index: word, perm: Perm)
-datatype Perm = Perm(r: bool, w: bool, x: bool)
-
-predicate validMapping(m:Mapping,d:PageDb,a:PageNr)
-{
-    reveal_validPageDb();
-    validPageDb(d) && isAddrspace(d,a) && validAddrspace(d,a) 
-    && validPageNr(m.l1index) && 0 <= m.l1index < NR_L1PTES()
-    && validPageNr(m.l2index) && 0 <= m.l2index < NR_L2PTES()
-    && (var addrspace := d[a].entry;
-        addrspace.state == InitState &&
-        (var l1 := d[addrspace.l1ptnr].entry;
-        l1.l1pt[m.l1index].Just?))
-}
-
-function l1indexFromMapping(arg:word) : word
-    { RightShift(arg,20) }
-
-function l2indexFromMapping(arg:word) : word
-    { BitwiseAnd(RightShift(arg,12),0xff) }
-
-function permFromMapping(arg:word) : Perm
-{
-    Perm(BitwiseAnd(arg,KOM_MAPPING_R()) != 0,
-        BitwiseAnd(arg,KOM_MAPPING_W()) != 0,
-        BitwiseAnd(arg,KOM_MAPPING_X()) != 0)
-}
-
-function {:opaque} wordToMapping(arg:word) : Mapping
-{
-    Mapping(l1indexFromMapping(arg),l2indexFromMapping(arg),
-        permFromMapping(arg))
-}
-
 function updateL2Pte(d: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
     : PageDb 
     requires validPageDb(d)

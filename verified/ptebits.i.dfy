@@ -1,4 +1,3 @@
-include "smcapi.s.dfy"
 include "pagedb.i.dfy"
 include "bitvectors.i.dfy"
 
