@@ -184,10 +184,11 @@ lemma lemma_stackunstack_banked_regs(s1:state, m1:memstate, s2:state, m2:memstat
     requires banked_regs_stackframe(s1, m1, a) && banked_regs_stackframe(s2, m2, a)
     requires forall p:addr :: ValidMem(p) && (a <= p < a + banked_regs_framesize())
         ==> MemContents(m1, p) == MemContents(m2, p)
-    ensures BankedRegsInvariant(s1, s2)
+    ensures BankedRegsInvariant(s1, s2) && SpsrsInvariant(s1, s2)
 {
     reveal_wellformed_banked_regs_stackframe();
     reveal_ValidRegState();
+    reveal_ValidSRegState();
 
     // sigh. help Dafny see that we're enumerating all constructors of a datatype
     assert forall m:mode {:trigger SP(m)} :: m.User? || m.FIQ? || m.IRQ? || m.Supervisor?
@@ -195,6 +196,17 @@ lemma lemma_stackunstack_banked_regs(s1:state, m1:memstate, s2:state, m2:memstat
 
     forall m | m != Monitor
         ensures s1.regs[SP(m)] == s2.regs[SP(m)] && s1.regs[LR(m)] == s2.regs[LR(m)]
+    {
+        reveal_banked_regs_stackframe();
+    }
+
+    // double sigh. something's odd with triggering here, and we need a separate assert
+    assert forall m:mode {:trigger spsr(m)} ::
+        m.User? || m.FIQ? || m.IRQ? || m.Supervisor?
+        || m.Abort? || m.Undefined? || m.Monitor?;
+
+    forall m | m != User
+        ensures s1.sregs[spsr(m)] == s2.sregs[spsr(m)]
     {
         reveal_banked_regs_stackframe();
     }
@@ -594,6 +606,23 @@ lemma lemma_validEnterPost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp
 }
 
 function exPageDb(t: (int, int, PageDb)): PageDb { t.2 }
+
+predicate SpsrsInvariant(s:state, r:state)
+    requires ValidState(s) && ValidState(r)
+{
+    reveal_ValidSRegState();
+    forall m | m != User :: s.sregs[spsr(m)] == r.sregs[spsr(m)]
+}
+
+predicate EnterResumeSmcProcedureInvariant(s:state, r:state)
+    requires SaneState(s) && SaneState(r)
+{
+    mode_of_state(r) == mode_of_state(s) // implied by SaneState
+        && StackPreserving(s,r)
+        && BankedRegsInvariant(s, r)
+        && SpsrsInvariant(s, r)
+        && r.conf.scr.ns == NotSecure
+}
 #endverbatim
 
 procedure smc_enter_success(
@@ -616,7 +645,7 @@ procedure smc_enter_success(
         AUCIdef();
         smc_enter_err(pagedb_in, pagenr, false) == KOM_ERR_SUCCESS();
     ensures
-        SmcProcedureInvariant(old(this), this);
+        EnterResumeSmcProcedureInvariant(old(this), this);
         validEnter(SysState(old(this), pagedb_in), SysState(this, pagedb),
                    old(pagenr),old(arg1),old(arg2),old(arg3));
         validPageDb(pagedb);
@@ -658,7 +687,7 @@ procedure smc_enter_success(
 
     assert StackPreserving(old(this), this);
     lemma_stackunstack_banked_regs(old(this), s0.m, this, s6.m, s6_sp);
-    assume SRegsInvariant(old(this), this);
+    assume this.conf.scr == SCR(NotSecure, false, false); // TODO: implement!
 }
 
 procedure kom_smc_enter(
@@ -679,8 +708,9 @@ procedure kom_smc_enter(
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         AUCIdef();
+        this.conf.scr.ns == NotSecure; // FIXME: cleanup
     ensures
-        SmcProcedureInvariant(old(this), this);
+        EnterResumeSmcProcedureInvariant(old(this), this);
         smc_enter(old(this), pagedb_in, this, pagedb, old(disppg),
                   old(arg1), old(arg2), old(arg3));
         validPageDb(pagedb);

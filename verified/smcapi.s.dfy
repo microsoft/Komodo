@@ -395,7 +395,7 @@ predicate smchandlerInvariant(s:state, s':state)
     ValidState(s') && nonvolatileRegInvariant(s, s')
         // all banked regs, including SPSR and LR (our return target) are preserved
         // TODO: we may need to weaken this to reason about IRQ/FIQ injection.
-        && forall m :: ((m == User || s.conf.spsr[m] == s'.conf.spsr[m]) // (no User SPSR)
+        && forall m :: ((m == User || s.sregs[spsr(m)] == s'.sregs[spsr(m)]) // (no User SPSR)
                 && s.regs[LR(m)] == s'.regs[LR(m)]
                 && s.regs[SP(m)] == s'.regs[SP(m)])
         // return in non-secure world, in same (i.e., monitor) mode
