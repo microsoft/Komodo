@@ -1263,7 +1263,7 @@ requires
     IsSHA256TraceReadyForStep(trace_in, 0);
     SeqLength(trace_in.H) > 0;
     
-//    // K table adjusted properly
+    // K table adjusted properly
     ValidGlobalsAddr(globals, K_SHA256s().sym, lr);
     globals?[K_SHA256s()];
     AddressOfGlobal(K_SHA256s()) + 256 < 0x1_0000_0000;
@@ -1319,12 +1319,24 @@ ensures
     // Memory framing: We only touch the stack
     forall addr:word :: old(mem)?[addr] && addr < sp && addr >= sp + 18*4 ==> mem?[addr] && mem[addr] == old(mem)[addr];
 
+    // K table adjusted properly
+    //ValidGlobalsAddr(globals, K_SHA256s().sym, lr);
+//    globals?[K_SHA256s()];
+//    AddressOfGlobal(K_SHA256s()) + 256 < 0x1_0000_0000;
+//    lr == AddressOfGlobal(K_SHA256s());
+//    SeqLength(globals[K_SHA256s()]) == 256;
+//    forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][j] == K_SHA256(j);
+    lr == AddressOfGlobal(K_SHA256s()) + 256;
+
+    mem[sp+17*4] == old(r1) + 64;
 
     exists trace_out:SHA256Trace ::
-        IsSHA256TraceReadyForStep(trace_out, 64)
+        SeqLength(trace_out.H) > 0
+     && IsSHA256TraceReadyForStep(trace_out, 64)
      && trace_out.M == trace_in.M
      && trace_out.H == trace_in.H
-     && trace_out.W == trace_in.W;
+     && trace_out.W == trace_in.W
+     && last(last(trace_out.atoh)) == atoh_c(r4, r5, r6, r7, r8, r9, r10, r11);
 {
     // Set up the initial conditions for BODY_00_15
     assert ValidAddr(mem, r1 + 0*4);    // OBSERVE that r1 aka t1 is a ValidAddr
@@ -1343,8 +1355,15 @@ ensures
              Body_00_15LoopStateInvariantBreakdown(old(mem), mem, input_ptr, trace_in, trace_mid, 16, sp, globals, lr,
                                                    r2, r12, r3, r1, input,
                                                    r4, r5, r6, r7, r8, r9, r10, r11);
+
+    ghost var mid_mem := mem;
     Body_16_XXLoopUnrolled(trace_mid, input);
-    assume false;
+    
+    exists trace_out :: 
+             Body_16_XXLoopStateInvariantBreakdown(mid_mem, mem, trace_in, trace_out, 64, sp, globals, lr,
+                                                   r2, r12, r3, r1, input,
+                                                   r4, r5, r6, r7, r8, r9, r10, r11);
+    rADDWrap(r4, r4, r12);
 }
 
 
