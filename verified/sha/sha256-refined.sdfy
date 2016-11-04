@@ -506,7 +506,7 @@ lemma lemma_GenericFramingInvariantTransitivity(sp_s1:sp_state, sp_s2:sp_state, 
 {
 }
 
-lemma sp_lemma_GenericIterationPreservesInvariants(
+lemma {:timeLimitMultiplier 2} sp_lemma_GenericIterationPreservesInvariants(
     sp_b0:sp_codes,
     sp_s0:sp_state,
     sp_sN:sp_state,
@@ -803,7 +803,7 @@ requires
     t4 == mem[sp + CheapMod16(i+14)*4];
 ensures 
     t2 == BitwiseXor(a, b);
-    t3 == Maj(a, b, c);
+    //t3 == Maj(a, b, c);
     //a == old(BitwiseAdd32(a, t2));
     lr == old(lr) + 4;
     t4 == mem[sp+CheapMod16(i + 15)*4];
@@ -869,7 +869,7 @@ ensures
 
     ghost var mid_a := a;
     ghost var mid_t2 := t2;
-    ghost var dummy_input_ptr;  // Body_00_15 only cares about the value for i < 16
+    ghost var dummy_input_ptr:word;  // Body_00_15 only cares about the value for i < 16
     Body_00_15(i, perm, input_slot, CheapMod16(i + 2)*4, CheapMod16(i + 15)*4, dummy_input_ptr, trace_in, input,
                t0, t1, t2, t3, t4, 
                a, b, c, d, e, f, g, h);
