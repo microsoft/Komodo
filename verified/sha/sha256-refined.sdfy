@@ -1366,6 +1366,83 @@ ensures
     rADDWrap(r4, r4, r12);
 }
 
+procedure {:refined} update_Hs(
+    ghost base_ptr:word,
+    inout operand t0:word,
+    inout operand t1:word,
+    inout operand t2:word,
+    inout operand t3:word,
+    inout operand a:word,
+    inout operand b:word,
+    inout operand c:word,
+    inout operand d:word,
+    inout operand e:word,
+    inout operand f:word,
+    inout operand g:word,
+    inout operand h:word
+    )
+requires/ensures
+    // Stack is accessible
+    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 18 ==> ValidAddr(mem, sp + j*4);
+
+requires {:refined false}
+    @t0 == OReg(R0);
+    @t1 == OReg(R2);
+    @t2 == OReg(R12);
+    @t3 == OReg(R3);
+    @a  == OReg(R4);
+    @b  == OReg(R5);
+    @c  == OReg(R6);
+    @d  == OReg(R7);
+    @e  == OReg(R8);
+    @f  == OReg(R9);
+    @g  == OReg(R10);
+    @h  == OReg(R11);
+requires
+    base_ptr == mem[sp + 16*4];
+
+    // Stack slot 16 holds a pointer to a valid region of memory with 8 words of data in it
+    forall j {ValidAddr(mem, base_ptr+j*4)} { mem?[mem[base_ptr]+j*4] } :: 
+             0 <= j < 8 ==> ValidAddr(mem, base_ptr + j*4);
+reads
+    sp;
+modifies 
+    mem; 
+ensures
+    // Memory framing: We only touch 8 bytes pointed to by the base_ptr
+    forall addr:word :: old(mem)?[addr] && addr < base_ptr && addr >= sp + 8*4 
+                    ==> mem?[addr] && mem[addr] == old(mem)[addr];
+    mem[base_ptr +  0*4] == a == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(a));
+    mem[base_ptr +  1*4] == b == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(b));
+    mem[base_ptr +  2*4] == c == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(c));
+    mem[base_ptr +  3*4] == d == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(d));
+    mem[base_ptr +  4*4] == e == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(e));
+    mem[base_ptr +  5*4] == f == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(f));
+    mem[base_ptr +  6*4] == g == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(g));
+    mem[base_ptr +  7*4] == h == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(h));
+{
+    // Load the ctx pointer that holds the Hs
+    assert 256 == 16*4; // OBSERVE
+    rLDR(t3, sp, 256);
+
+    rLDR(t0, t3, 0);
+    rLDR(t1, t3, 4);
+    rLDR(t2, t3, 8);
+    rADDWrap(a, a, t0);
+    rLDR(t0, t3, 12);
+    rADDWrap(b, b, t1);
+    rLDR(t1, t3, 16);
+    rADDWrap(c, c, t2);
+    rLDR(t2,t3,20);
+    rADDWrap(d,d,t0);
+    rLDR(t0,t3,24);
+    rADDWrap(e,e,t1);
+    rLDR(t1,t3,28);
+    rADDWrap(f,f,t2);
+    rADDWrap(g,g,t0);
+    rADDWrap(h,h,t1);
+}
+
 
 /*
 procedure {:refined} sha256_block_data_order(
