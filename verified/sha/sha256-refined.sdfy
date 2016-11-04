@@ -341,7 +341,7 @@ import opened sha256_refined_Body_00_15
 export provides sp_refined_Body_00_15LoopUnrolled, sp_code_Body_00_15LoopUnrolled, sha256_refined_Body_00_15 //, sha256_i, x86def_s, x86spartan 
        reveals sp_trigger_Body_00_15LoopUnrolled, sp_spec_Body_00_15LoopUnrolled, Body_00_15LoopStateInvariantBreakdown
 
-datatype Body_00_15LoopConstantState = Body_00_15LoopConstantState(orig_mem:memmap, orig_trace:SHA256Trace, orig_t4:word, input_ptr:word, input:seq<word>) 
+datatype Body_00_15LoopConstantState = Body_00_15LoopConstantState(orig_mem:memmap, orig_trace:SHA256Trace, input_ptr:word, input:seq<word>) 
 datatype Body_00_15LoopCodeParameters = Body_00_15LoopCodeParameters()
 datatype Body_00_15LoopAuxiliaryState = Body_00_15LoopAuxiliaryState(current_trace:SHA256Trace)
 
@@ -376,7 +376,6 @@ predicate Body_00_15LoopStateInvariantBreakdown(
     mem:memmap,
     input_ptr:word,
     orig_trace:SHA256Trace,
-    orig_t4:word,       // TODO: Eliminate this
     current_trace:SHA256Trace,
     i:int,
     sp:word,
@@ -454,10 +453,6 @@ predicate Body_00_15LoopStateInvariantBreakdown(
      // Updated input ptr
  && (if i < 16 then t4 == input_ptr + (i+1)*4         // Correctly advanced input ptr
      else mem[sp+17*4] == input_ptr + 4*16)             // We preserved the advanced input ptr on the stack
-
-    // t4 doesn't alias the stack
- && (orig_t4 + 4*16 < sp || orig_t4 >= sp + 18*4)
-
 }
 
 predicate GenericStateInvariant(c:GenericConstantState, s:sp_state, aux:GenericAuxiliaryState, i:int, p:GenericCodeParameters)
@@ -467,7 +462,7 @@ predicate GenericStateInvariant(c:GenericConstantState, s:sp_state, aux:GenericA
     && var perm := i % 8;
        Body_00_15LoopStateInvariantBreakdown(
             c.orig_mem, sp_get_mem(s), c.input_ptr, 
-            c.orig_trace, c.orig_t4, aux.current_trace, 
+            c.orig_trace, aux.current_trace, 
             i, sp_get_osp(s), sp_get_globals(s), sp_get_olr(s), 
            /*t1*/sp_get_reg(R2, s), 
            /*t2*/sp_get_reg(if Even(i) then R12 else R3, s), 
@@ -650,7 +645,7 @@ lemma sp_refined_Body_00_15LoopUnrolled(sp_b0:sp_codes, sp_s0:sp_state, sp_sN:sp
         | sp_trigger_Body_00_15LoopUnrolled(sp_id, input_ptr, trace_in, input) 
         ensures sp_spec_Body_00_15LoopUnrolled(input_ptr, trace_in, input, sp_get_ok(sp_s0), sp_get_ok(sp_sM), sp_get_osp(sp_s0), sp_get_globals(sp_s0), sp_get_mem(sp_s0), sp_get_mem(sp_sM), sp_get_olr(sp_s0), sp_get_olr(sp_sM), sp_get_reg(R0, sp_s0), sp_get_reg(R0, sp_sM), sp_get_reg(R1, sp_s0), sp_get_reg(R1, sp_sM), sp_get_reg(R2, sp_s0), sp_get_reg(R2, sp_sM), sp_get_reg(R3, sp_s0), sp_get_reg(R3, sp_sM), sp_get_reg(R4, sp_s0), sp_get_reg(R4, sp_sM), sp_get_reg(R5, sp_s0), sp_get_reg(R5, sp_sM), sp_get_reg(R6, sp_s0), sp_get_reg(R6, sp_sM), sp_get_reg(R7, sp_s0), sp_get_reg(R7, sp_sM), sp_get_reg(R8, sp_s0), sp_get_reg(R8, sp_sM), sp_get_reg(R9, sp_s0), sp_get_reg(R9, sp_sM), sp_get_reg(R10, sp_s0), sp_get_reg(R10, sp_sM), sp_get_reg(R11, sp_s0), sp_get_reg(R11, sp_sM), sp_get_reg(R12, sp_s0), sp_get_reg(R12, sp_sM))
     {
-        var c := Body_00_15LoopConstantState(sp_get_mem(sp_s0), trace_in, sp_get_reg(R1, sp_s0), input_ptr, input);
+        var c := Body_00_15LoopConstantState(sp_get_mem(sp_s0), trace_in, input_ptr, input);
         var aux0 := Body_00_15LoopAuxiliaryState(trace_in);
 
         assert sp_trigger_GenericUnrolledChunk(sp_id, c, aux0);
@@ -671,7 +666,6 @@ lemma sp_refined_Body_00_15LoopUnrolled(sp_b0:sp_codes, sp_s0:sp_state, sp_sN:sp
                        sp_get_mem(sp_sM),
                        input_ptr,
                        trace_in,
-                       sp_get_reg(R1, sp_s0),   // t4
                        auxM.current_trace,
                        16,
                        sp_get_osp(sp_sM),
@@ -702,13 +696,13 @@ procedure {:refined} Body_00_15LoopUnrolled(
     ghost trace_in:SHA256Trace,
     ghost input:seq(word)
     )
-    requires Body_00_15LoopStateInvariantBreakdown(old(mem), mem, input_ptr, trace_in, r1, trace_in, 0, sp, globals, lr, 
+    requires Body_00_15LoopStateInvariantBreakdown(old(mem), mem, input_ptr, trace_in, trace_in, 0, sp, globals, lr, 
                                                    r2, r12, r3, r1, input,
                                                    r4, r5, r6, r7, r8, r9, r10, r11);
     reads  sp; globals;
     modifies mem; lr; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12;
     ensures  exists trace_out :: 
-             Body_00_15LoopStateInvariantBreakdown(old(mem), mem, input_ptr, trace_in, old(r1), trace_out, 16, sp, globals, lr,
+             Body_00_15LoopStateInvariantBreakdown(old(mem), mem, input_ptr, trace_in, trace_out, 16, sp, globals, lr,
                                                    r2, r12, r3, r1, input,
                                                    r4, r5, r6, r7, r8, r9, r10, r11);
 
@@ -1245,15 +1239,14 @@ procedure {:refined} Body_16_XXLoopUnrolled(
 } // end module Body_16_XXLoopUnrollableCode
 
 module sha256_block_data_order {
-import opened sha256_refined_Body_16_XX_ARMdecls = ARMdecls
-import opened sha256_refined_Body_16_XX_sha256_refined_Body_00_15 = sha256_refined_Body_00_15
-import opened sha256_refined_Body_16_XX_ARMspartan = ARMspartan
-import opened sha256_refined_Body_16_XX_sha256_i = sha256_i
-import opened sha256_refined_Body_16_XX_sha256_refined_helpers_i = sha256_refined_helpers_i
-
+import opened sha256_block_data_order_ARMdecls = ARMdecls
+import opened sha256_block_data_order_ARMspartan = ARMspartan
+import opened sha256_block_data_order_sha256_i = sha256_i
+import opened sha256_block_data_order_sha256_refined_helpers_i = sha256_refined_helpers_i
+import opened Body_00_15LoopUnrollableCode = Body_00_15LoopUnrollableCode
+import opened Body_16_XXLoopUnrollableCode = Body_16_XXLoopUnrollableCode
 #endverbatim
 
-/*
 procedure {:refined} sha256_one_block(
     ghost trace_in:SHA256Trace,
     ghost input:seq(word)
@@ -1262,13 +1255,15 @@ requires/ensures
     // Stack is accessible
     forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 18 ==> ValidAddr(mem, sp + j*4);
 requires
+    // SHA semantics
     IsSHA256TraceReadyForStep(trace_in, 0);
     SeqLength(trace_in.H) > 0;
     
 //    // K table adjusted properly
     ValidGlobalsAddr(globals, K_SHA256s().sym, lr);
+    globals?[K_SHA256s()];
     AddressOfGlobal(K_SHA256s()) + 256 < 0x1_0000_0000;
-    lr == AddressOfGlobal(K_SHA256s()) + 4*i;
+    lr == AddressOfGlobal(K_SHA256s());
     SeqLength(globals[K_SHA256s()]) == 256;
     forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][j] == K_SHA256(j);
 
@@ -1302,20 +1297,25 @@ requires
      // Ghost input matches in-memory input
      && SeqLength(input) == 16
      && (input_ptr + 16*4) < 0x1_0000_0000
+     && (input_ptr + 16*4 < sp || sp + 18*4 <= input_ptr)    // input_ptr doesn't alias the stack
      && (forall j {ValidAddr(mem, input_ptr+j*4)} { mem?[input_ptr+j*4] } :: 
             0 <= j < 16 ==> ValidAddr(mem, input_ptr + j*4)
                                    && mem[input_ptr + j*4] == input[j]
          )
+     // The first 16 values in W are the byte-swapped version of the input words
      && (forall j :: 0 <= j < 16 ==> last(trace_in.W)[j] == bswap32(input[j]))
+   ; // end let
      
-     // t4 doesn't alias the stack
-     && t4 + 16 * 4 < sp || t4 >= sp + 18*4;
 
 reads
     sp; globals;
 modifies
     mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
 ensures
+    // Memory framing: We only touch the stack
+    forall addr:word :: old(mem)?[addr] && addr < sp && addr >= sp + 18*4 ==> mem?[addr] && mem[addr] == old(mem)[addr];
+
+
     exists trace_out:SHA256Trace ::
         IsSHA256TraceReadyForStep(trace_out, 64)
      && trace_out.M == trace_in.M
@@ -1323,6 +1323,7 @@ ensures
      && trace_out.W == trace_in.W;
 {
     // Set up the initial conditions for BODY_00_15
+    assert ValidAddr(mem, r1 + 0*4);    // OBSERVE that r1 aka t1 is a ValidAddr
     rLDR(r2, r1, 0);        // t1 <- input[0]
     assert r2 == input[0];
     rADDWrap(r1, r1, 4);        // TODO: OpenSSL does this with a single LDR instruction
@@ -1330,12 +1331,20 @@ ensures
     //rEOR(r12, r12, r12);    // Note: OpenSSL includes this unnecessarily, since for i=0, we clobber r12
     //assert r12 == 0 by { lemma_XorSelfIsZero(); }
 
-    // Call Body_00_15Unrolled
-    
-    // Call Body_16_XXUnrolled
+    assert r1 /*aka t4*/ == old(r1) + 1 * 4;    // OBSERVE that t4 is a ValidAddr
+    ghost var input_ptr := old(r1);      // Avoid Spartan mis-capture
+    Body_00_15LoopUnrolled(input_ptr, trace_in, input);
+
+    exists trace_mid :: 
+             Body_00_15LoopStateInvariantBreakdown(old(mem), mem, input_ptr, trace_in, trace_mid, 16, sp, globals, lr,
+                                                   r2, r12, r3, r1, input,
+                                                   r4, r5, r6, r7, r8, r9, r10, r11);
+    assume false;
+    //Body_16_XXLoopUnrolled(trace_mid, input);
 }
 
 
+/*
 procedure {:refined} sha256_block_data_order(
     ghost trace_in:SHA256Trace,
     ghost input:seq(word)
