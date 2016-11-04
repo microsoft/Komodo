@@ -435,7 +435,7 @@ predicate Body_00_15LoopStateInvariantBreakdown(
             atoh_c(BitwiseAdd32(a, t2), b, c, d, e, f, g, h))
 
     // t1 holds the current value of W
- && t1 == (if (i < 16) then input[i] else if i + 1 <= 64 then mem[sp + CheapMod16(i+2)*4] else last(current_trace.W)[i])
+ && t1 == (if (i < 16) then input[i] else if i + 1 <= 64 then mem[sp + CheapMod16(i+1)*4] else last(current_trace.W)[i])
 
     // The first 16 values in W are the byte-swapped version of the input words
  && (forall j :: 0 <= j < 16 ==> last(current_trace.W)[j] == bswap32(input[j]))
@@ -448,7 +448,7 @@ predicate Body_00_15LoopStateInvariantBreakdown(
  && (i >= 15 ==> ValidAddr(mem, sp+CheapMod16(i+15)*4))
 
      // Updated input ptr
- && (if i < 15 then t4 == input_ptr + (i+1)*4         // Correctly advanced input ptr
+ && (if i < 16 then t4 == input_ptr + (i+1)*4         // Correctly advanced input ptr
      else mem[sp+17*4] == input_ptr + 4*16)             // We preserved the advanced input ptr on the stack
 
     // t4 doesn't alias the stack
@@ -597,13 +597,30 @@ lemma sp_lemma_GenericIterationPreservesInvariants(
                           && t1 == (if i + 1 < 16 then c.input[i + 1] else if i + 1 <= 64 then mem[old_sp + CheapMod16(i + 2) * 4] else t1)
                           && (16 <= i + 1 < 64 ==> (forall j :: i + 1 - 16 <= j < i + 1 ==> last(trace_out.W)[j] == mem[(old_sp + CheapMod16(j) * 4)])) 
                           && last(last(trace_out.atoh)) == 
-                             var mid_a := (if i == 0 || i >= 16 then old_a else BitwiseAdd32(old_a, old_t2));
-                             atoh_c(BitwiseAdd32(new_h, t3), mid_a, new_b, new_c, new_d, new_e, new_f, new_g);
+                             atoh_c(BitwiseAdd32(new_h, t3), new_a, new_b, new_c, new_d, new_e, new_f, new_g);
+                             //var mid_a := (if i == 0 || i >= 16 then old_a else BitwiseAdd32(old_a, old_t2));
+                             //atoh_c(BitwiseAdd32(new_h, t3), mid_a, new_b, new_c, new_d, new_e, new_f, new_g);
             var auxM := Body_00_15LoopAuxiliaryState(trace_out);
 
             assert GenericStateInvariant(c, sp_sM, auxM, i+1, p);
         }
     }
+    // OBSERVE
+    assert sp_state_eq(sp_sM, sp_update_olr(sp_sM, sp_update_mem(sp_sM, sp_update_ok(sp_sM, 
+                sp_update_reg(R0, sp_sM, 
+                sp_update_reg(R1, sp_sM, 
+                sp_update_reg(R2, sp_sM, 
+                sp_update_reg(R3, sp_sM, 
+                sp_update_reg(R4, sp_sM, 
+                sp_update_reg(R5, sp_sM, 
+                sp_update_reg(R6, sp_sM, 
+                sp_update_reg(R7, sp_sM, 
+                sp_update_reg(R8, sp_sM, 
+                sp_update_reg(R9, sp_sM, 
+                sp_update_reg(R10, sp_sM, 
+                sp_update_reg(R11, sp_sM, 
+                sp_update_reg(R12, sp_sM, sp_s0)))))))))))))))));
+
 }
 
 function method sp_code_Body_00_15LoopUnrolled() : code
