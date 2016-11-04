@@ -168,8 +168,10 @@ ensures
 
     // Updated input ptr
     if i < 15 then t4 == input_ptr + (i+2)*4              // Advanced input ptr
-    else if i == 15 then mem[sp+17*4] == input_ptr+16*4   // We stored the advanced input ptr on the stack
-    else mem[sp+17*4] == old(mem[sp+17*4]);               // We preserved the input ptr on the stack
+    else 
+        t4 == mem[sp + i_plus_15]
+     && (if i == 15 then mem[sp+17*4] == input_ptr+16*4   // We stored the advanced input ptr on the stack
+         else mem[sp+17*4] == old(mem[sp+17*4]));               // We preserved the input ptr on the stack
 
     // Memory framing: We only touch the stack
     forall addr:word :: old(mem)?[addr] && addr < sp && addr >= sp + 18*4 ==> mem?[addr] && mem[addr] == old(mem)[addr];
@@ -453,6 +455,8 @@ predicate Body_00_15LoopStateInvariantBreakdown(
      // Updated input ptr
  && (if i < 16 then t4 == input_ptr + (i+1)*4         // Correctly advanced input ptr
      else mem[sp+17*4] == input_ptr + 4*16)             // We preserved the advanced input ptr on the stack
+
+ && (i >= 16 ==> t4 == mem[sp + CheapMod16(i+14)*4])
 }
 
 predicate GenericStateInvariant(c:GenericConstantState, s:sp_state, aux:GenericAuxiliaryState, i:int, p:GenericCodeParameters)
@@ -1054,7 +1058,7 @@ lemma lemma_GenericFramingInvariantTransitivity(sp_s1:sp_state, sp_s2:sp_state, 
 {
 }
 
-lemma sp_lemma_GenericIterationPreservesInvariants(
+lemma {:timeLimitMultiplier 2} sp_lemma_GenericIterationPreservesInvariants(
     sp_b0:sp_codes,
     sp_s0:sp_state,
     sp_sN:sp_state,
@@ -1226,7 +1230,7 @@ procedure {:refined} Body_16_XXLoopUnrolled(
     ghost trace_in:SHA256Trace,
     ghost input:seq(word)
     )
-    requires Body_16_XXLoopStateInvariantBreakdown(old(mem), mem, trace_in, trace_in, 16, sp, globals, lr, 
+    requires Body_16_XXLoopStateInvariantBreakdown(mem, mem, trace_in, trace_in, 16, sp, globals, lr, 
                                                    r2, r12, r3, r1, input,
                                                    r4, r5, r6, r7, r8, r9, r10, r11);
     reads  sp; globals;
@@ -1339,8 +1343,8 @@ ensures
              Body_00_15LoopStateInvariantBreakdown(old(mem), mem, input_ptr, trace_in, trace_mid, 16, sp, globals, lr,
                                                    r2, r12, r3, r1, input,
                                                    r4, r5, r6, r7, r8, r9, r10, r11);
+    Body_16_XXLoopUnrolled(trace_mid, input);
     assume false;
-    //Body_16_XXLoopUnrolled(trace_mid, input);
 }
 
 
