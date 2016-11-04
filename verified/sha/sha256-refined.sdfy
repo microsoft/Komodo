@@ -669,7 +669,7 @@ lemma sp_refined_Body_00_15LoopUnrolled(sp_b0:sp_codes, sp_s0:sp_state, sp_sN:sp
                        trace_in,
                        sp_get_reg(R1, sp_s0),   // t4
                        auxM.current_trace,
-                       64,
+                       16,
                        sp_get_osp(sp_sM),
                        sp_get_globals(sp_sM),
                        sp_get_olr(sp_sM),
