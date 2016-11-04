@@ -318,3 +318,47 @@ lemma lemma_validEnter(s0:state, s1:state, r:state, sd:PageDb,
 
     reveal_validEnter();
 }
+
+lemma lemma_validResume(s0:state, s1:state, r:state, sd:PageDb, dp:word)
+    returns (exs:state, rd:PageDb)
+    requires SaneState(s0) && SaneState(s1)
+    requires validPageDb(sd) && pageDbCorresponds(s0.m, sd) && pageDbCorresponds(s1.m, sd)
+    requires smc_enter_err(sd, dp, true) == KOM_ERR_SUCCESS()
+    requires preEntryResume(s0, s1, sd, dp)
+    requires evalMOVSPCLRUC(s1, r)
+    requires AUCIdef()
+    ensures ValidState(exs) && mode_of_state(exs) != User
+    ensures (reveal_ValidRegState();
+        (r.regs[R0], r.regs[R1], rd) == exceptionHandled(exs, sd, dp))
+    ensures validPageDb(rd) && SaneMem(r.m) && pageDbCorresponds(r.m, rd)
+    ensures validResume(SysState(s0, sd), SysState(r, rd), dp)
+{
+    assert nonStoppedDispatcher(sd, dp);
+    var l1p := l1pOfDispatcher(sd, dp);
+
+    reveal_evalMOVSPCLRUC();
+    var s2, s3, ex, s4 :| ValidState(s2) && ValidState(s3) && ValidState(s4)
+        && evalEnterUserspace(s1, s2)
+        && evalUserspaceExecution(s2, s3)
+        && evalExceptionTaken(s3, ex, s4)
+        && ApplicationUsermodeContinuationInvariant(s4, r);
+
+    assert entryTransition(s1, s2);
+    assert userspaceExecutionAndException(s2, s3, ex, s4);
+
+    enterUserspacePreservesStuff(sd, s1,  s2);
+    userspaceExecutionPreservesPrivState(s2, s3);
+    userspaceExecutionPreservesPageDb(sd, s2, s3, l1p);
+    exceptionTakenPreservesStuff(sd, s3, ex, s4);
+    assert KomExceptionHandlerInvariant(s4, sd, r, dp) by { reveal_AUCIdef(); }
+
+    exs := s4;
+    rd := exceptionHandled(exs, sd, dp).2;
+    exceptionHandledValidPageDb(s3, ex, s4, sd, dp);
+
+    assert validExceptionTransition(SysState(s4, sd), SysState(r, rd), dp);
+    assert (reveal_ValidRegState();
+        (r.regs[R0], r.regs[R1], rd) == exceptionHandled(exs, sd, dp));
+
+    reveal_validResume();
+}
