@@ -111,11 +111,15 @@ map_insecure_dep-sdfy = ARMdecls kom_utils allocate_page map_utils map_secure
 map_insecure_dep-dfy  = ARMspartan kom_common.i pagedb.i smcapi.i ptebits.i
 $(dir)/map_insecure.verified: $(call mkdeps,map_insecure)
 
-enter_dep-sdfy = ARMdecls kom_utils
+enter_common_dep-sdfy = ARMdecls kom_utils
+enter_common_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
+$(dir)/enter_common.verified: $(call mkdeps,enter_common)
+
+enter_dep-sdfy = ARMdecls kom_utils enter_common
 enter_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
 $(dir)/enter.verified: $(call mkdeps,enter)
 
-resume_dep-sdfy = ARMdecls kom_utils enter
+resume_dep-sdfy = ARMdecls kom_utils enter_common
 resume_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i 
 $(dir)/resume.verified: $(call mkdeps,resume)
 
@@ -138,7 +142,8 @@ remove_dep-dfy  = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/remove.verified: $(call mkdeps,remove)
 
 smc_handler_dep-sdfy = ARMdecls kom_utils init_addrspace init_dispatcher \
-    init_l2ptable map_secure map_insecure enter resume finalise stop remove
+    init_l2ptable map_secure map_insecure enter_common enter resume finalise \
+    stop remove
 smc_handler_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/smc_handler.verified: $(call mkdeps,smc_handler)
 

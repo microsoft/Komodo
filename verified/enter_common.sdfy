@@ -1,0 +1,575 @@
+#verbatim
+function method banked_regs_framesize(): int { 18*4 }
+
+predicate {:opaque} wellformed_banked_regs_stackframe(m:memstate, a:addr)
+    requires ValidMemState(m)
+{
+    ValidMemRange(a, a + banked_regs_framesize())
+    && forall i:int | 12 <= i <= 17 ::
+        ValidModeEncoding(psr_mask_mode(MemContents(m, a + i * 4)))
+}
+
+lemma lemma_wellformed_banked_regs_stackframe_preserved(m1:memstate, m2:memstate, a:addr)
+    requires ValidMemState(m1) && ValidMemState(m2)
+    requires wellformed_banked_regs_stackframe(m1, a)
+    requires forall p:addr :: ValidMem(p) && (a <= p < a + banked_regs_framesize())
+        ==> MemContents(m1, p) == MemContents(m2, p)
+    ensures wellformed_banked_regs_stackframe(m2, a)
+{
+    reveal_wellformed_banked_regs_stackframe();
+    forall i:int | 12 <= i <= 17
+        ensures ValidModeEncoding(psr_mask_mode(MemContents(m2, a + i * 4)));
+    {
+        assert MemContents(m1, a + i * 4) == MemContents(m2, a + i * 4);
+    }
+}
+
+predicate {:opaque} banked_regs_stackframe(s:state, m:memstate, a:addr)
+    requires ValidState(s) && ValidMemState(m)
+    ensures banked_regs_stackframe(s,m,a) ==> wellformed_banked_regs_stackframe(m, a)
+{
+    reveal_ValidRegState();
+    reveal_ValidSRegState();
+    reveal_wellformed_banked_regs_stackframe();
+
+    wellformed_banked_regs_stackframe(m, a)
+    && MemContents(m, a+(0*4))  == s.regs[SP(User)]
+    && MemContents(m, a+(1*4))  == s.regs[SP(FIQ)]
+    && MemContents(m, a+(2*4))  == s.regs[SP(IRQ)]
+    && MemContents(m, a+(3*4))  == s.regs[SP(Supervisor)]
+    && MemContents(m, a+(4*4))  == s.regs[SP(Abort)]
+    && MemContents(m, a+(5*4))  == s.regs[SP(Undefined)]
+
+    && MemContents(m, a+(6*4))  == s.regs[LR(User)]
+    && MemContents(m, a+(7*4))  == s.regs[LR(FIQ)]
+    && MemContents(m, a+(8*4))  == s.regs[LR(IRQ)]
+    && MemContents(m, a+(9*4))  == s.regs[LR(Supervisor)]
+    && MemContents(m, a+(10*4)) == s.regs[LR(Abort)]
+    && MemContents(m, a+(11*4)) == s.regs[LR(Undefined)]
+
+    && MemContents(m, a+(12*4)) == s.sregs[spsr(FIQ)]
+    && MemContents(m, a+(13*4)) == s.sregs[spsr(IRQ)]
+    && MemContents(m, a+(14*4)) == s.sregs[spsr(Supervisor)]
+    && MemContents(m, a+(15*4)) == s.sregs[spsr(Abort)]
+    && MemContents(m, a+(16*4)) == s.sregs[spsr(Undefined)]
+    && MemContents(m, a+(17*4)) == s.sregs[spsr(Monitor)]
+}
+
+lemma lemma_stackunstack_banked_regs(s1:state, m1:memstate, s2:state, m2:memstate, a:addr)
+    requires SaneState(s1) && ValidMemState(m1) && SaneState(s2) && ValidMemState(m2)
+    requires banked_regs_stackframe(s1, m1, a) && banked_regs_stackframe(s2, m2, a)
+    requires forall p:addr :: ValidMem(p) && (a <= p < a + banked_regs_framesize())
+        ==> MemContents(m1, p) == MemContents(m2, p)
+    ensures BankedRegsInvariant(s1, s2) && SpsrsInvariant(s1, s2)
+{
+    reveal_wellformed_banked_regs_stackframe();
+    reveal_ValidRegState();
+    reveal_ValidSRegState();
+
+    // sigh. help Dafny see that we're enumerating all constructors of a datatype
+    assert forall m:mode {:trigger SP(m)} :: m.User? || m.FIQ? || m.IRQ? || m.Supervisor?
+        || m.Abort? || m.Undefined? || m.Monitor?;
+
+    forall m | m != Monitor
+        ensures s1.regs[SP(m)] == s2.regs[SP(m)] && s1.regs[LR(m)] == s2.regs[LR(m)]
+    {
+        reveal_banked_regs_stackframe();
+    }
+
+    // double sigh. something's odd with triggering here, and we need a separate assert
+    assert forall m:mode {:trigger spsr(m)} ::
+        m.User? || m.FIQ? || m.IRQ? || m.Supervisor?
+        || m.Abort? || m.Undefined? || m.Monitor?;
+
+    forall m | m != User
+        ensures s1.sregs[spsr(m)] == s2.sregs[spsr(m)]
+    {
+        reveal_banked_regs_stackframe();
+    }
+}
+#endverbatim
+
+procedure stack_banked_regs({:operand} tmp:int, ghost stack_bytes_in:int)
+          returns (ghost stack_bytes:int)
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidRegOperand(@tmp);
+        @tmp != @sp;
+        stack_bytes_in >= banked_regs_framesize();
+        StackBytesRemaining(this, stack_bytes_in);
+    ensures
+        sp == old(sp)-banked_regs_framesize();
+        stack_bytes == stack_bytes_in-banked_regs_framesize();
+        StackBytesRemaining(this,stack_bytes);
+        banked_regs_stackframe(old(this), this.m, sp);
+        RegPreservingExcept(old(this),this,set(@tmp,@sp));
+        GlobalsInvariant(old(this),this);
+        NonStackMemPreserving(old(this),this);
+        ParentStackPreserving(old(this),this);
+{
+    reveal_wellformed_banked_regs_stackframe();
+
+    SUB(sp, sp, sp_op_const(banked_regs_framesize()));
+    stack_bytes := stack_bytes_in - banked_regs_framesize();
+
+    MRS(tmp, spsr_fiq);
+    assert ValidModeEncoding(psr_mask_mode(tmp)) by { reveal_ValidSRegState(); }
+    STR(tmp, sp, sp_op_const(12*4));
+    MRS(tmp, spsr_irq);
+    assert ValidModeEncoding(psr_mask_mode(tmp)) by { reveal_ValidSRegState(); }
+    STR(tmp, sp, sp_op_const(13*4));
+    MRS(tmp, spsr_svc);
+    assert ValidModeEncoding(psr_mask_mode(tmp)) by { reveal_ValidSRegState(); }
+    STR(tmp, sp, sp_op_const(14*4));
+    MRS(tmp, spsr_abt);
+    assert ValidModeEncoding(psr_mask_mode(tmp)) by { reveal_ValidSRegState(); }
+    STR(tmp, sp, sp_op_const(15*4));
+    MRS(tmp, spsr_und);
+    assert ValidModeEncoding(psr_mask_mode(tmp)) by { reveal_ValidSRegState(); }
+    STR(tmp, sp, sp_op_const(16*4));
+    MRS(tmp, spsr_mon);
+    assert ValidModeEncoding(psr_mask_mode(tmp)) by { reveal_ValidSRegState(); }
+    STR(tmp, sp, sp_op_const(17*4));
+
+    assert wellformed_banked_regs_stackframe(this.m, sp);
+
+    MRS(tmp, sp_usr);
+    STR(tmp, sp, sp_op_const(0*4));
+    MRS(tmp, sp_fiq);
+    STR(tmp, sp, sp_op_const(1*4));
+    MRS(tmp, sp_irq);
+    STR(tmp, sp, sp_op_const(2*4));
+    MRS(tmp, sp_svc);
+    STR(tmp, sp, sp_op_const(3*4));
+    MRS(tmp, sp_abt);
+    STR(tmp, sp, sp_op_const(4*4));
+    MRS(tmp, sp_und);
+    STR(tmp, sp, sp_op_const(5*4));
+
+    MRS(tmp, lr_usr);
+    STR(tmp, sp, sp_op_const(6*4));
+    MRS(tmp, lr_fiq);
+    STR(tmp, sp, sp_op_const(7*4));
+    MRS(tmp, lr_irq);
+    STR(tmp, sp, sp_op_const(8*4));
+    MRS(tmp, lr_svc);
+    STR(tmp, sp, sp_op_const(9*4));
+    MRS(tmp, lr_abt);
+    STR(tmp, sp, sp_op_const(10*4));
+    MRS(tmp, lr_und);
+    STR(tmp, sp, sp_op_const(11*4));
+
+    reveal_banked_regs_stackframe();
+}
+
+procedure unstack_banked_regs({:operand} tmp:int, ghost stack_bytes_in:int)
+          returns (ghost stack_bytes:int)
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidRegOperand(@tmp);
+        @tmp != @sp;
+        isUInt32(sp + banked_regs_framesize());
+        sp + banked_regs_framesize() <= StackBase();
+        StackBytesRemaining(this, stack_bytes_in);
+        wellformed_banked_regs_stackframe(this.m, sp);
+    ensures
+        sp == old(sp)+banked_regs_framesize();
+        stack_bytes == stack_bytes_in + banked_regs_framesize();
+        StackBytesRemaining(this, stack_bytes);
+        banked_regs_stackframe(this, old(this.m), old(sp));
+        CoreRegPreservingExcept(old(this), this, set(@tmp,@sp));
+        AllMemInvariant(old(this),this);
+
+{
+    reveal_banked_regs_stackframe();
+    reveal_wellformed_banked_regs_stackframe();
+
+    LDR(tmp, sp, sp_op_const(0*4));
+    MSR(sp_usr, tmp);
+    LDR(tmp, sp, sp_op_const(1*4));
+    MSR(sp_fiq, tmp);
+    LDR(tmp, sp, sp_op_const(2*4));
+    MSR(sp_irq, tmp);
+    LDR(tmp, sp, sp_op_const(3*4));
+    MSR(sp_svc, tmp);
+    LDR(tmp, sp, sp_op_const(4*4));
+    MSR(sp_abt, tmp);
+    LDR(tmp, sp, sp_op_const(5*4));
+    MSR(sp_und, tmp);
+
+    LDR(tmp, sp, sp_op_const(6*4));
+    MSR(lr_usr, tmp);
+    LDR(tmp, sp, sp_op_const(7*4));
+    MSR(lr_fiq, tmp);
+    LDR(tmp, sp, sp_op_const(8*4));
+    MSR(lr_irq, tmp);
+    LDR(tmp, sp, sp_op_const(9*4));
+    MSR(lr_svc, tmp);
+    LDR(tmp, sp, sp_op_const(10*4));
+    MSR(lr_abt, tmp);
+    LDR(tmp, sp, sp_op_const(11*4));
+    MSR(lr_und, tmp);
+
+    LDR(tmp, sp, sp_op_const(12*4));
+    MSR(spsr_fiq, tmp);
+    LDR(tmp, sp, sp_op_const(13*4));
+    MSR(spsr_irq, tmp);
+    LDR(tmp, sp, sp_op_const(14*4));
+    MSR(spsr_svc, tmp);
+    LDR(tmp, sp, sp_op_const(15*4));
+    MSR(spsr_abt, tmp);
+    LDR(tmp, sp, sp_op_const(16*4));
+    MSR(spsr_und, tmp);
+    LDR(tmp, sp, sp_op_const(17*4));
+    MSR(spsr_mon, tmp);
+
+    ADD(sp, sp, sp_op_const(banked_regs_framesize()));
+    stack_bytes := stack_bytes_in + banked_regs_framesize();
+}
+// smc_enter_premium and smc_resume premium are almost the same
+procedure smc_enter_err(
+    {:register OReg(R1)} pagenr:int,
+    {:register OReg(R5)} is_resume:int,
+    out {:register OReg(R0)} err:int,
+    ghost isresumeg:bool,
+    ghost pagedb:PageDb)
+    requires/ensures
+        SaneState(this);
+    requires
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+        is_resume != 0 <==> isresumeg;
+    ensures
+        AllMemInvariant(old(this),this);
+        RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
+        SmcProcedureInvariant(old(this), this);
+        err == smc_enter_err(pagedb, old(pagenr), isresumeg);
+{
+    if (pagenr >= sp_op_const(KOM_SECURE_NPAGES())) {
+        assert !validPageNr(pagenr);
+        err := sp_op_const(KOM_ERR_INVALID_PAGENO());
+    } else {
+        assert validPageNr(pagenr);
+        LDRglobaladdr(r12, PageDb());
+        lemma_LeftShift3(pagenr);
+        LSL(r10, pagenr, sp_op_const(PAGEDB_ENTRY_SHIFT()));
+        assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_TYPE();
+        WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_TYPE(), r10);
+        LDRglobal(r9, PageDb(), r12, r10);
+        assert r9 == GlobalWord(this.m, PageDb(), r10);
+        assert pageDbEntryCorresponds(pagedb[pagenr], extractPageDbEntry(this.m, pagenr))
+            by { reveal_validPageDb(); }
+        assert r9 == pageDbEntryTypeVal(pagedb[pagenr]) by {
+            reveal_pageDbEntryCorresponds();
+            extractPageDbToAbstractOne(this.m, pagenr, PAGEDB_ENTRY_TYPE());
+            assert GlobalWord(this.m, PageDb(), r10) == 
+                pageDbEntryTypeVal(pagedb[pagenr]);
+        }
+        assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
+        if( r9 != sp_op_const(KOM_PAGE_DISPATCHER()) ) {
+            assert !(pagedb[pagenr] is PageDbEntryTyped && pagedb[pagenr].entry is Dispatcher);
+            err := sp_op_const(KOM_ERR_INVALID_PAGENO());
+        } else {
+            assert pagedb[pagenr] is PageDbEntryTyped && pagedb[pagenr].entry is Dispatcher;
+
+            ADD(r10, r10, sp_op_const(PAGEDB_ENTRY_ADDRSPACE()));
+            assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE();
+            WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE(), r10);
+           
+            LDRglobal(r8, PageDb(), r12, r10);
+            ghost var addrspace := pagedb[pagenr].addrspace;
+            assert validPageNr(addrspace) by { reveal_validPageDb(); }
+            assert r8 == page_monvaddr(addrspace) && WordAligned(r8) by {
+                reveal_pageDbEntryCorresponds();
+                reveal_validPageDb();
+                assert pageDbCorrespondsOnly(this.m, pagedb, pagenr);
+                ghost var entryWords := extractPageDbEntry(this.m, pagenr);
+                assert entryWords[BytesToWords(PAGEDB_ENTRY_ADDRSPACE())] == 
+                    page_monvaddr(pagedb[pagenr].addrspace);
+                               
+                extractPageDbToAbstractOne(this.m, pagenr, PAGEDB_ENTRY_ADDRSPACE());
+
+                assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE();
+                assert entryWords[BytesToWords(PAGEDB_ENTRY_ADDRSPACE())] ==
+                    GlobalWord(this.m, PageDb(), r10);
+                assert GlobalWord(this.m, PageDb(), r10) == 
+                    page_monvaddr(pagedb[pagenr].addrspace);
+            }
+            WordAlignedAdd_(r8,ADDRSPACE_STATE(),r8+ADDRSPACE_STATE());
+           
+            assert ValidMem(r8 + ADDRSPACE_STATE()) by { reveal_validPageDb(); }
+            LDR(r8, r8, sp_op_const(ADDRSPACE_STATE()));
+            assert r8 == KOM_ADDRSPACE_FINAL()
+                <==> pagedb[addrspace].entry.state == FinalState
+            by {
+                reveal_validPageDb();
+                reveal_pageContentsCorresponds();
+                reveal_pageDbAddrspaceCorresponds();
+            }
+
+            // this particular RegPreserving assert saved 30s.
+            assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
+            if( r8 != sp_op_const(KOM_ADDRSPACE_FINAL()) ) {
+                err := sp_op_const(KOM_ERR_NOT_FINAL());
+            } else {
+                assert this.m == old(this.m);
+                assert SaneState(this);
+                page_monvaddr_impl(r9,pagenr,r10);
+                assert r9 == page_monvaddr(pagenr);
+                assert MemContents(this.m, page_monvaddr(pagenr) + 
+                    DISPATCHER_ENTERED()) == to_i(pagedb[pagenr].entry.entered)
+                by {
+                    reveal_pageContentsCorresponds();
+                    reveal_pageDbDispatcherCorresponds();
+                }
+                LDR(r9,r9,sp_op_const(DISPATCHER_ENTERED()));
+                
+                assert r9 == 1 <==> pagedb[pagenr].entry.entered;
+                assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
+              
+                // TODO make this part less ugly when you are less tired.
+                if( is_resume != 0) {
+                    // smc_resume
+                    assert isresumeg;
+                    if( r9 != 1 ) {
+                        err := sp_op_const(KOM_ERR_NOT_ENTERED());
+                    } else {
+                        err := sp_op_const(KOM_ERR_SUCCESS());
+                    }
+                } else {
+                    // smc_enter
+                    assert !isresumeg;
+                    if( r9 == 1 ) {
+                        err := sp_op_const(KOM_ERR_ALREADY_ENTERED());
+                    } else {
+                        err := sp_op_const(KOM_ERR_SUCCESS());
+                    }
+                }
+            }
+        }
+    }
+}
+
+#verbatim
+lemma lemma_scr_entry(pre: word, post: word)
+    requires post == BitwiseOr(BitwiseAnd(pre, 0xfffffffe), 6)
+    ensures decode_scr(post) == SCR(Secure, true, true)
+{
+    assert WordAsBits(1) == 1 && WordAsBits(2) == 2 && WordAsBits(4) == 4
+           && WordAsBits(6) == 6 && WordAsBits(0xfffffffe) == 0xfffffffe
+        by { reveal_WordAsBits(); }
+    lemma_WordBitEquiv(1,1);
+
+    calc {
+        post;
+        BitwiseOr(BitwiseAnd(pre, 0xfffffffe), 6);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitOr(BitAnd(WordAsBits(pre), 0xfffffffe), 6));
+    }
+
+    calc {
+        BitwiseAnd(post, 1);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffffe), 6), 1));
+        { reveal_BitAnd(); reveal_BitOr(); }
+        BitsAsWord(0);
+    }
+
+    var x := BitAnd(WordAsBits(pre), 0xfffffffe);
+
+    calc {
+        BitwiseAnd(post, 2);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffffe), 6), 2));
+        BitsAsWord(BitAnd(BitOr(x, 6), 2));
+        { lemma_BitOrAndRelation(x, 6, 2); }
+        BitsAsWord(BitOr(BitAnd(x, 2), BitAnd(6, 2)));
+        { reveal_BitAnd(); }
+        BitsAsWord(BitOr(BitAnd(x, 2), 2));
+        != { reveal_BitOr(); }
+        BitsAsWord(0);
+    }
+
+    calc {
+        BitwiseAnd(post, 4);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffffe), 6), 4));
+        BitsAsWord(BitAnd(BitOr(x, 6), 4));
+        { lemma_BitOrAndRelation(x, 6, 4); }
+        BitsAsWord(BitOr(BitAnd(x, 4), BitAnd(6, 4)));
+        { reveal_BitAnd(); }
+        BitsAsWord(BitOr(BitAnd(x, 4), 4));
+        != { reveal_BitOr(); }
+        BitsAsWord(0);
+    }
+}
+
+lemma lemma_scr_exit(pre: word, post: word)
+    requires post == BitwiseOr(BitwiseAnd(pre, 0xfffffff9), 1)
+    ensures decode_scr(post) == SCR(NotSecure, false, false)
+{
+    assert WordAsBits(1) == 1 && WordAsBits(2) == 2 && WordAsBits(4) == 4
+           && WordAsBits(0xfffffff9) == 0xfffffff9
+        by { reveal_WordAsBits(); }
+    lemma_WordBitEquiv(1,1);
+
+    calc {
+        post;
+        BitwiseOr(BitwiseAnd(pre, 0xfffffff9), 1);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitOr(BitAnd(WordAsBits(pre), 0xfffffff9), 1));
+    }
+
+    calc {
+        BitwiseAnd(post, 1);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffff9), 1), 1));
+        { reveal_BitAnd(); reveal_BitOr(); }
+        BitsAsWord(1);
+    }
+
+    calc {
+        BitwiseAnd(post, 2);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffff9), 1), 2));
+        { reveal_BitAnd(); reveal_BitOr(); }
+        BitsAsWord(0);
+    }
+
+    calc {
+        BitwiseAnd(post, 4);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffff9), 1), 4));
+        { reveal_BitAnd(); reveal_BitOr(); }
+        BitsAsWord(0);
+    }
+}
+#endverbatim
+
+procedure switch_addrspace(
+    {:register OReg(R1)} pagenr:int,
+    ghost isresume:bool,
+    ghost pagedb:PageDb)
+    requires/ensures
+        SaneState(this);
+    requires
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+        validPageNr(pagenr);
+        validDispatcherPage(pagedb, pagenr);
+        !hasStoppedAddrspace(pagedb, pagenr);
+    ensures
+        AllMemInvariant(old(this),this);
+        CoreRegPreservingExcept(old(this), this, set(@r10,@r11,@r12));
+        BankedRegsInvariant(old(this),this);
+        this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, pagenr));
+        this.conf.scr.ns == Secure && this.conf.scr.irq && this.conf.scr.fiq;
+{
+    //-------------------------------------------------------------------------
+    // update SCR
+    //-------------------------------------------------------------------------
+
+    // read SCR
+    MRC(r10, OSReg(scr));
+    ghost var old_scr := r10;
+
+    // clear NS bit
+    AND(r10, r10, 0xfffffffe);
+
+    // set IRQ and FIQ bits
+    ORR(r10, r10, 6);
+
+    // write SCR
+    lemma_scr_entry(old_scr, r10);
+    MCR(OSReg(scr), r10);
+    assert this.conf.scr.ns == Secure;
+
+    //-------------------------------------------------------------------------
+    // load l1p into ttbr0
+    //-------------------------------------------------------------------------
+    ghost var addrspace := pagedb[pagenr].addrspace;
+    assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
+    ghost var l1p := l1pOfDispatcher(pagedb, pagenr);
+
+    r11 := sp_op_const(PAGEDB_ENTRY_SIZE());
+    MUL(r10,pagenr,r11);
+    assert r10 == G_PAGEDB_ENTRY(pagenr);
+    ADD(r10, r10, sp_op_const(PAGEDB_ENTRY_ADDRSPACE())); 
+    assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE();
+    WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE(), r10);
+
+    LDRglobaladdr(r12, PageDb());
+    LDRglobal(r11, PageDb(), r12, r10);
+    assert r11 == page_monvaddr(addrspace) by {
+        reveal_pageDbEntryCorresponds();
+        assert validAddrspacePage(pagedb, addrspace);
+    }
+
+    LDR(r10,r11,sp_op_const(ADDRSPACE_L1PT_PHYS()));
+
+    assert r10 == page_paddr(pagedb[addrspace].entry.l1ptnr) by {
+        assert pageDbAddrspaceCorresponds(addrspace, pagedb[addrspace].entry,
+            extractPage(this.m, addrspace))
+        by {
+            assert validAddrspacePage(pagedb, addrspace);
+            assert pageDbCorrespondsOnly(this.m, pagedb, addrspace);
+            reveal_pageContentsCorresponds();
+        }
+        reveal_pageDbAddrspaceCorresponds();
+    }
+
+    assert r10 == page_paddr(l1p);
+    assert PageAligned(r10);
+    MCR(OSReg(ttbr0), r10);
+    assert this.conf.ttbr0.ptbase == page_paddr(l1p);
+}
+
+procedure leave_secure_world({:operand} tmp:int)
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidRegOperand(@tmp) && @tmp != @sp;
+    ensures
+        AllMemInvariant(old(this),this);
+        CoreRegPreservingExcept(old(this), this, set(@tmp));
+        BankedRegsInvariant(old(this),this);
+        SpsrsInvariant(old(this), this);
+        this.conf.scr.ns == NotSecure && !this.conf.scr.irq && !this.conf.scr.fiq;
+{
+    // read SCR
+    MRC(tmp, OSReg(scr));
+    ghost var old_scr := tmp;
+
+    // clear IRQ and FIQ bits
+    AND(tmp, tmp, 0xfffffff9);
+
+    // set NS bit
+    ORR(tmp, tmp, 1);
+
+    // write SCR
+    lemma_scr_exit(old_scr, tmp);
+    MCR(OSReg(scr), tmp);
+}
+
+#verbatim
+function exPageDb(t: (int, int, PageDb)): PageDb { t.2 }
+
+predicate SpsrsInvariant(s:state, r:state)
+    requires ValidState(s) && ValidState(r)
+{
+    reveal_ValidSRegState();
+    forall m | m != User :: s.sregs[spsr(m)] == r.sregs[spsr(m)]
+}
+
+predicate EnterResumeSmcProcedureInvariant(s:state, r:state)
+    requires SaneState(s) && SaneState(r)
+{
+    mode_of_state(r) == mode_of_state(s) // implied by SaneState
+        && StackPreserving(s,r)
+        && BankedRegsInvariant(s, r)
+        && SpsrsInvariant(s, r)
+        && r.conf.scr.ns == NotSecure
+}
+#endverbatim
