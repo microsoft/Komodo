@@ -67,8 +67,6 @@ function method CheapMod16(j:int) : int
 
 #endverbatim
 
-// TODO: Tighten up our memory framing for this and 16, so we don't obliterate the rest of memory as we go.
-
 procedure {:refined} Body_00_15(
     inline i:SHA_step,
     inline perm:perm_index,
@@ -172,6 +170,9 @@ ensures
     if i < 15 then t4 == input_ptr + (i+2)*4              // Advanced input ptr
     else if i == 15 then mem[sp+17*4] == input_ptr+16*4   // We stored the advanced input ptr on the stack
     else mem[sp+17*4] == old(mem[sp+17*4]);               // We preserved the input ptr on the stack
+
+    // Memory framing: We only touch the stack
+    forall addr:word :: old(mem)?[addr] && addr < sp && addr >= sp + 18*4 ==> mem?[addr] && mem[addr] == old(mem)[addr];
 
 // No longer need this in the ensures, since it's implied by the clauses below
 //    let T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), BSIG1(e)),
@@ -421,6 +422,9 @@ predicate Body_00_15LoopStateInvariantBreakdown(
 
  && t3 == BitwiseXor(b, c)
  //&& t2 == Maj(a, b, c)
+
+    // Memory framing: We only touch the stack
+ && (forall addr:word :: addr in orig_mem && addr < sp && addr >= sp + 18*4 ==> addr in mem && mem[addr] == orig_mem[addr])
 
     // SHA semantics
  && SeqLength(current_trace.H) > 0
@@ -810,6 +814,9 @@ ensures
 
     mem[sp+17*4] == old(mem[sp+17*4]);         // We preserved the input ptr on the stack
 
+    // Memory framing: We only touch the stack
+    forall addr:word :: old(mem)?[addr] && addr < sp && addr >= sp + 18*4 ==> mem?[addr] && mem[addr] == old(mem)[addr];
+
     exists trace_out:SHA256Trace ::
         IsSHA256TraceReadyForStep(trace_out, i+1)
      && trace_out.M == trace_in.M
@@ -975,6 +982,9 @@ predicate Body_16_XXLoopStateInvariantBreakdown(
  && ValidAddr(mem, sp + CheapMod16(i + 15)*4)
 
  && t3 == BitwiseXor(b, c)
+
+    // Memory framing: We only touch the stack
+ && (forall addr:word :: addr in orig_mem && addr < sp && addr >= sp + 18*4 ==> addr in mem && mem[addr] == orig_mem[addr])
 
     // SHA semantics
  && SeqLength(current_trace.H) > 0
