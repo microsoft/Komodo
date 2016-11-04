@@ -1,5 +1,5 @@
 procedure mkl2pte_insecure(
-    inout {:register OReg(R2)} mapping:int,
+    inout {:register OReg(R3)} mapping:int,
     inout {:register OReg(R6)} page:int,
     ghost abs_mapping:Mapping,
     ghost l2pte:L2PTE
@@ -15,7 +15,7 @@ procedure mkl2pte_insecure(
     ensures
         page == mkL2Pte(l2pte);
         nonexec_mapping(abs_mapping) == wordToMapping(mapping);
-        RegPreservingExcept(old(this),this,set(@r2,@r6,@r4));
+        RegPreservingExcept(old(this),this,set(@r3,@r4,@r6));
         AllMemInvariant(old(this),this);
         SmcProcedureInvariant(old(this), this);        
 {
@@ -35,44 +35,45 @@ procedure mkl2pte_insecure(
     ARM_L2PTE_impl(mapping,page,r4,newabs_mapping);
 }
 
-procedure phys_page_is_insecure_ram({:register OReg(R3)} phys_page:int)
-    returns({:register OReg(R12)} ret:int)
+procedure phys_page_is_insecure_ram({:operand} phys_page:int, out {:operand} ret:int)
     requires/ensures
         SaneState(this);
     requires
         ValidRegOperand(@phys_page);
-        ValidRegOperand(@r12);
+        ValidRegOperand(@ret);
+        @phys_page != @ret;
+        @ret != @sp;
     ensures 
-        r12 == 0 <==> !physPageIsInsecureRam(phys_page);
-        RegPreservingExcept(old(this), this, set(@r12)); // TODO FIXME
+        ret == 0 <==> !physPageIsInsecureRam(phys_page);
+        RegPreservingExcept(old(this), this, set(@ret));
         AllMemInvariant(old(this),this);
         SmcProcedureInvariant(old(this), this);
-        r12 != 0 ==> validInsecurePageNr(phys_page);
+        ret != 0 ==> validInsecurePageNr(phys_page);
 {
-    LDRglobaladdr(r12, SecurePhysBaseOp());
-    LDRglobal(r12, SecurePhysBaseOp(), r12, 0);
-    lemma_RightShift12(r12);
-    LSR(r12,r12,12);
-    assert r12 == SecurePhysBase() / PAGESIZE();
+    LDRglobaladdr(ret, SecurePhysBaseOp());
+    LDRglobal(ret, SecurePhysBaseOp(), ret, 0);
+    lemma_RightShift12(ret);
+    LSR(ret,ret,12);
+    assert ret == SecurePhysBase() / PAGESIZE();
 
-    if(phys_page >= r12)
+    if(phys_page >= ret)
     {
         assert !physPageIsInsecureRam(phys_page);
-        r12 := 0;
+        ret := 0;
     } else {
         forall :: validInsecurePageNr(phys_page) {
             assert SecurePhysBase() < KOM_PHYSMEM_LIMIT();
             assert SecurePhysBase() / PAGESIZE() <
                 KOM_PHYSMEM_LIMIT() / PAGESIZE();
         }
-        r12 := 1;
+        ret := 1;
     }
 }
 
 procedure kom_smc_map_insecure(
     {:register OReg(R1)} as_page:int,
-    inout {:register OReg(R2)} mapping:int,
-    {:register OReg(R3)} phys_page:int,
+    {:register OReg(R2)} phys_page:int,
+    inout {:register OReg(R3)} mapping:int,
     out {:register OReg(R0)} err:int,
     ghost pagedb_in: PageDb)
     returns (ghost pagedb: PageDb)
@@ -84,7 +85,8 @@ procedure kom_smc_map_insecure(
     ensures
         GlobalsInvariant(old(this), this);
         SmcProcedureInvariant(old(this), this);
-        tuple(pagedb,err) == old(smc_mapInsecure_premium(pagedb_in, as_page, phys_page, mapping));
+        tuple(pagedb,err) == smc_mapInsecure_premium(pagedb_in, old(as_page),
+                                                old(phys_page), old(mapping));
         pageDbCorresponds(this.m, pagedb);
 {
     pagedb := pagedb_in;
@@ -117,7 +119,7 @@ procedure kom_smc_map_insecure(
                 assert err == specErr(specResult);
             } else {
                 assert as_page == old(as_page);
-                r12 := phys_page_is_insecure_ram(phys_page);
+                phys_page_is_insecure_ram(phys_page, r12);
                 if(r12 == 0) {
                     err := sp_op_const(KOM_ERR_INVALID_PAGENO());
                     assert err == specErr(specResult);
@@ -139,10 +141,9 @@ procedure kom_smc_map_insecure(
                     mkl2pte_insecure(mapping, r6, abs_mapping, l2pte);
                     assert r10 == mkL1Pte(d'[d'[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
                     assert r10 == mkL1Pte(pagedb[pagedb[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
-                    // TODO: fix register allocation in update_l2pte to avoid these moves
-                    r3 := mapping;
+                    // TODO: fix register allocation in update_l2pte to avoid this moves
                     r2 := as_page;
-                    pagedb := update_l2pte(r2,r3,r6,r10,d',abs_mapping,l2pte);
+                    pagedb := update_l2pte(r2,mapping,r6,r10,d',abs_mapping,l2pte);
                     assert pagedb == updateL2Pte(d', old(as_page), abs_mapping, l2pte);
                     assert pagedb == specPageDb(specResult);
                     assert pageDbCorresponds(this.m, pagedb);

@@ -94,11 +94,8 @@ procedure stack_nonvolatiles(ghost stack_bytes:int) returns (ghost stack_bytes_r
     ensures
         sp == old(sp-40);
         
-        //preserves function call argument registers 
-        r0 == old(r0);
-        r1 == old(r1);
-        r2 == old(r2);
-        r3 == old(r3);
+        //preserves registers
+        RegPreservingExcept(old(this), this, set(@sp));
 
         // pushes r4-r11, sp, lr
         MemContents(this.m, sp)    == old(r12);
@@ -123,10 +120,7 @@ procedure stack_nonvolatiles(ghost stack_bytes:int) returns (ghost stack_bytes_r
 {
     SUB(sp, sp, 40);
 
-    //push link register onto stack
-    STR(lr, sp, 36);
-
-    //push r4-r11 onto stack
+    STR(lr,  sp, 36);
     STR(r4,  sp, 32);
     STR(r5,  sp, 28);
     STR(r6,  sp, 24);

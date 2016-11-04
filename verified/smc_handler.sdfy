@@ -20,8 +20,10 @@ procedure smc_handler(
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         AUCIdef(); // FIXME
+        this.conf.scr.ns == NotSecure; // FIXME: cleanup
     ensures
         smchandler(old(this), pagedb_in, this, pagedb);
+        smchandlerInvariant(old(this), this);
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
@@ -29,48 +31,80 @@ procedure smc_handler(
     stack_bytes_local := stack_nonvolatiles(stack_bytes);
     lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb_in);
 
+    reveal_ValidRegState();
+    assert callno == old(callno) && arg1 == old(arg1) && arg2 == old(arg2)
+        && arg3 == old(arg3) && arg4 == old(arg4);
+
     if (callno == sp_op_const(KOM_SMC_QUERY())) {
         pagedb := pagedb_in;
         retval := 0;
         err := sp_op_const(KOM_MAGIC());
+        assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == sp_op_const(KOM_SMC_GETPHYSPAGES())) {
         pagedb := pagedb_in;
         retval := sp_op_const(KOM_SECURE_NPAGES());
         err := sp_op_const(KOM_ERR_SUCCESS());
+        assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == sp_op_const(KOM_SMC_INIT_ADDRSPACE())) {
         pagedb := kom_smc_init_addrspace(arg1, arg2, err, pagedb_in);
         retval := 0;
+        reveal_smc_initAddrspace_premium();
+        assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == sp_op_const(KOM_SMC_INIT_DISPATCHER())) {
         pagedb := kom_smc_init_dispatcher(arg1, arg2, arg3, err, pagedb_in);
         retval := 0;
+        reveal_smc_initDispatcher_premium();
+        assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == sp_op_const(KOM_SMC_INIT_L2PTABLE())) {
         pagedb := kom_smc_init_l2ptable(arg1, arg2, arg3, err, pagedb_in);
         retval := 0;
+        reveal_smc_initL2PTable_premium();
+        assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == sp_op_const(KOM_SMC_MAP_SECURE())) {
         pagedb := kom_smc_map_secure(arg1, arg2, arg3, arg4, err, pagedb_in);
         retval := 0;
+        reveal_smc_mapSecure_premium();
+        assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == sp_op_const(KOM_SMC_MAP_INSECURE())) {
         pagedb := kom_smc_map_insecure(arg1, arg2, arg3, err, pagedb_in);
         retval := 0;
+        reveal_smc_mapInsecure_premium();
+        assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == sp_op_const(KOM_SMC_REMOVE())) {
         pagedb := kom_smc_remove(arg1, err, pagedb_in);
         retval := 0;
+        reveal_smc_remove_premium();
+        assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == sp_op_const(KOM_SMC_FINALISE())) {
         pagedb := kom_smc_finalise(arg1, err, pagedb_in);
         retval := 0;
+        reveal_smc_finalise_premium();
+        assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == sp_op_const(KOM_SMC_ENTER())) {
+        ghost var s0 := this;
         pagedb := kom_smc_enter(arg1, arg2, arg3, arg4, err, retval,
-                                pagedb_in, local_stack_bytes);
+                                pagedb_in, stack_bytes_local);
+        assert smc_enter(old(this), pagedb_in, this, pagedb, old(arg1),
+                  old(arg2), old(arg3), old(arg4));
+        assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == sp_op_const(KOM_SMC_RESUME())) {
-        pagedb := kom_smc_resume(arg1, err, retval, pagedb_in, local_stack_bytes);
+        pagedb := kom_smc_resume(arg1, err, retval, pagedb_in, stack_bytes_local);
+        assert smc_resume(old(this), pagedb_in, this, pagedb, old(arg1));
+        assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == sp_op_const(KOM_SMC_STOP())) {
         pagedb := kom_smc_stop(arg1, err, pagedb_in);
         retval := 0;
+        reveal_smc_stop_premium();
+        assert smchandler(old(this), pagedb_in, this, pagedb);
     } else {
         pagedb := pagedb_in;
         err := sp_op_const(KOM_ERR_INVALID());
         retval := 0;
+        assert smchandler(old(this), pagedb_in, this, pagedb);
     }
+
+    ghost var prePopErr := err;
+    ghost var prePopRet := retval;
 
     ghost var prePopThis := this;
     stack_bytes_local := unstack_nonvolatiles(stack_bytes_local);
@@ -80,4 +114,17 @@ procedure smc_handler(
     // zero other volatiles to prevent information leakage
     r2 := 0;
     r3 := 0;
+
+    assert prePopErr == err;
+    assert prePopRet == retval;
+
+    assert smchandlerInvariant(old(this), this) by {
+        assert nonvolatileRegInvariant(old(this), this);
+        assert BankedRegsInvariant(old(this), this);
+        assert SpsrsInvariant(old(this), this);
+        assert mode_of_state(this) == mode_of_state(old(this)) == Monitor;
+        assert this.conf.scr.ns == NotSecure;
+    }
+
+    assert smchandler(old(this), pagedb_in, this, pagedb);
 }

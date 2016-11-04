@@ -336,9 +336,7 @@ function smc_stop(pageDbIn: PageDb, addrspacePage: word)
 predicate smchandler(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb)
     requires ValidState(s) && validPageDb(pageDbIn)
 {
-    smchandlerInvariant(s, s') &&
-
-    (reveal_ValidRegState();
+    ValidState(s') && (reveal_ValidRegState();
     var callno, arg1, arg2, arg3, arg4
         := s.regs[R0], s.regs[R1], s.regs[R2], s.regs[R3], s.regs[R4];
     var err, val := s'.regs[R0], s'.regs[R1];
@@ -388,11 +386,11 @@ predicate nonvolatileRegInvariant(s:state, s':state)
 
 /* Overall invariant across SMC handler state */
 predicate smchandlerInvariant(s:state, s':state)
-    requires ValidState(s)
+    requires ValidState(s) && ValidState(s')
 {
     reveal_ValidRegState();
     reveal_ValidSRegState();
-    ValidState(s') && nonvolatileRegInvariant(s, s')
+    nonvolatileRegInvariant(s, s')
         // all banked regs, including SPSR and LR (our return target) are preserved
         // TODO: we may need to weaken this to reason about IRQ/FIQ injection.
         && forall m :: ((m == User || s.sregs[spsr(m)] == s'.sregs[spsr(m)]) // (no User SPSR)
@@ -400,7 +398,7 @@ predicate smchandlerInvariant(s:state, s':state)
                 && s.regs[SP(m)] == s'.regs[SP(m)])
         // return in non-secure world, in same (i.e., monitor) mode
         && mode_of_state(s') == mode_of_state(s)
-        && s'.conf.scr == SCR(NotSecure, false, false)
+        && s'.conf.scr.ns == NotSecure
 }
 
 // lemma for allocatePage; FIXME: not trusted, should not be in a .s.dfy file
