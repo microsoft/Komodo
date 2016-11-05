@@ -461,7 +461,7 @@ function havocPages(pages:set<addr>, s:memmap, r:memmap): memmap
 }
 
 // XXX: To be defined by "application" (exception-handling) code
-predicate ApplicationUsermodeContinuationInvariant(s:state, r:state)
+predicate {:axiom} ApplicationUsermodeContinuationInvariant(s:state, r:state)
     requires ValidState(s)
     ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> ValidState(r) && r.ok
 
