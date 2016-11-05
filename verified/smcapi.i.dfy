@@ -393,11 +393,6 @@ lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word)
     }
 }
 
-lemma lemma_evalExceptionTaken_NonUser(s:state, e:exception, r:state)
-    requires ValidState(s) && evalExceptionTaken(s, e, r)
-    ensures mode_of_state(r) != User
-{}
-
 lemma enterPreservesPageDbValidity(s:state, pageDbIn: PageDb, s':state,
     pageDbOut: PageDb, dispPage: word, arg1: word, arg2: word, arg3: word)
     requires ValidState(s) && validPageDb(pageDbIn) && ValidState(s')

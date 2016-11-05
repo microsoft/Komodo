@@ -362,3 +362,68 @@ lemma lemma_validResume(s0:state, s1:state, r:state, sd:PageDb, dp:word)
 
     reveal_validResume();
 }
+
+lemma lemma_ValidEntryPre(s0:state, s1:state, sd:PageDb, r:state, rd:PageDb, dp:word,
+                           a1:word, a2:word, a3:word)
+    requires ValidState(s0) && ValidState(s1) && ValidState(r) && validPageDb(sd)
+    ensures smc_enter(s1, sd, r, rd, dp, a1, a2, a3)
+        ==> smc_enter(s0, sd, r, rd, dp, a1, a2, a3)
+    ensures smc_resume(s1, sd, r, rd, dp) ==> smc_resume(s0, sd, r, rd, dp)
+{
+    reveal_validEnter();
+    reveal_validResume();
+}
+
+lemma lemma_evalExceptionTaken_NonUser(s:state, e:exception, r:state)
+    requires ValidState(s) && evalExceptionTaken(s, e, r)
+    ensures mode_of_state(r) != User
+{}
+
+lemma lemma_validEnterPost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp:word,
+                           a1:word, a2:word, a3:word)
+    requires ValidState(s) && ValidState(r1) && ValidState(r2) && validPageDb(sd)
+    requires smc_enter_err(sd, dp, false) == KOM_ERR_SUCCESS()
+    requires validEnter(SysState(s, sd), SysState(r1, rd), dp, a1, a2, a3)
+    requires validExceptionTransition(SysState(r1, rd), SysState(r2, rd), dp)
+    requires OperandContents(r1, OReg(R0)) == OperandContents(r2, OReg(R0))
+    requires OperandContents(r1, OReg(R1)) == OperandContents(r2, OReg(R1))
+    ensures validEnter(SysState(s, sd), SysState(r2, rd), dp, a1, a2, a3)
+{
+    reveal_validEnter();
+    reveal_ValidRegState();
+
+    var s1, s2, s3, ex, s4 :|
+        preEntryEnter(s, s1, sd, dp, a1, a2, a3)
+        && entryTransition(s1, s2)
+        && userspaceExecutionAndException(s2, s3, ex, s4)
+        && validExceptionTransition(SysState(s4, sd), SysState(r1, rd), dp)
+        && (r1.regs[R0], r1.regs[R1], rd) == exceptionHandled(s4, sd, dp);
+
+    assert validExceptionTransition(SysState(s4, sd), SysState(r2, rd), dp)
+        by { reveal_validExceptionTransition(); }
+    assert (r2.regs[R0], r2.regs[R1], rd) == exceptionHandled(s4, sd, dp);
+}
+
+lemma lemma_validResumePost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp:word)
+    requires ValidState(s) && ValidState(r1) && ValidState(r2) && validPageDb(sd)
+    requires smc_enter_err(sd, dp, true) == KOM_ERR_SUCCESS()
+    requires validResume(SysState(s, sd), SysState(r1, rd), dp)
+    requires validExceptionTransition(SysState(r1, rd), SysState(r2, rd), dp)
+    requires OperandContents(r1, OReg(R0)) == OperandContents(r2, OReg(R0))
+    requires OperandContents(r1, OReg(R1)) == OperandContents(r2, OReg(R1))
+    ensures validResume(SysState(s, sd), SysState(r2, rd), dp)
+{
+    reveal_validResume();
+    reveal_ValidRegState();
+
+    var s1, s2, s3, ex, s4 :|
+        preEntryResume(s, s1, sd, dp)
+        && entryTransition(s1, s2)
+        && userspaceExecutionAndException(s2, s3, ex, s4)
+        && validExceptionTransition(SysState(s4, sd), SysState(r1, rd), dp)
+        && (r1.regs[R0], r1.regs[R1], rd) == exceptionHandled(s4, sd, dp);
+
+    assert validExceptionTransition(SysState(s4, sd), SysState(r2, rd), dp)
+        by { reveal_validExceptionTransition(); }
+    assert (r2.regs[R0], r2.regs[R1], rd) == exceptionHandled(s4, sd, dp);
+}

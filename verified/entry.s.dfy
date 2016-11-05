@@ -223,15 +223,16 @@ function exceptionHandled(s:state, d:PageDb, dispPg:PageNr) : (word, word, PageD
             (KOM_ERR_FAULT(), 0, d')
 }
 
-predicate {:opaque} validExceptionTransition(s:SysState, s':SysState, dispPg: PageNr)
-    requires validDispatcherPage(s.d, dispPg)
+predicate {:opaque} validExceptionTransition(s:SysState, s':SysState, dispPg: word)
     ensures validExceptionTransition(s,s',dispPg) ==>
         validSysState(s) && validSysState(s')
 {
-    validSysState(s) && validSysState(s') &&
-    equivalentExceptPage(s.d, s'.d, dispPg)
-    && nonStoppedDispatcher(s'.d, dispPg)
+    validSysState(s) && validSysState(s')
     && mode_of_state(s'.hw) == Monitor
+    && (s.d == s'.d || (
+        validPageNr(dispPg) && validDispatcherPage(s.d, dispPg)
+        && equivalentExceptPage(s.d, s'.d, dispPg)
+        && nonStoppedDispatcher(s'.d, dispPg)))
     // TODO: we didn't scribble on user memory
 }
 
