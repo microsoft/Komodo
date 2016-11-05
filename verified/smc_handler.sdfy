@@ -66,7 +66,11 @@ procedure smc_handler(
     if (callno == sp_op_const(KOM_SMC_QUERY())) {
         pagedb := pagedb_in;
         retval := 0;
-        err := sp_op_const(KOM_MAGIC());
+        err := 0x4b000000;
+        ADD(err, err, 0x6d0000);
+        ADD(err, err, 0x6400);
+        ADD(err, err, 0x6f);
+        assert err == KOM_MAGIC(); // 0x4b6d646f
         assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == sp_op_const(KOM_SMC_GETPHYSPAGES())) {
         pagedb := pagedb_in;
