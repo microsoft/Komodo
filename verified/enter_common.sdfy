@@ -133,6 +133,7 @@ procedure stack_banked_regs({:operand} tmp:int, ghost stack_bytes_in:int)
     STR(tmp, sp, sp_op_const(17*4));
 
     assert wellformed_banked_regs_stackframe(this.m, sp);
+    assert RegPreservingExcept(old(this),this,set(@tmp,@sp));
 
     MRS(tmp, sp_usr);
     STR(tmp, sp, sp_op_const(0*4));
