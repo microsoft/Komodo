@@ -1385,7 +1385,17 @@ requires/ensures
     // Stack is accessible
     forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 18 ==> ValidAddr(mem, sp + j*4);
 
-requires {:refined false}
+    base_ptr == mem[sp + 16*4];
+
+    // Base_ptr doesn't alias the stack
+    base_ptr + 32 < sp || base_ptr > sp + 18*4;
+
+    // Stack slot 16 holds a pointer to a valid region of memory with 8 words of data in it
+//    forall j {ValidAddr(mem, base_ptr+j*4)} { mem?[base_ptr+j*4] } :: 
+//             0 <= j < 8 ==> ValidAddr(mem, base_ptr + j*4);
+    forall addr {ValidAddr(mem, addr)} {mem?[addr]} :: 
+        base_ptr <= addr < base_ptr + 8*4 && (addr - base_ptr) % 4 == 0 ==> ValidAddr(mem, addr);
+requires {:refined false}   // Using this style so I can give explicit names to all the registers.  Less confusing this way.
     @t0 == OReg(R0);
     @t1 == OReg(R2);
     @t2 == OReg(R12);
@@ -1398,12 +1408,6 @@ requires {:refined false}
     @f  == OReg(R9);
     @g  == OReg(R10);
     @h  == OReg(R11);
-requires
-    base_ptr == mem[sp + 16*4];
-
-    // Stack slot 16 holds a pointer to a valid region of memory with 8 words of data in it
-    forall j {ValidAddr(mem, base_ptr+j*4)} { mem?[mem[base_ptr]+j*4] } :: 
-             0 <= j < 8 ==> ValidAddr(mem, base_ptr + j*4);
 reads
     sp;
 modifies 
@@ -1413,18 +1417,17 @@ ensures
     forall addr:word :: old(mem)?[addr] && addr < base_ptr && addr >= sp + 8*4 
                     ==> mem?[addr] && mem[addr] == old(mem)[addr];
     mem[base_ptr +  0*4] == a == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(a));
-    mem[base_ptr +  1*4] == b == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(b));
-    mem[base_ptr +  2*4] == c == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(c));
-    mem[base_ptr +  3*4] == d == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(d));
-    mem[base_ptr +  4*4] == e == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(e));
-    mem[base_ptr +  5*4] == f == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(f));
-    mem[base_ptr +  6*4] == g == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(g));
-    mem[base_ptr +  7*4] == h == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(h));
+    mem[base_ptr +  1*4] == b == BitwiseAdd32(old(mem)[base_ptr +  1*4], old(b));
+    mem[base_ptr +  2*4] == c == BitwiseAdd32(old(mem)[base_ptr +  2*4], old(c));
+    mem[base_ptr +  3*4] == d == BitwiseAdd32(old(mem)[base_ptr +  3*4], old(d));
+    mem[base_ptr +  4*4] == e == BitwiseAdd32(old(mem)[base_ptr +  4*4], old(e));
+    mem[base_ptr +  5*4] == f == BitwiseAdd32(old(mem)[base_ptr +  5*4], old(f));
+    mem[base_ptr +  6*4] == g == BitwiseAdd32(old(mem)[base_ptr +  6*4], old(g));
+    mem[base_ptr +  7*4] == h == BitwiseAdd32(old(mem)[base_ptr +  7*4], old(h));
 {
     // Load the ctx pointer that holds the Hs
-    assert 256 == 16*4; // OBSERVE
-    rLDR(t3, sp, 256);
-
+    rLDR(t3, sp, 64);
+    assert t3 == base_ptr;
     rLDR(t0, t3, 0);
     rLDR(t1, t3, 4);
     rLDR(t2, t3, 8);
@@ -1441,6 +1444,29 @@ ensures
     rADDWrap(f,f,t2);
     rADDWrap(g,g,t0);
     rADDWrap(h,h,t1);
+
+    // TODO: OpenSSL does this in a single call to: stmia $t3,{$A,$B,$C,$D,$E,$F,$G,$H}
+    // TODO: Can we choose better triggers to avoid all of these assertions?
+    rSTR(a, t3,  0); 
+    assert ValidAddr(old(mem), t3 + 4);      // OBSERVE
+    rSTR(b, t3,  4); 
+    assert ValidAddr(old(mem), t3 + 8);      // OBSERVE
+    rSTR(c, t3,  8); 
+    assert ValidAddr(old(mem), t3 + 12);     // OBSERVE
+    rSTR(d, t3, 12); 
+    assert ValidAddr(old(mem), t3 + 16);     // OBSERVE
+    rSTR(e, t3, 16); 
+    assert ValidAddr(old(mem), t3 + 20);     // OBSERVE
+    rSTR(f, t3, 20); 
+    assert ValidAddr(old(mem), t3 + 24);     // OBSERVE
+    rSTR(g, t3, 24); 
+    assert ValidAddr(old(mem), t3 + 28);     // OBSERVE
+    rSTR(h, t3, 28); 
+
+    forall j :| 0 <= j < 18 :: ValidAddr(mem, sp + j*4)
+    {
+        assert ValidAddr(old(mem), sp + j*4);
+    }
 }
 
 
