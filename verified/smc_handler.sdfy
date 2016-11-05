@@ -2,33 +2,6 @@
 // Top-level SMC handler
 //=============================================================================
 
-#verbatim
-lemma lemma_ValidEntryPost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp:word,
-                           a1:word, a2:word, a3:word)
-    requires ValidState(s) && ValidState(r1) && ValidState(r2) && validPageDb(sd)
-    requires validExceptionTransition(SysState(r1, rd), SysState(r2, rd), dp)
-    requires OperandContents(r1, OReg(R0)) == OperandContents(r2, OReg(R0))
-    requires OperandContents(r1, OReg(R1)) == OperandContents(r2, OReg(R1))
-    ensures smc_enter(s, sd, r1, rd, dp, a1, a2, a3)
-        ==> smc_enter(s, sd, r2, rd, dp, a1, a2, a3)
-    ensures smc_resume(s, sd, r1, rd, dp) ==> smc_resume(s, sd, r2, rd, dp)
-{
-    reveal_ValidRegState();
-
-    if smc_enter(s, sd, r1, rd, dp, a1, a2, a3) {
-        if smc_enter_err(sd, dp, false) == KOM_ERR_SUCCESS() {
-            lemma_validEnterPost(s, sd, r1, rd, r2, dp, a1, a2, a3);
-        }
-    }
-
-    if smc_resume(s, sd, r1, rd, dp) {
-        if smc_enter_err(sd, dp, true) == KOM_ERR_SUCCESS() {
-            lemma_validResumePost(s, sd, r1, rd, r2, dp);
-        }
-    }
-}
-#endverbatim
-
 procedure smc_handler(
     inout {:register OReg(R0)} callno:int,
     inout {:register OReg(R1)} arg1:int,
@@ -55,7 +28,6 @@ procedure smc_handler(
         pageDbCorresponds(this.m, pagedb);
 {
     ghost var stack_bytes_local;
-    ghost var entry := false;
     stack_bytes_local := stack_nonvolatiles(stack_bytes);
     lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb_in);
 
@@ -63,7 +35,25 @@ procedure smc_handler(
     assert callno == old(callno) && arg1 == old(arg1) && arg2 == old(arg2)
         && arg3 == old(arg3) && arg4 == old(arg4);
 
-    if (callno == sp_op_const(KOM_SMC_QUERY())) {
+    // is this an enter/resume call?
+    ghost var entry := callno == KOM_SMC_ENTER() || callno == KOM_SMC_RESUME();
+    r5 := 0;
+    if (callno == sp_op_const(KOM_SMC_ENTER())) {
+        r5 := 1;
+    } else if (callno == sp_op_const(KOM_SMC_RESUME())) {
+        r5 := 1;
+    }
+    assert r5 == 1 || r5 == 0;
+    assert entry <==> r5 == 1;
+
+    if (r5 == 1) {
+        ghost var s0 := this;
+        pagedb := kom_smc_enterresume(callno, arg1, arg2, arg3, arg4, err, retval,
+                                      pagedb_in, stack_bytes_local);
+        lemma_ValidEntryPre(old(this), s0, pagedb_in, this, pagedb,
+                            old(arg1), old(arg2), old(arg3), old(arg4));
+        assert smchandler(old(this), pagedb_in, this, pagedb);
+    } else if (callno == sp_op_const(KOM_SMC_QUERY())) {
         pagedb := pagedb_in;
         retval := 0;
         err := 0x4b000000;
@@ -111,21 +101,6 @@ procedure smc_handler(
         pagedb := kom_smc_finalise(arg1, err, pagedb_in);
         retval := 0;
         reveal_smc_finalise_premium();
-        assert smchandler(old(this), pagedb_in, this, pagedb);
-    } else if (callno == sp_op_const(KOM_SMC_ENTER())) {
-        entry := true;
-        ghost var s0 := this;
-        pagedb := kom_smc_enter(arg1, arg2, arg3, arg4, err, retval,
-                                pagedb_in, stack_bytes_local);
-        lemma_ValidEntryPre(old(this), s0, pagedb_in, this, pagedb,
-                            old(arg1), old(arg2), old(arg3), old(arg4));
-        assert smchandler(old(this), pagedb_in, this, pagedb);
-    } else if (callno == sp_op_const(KOM_SMC_RESUME())) {
-        entry := true;
-        ghost var s0 := this;
-        pagedb := kom_smc_resume(arg1, err, retval, pagedb_in, stack_bytes_local);
-        lemma_ValidEntryPre(old(this), s0, pagedb_in, this, pagedb,
-                            old(arg1), old(arg2), old(arg3), old(arg4));
         assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == sp_op_const(KOM_SMC_STOP())) {
         pagedb := kom_smc_stop(arg1, err, pagedb_in);
