@@ -342,4 +342,126 @@ lemma lemma_SHA256TransitionOKAfterSettingAtoH(
     }
 }
 
+
+lemma lemma_SHA256DigestOneBlockHelper2(
+    z:SHA256Trace,
+    old_H:seq<word>,
+    H:seq<word>,
+    W:seq<word>,
+    atoh:atoh_Type,
+    M:seq<word>
+    ) returns (
+    z':SHA256Trace//,
+    //processed_bytes':seq<uint8>
+    )
+    requires |W| == 64;
+    requires |M| == 16;
+    requires |H| == |old_H| == 8;
+    requires |z.M| == |z.H| > 0;
+    requires last(z.M) == M;
+    requires IsSHA256ReadyForStep(z, SHA256_state_c(old_H, W, atoh), 64);
+    requires H[0] == BitwiseAdd32(atoh.a, old_H[0]);
+    requires H[1] == BitwiseAdd32(atoh.b, old_H[1]);
+    requires H[2] == BitwiseAdd32(atoh.c, old_H[2]);
+    requires H[3] == BitwiseAdd32(atoh.d, old_H[3]);
+    requires H[4] == BitwiseAdd32(atoh.e, old_H[4]);
+    requires H[5] == BitwiseAdd32(atoh.f, old_H[5]);
+    requires H[6] == BitwiseAdd32(atoh.g, old_H[6]);
+    requires H[7] == BitwiseAdd32(atoh.h, old_H[7]);
+    //requires WordSeqToBytes(ConcatenateSeqs(z.M[..|z.H|-1])) == ctx.processed_bytes;
+    ensures  z' == z.(H := z.H + [H]);
+    ensures  IsCompleteSHA256Trace(z');
+    ensures  SHA256TraceIsCorrect(z');
+    //ensures  WordSeqToBytes(ConcatenateSeqs(z'.M)) == processed_bytes';
+    //ensures  processed_bytes' == ctx.processed_bytes + WordSeqToBytes(M);
+//    ensures  |processed_bytes'| == |ctx.processed_bytes| + 64;
+//    ensures  |processed_bytes'| % 64 == 0;
+//    ensures  H == last(z'.H);
+{
+    z' := z.(H := z.H + [H]);
+
+    forall blk:int {:trigger TBlk(blk)} | TBlk(blk)
+        ensures forall j :: 0 <= blk < |z'.M| && 0 <= j < 8 ==> z'.H[blk+1][j] == BitwiseAdd32(ConvertAtoHToSeq(z'.atoh[blk][64])[j], z'.H[blk][j]);
+    {
+        if 0 <= blk < |z.H|-1 {
+            assert PartialSHA256TraceIsCorrect(z);
+            assert CorrectlyAccumulatedHsForBlock(z, blk);
+            forall j | 0 <= j < 8
+                ensures z.H[blk+1][j] == BitwiseAdd32(ConvertAtoHToSeq(z.atoh[blk][64])[j], z.H[blk][j]);
+            {
+                assert TStep(j);
+            }
+        }
+        else if blk == |z.H|-1 {
+            forall j | 0 <= j < 8
+                ensures z'.H[blk+1][j] == BitwiseAdd32(ConvertAtoHToSeq(z'.atoh[blk][64])[j], z'.H[blk][j]);
+            {
+                assert z'.atoh[blk][64] == atoh;
+                assert z'.H[blk][j] == old_H[j];
+                assert z'.H[blk+1][j] == H[j] as word;
+                ghost var atoh_seq := ConvertAtoHToSeq(atoh);
+                     if j == 0 { assert H[0] == BitwiseAdd32(atoh.a, old_H[0]); }
+                else if j == 1 { assert H[1] == BitwiseAdd32(atoh.b, old_H[1]); }
+                else if j == 2 { assert H[2] == BitwiseAdd32(atoh.c, old_H[2]); }
+                else if j == 3 { assert H[3] == BitwiseAdd32(atoh.d, old_H[3]); }
+                else if j == 4 { assert H[4] == BitwiseAdd32(atoh.e, old_H[4]); }
+                else if j == 5 { assert H[5] == BitwiseAdd32(atoh.f, old_H[5]); }
+                else if j == 6 { assert H[6] == BitwiseAdd32(atoh.g, old_H[6]); }
+                else if j == 7 { assert H[7] == BitwiseAdd32(atoh.h, old_H[7]); }
+            }
+        }
+    }
+
+    forall blk | 0 <= blk < |z'.M|
+        ensures ConvertAtoHToSeq(z'.atoh[blk][0]) == z'.H[blk];
+        ensures forall t:word {:trigger TStep(t)} :: TStep(t) && 0 <= t <= 63 ==>
+            (var T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(z'.atoh[blk][t].h, BSIG1(z'.atoh[blk][t].e)),
+                                      Ch(z'.atoh[blk][t].e, z'.atoh[blk][t].f, z'.atoh[blk][t].g)), K_SHA256(t)),
+                              z'.W[blk][t]);
+            var T2 := BitwiseAdd32(BSIG0(z'.atoh[blk][t].a), Maj(z'.atoh[blk][t].a, z'.atoh[blk][t].b, z'.atoh[blk][t].c));
+            z'.atoh[blk][t+1].h == z'.atoh[blk][t].g &&
+            z'.atoh[blk][t+1].g == z'.atoh[blk][t].f &&
+            z'.atoh[blk][t+1].f == z'.atoh[blk][t].e &&
+            z'.atoh[blk][t+1].e == BitwiseAdd32(z'.atoh[blk][t].d, T1) &&
+            z'.atoh[blk][t+1].d == z'.atoh[blk][t].c &&
+            z'.atoh[blk][t+1].c == z'.atoh[blk][t].b &&
+            z'.atoh[blk][t+1].b == z'.atoh[blk][t].a &&
+            z'.atoh[blk][t+1].a == BitwiseAdd32(T1, T2))
+    {
+        forall t:word {:trigger TStep(t)}
+            ensures TStep(t) && 0 <= t <= 63 ==>
+                (var T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(z'.atoh[blk][t].h, BSIG1(z'.atoh[blk][t].e)),
+                                          Ch(z'.atoh[blk][t].e, z'.atoh[blk][t].f, z'.atoh[blk][t].g)), K_SHA256(t)),
+                                  z'.W[blk][t]);
+                var T2 := BitwiseAdd32(BSIG0(z'.atoh[blk][t].a), Maj(z'.atoh[blk][t].a, z'.atoh[blk][t].b, z'.atoh[blk][t].c));
+                z'.atoh[blk][t+1].h == z'.atoh[blk][t].g &&
+                z'.atoh[blk][t+1].g == z'.atoh[blk][t].f &&
+                z'.atoh[blk][t+1].f == z'.atoh[blk][t].e &&
+                z'.atoh[blk][t+1].e == BitwiseAdd32(z'.atoh[blk][t].d, T1) &&
+                z'.atoh[blk][t+1].d == z'.atoh[blk][t].c &&
+                z'.atoh[blk][t+1].c == z'.atoh[blk][t].b &&
+                z'.atoh[blk][t+1].b == z'.atoh[blk][t].a &&
+                z'.atoh[blk][t+1].a == BitwiseAdd32(T1, T2));
+        {
+            assert PartialSHA256TraceIsCorrect(z);
+            assert TBlk(blk);
+            assert z'.atoh[blk] == z.atoh[blk];
+            reveal_PartialSHA256TraceHasCorrectatohsOpaque();
+        }
+
+        assert PartialSHA256TraceIsCorrect(z);
+        assert PartialSHA256TraceHasCorrectatohsWf(z);
+        assert TBlk(blk);
+        assert |z.atoh[blk]| > 0;
+        assert ConvertAtoHToSeq(z.atoh[blk][0]) == z.H[blk];
+        assert ConvertAtoHToSeq(z'.atoh[blk][0]) == z'.H[blk];
+    }
+
+//    processed_bytes' := ctx.processed_bytes + WordSeqToBytes(M);
+//    lemma_EffectOfAddingBytesOnWordSeqToBytesOfConcatenateSeqs(z.M[..|z.H|-1], ctx.processed_bytes, M, processed_bytes');
+//    assert z.M[..|z.H|-1] + [M] == z'.M;
+//    lemma_AddingMultipleOfNDoesntChangeModN(|WordSeqToBytes(M)|, |ctx.processed_bytes|, 64);
+}
+
+
 }
