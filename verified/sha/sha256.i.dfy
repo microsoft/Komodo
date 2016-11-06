@@ -346,39 +346,35 @@ lemma lemma_SHA256TransitionOKAfterSettingAtoH(
 lemma lemma_SHA256DigestOneBlockHelper2(
     z:SHA256Trace,
     old_H:seq<word>,
-    H:seq<word>,
-    W:seq<word>,
-    atoh:atoh_Type,
-    M:seq<word>
+    H:seq<word>
     ) returns (
     z':SHA256Trace//,
     //processed_bytes':seq<uint8>
     )
-    requires |W| == 64;
-    requires |M| == 16;
     requires |H| == |old_H| == 8;
     requires |z.M| == |z.H| > 0;
-    requires last(z.M) == M;
-    requires IsSHA256ReadyForStep(z, SHA256_state_c(old_H, W, atoh), 64);
-    requires H[0] == BitwiseAdd32(atoh.a, old_H[0]);
-    requires H[1] == BitwiseAdd32(atoh.b, old_H[1]);
-    requires H[2] == BitwiseAdd32(atoh.c, old_H[2]);
-    requires H[3] == BitwiseAdd32(atoh.d, old_H[3]);
-    requires H[4] == BitwiseAdd32(atoh.e, old_H[4]);
-    requires H[5] == BitwiseAdd32(atoh.f, old_H[5]);
-    requires H[6] == BitwiseAdd32(atoh.g, old_H[6]);
-    requires H[7] == BitwiseAdd32(atoh.h, old_H[7]);
+    requires last(z.H) == old_H;
+    requires IsSHA256TraceReadyForStep(z, 64);
+    requires H[0] == BitwiseAdd32(last(last(z.atoh)).a, old_H[0]);
+    requires H[1] == BitwiseAdd32(last(last(z.atoh)).b, old_H[1]);
+    requires H[2] == BitwiseAdd32(last(last(z.atoh)).c, old_H[2]);
+    requires H[3] == BitwiseAdd32(last(last(z.atoh)).d, old_H[3]);
+    requires H[4] == BitwiseAdd32(last(last(z.atoh)).e, old_H[4]);
+    requires H[5] == BitwiseAdd32(last(last(z.atoh)).f, old_H[5]);
+    requires H[6] == BitwiseAdd32(last(last(z.atoh)).g, old_H[6]);
+    requires H[7] == BitwiseAdd32(last(last(z.atoh)).h, old_H[7]);
     //requires WordSeqToBytes(ConcatenateSeqs(z.M[..|z.H|-1])) == ctx.processed_bytes;
     ensures  z' == z.(H := z.H + [H]);
     ensures  IsCompleteSHA256Trace(z');
     ensures  SHA256TraceIsCorrect(z');
     //ensures  WordSeqToBytes(ConcatenateSeqs(z'.M)) == processed_bytes';
-    //ensures  processed_bytes' == ctx.processed_bytes + WordSeqToBytes(M);
+    //ensures  processed_bytes' == ctx.processed_bytes + WordSeqToBytes(last(z.M));
 //    ensures  |processed_bytes'| == |ctx.processed_bytes| + 64;
 //    ensures  |processed_bytes'| % 64 == 0;
 //    ensures  H == last(z'.H);
 {
     z' := z.(H := z.H + [H]);
+    var atoh := last(last(z.atoh));
 
     forall blk:int {:trigger TBlk(blk)} | TBlk(blk)
         ensures forall j :: 0 <= blk < |z'.M| && 0 <= j < 8 ==> z'.H[blk+1][j] == BitwiseAdd32(ConvertAtoHToSeq(z'.atoh[blk][64])[j], z'.H[blk][j]);
@@ -457,10 +453,10 @@ lemma lemma_SHA256DigestOneBlockHelper2(
         assert ConvertAtoHToSeq(z'.atoh[blk][0]) == z'.H[blk];
     }
 
-//    processed_bytes' := ctx.processed_bytes + WordSeqToBytes(M);
-//    lemma_EffectOfAddingBytesOnWordSeqToBytesOfConcatenateSeqs(z.M[..|z.H|-1], ctx.processed_bytes, M, processed_bytes');
-//    assert z.M[..|z.H|-1] + [M] == z'.M;
-//    lemma_AddingMultipleOfNDoesntChangeModN(|WordSeqToBytes(M)|, |ctx.processed_bytes|, 64);
+//    processed_bytes' := ctx.processed_bytes + WordSeqToBytes(last(z.M));
+//    lemma_EffectOfAddingBytesOnWordSeqToBytesOfConcatenateSeqs(z.M[..|z.H|-1], ctx.processed_bytes, last(z.M), processed_bytes');
+//    assert z.M[..|z.H|-1] + [last(z.M)] == z'.M;
+//    lemma_AddingMultipleOfNDoesntChangeModN(|WordSeqToBytes(last(z.M))|, |ctx.processed_bytes|, 64);
 }
 
 
