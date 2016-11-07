@@ -1,5 +1,20 @@
 include "ARMdef.dfy"
 
+type exvector = Maybe<string>
+datatype vectbl = VecTable(
+    reset: exvector,
+    undef: exvector,
+    svc_smc: exvector,
+    prefetch_abort: exvector,
+    data_abort: exvector,
+    irq: exvector,
+    fiq: exvector)
+
+function method emptyVecTbl(): vectbl
+{
+    VecTable(Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing)
+}
+
 function method user_continue_label(): string
 {
     "usermode_return_continue"
@@ -279,7 +294,6 @@ method printCode(c:code, n:int) returns(n':int)
 
 method printFunction(symname:string, c:code, n:int) returns(n':int)
 {
-    nl();
     print(".global "); print(symname); nl();
     print(symname); print(":"); nl();
     n' := printCode(c, n);
@@ -289,6 +303,30 @@ method printHeader()
 {
     print(".arm"); nl();
     print(".section .text"); nl();
+}
+
+method printVecTblEntry(vector: exvector)
+{
+    match vector 
+        case Nothing =>
+            print("1: B 1b"); nl();
+        case Just(symname) =>
+            print("  B "); print(symname); nl();
+}
+
+method printVecTbl(symname: string, vectbl: vectbl)
+{
+    print(".align 5"); nl();
+    print(".global "); print(symname); nl();
+    print(symname); print(":"); nl();
+    printVecTblEntry(vectbl.reset);
+    printVecTblEntry(vectbl.undef);
+    printVecTblEntry(vectbl.svc_smc);
+    printVecTblEntry(vectbl.prefetch_abort);
+    printVecTblEntry(vectbl.data_abort);
+    printVecTblEntry(Nothing); // reserved
+    printVecTblEntry(vectbl.irq);
+    printVecTblEntry(vectbl.fiq);
 }
 
 method printGlobal(symname: string, bytes: int)
@@ -309,7 +347,6 @@ function method SymbolName(o:operand): string
 method printBss(gdecls: globaldecls)
     requires ValidGlobalDecls(gdecls)
 {
-    nl();
     print(".section .bss"); nl();
     print(".align 2"); nl(); // 4-byte alignment
     var syms := (set k | k in gdecls :: k);

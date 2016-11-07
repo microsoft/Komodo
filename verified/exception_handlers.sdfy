@@ -1,0 +1,49 @@
+procedure svc_handler(
+    inout {:register OReg(R0)} retval:int,
+    ghost stack_bytes: int,
+    ghost pagedb_in: PageDb,
+    ghost dispPg: PageNr) returns (ghost pagedb: PageDb)
+    requires/ensures
+        SaneState(this);
+        StackBytesRemaining(this, stack_bytes);
+    requires
+        stack_bytes >= 120;
+        validPageDb(pagedb_in);
+        pageDbCorresponds(this.m, pagedb_in);
+        this.conf.scr.ns == Secure;
+        mode_of_state(this) == Supervisor;
+    ensures
+        KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
+        tuple(r0, r1, pagedb) == exceptionHandled(old(this), pagedb_in, dispPg);
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+{
+    r1 := r0;
+    r0 := sp_op_const(KOM_ERR_SUCCESS());
+    pagedb := pagedb_in;
+    assume false;
+}
+
+procedure abort_handler(
+    ghost stack_bytes: int,
+    ghost pagedb_in: PageDb,
+    ghost dispPg: PageNr) returns (ghost pagedb: PageDb)
+    requires/ensures
+        SaneState(this);
+        StackBytesRemaining(this, stack_bytes);
+    requires
+        stack_bytes >= 120;
+        validPageDb(pagedb_in);
+        pageDbCorresponds(this.m, pagedb_in);
+        this.conf.scr.ns == Secure;
+        mode_of_state(this) == Abort || mode_of_state(this) == Undefined;
+    ensures
+        KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
+        tuple(r0, r1, pagedb) == exceptionHandled(old(this), pagedb_in, dispPg);
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+{
+    r0 := sp_op_const(KOM_ERR_FAULT());
+    pagedb := pagedb_in;
+    assume false;
+}

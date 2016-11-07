@@ -69,7 +69,7 @@ $(dir)/ptables.i.verified: $(dir)/pagedb.i.verified $(dir)/entry.s.verified $(di
 $(dir)/ptebits.i.verified: $(dir)/pagedb.i.verified $(dir)/bitvectors.i.verified
 $(dir)/entry.s.verified: $(dir)/ARMdef.verified $(dir)/pagedb.s.verified $(dir)/abstate.s.verified
 $(dir)/entry.i.verified: $(dir)/entry.s.verified $(dir)/ptables.i.verified
-$(dir)/main.i.verified: $(dir)/ARMprint.verified $(dir)/smc_handler.verified
+$(dir)/main.i.verified: $(dir)/ARMprint.verified $(dir)/smc_handler.verified $(dir)/exception_handlers.verified
 
 # variables used to emit deps/includes for all Spartan code
 ARMdecls_dep-dfy = ARMspartan
@@ -138,6 +138,10 @@ smc_handler_dep-sdfy = ARMdecls kom_utils init_addrspace init_dispatcher \
     stop remove
 smc_handler_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/smc_handler.verified: $(call mkdeps,smc_handler)
+
+exception_handlers_dep-sdfy = ARMdecls
+exception_handlers_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i entry.i
+$(dir)/exception_handlers.verified: $(call mkdeps,exception_handlers)
 
 # file-specific flags (besides /noNLarith)
 DAFNYFLAGS_bitvectors.s = /proverOpt:OPTIMIZE_FOR_BV=true
