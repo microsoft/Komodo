@@ -702,7 +702,7 @@ procedure {:refined} Body_00_15LoopUnrolled(
     ghost trace_in:SHA256Trace,
     ghost input:seq(word)
     )
-    requires Body_00_15LoopStateInvariantBreakdown(old(mem), mem, input_ptr, trace_in, trace_in, 0, sp, globals, lr, 
+    requires Body_00_15LoopStateInvariantBreakdown(mem, mem, input_ptr, trace_in, trace_in, 0, sp, globals, lr, 
                                                    r2, r12, r3, r1, input,
                                                    r4, r5, r6, r7, r8, r9, r10, r11);
     reads  sp; globals;
@@ -1381,8 +1381,8 @@ requires
     IsCompleteSHA256Trace(trace_in);
     SHA256TraceIsCorrect(trace_in);
     //IsSHA256TraceReadyForStep(trace_in, 0);
-    SeqLength(trace_in.H) > 0;
-    SeqLength(trace_in.M) == SeqLength(trace_in.H);
+    //SeqLength(trace_in.H) > 0;
+    //SeqLength(trace_in.M) == SeqLength(trace_in.H);
     
     // K table adjusted properly
     ValidGlobalsAddr(globals, K_SHA256s().sym, lr);
@@ -1410,14 +1410,14 @@ requires
     let ctx := r0 in
     let input_ptr := r1 in
     let num_blocks := r2 in // Number of 64-byte blocks to process
-        last(trace_in.H)[0] == mem[base_ptr + 0*4] == last(last(trace_in.atoh)).a == a
-     && last(trace_in.H)[1] == mem[base_ptr + 1*4] == last(last(trace_in.atoh)).b == b
-     && last(trace_in.H)[2] == mem[base_ptr + 2*4] == last(last(trace_in.atoh)).c == c
-     && last(trace_in.H)[3] == mem[base_ptr + 3*4] == last(last(trace_in.atoh)).d == d
-     && last(trace_in.H)[4] == mem[base_ptr + 4*4] == last(last(trace_in.atoh)).e == e
-     && last(trace_in.H)[5] == mem[base_ptr + 5*4] == last(last(trace_in.atoh)).f == f
-     && last(trace_in.H)[6] == mem[base_ptr + 6*4] == last(last(trace_in.atoh)).g == g
-     && last(trace_in.H)[7] == mem[base_ptr + 7*4] == last(last(trace_in.atoh)).h == h
+        last(trace_in.H)[0] == mem[base_ptr + 0*4] == a
+     && last(trace_in.H)[1] == mem[base_ptr + 1*4] == b
+     && last(trace_in.H)[2] == mem[base_ptr + 2*4] == c
+     && last(trace_in.H)[3] == mem[base_ptr + 3*4] == d
+     && last(trace_in.H)[4] == mem[base_ptr + 4*4] == e
+     && last(trace_in.H)[5] == mem[base_ptr + 5*4] == f
+     && last(trace_in.H)[6] == mem[base_ptr + 6*4] == g
+     && last(trace_in.H)[7] == mem[base_ptr + 7*4] == h
 
      // Ghost input matches in-memory input
      && SeqLength(input) == 16
@@ -1428,7 +1428,7 @@ requires
                                    && mem[input_ptr + j*4] == input[j]
          )
      // The first 16 values in W are the byte-swapped version of the input words
-     && (forall j :: 0 <= j < 16 ==> last(trace_in.W)[j] == bswap32(input[j]))
+     //&& (forall j :: 0 <= j < 16 ==> last(trace_in.W)[j] == bswap32(input[j]))
    ; // end let
      
 
@@ -1463,9 +1463,8 @@ ensures
     exists trace_out:SHA256Trace ::
            IsCompleteSHA256Trace(trace_out)
         && SHA256TraceIsCorrect(trace_out)
-        && trace_out.M == trace_in.M
-        && all_but_last(trace_out.H) == trace_in.H
-        && trace_out.W == trace_in.W
+        && trace_out.M == trace_in.M + seq(bswap32_seq(input))
+        //&& all_but_last(trace_out.H) == trace_in.H
         && mem[base_ptr + 0*4] ==  r4 == last(trace_out.H)[0]
         && mem[base_ptr + 1*4] ==  r5 == last(trace_out.H)[1]
         && mem[base_ptr + 2*4] ==  r6 == last(trace_out.H)[2]
@@ -1476,9 +1475,16 @@ ensures
         && mem[base_ptr + 7*4] == r11 == last(trace_out.H)[7];
 {
     // Prepare the incoming trace by incorporating the input we're about to digest
-    ghost var new_trace_in := trace_in.(M := trace_in.M + seq(input));
-    ghost var new_Ws := ComputeWs(input);
-    new_trace_in := new_trace_in.(W := new_trace_in.W + seq(new_Ws));             
+    //ghost var new_trace_in := trace_in.(M := trace_in.M + seq(input));
+    ghost var bswapped_input := bswap32_seq(input);
+    ghost var new_Ws := ComputeWs(bswapped_input);
+    ghost var init_atoh := atoh_c(r4, r5, r6, r7, r8, r9, r10, r11);
+    //new_trace_in := new_trace_in.(W := new_trace_in.W + seq(new_Ws));             
+    //new_trace_in := new_trace_in.(atoh := new_trace_in.atoh + seq(seq(atoh_c(r4, r5, r6, r7, r8, r9, r10, r11))));
+    ghost var new_trace_in := lemma_SHA256DigestOneBlockHelper1(trace_in, new_Ws, init_atoh, bswapped_input);
+
+    forall j :| 0 <= j < 16 :: last(new_trace_in.W)[j] == bswap32(input[j])
+        { assert TStep(j); }
 
     assert IsSHA256TraceReadyForStep(new_trace_in, 0);
 
@@ -1493,10 +1499,15 @@ ensures
 
     assert r1 /*aka t4*/ == old(r1) + 1 * 4;    // OBSERVE that t4 is a ValidAddr
     ghost var input_ptr := old(r1);      // Avoid Spartan mis-capture
+
+    assert Body_00_15LoopStateInvariantBreakdown(mem, mem, input_ptr, new_trace_in, new_trace_in, 0, sp, globals, lr, 
+                                                 r2, r12, r3, r1, input,
+                                                 r4, r5, r6, r7, r8, r9, r10, r11);
+
     Body_00_15LoopUnrolled(input_ptr, new_trace_in, input);
 
     exists trace_00_15 :: 
-             Body_00_15LoopStateInvariantBreakdown(old(mem), mem, input_ptr, trace_in, trace_00_15, 16, sp, globals, lr,
+             Body_00_15LoopStateInvariantBreakdown(old(mem), mem, input_ptr, new_trace_in, trace_00_15, 16, sp, globals, lr,
                                                    r2, r12, r3, r1, input,
                                                    r4, r5, r6, r7, r8, r9, r10, r11);
 
@@ -1504,7 +1515,7 @@ ensures
     Body_16_XXLoopUnrolled(trace_00_15, input);
     
     exists trace_16_XX :: 
-             Body_16_XXLoopStateInvariantBreakdown(mid_mem, mem, trace_in, trace_16_XX, 64, sp, globals, lr,
+             Body_16_XXLoopStateInvariantBreakdown(mid_mem, mem, trace_00_15, trace_16_XX, 64, sp, globals, lr,
                                                    r2, r12, r3, r1, input,
                                                    r4, r5, r6, r7, r8, r9, r10, r11);
     rADDWrap(r4, r4, r12);
@@ -1533,8 +1544,20 @@ ensures
                             mem[base_ptr + 24],
                             mem[base_ptr + 28]);
     ghost var trace_out := lemma_SHA256DigestOneBlockHelper2(trace_16_XX, old_H, new_H);
+//
+//    assert IsCompleteSHA256Trace(trace_out)
+//        && SHA256TraceIsCorrect(trace_out)
+//        && trace_out.M == trace_in.M + seq(bswap32_seq(input))
+//        //&& all_but_last(trace_out.H) == trace_in.H
+//        && mem[base_ptr + 0*4] ==  r4 == last(trace_out.H)[0]
+//        && mem[base_ptr + 1*4] ==  r5 == last(trace_out.H)[1]
+//        && mem[base_ptr + 2*4] ==  r6 == last(trace_out.H)[2]
+//        && mem[base_ptr + 3*4] ==  r7 == last(trace_out.H)[3]
+//        && mem[base_ptr + 4*4] ==  r8 == last(trace_out.H)[4]
+//        && mem[base_ptr + 5*4] ==  r9 == last(trace_out.H)[5]
+//        && mem[base_ptr + 6*4] == r10 == last(trace_out.H)[6]
+//        && mem[base_ptr + 7*4] == r11 == last(trace_out.H)[7];
 }
-
 
 
 /*
@@ -1547,11 +1570,10 @@ requires/ensures
     forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 18 ==> ValidAddr(mem, sp + j*4);
     
 requires
-   IsCompleteSHA256Trace(trace_in)
-&& SHA256TraceIsCorrect(trace_int)
-//    // K table adjusted properly
-//    ValidGlobalsAddr(globals, K_SHA256s().sym, lr);
-//    lr == AddressOfGlobal(K_SHA256s()) + 4*i;
+    IsCompleteSHA256Trace(trace_in);
+    SHA256TraceIsCorrect(trace_in);
+
+    // K table is valid
     ValidGlobals(globals);
     ValidGlobal(K_SHA256s());
     SeqLength(globals[K_SHA256s()]) == 256;
@@ -1583,7 +1605,7 @@ requires
             0 <= j < num_blocks*16 ==> ValidAddr(mem, input_ptr + j*4)
                                    && mem[input_ptr + j*4] == input[j]
          )
-     && (forall j :: 0 <= j < 16 ==> last(trace_in.W)[j] == bswap32(input[j]))
+//     && (forall j :: 0 <= j < 16 ==> last(trace_in.W)[j] == bswap32(input[j]))
 
      // Anti-aliasing
      && (ctx + 7*4 < input_ptr || ctx > input_ptr + num_blocks*16)     // input_ptr != ctx
@@ -1603,46 +1625,19 @@ ensures
 {
     // TODO: Need to save the value in R2 to the stack
 
-    rLDR( r4, r0, 0);       // a
-    rLDR( r5, r0, 4);       // b
-    rLDR( r6, r0, 8);       // c
-    rLDR( r7, r0, 12);      // d
-    rLDR( r8, r0, 16);      // e
-    rLDR( r9, r0, 20);      // f
-    rLDR(r10, r0, 24);      // g
-    rLDR(r11, r0, 28);      // h
 
     rLDRglobaladdr(lr, K_SHA256s().sym);
 
-    // Call sha256_one_block(trace_in, input);
+    ghost var base_ptr := r1;
+    sha256_one_block(base_ptr, trace_in, input);
 
-    // Reload the original elements from ctx
-    rLDR(t3, sp, 16*4);
-
-    rADDWrap(a, a, t2);     // h += Maj(a, b, c) from the past
-    rLDR(t0, t3, 0);
-    rLDR(t1, t3, 4);
-    rLDR(t2, t3, 8);
-    rADDWrap(a, a, t0);
-    rLDR(t0, t3, 12);
-    rADDWrap(b, b, t1);
-    rLDR(t1, t3, 16);
-    rADDWrap(c, c, t2);
-    rLDR(t2,t3,20);
-    rADDWrap(D,D,t0);
-    rLDR(t0,t3,24);
-    rADDWrap(E,E,t1);
-    rLDR(t1,t3,28);
-    rADDWrap(F,F,t2);
     rLDR(inp,sp,17*4);  //        @ pull inp
     rLDR(t2,sp,18*4);   //        @ pull inp+len
-    rADDWrap(G,G,t0);
-    rADDWrap(H,H,t1);
 
     // Decide whether to loop around again if inp != t2
 }
-
 */
+
 #verbatim
 }
 #endverbatim

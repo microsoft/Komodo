@@ -343,6 +343,60 @@ lemma lemma_SHA256TransitionOKAfterSettingAtoH(
 }
 
 
+lemma lemma_SHA256DigestOneBlockHelper1(
+    z:SHA256Trace,
+    W:seq<word>,
+    atoh:atoh_Type,
+    M:seq<word>
+    ) returns (
+    z':SHA256Trace
+    )
+    requires IsCompleteSHA256Trace(z);
+    requires SHA256TraceIsCorrect(z);
+    requires |W| == 64;
+    requires |M| == 16;
+    requires forall t:word {:trigger TStep(t)} :: TStep(t) && 0 <= t < 16 ==> W[t] == M[t];
+    requires forall t:word {:trigger TStep(t)} :: TStep(t) && 16 <= t <= 63 ==> W[t] == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(SSIG1(W[t-2]), W[t-7]), SSIG0(W[t-15])), W[t-16]);
+    requires atoh == atoh_c(last(z.H)[0], last(z.H)[1], last(z.H)[2], last(z.H)[3], 
+                            last(z.H)[4], last(z.H)[5], last(z.H)[6], last(z.H)[7]);
+    ensures  z' == z.(M := z.M + [M], W := z.W + [W], atoh := z.atoh + [[atoh]]);
+    ensures  IsSHA256TraceReadyForStep(z', 0);
+{
+    z' := z.(M := z.M + [M], W := z.W + [W[..]], atoh := z.atoh + [[atoh]]);
+
+    forall blk {:trigger CorrectlyAccumulatedHsForBlock(z', blk)} | 0 <= blk < |z'.H|-1
+        ensures |z'.atoh[blk]| == 65;
+        ensures CorrectlyAccumulatedHsForBlock(z', blk);
+    {
+        assert TBlk(blk);
+    }
+    assert CorrectlyAccumulatedHsForAllBlocks(z');
+
+    forall blk:int {:trigger TBlk(blk)} | 0 <= blk < |z'.atoh|
+        ensures |z'.atoh[blk]| <= 65;
+        ensures |z'.W[blk]| == 64;
+        ensures (|z'.atoh[blk]| > 0 ==> |z'.H[blk]| == 8 && ConvertAtoHToSeq(z'.atoh[blk][0]) == z'.H[blk]);
+    {
+    }
+    assert PartialSHA256TraceHasCorrectatohsWf(z');
+
+    forall blk {:trigger z'.W[blk]} {:trigger z'.M[blk]} | 0 <= blk < |z'.W|
+        ensures |z'.W[blk]| == 64;
+        ensures |z'.M[blk]| == 16;
+        ensures forall t {:trigger TStep(t)} :: TStep(t) && 0 <= t < 64 ==>
+                     (0 <= t <= 15 ==> z'.W[blk][t] == z'.M[blk][t])
+                     && (16 <= t <= 63 ==> z'.W[blk][t] == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(SSIG1(z'.W[blk][t-2]), z'.W[blk][t-7]), SSIG0(z'.W[blk][t-15])), z'.W[blk][t-16]));
+    {
+        assert TBlk(blk);
+    }
+    assert PartialSHA256TraceHasCorrectWs(z');
+
+    reveal_PartialSHA256TraceHasCorrectatohsOpaque();
+
+    assert IsSHA256TraceReadyForStep(z', 0);
+}
+
+
 lemma lemma_SHA256DigestOneBlockHelper2(
     z:SHA256Trace,
     old_H:seq<word>,
@@ -492,5 +546,14 @@ ghost method ComputeWs(input:seq<word>) returns (W:seq<word>)
     }
 
 }
+
+function {:opaque} bswap32_seq(input:seq<word>) : seq<word>
+    ensures |bswap32_seq(input)| == |input|;
+    ensures forall i :: 0 <= i < |bswap32_seq(input)| ==> bswap32_seq(input)[i] == bswap32(input[i]);
+{
+    if input == [] then []
+    else [bswap32(input[0])] + bswap32_seq(input[1..])
+}
+
 
 }
