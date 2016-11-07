@@ -174,7 +174,8 @@ ensures
          else mem[sp+17*4] == old(mem[sp+17*4]));               // We preserved the input ptr on the stack
 
     // Memory framing: We only touch the stack
-    forall addr:word :: old(mem)?[addr] && addr < sp && addr >= sp + 18*4 ==> mem?[addr] && mem[addr] == old(mem)[addr];
+    forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 18*4) ==> mem?[addr] && mem[addr] == old(mem)[addr];
+    mem[sp + 16*4] == old(mem)[sp + 16*4];
 
 // No longer need this in the ensures, since it's implied by the clauses below
 //    let T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), BSIG1(e)),
@@ -425,7 +426,8 @@ predicate Body_00_15LoopStateInvariantBreakdown(
  //&& t2 == Maj(a, b, c)
 
     // Memory framing: We only touch the stack
- && (forall addr:word :: addr in orig_mem && addr < sp && addr >= sp + 18*4 ==> addr in mem && mem[addr] == orig_mem[addr])
+ && (forall addr:word :: addr in orig_mem && (addr < sp || addr >= sp + 18*4) ==> addr in mem && mem[addr] == orig_mem[addr])
+ && mem[sp + 16*4] == orig_mem[sp + 16*4]
 
     // SHA semantics
  && SeqLength(current_trace.H) > 0
@@ -813,7 +815,8 @@ ensures
     mem[sp+17*4] == old(mem[sp+17*4]);         // We preserved the input ptr on the stack
 
     // Memory framing: We only touch the stack
-    forall addr:word :: old(mem)?[addr] && addr < sp && addr >= sp + 18*4 ==> mem?[addr] && mem[addr] == old(mem)[addr];
+    forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 18*4) ==> mem?[addr] && mem[addr] == old(mem)[addr];
+    mem[sp + 16*4] == old(mem)[sp + 16*4];
 
     exists trace_out:SHA256Trace ::
         IsSHA256TraceReadyForStep(trace_out, i+1)
@@ -982,7 +985,8 @@ predicate Body_16_XXLoopStateInvariantBreakdown(
  && t3 == BitwiseXor(b, c)
 
     // Memory framing: We only touch the stack
- && (forall addr:word :: addr in orig_mem && addr < sp && addr >= sp + 18*4 ==> addr in mem && mem[addr] == orig_mem[addr])
+ && (forall addr:word :: addr in orig_mem && (addr < sp || addr >= sp + 18*4) ==> addr in mem && mem[addr] == orig_mem[addr])
+ && mem[sp + 16*4] == orig_mem[sp + 16*4]
 
     // SHA semantics
  && SeqLength(current_trace.H) > 0
@@ -1251,121 +1255,6 @@ import opened Body_00_15LoopUnrollableCode = Body_00_15LoopUnrollableCode
 import opened Body_16_XXLoopUnrollableCode = Body_16_XXLoopUnrollableCode
 #endverbatim
 
-procedure {:refined} sha256_one_block(
-    ghost trace_in:SHA256Trace,
-    ghost input:seq(word)
-    )
-requires/ensures
-    // Stack is accessible
-    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 18 ==> ValidAddr(mem, sp + j*4);
-requires
-    // SHA semantics
-    IsSHA256TraceReadyForStep(trace_in, 0);
-    SeqLength(trace_in.H) > 0;
-    
-    // K table adjusted properly
-    ValidGlobalsAddr(globals, K_SHA256s().sym, lr);
-    globals?[K_SHA256s()];
-    AddressOfGlobal(K_SHA256s()) + 256 < 0x1_0000_0000;
-    lr == AddressOfGlobal(K_SHA256s());
-    SeqLength(globals[K_SHA256s()]) == 256;
-    forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][j] == K_SHA256(j);
-
-    let t0 := r0 in
-    let t1 := r2 in
-    let t2 := r12 in
-    let t3 := r3 in
-    let t4 := r1 in
-    let a := r4 in
-    let b := r5 in
-    let c := r6 in
-    let d := r7 in
-    let e := r8 in
-    let f := r9 in
-    let g := r10 in
-    let h := r11 in
-    let input_ptr := r1 in  // Note that this aliases t4
-
-    let ctx := r0 in
-    let input_ptr := r1 in
-    let num_blocks := r2 in // Number of 64-byte blocks to process
-        last(trace_in.H)[0] == last(last(trace_in.atoh)).a == a
-     && last(trace_in.H)[1] == last(last(trace_in.atoh)).b == b
-     && last(trace_in.H)[2] == last(last(trace_in.atoh)).c == c
-     && last(trace_in.H)[3] == last(last(trace_in.atoh)).d == d
-     && last(trace_in.H)[4] == last(last(trace_in.atoh)).e == e
-     && last(trace_in.H)[5] == last(last(trace_in.atoh)).f == f
-     && last(trace_in.H)[6] == last(last(trace_in.atoh)).g == g
-     && last(trace_in.H)[7] == last(last(trace_in.atoh)).h == h
-
-     // Ghost input matches in-memory input
-     && SeqLength(input) == 16
-     && (input_ptr + 16*4) < 0x1_0000_0000
-     && (input_ptr + 16*4 < sp || sp + 18*4 <= input_ptr)    // input_ptr doesn't alias the stack
-     && (forall j {ValidAddr(mem, input_ptr+j*4)} { mem?[input_ptr+j*4] } :: 
-            0 <= j < 16 ==> ValidAddr(mem, input_ptr + j*4)
-                                   && mem[input_ptr + j*4] == input[j]
-         )
-     // The first 16 values in W are the byte-swapped version of the input words
-     && (forall j :: 0 <= j < 16 ==> last(trace_in.W)[j] == bswap32(input[j]))
-   ; // end let
-     
-
-reads
-    sp; globals;
-modifies
-    mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
-ensures
-    // Memory framing: We only touch the stack
-    forall addr:word :: old(mem)?[addr] && addr < sp && addr >= sp + 18*4 ==> mem?[addr] && mem[addr] == old(mem)[addr];
-
-    // K table adjusted properly
-    //ValidGlobalsAddr(globals, K_SHA256s().sym, lr);
-//    globals?[K_SHA256s()];
-//    AddressOfGlobal(K_SHA256s()) + 256 < 0x1_0000_0000;
-//    lr == AddressOfGlobal(K_SHA256s());
-//    SeqLength(globals[K_SHA256s()]) == 256;
-//    forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][j] == K_SHA256(j);
-    lr == AddressOfGlobal(K_SHA256s()) + 256;
-
-    mem[sp+17*4] == old(r1) + 64;
-
-    exists trace_out:SHA256Trace ::
-        SeqLength(trace_out.H) > 0
-     && IsSHA256TraceReadyForStep(trace_out, 64)
-     && trace_out.M == trace_in.M
-     && trace_out.H == trace_in.H
-     && trace_out.W == trace_in.W
-     && last(last(trace_out.atoh)) == atoh_c(r4, r5, r6, r7, r8, r9, r10, r11);
-{
-    // Set up the initial conditions for BODY_00_15
-    assert ValidAddr(mem, r1 + 0*4);    // OBSERVE that r1 aka t1 is a ValidAddr
-    rLDR(r2, r1, 0);        // t1 <- input[0]
-    assert r2 == input[0];
-    rADDWrap(r1, r1, 4);        // TODO: OpenSSL does this with a single LDR instruction
-    rEOR(r3, r5, r6);       // t3 <- B xor C  "@magic"
-    //rEOR(r12, r12, r12);    // Note: OpenSSL includes this unnecessarily, since for i=0, we clobber r12
-    //assert r12 == 0 by { lemma_XorSelfIsZero(); }
-
-    assert r1 /*aka t4*/ == old(r1) + 1 * 4;    // OBSERVE that t4 is a ValidAddr
-    ghost var input_ptr := old(r1);      // Avoid Spartan mis-capture
-    Body_00_15LoopUnrolled(input_ptr, trace_in, input);
-
-    exists trace_mid :: 
-             Body_00_15LoopStateInvariantBreakdown(old(mem), mem, input_ptr, trace_in, trace_mid, 16, sp, globals, lr,
-                                                   r2, r12, r3, r1, input,
-                                                   r4, r5, r6, r7, r8, r9, r10, r11);
-
-    ghost var mid_mem := mem;
-    Body_16_XXLoopUnrolled(trace_mid, input);
-    
-    exists trace_out :: 
-             Body_16_XXLoopStateInvariantBreakdown(mid_mem, mem, trace_in, trace_out, 64, sp, globals, lr,
-                                                   r2, r12, r3, r1, input,
-                                                   r4, r5, r6, r7, r8, r9, r10, r11);
-    rADDWrap(r4, r4, r12);
-}
-
 procedure {:refined} update_Hs(
     ghost base_ptr:word,
     inout operand t0:word,
@@ -1414,7 +1303,7 @@ modifies
     mem; 
 ensures
     // Memory framing: We only touch 8 bytes pointed to by the base_ptr
-    forall addr:word :: old(mem)?[addr] && addr < base_ptr && addr >= sp + 8*4 
+    forall addr:word :: old(mem)?[addr] && (addr < base_ptr || addr >= base_ptr + 8*4)
                     ==> mem?[addr] && mem[addr] == old(mem)[addr];
     mem[base_ptr +  0*4] == a == BitwiseAdd32(old(mem)[base_ptr +  0*4], old(a));
     mem[base_ptr +  1*4] == b == BitwiseAdd32(old(mem)[base_ptr +  1*4], old(b));
@@ -1468,6 +1357,175 @@ ensures
         assert ValidAddr(old(mem), sp + j*4);
     }
 }
+
+procedure {:refined} sha256_one_block(
+    ghost base_ptr:word,
+    ghost trace_in:SHA256Trace,
+    ghost input:seq(word)
+    )
+requires/ensures
+    // Stack is accessible
+    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 18 ==> ValidAddr(mem, sp + j*4);
+
+    base_ptr == mem[sp + 16*4];
+
+    // Base_ptr doesn't alias the stack
+    base_ptr + 32 < sp || base_ptr > sp + 18*4;
+
+    // Stack slot 16 holds a pointer to a valid region of memory with 8 words of data in it
+    forall addr {ValidAddr(mem, addr)} {mem?[addr]} :: 
+        base_ptr <= addr < base_ptr + 8*4 && (addr - base_ptr) % 4 == 0 ==> ValidAddr(mem, addr);
+
+requires
+    // SHA semantics
+    IsSHA256TraceReadyForStep(trace_in, 0);
+    SeqLength(trace_in.H) > 0;
+    SeqLength(trace_in.M) == SeqLength(trace_in.H);
+    
+    // K table adjusted properly
+    ValidGlobalsAddr(globals, K_SHA256s().sym, lr);
+    globals?[K_SHA256s()];
+    AddressOfGlobal(K_SHA256s()) + 256 < 0x1_0000_0000;
+    lr == AddressOfGlobal(K_SHA256s());
+    SeqLength(globals[K_SHA256s()]) == 256;
+    forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][j] == K_SHA256(j);
+
+    let t0 := r0 in
+    let t1 := r2 in
+    let t2 := r12 in
+    let t3 := r3 in
+    let t4 := r1 in
+    let a := r4 in
+    let b := r5 in
+    let c := r6 in
+    let d := r7 in
+    let e := r8 in
+    let f := r9 in
+    let g := r10 in
+    let h := r11 in
+    let input_ptr := r1 in  // Note that this aliases t4
+
+    let ctx := r0 in
+    let input_ptr := r1 in
+    let num_blocks := r2 in // Number of 64-byte blocks to process
+        last(trace_in.H)[0] == mem[base_ptr + 0*4] == last(last(trace_in.atoh)).a == a
+     && last(trace_in.H)[1] == mem[base_ptr + 1*4] == last(last(trace_in.atoh)).b == b
+     && last(trace_in.H)[2] == mem[base_ptr + 2*4] == last(last(trace_in.atoh)).c == c
+     && last(trace_in.H)[3] == mem[base_ptr + 3*4] == last(last(trace_in.atoh)).d == d
+     && last(trace_in.H)[4] == mem[base_ptr + 4*4] == last(last(trace_in.atoh)).e == e
+     && last(trace_in.H)[5] == mem[base_ptr + 5*4] == last(last(trace_in.atoh)).f == f
+     && last(trace_in.H)[6] == mem[base_ptr + 6*4] == last(last(trace_in.atoh)).g == g
+     && last(trace_in.H)[7] == mem[base_ptr + 7*4] == last(last(trace_in.atoh)).h == h
+
+     // Ghost input matches in-memory input
+     && SeqLength(input) == 16
+     && (input_ptr + 16*4) < 0x1_0000_0000
+     && (input_ptr + 16*4 < sp || sp + 18*4 <= input_ptr)    // input_ptr doesn't alias the stack
+     && (forall j {ValidAddr(mem, input_ptr+j*4)} { mem?[input_ptr+j*4] } :: 
+            0 <= j < 16 ==> ValidAddr(mem, input_ptr + j*4)
+                                   && mem[input_ptr + j*4] == input[j]
+         )
+     // The first 16 values in W are the byte-swapped version of the input words
+     && (forall j :: 0 <= j < 16 ==> last(trace_in.W)[j] == bswap32(input[j]))
+   ; // end let
+     
+
+reads
+    sp; globals;
+modifies
+    mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
+ensures
+    // Memory framing: We only touch the stack and 8 bytes pointed to by the base_ptr
+    forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 18*4) && (addr < base_ptr && addr >= sp + 8*4)
+                    ==> mem?[addr] && mem[addr] == old(mem)[addr];
+
+    // K table adjusted properly
+    //ValidGlobalsAddr(globals, K_SHA256s().sym, lr);
+//    globals?[K_SHA256s()];
+//    AddressOfGlobal(K_SHA256s()) + 256 < 0x1_0000_0000;
+//    lr == AddressOfGlobal(K_SHA256s());
+//    SeqLength(globals[K_SHA256s()]) == 256;
+//    forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][j] == K_SHA256(j);
+    lr == AddressOfGlobal(K_SHA256s()) + 256;
+
+    mem[sp+17*4] == old(r1) + 64;
+
+//    exists trace_out:SHA256Trace ::
+//        SeqLength(trace_out.H) > 0
+//     && IsSHA256TraceReadyForStep(trace_out, 64)
+//     && trace_out.M == trace_in.M
+//     && trace_out.H == trace_in.H
+//     && trace_out.W == trace_in.W
+//     && last(last(trace_out.atoh)) == atoh_c(r4, r5, r6, r7, r8, r9, r10, r11);
+
+    exists trace_out:SHA256Trace ::
+           IsCompleteSHA256Trace(trace_out)
+        && SHA256TraceIsCorrect(trace_out)
+        && trace_out.M == trace_in.M
+        && all_but_last(trace_out.H) == trace_in.H
+        && trace_out.W == trace_in.W
+        && mem[base_ptr + 0*4] ==  r4 == last(trace_out.H)[0]
+        && mem[base_ptr + 1*4] ==  r5 == last(trace_out.H)[1]
+        && mem[base_ptr + 2*4] ==  r6 == last(trace_out.H)[2]
+        && mem[base_ptr + 3*4] ==  r7 == last(trace_out.H)[3]
+        && mem[base_ptr + 4*4] ==  r8 == last(trace_out.H)[4]
+        && mem[base_ptr + 5*4] ==  r9 == last(trace_out.H)[5]
+        && mem[base_ptr + 6*4] == r10 == last(trace_out.H)[6]
+        && mem[base_ptr + 7*4] == r11 == last(trace_out.H)[7];
+{
+    // Set up the initial conditions for BODY_00_15
+    assert ValidAddr(mem, r1 + 0*4);    // OBSERVE that r1 aka t1 is a ValidAddr
+    rLDR(r2, r1, 0);        // t1 <- input[0]
+    assert r2 == input[0];
+    rADDWrap(r1, r1, 4);        // TODO: OpenSSL does this with a single LDR instruction
+    rEOR(r3, r5, r6);       // t3 <- B xor C  "@magic"
+    //rEOR(r12, r12, r12);    // Note: OpenSSL includes this unnecessarily, since for i=0, we clobber r12
+    //assert r12 == 0 by { lemma_XorSelfIsZero(); }
+
+    assert r1 /*aka t4*/ == old(r1) + 1 * 4;    // OBSERVE that t4 is a ValidAddr
+    ghost var input_ptr := old(r1);      // Avoid Spartan mis-capture
+    Body_00_15LoopUnrolled(input_ptr, trace_in, input);
+
+    exists trace_00_15 :: 
+             Body_00_15LoopStateInvariantBreakdown(old(mem), mem, input_ptr, trace_in, trace_00_15, 16, sp, globals, lr,
+                                                   r2, r12, r3, r1, input,
+                                                   r4, r5, r6, r7, r8, r9, r10, r11);
+
+    ghost var mid_mem := mem;
+    Body_16_XXLoopUnrolled(trace_00_15, input);
+    
+    exists trace_16_XX :: 
+             Body_16_XXLoopStateInvariantBreakdown(mid_mem, mem, trace_in, trace_16_XX, 64, sp, globals, lr,
+                                                   r2, r12, r3, r1, input,
+                                                   r4, r5, r6, r7, r8, r9, r10, r11);
+    rADDWrap(r4, r4, r12);
+
+    forall addr :| base_ptr <= addr < base_ptr + 8 * 4 && (addr - base_ptr) % 4 == 0 
+        :: ValidAddr(mem, addr)
+    {
+        assert old(mem)?[addr];
+    }
+    update_Hs(base_ptr, r0, r2, r12, r3, r4, r5, r6, r7, r8, r9, r10, r11);
+
+    ghost var old_H := seq( old(mem)[base_ptr +  0],
+                            old(mem)[base_ptr +  4],
+                            old(mem)[base_ptr +  8],
+                            old(mem)[base_ptr + 12],
+                            old(mem)[base_ptr + 16],
+                            old(mem)[base_ptr + 20],
+                            old(mem)[base_ptr + 24],
+                            old(mem)[base_ptr + 28]);
+    ghost var new_H := seq( mem[base_ptr +  0],
+                            mem[base_ptr +  4],
+                            mem[base_ptr +  8],
+                            mem[base_ptr + 12],
+                            mem[base_ptr + 16],
+                            mem[base_ptr + 20],
+                            mem[base_ptr + 24],
+                            mem[base_ptr + 28]);
+    ghost var trace_out := lemma_SHA256DigestOneBlockHelper2(trace_16_XX, old_H, new_H);
+}
+
 
 
 /*
