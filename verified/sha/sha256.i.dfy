@@ -459,5 +459,38 @@ lemma lemma_SHA256DigestOneBlockHelper2(
 //    lemma_AddingMultipleOfNDoesntChangeModN(|WordSeqToBytes(last(z.M))|, |ctx.processed_bytes|, 64);
 }
 
+ghost method ComputeWs(input:seq<word>) returns (W:seq<word>)
+    requires |input| == 16;
+    ensures |W| == 64;
+    ensures forall t:word {:trigger TStep(t)} :: TStep(t) && 0 <= t < 64 ==>
+                     (0 <= t <= 15 ==> W[t] == input[t])
+                  && (16 <= t <= 63 ==> W[t] == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(SSIG1(W[t-2]), 
+                                                                                       W[t-7]), 
+                                                                          SSIG0(W[t-15])), 
+                                                             W[t-16]));
+{
+    W := input;
+    var i := 16;
+    while i < 64
+        invariant 16 <= i <= 64;
+        invariant |W| == i;
+        invariant 
+            forall t:word {:trigger TStep(t)} :: TStep(t) && 0 <= t < i ==>
+                     (0 <= t <= 15 ==> W[t] == input[t])
+                  && (16 <= t <= i ==> W[t] == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(SSIG1(W[t-2]), 
+                                                                                      W[t-7]), 
+                                                                          SSIG0(W[t-15])), 
+                                                            W[t-16]));
+
+    {
+        var new_W := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(SSIG1(W[i-2]), 
+                                                            W[i-7]), 
+                                               SSIG0(W[i-15])), 
+                                 W[i-16]);
+        W := W + [new_W];
+        i := i + 1;
+    }
+
+}
 
 }
