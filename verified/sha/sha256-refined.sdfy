@@ -1777,38 +1777,17 @@ ensures
     }
 
     // OBSERVE
-    ghost var prev_mem := mem;
-    ghost var len_M := SeqLength(trace_in.M);
+    ghost var prev_mem := mem;  // Avoid Spartan mis-capture
+    ghost var len_M := SeqLength(trace_in.M);   
     assert BlockInvariant(trace_in, input, globals, len_M, prev_mem, mem, sp, lr, r1, r12,
                           r4, r5, r6, r7, r8, r9, r10, r11,
                           input_ptr, ctx_ptr, num_blocks, 0);
-    sha256_loop(ctx_ptr, input_ptr, input, num_blocks, len_M, mem);
-    assert exists trace_out ::
-        BlockInvariant(trace_out, input, globals, len_M, prev_mem, mem, sp, lr, r1, r12,
-                        r4, r5, r6, r7, r8, r9, r10, r11,
-                        input_ptr, ctx_ptr, num_blocks, num_blocks);
+    sha256_loop(ctx_ptr, input_ptr, input, num_blocks, len_M, prev_mem);
     exists trace_out ::
         BlockInvariant(trace_out, input, globals, len_M, prev_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, num_blocks);
     assert IsCompleteSHA256Trace(trace_out);
-//        && SHA256TraceIsCorrect(trace_out);
-//    assert SeqLength(trace_out.M) == SeqLength(trace_in.M) + num_blocks;
-//    assert (forall i :: 0 <= i < num_blocks
-//             ==> trace_out.M[SeqLength(trace_in.M) + i] == bswap32_seq(SeqSlice(input, i*16, (i+1)*16))); 
-//    assert last(trace_out.H)[0] == mem[ctx_ptr + 0*4];
-//    assert last(trace_out.H)[1] == mem[ctx_ptr + 1*4];
-//    assert last(trace_out.H)[2] == mem[ctx_ptr + 2*4];
-//    assert last(trace_out.H)[3] == mem[ctx_ptr + 3*4];
-//    assert last(trace_out.H)[4] == mem[ctx_ptr + 4*4];
-//    assert last(trace_out.H)[5] == mem[ctx_ptr + 5*4];
-//    assert last(trace_out.H)[6] == mem[ctx_ptr + 6*4];
-//    assert last(trace_out.H)[7] == mem[ctx_ptr + 7*4];
-//
-//     // Memory framing:  We only touch the stack and 8 bytes pointed to by ctx_ptr
-//    assert (forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 19 * 4) 
-//                                                && (addr < ctx_ptr || addr >= ctx_ptr + 8 * 4) 
-//                            ==> mem?[addr] && old(mem)[addr] == mem[addr]);
 }
 
 // Wrapper around the inner version that conforms to the calling convention
