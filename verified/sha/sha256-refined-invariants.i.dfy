@@ -17,7 +17,7 @@ import opened sha256_refined_invariants_i_ARMdecls = ARMdecls
 
 predicate BlockInvariant(
             trace:SHA256Trace, input:seq<word>, globals:map<operand, seq<word>>,
-            mem:memmap, sp:word, lr:word, r1:word,
+            old_M_len:nat, old_mem:memmap, mem:memmap, sp:word, lr:word, r1:word,
             a:word, b:word, c:word, d:word, e:word, f:word, g:word, h:word,
             input_ptr:word, ctx_ptr:word,             
             num_blocks:nat, block:nat)
@@ -49,9 +49,9 @@ predicate BlockInvariant(
  // Trace properties
  && IsCompleteSHA256Trace(trace)
  && SHA256TraceIsCorrect(trace) 
- && |trace.M| >= block
+ && |trace.M| == old_M_len + block
  && (forall i :: 0 <= i < block 
-             ==> trace.M[|trace.M| - block + i] == bswap32_seq(input[i*16..(i+1)*16])) 
+             ==> trace.M[old_M_len + i] == bswap32_seq(input[i*16..(i+1)*16])) 
 
  // Globals properties
  && ValidGlobalsAddr(globals, K_SHA256s().sym, lr) 
@@ -72,9 +72,9 @@ predicate BlockInvariant(
  && last(trace.H)[7] == mem[ctx_ptr + 7 * 4] == h 
 
  // Memory framing:  We only touch the stack and 8 bytes pointed to by ctx_ptr
- && (forall addr:word :: addr in mem && (addr < sp || addr >= sp + 19 * 4) 
-                                     && (addr < ctx_ptr || addr >= ctx_ptr + 8 * 4) 
-                     ==> addr in mem && mem[addr] == mem[addr])
+ && (forall addr:word :: addr in old_mem && (addr < sp || addr >= sp + 19 * 4) 
+                                         && (addr < ctx_ptr || addr >= ctx_ptr + 8 * 4) 
+                     ==> addr in mem && old_mem[addr] == mem[addr])
 }
 
 

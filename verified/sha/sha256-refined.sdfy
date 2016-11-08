@@ -1540,14 +1540,15 @@ ensures
 
 procedure {:refined} sha256_loop_body(
     ghost ctx_ptr:word,
-    ghost trace_in:SHA256Trace,
     ghost input_ptr:word,
     ghost input:seq(word),
     ghost num_blocks:nat,
+    ghost old_M_length:nat,
     ghost block:nat
     )
 requires block < num_blocks;
-requires BlockInvariant(trace_in, input, globals, mem, sp, lr, r1,
+requires exists trace_in ::
+         BlockInvariant(trace_in, input, globals, old_M_length, mem, mem, sp, lr, r1,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, block);
 reads
@@ -1555,7 +1556,7 @@ reads
 modifies
     mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
 ensures exists trace_out ::
-        BlockInvariant(trace_out, input, globals, mem, sp, lr, r1,
+        BlockInvariant(trace_out, input, globals, old_M_length, old(mem), mem, sp, lr, r1,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, block+1);
 {
@@ -1568,7 +1569,10 @@ ensures exists trace_out ::
         assert current_input_ptr + j*4 == input_ptr + (block*16+j)*4;
         assert ValidAddr(mem, current_input_ptr + j*4);
     }
-
+    exists trace_in ::
+         BlockInvariant(trace_in, input, globals, old_M_length, mem, mem, sp, lr, r1,
+                        r4, r5, r6, r7, r8, r9, r10, r11,
+                        input_ptr, ctx_ptr, num_blocks, block);
     sha256_one_block(ctx_ptr, trace_in, block_input);
     exists trace_out:SHA256Trace ::
            IsCompleteSHA256Trace(trace_out)
@@ -1593,7 +1597,7 @@ ensures exists trace_out ::
         assert ValidAddr(old(mem), input_ptr + j*4);
     }
 
-    assert BlockInvariant(trace_out, input, globals, mem, sp, lr, r1,
+    assert BlockInvariant(trace_out, input, globals, old_M_length, old(mem), mem, sp, lr, r1,
                           r4, r5, r6, r7, r8, r9, r10, r11,
                           input_ptr, ctx_ptr, num_blocks, block+1);
 }
@@ -1601,12 +1605,13 @@ ensures exists trace_out ::
 
 procedure {:refined} sha256_loop(
     ghost ctx_ptr:word,
-    ghost trace_in:SHA256Trace,
     ghost input_ptr:word,
     ghost input:seq(word),
-    ghost num_blocks:nat
+    ghost num_blocks:nat,
+    ghost old_M_length:nat
     )
-requires BlockInvariant(trace_in, input, globals, mem, sp, lr, r1,
+requires exists trace_in ::
+         BlockInvariant(trace_in, input, globals, old_M_length, mem, mem, sp, lr, r1,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, 0);
 reads
@@ -1614,7 +1619,7 @@ reads
 modifies
     mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
 ensures exists trace_out ::
-        BlockInvariant(trace_out, input, globals, mem, sp, lr, r1,
+        BlockInvariant(trace_out, input, globals, old_M_length, old(mem), mem, sp, lr, r1,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, num_blocks);
 {
@@ -1626,12 +1631,12 @@ ensures exists trace_out ::
             block == num_blocks ==> r1 == r12;
             old(r1) <= r1 <= r12;
             exists trace :: 
-                BlockInvariant(trace, input, globals, mem, sp, lr, r1,
+                BlockInvariant(trace, input, globals, old_M_length, old(mem), mem, sp, lr, r1,
                                r4, r5, r6, r7, r8, r9, r10, r11,
                                input_ptr, ctx_ptr, num_blocks, block);
          decreases r12 - r1;
     {
-        sha256_loop_body(ctx_ptr, trace, input_ptr, input, num_blocks, block);
+        sha256_loop_body(ctx_ptr, input_ptr, input, num_blocks, old_M_length, block);
         block := block + 1;
     }
 }
@@ -1688,6 +1693,26 @@ reads
 modifies
     mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
 ensures
+    exists trace_out ::
+           IsCompleteSHA256Trace(trace_out)
+        && SHA256TraceIsCorrect(trace_out)
+        && SeqLength(trace_out.M) == SeqLength(trace_in.M) + old(r2)
+        && (forall i :: 0 <= i < old(r2) 
+             ==> trace_out.M[SeqLength(trace_in.M) + i] == bswap32_seq(SeqSlice(input, i*16, (i+1)*16))) 
+        && last(trace_out.H)[0] == mem[old(r0) + 0*4]
+        && last(trace_out.H)[1] == mem[old(r0) + 1*4]
+        && last(trace_out.H)[2] == mem[old(r0) + 2*4]
+        && last(trace_out.H)[3] == mem[old(r0) + 3*4]
+        && last(trace_out.H)[4] == mem[old(r0) + 4*4]
+        && last(trace_out.H)[5] == mem[old(r0) + 5*4]
+        && last(trace_out.H)[6] == mem[old(r0) + 6*4]
+        && last(trace_out.H)[7] == mem[old(r0) + 7*4]
+        ;
+
+     // Memory framing:  We only touch the stack and 8 bytes pointed to by ctx_ptr
+    forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 19 * 4) 
+                                                && (addr < old(r0) || addr >= old(r0) + 8 * 4) 
+                            ==> mem?[addr] && old(mem)[addr] == mem[addr];
 {
     rLDRglobaladdr(lr, K_SHA256s().sym);
 
@@ -1740,8 +1765,35 @@ ensures
         assert ValidAddr(old(mem), input_ptr + j*4);
     }
 
-    sha256_loop(ctx_ptr, trace_in, input_ptr, input, num_blocks);
+    ghost var prev_mem := mem;
 
+    // OBSERVE
+    assert BlockInvariant(trace_in, input, globals, SeqLength(trace_in.M), mem, mem, sp, lr, r1,
+                          r4, r5, r6, r7, r8, r9, r10, r11,
+                          input_ptr, ctx_ptr, num_blocks, 0);
+    sha256_loop(ctx_ptr, input_ptr, input, num_blocks, SeqLength(trace_in.M));
+    exists trace_out ::
+        BlockInvariant(trace_out, input, globals, SeqLength(trace_in.M), prev_mem, mem, sp, lr, r1,
+                        r4, r5, r6, r7, r8, r9, r10, r11,
+                        input_ptr, ctx_ptr, num_blocks, num_blocks);
+    assert IsCompleteSHA256Trace(trace_out);
+//        && SHA256TraceIsCorrect(trace_out);
+//    assert SeqLength(trace_out.M) == SeqLength(trace_in.M) + num_blocks;
+//    assert (forall i :: 0 <= i < num_blocks
+//             ==> trace_out.M[SeqLength(trace_in.M) + i] == bswap32_seq(SeqSlice(input, i*16, (i+1)*16))); 
+//    assert last(trace_out.H)[0] == mem[ctx_ptr + 0*4];
+//    assert last(trace_out.H)[1] == mem[ctx_ptr + 1*4];
+//    assert last(trace_out.H)[2] == mem[ctx_ptr + 2*4];
+//    assert last(trace_out.H)[3] == mem[ctx_ptr + 3*4];
+//    assert last(trace_out.H)[4] == mem[ctx_ptr + 4*4];
+//    assert last(trace_out.H)[5] == mem[ctx_ptr + 5*4];
+//    assert last(trace_out.H)[6] == mem[ctx_ptr + 6*4];
+//    assert last(trace_out.H)[7] == mem[ctx_ptr + 7*4];
+//
+//     // Memory framing:  We only touch the stack and 8 bytes pointed to by ctx_ptr
+//    assert (forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 19 * 4) 
+//                                                && (addr < ctx_ptr || addr >= ctx_ptr + 8 * 4) 
+//                            ==> mem?[addr] && old(mem)[addr] == mem[addr]);
 }
 
 #verbatim
