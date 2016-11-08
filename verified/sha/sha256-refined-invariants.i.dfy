@@ -40,7 +40,8 @@ predicate BlockInvariant(
  && r1 == input_ptr + block * 16 * 4
  && input_ptr + num_blocks * 16 * 4 == mem[sp + 18*4]
  && input_ptr + num_blocks * 16 * 4 < 0x1_0000_0000
- && (input_ptr + num_blocks * 16 * 4 < sp || sp + 19 * 4 <= input_ptr)
+ && (input_ptr + num_blocks * 16 * 4 < sp || sp + 19 * 4 <= input_ptr)  // Doesn't alias sp
+ && (input_ptr + num_blocks * 16 * 4 < ctx_ptr || ctx_ptr + 32 <= input_ptr)  // Doesn't alias input_ptr
  && (forall j {:trigger ValidAddr(mem, input_ptr + j * 4)} {:trigger input_ptr + j * 4 in mem} ::
             0 <= j < num_blocks * 16 ==> ValidAddr(mem, input_ptr + j * 4) 
                                       && mem[input_ptr + j * 4] == input[j])
@@ -49,7 +50,8 @@ predicate BlockInvariant(
  && IsCompleteSHA256Trace(trace)
  && SHA256TraceIsCorrect(trace) 
  && |trace.M| >= block
- && (forall i :: 0 <= i < block ==> trace.M[i] == bswap32_seq(input[i*16..(i+1)*16])) 
+ && (forall i :: 0 <= i < block 
+             ==> trace.M[|trace.M| - block + i] == bswap32_seq(input[i*16..(i+1)*16])) 
 
  // Globals properties
  && ValidGlobalsAddr(globals, K_SHA256s().sym, lr) 

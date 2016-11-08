@@ -1591,14 +1591,7 @@ ensures exists trace_out ::
                                          && mem[input_ptr + j*4] == input[j]
     {
         assert ValidAddr(old(mem), input_ptr + j*4);
-        assert ValidAddr(mem, input_ptr + j*4);
-        assert old(mem)?[input_ptr + j*4];
-        ghost var addr := input_ptr + j*4;
-        assert addr < sp_old_sp || addr >= sp_old_sp + 19*4;
-        assert addr < ctx_ptr || addr >= ctx_ptr + 8 * 4;
-        assert old(mem)[input_ptr + j*4] == mem[input_ptr + j*4] == input[j];
     }
-
 
     assert BlockInvariant(trace_out, input, globals, mem, sp, lr, r1,
                           r4, r5, r6, r7, r8, r9, r10, r11,
