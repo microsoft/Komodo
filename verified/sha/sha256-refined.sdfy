@@ -1544,11 +1544,12 @@ procedure {:refined} sha256_loop_body(
     ghost input:seq(word),
     ghost num_blocks:nat,
     ghost old_M_length:nat,
+    ghost old_mem:memmap,
     ghost block:nat
     )
 requires block < num_blocks;
 requires exists trace_in ::
-         BlockInvariant(trace_in, input, globals, old_M_length, mem, mem, sp, lr, r1, r12,
+         BlockInvariant(trace_in, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, block);
 reads
@@ -1556,7 +1557,7 @@ reads
 modifies
     mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
 ensures exists trace_out ::
-        BlockInvariant(trace_out, input, globals, old_M_length, old(mem), mem, sp, lr, r1, r12,
+        BlockInvariant(trace_out, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, block+1);
 {
@@ -1610,10 +1611,11 @@ procedure {:refined} sha256_loop(
     ghost input_ptr:word,
     ghost input:seq(word),
     ghost num_blocks:nat,
-    ghost old_M_length:nat
+    ghost old_M_length:nat,
+    ghost old_mem:memmap
     )
 requires exists trace_in ::
-         BlockInvariant(trace_in, input, globals, old_M_length, mem, mem, sp, lr, r1, r12,
+         BlockInvariant(trace_in, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, 0);
 reads
@@ -1621,29 +1623,30 @@ reads
 modifies
     mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
 ensures exists trace_out ::
-        BlockInvariant(trace_out, input, globals, old_M_length, old(mem), mem, sp, lr, r1, r12,
+        BlockInvariant(trace_out, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, num_blocks);
 {
     ghost var block:nat := 0;
     while (r1 < r12)
         invariant
-            0 <= block <= num_blocks;
+            //0 <= block <= num_blocks;
             //r1 == input_ptr + block * 16 * 4;
-            block == num_blocks ==> r1 == r12;
-            old(r1) <= r1 <= r12;
+            //block == num_blocks ==> r1 == r12;
+            //old(r1) <= r1 <= r12;
             exists trace :: 
-                BlockInvariant(trace, input, globals, old_M_length, old(mem), mem, sp, lr, r1, r12,
+                BlockInvariant(trace, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
                                r4, r5, r6, r7, r8, r9, r10, r11,
                                input_ptr, ctx_ptr, num_blocks, block);
          decreases r12 - r1;
     {
-        sha256_loop_body(ctx_ptr, input_ptr, input, num_blocks, old_M_length, block);
+        sha256_loop_body(ctx_ptr, input_ptr, input, num_blocks, old_M_length, old_mem, block);
         block := block + 1;
     }
 }
 
-procedure {:refined} sha256_block_data_order(
+// Core implementation that does the real work
+procedure {:refined} sha256_block_data_order_inner(
     ghost trace_in:SHA256Trace,
     ghost input:seq(word)
     )
@@ -1695,6 +1698,12 @@ reads
 modifies
     mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
 ensures
+    // Memory framing:  We only touch the stack and 8 bytes pointed to by ctx_ptr
+    forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 19 * 4) 
+                                        && (addr < old(r0) || addr >= old(r0) + 8 * 4) 
+                            ==> mem?[addr] && old(mem)[addr] == mem[addr];
+    forall j {ValidAddr(mem, old(r0)+j*4)} { mem?[old(r0)+j*4] } :: 0 <= j < 8 ==> ValidAddr(mem, old(r0) + j*4);
+
     exists trace_out ::
            IsCompleteSHA256Trace(trace_out)
         && SHA256TraceIsCorrect(trace_out)
@@ -1711,10 +1720,6 @@ ensures
         && last(trace_out.H)[7] == mem[old(r0) + 7*4]
         ;
 
-     // Memory framing:  We only touch the stack and 8 bytes pointed to by ctx_ptr
-    forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 19 * 4) 
-                                                && (addr < old(r0) || addr >= old(r0) + 8 * 4) 
-                            ==> mem?[addr] && old(mem)[addr] == mem[addr];
 {
     rLDRglobaladdr(lr, K_SHA256s().sym);
 
@@ -1773,10 +1778,10 @@ ensures
     ghost var prev_mem := mem;
 
     // OBSERVE
-    assert BlockInvariant(trace_in, input, globals, SeqLength(trace_in.M), mem, mem, sp, lr, r1, r12,
+    assert BlockInvariant(trace_in, input, globals, SeqLength(trace_in.M), prev_mem, mem, sp, lr, r1, r12,
                           r4, r5, r6, r7, r8, r9, r10, r11,
                           input_ptr, ctx_ptr, num_blocks, 0);
-    sha256_loop(ctx_ptr, input_ptr, input, num_blocks, SeqLength(trace_in.M));
+    sha256_loop(ctx_ptr, input_ptr, input, num_blocks, SeqLength(trace_in.M), mem);
     exists trace_out ::
         BlockInvariant(trace_out, input, globals, SeqLength(trace_in.M), prev_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
@@ -1799,6 +1804,168 @@ ensures
 //    assert (forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 19 * 4) 
 //                                                && (addr < ctx_ptr || addr >= ctx_ptr + 8 * 4) 
 //                            ==> mem?[addr] && old(mem)[addr] == mem[addr]);
+}
+
+// Wrapper around the inner version that conforms to the calling convention
+procedure {:refined} sha256_block_data_order(
+    ghost trace_in:SHA256Trace,
+    ghost input:seq(word)
+    )
+requires/ensures
+    // Stack is accessible
+    forall j {ValidAddr(mem, sp-116+j*4)} { mem?[sp-116+j*4] } :: 0 <= j < 29 ==> ValidAddr(mem, sp - 116 + j*4);
+    
+requires
+    IsCompleteSHA256Trace(trace_in);
+    SHA256TraceIsCorrect(trace_in);
+
+    sp >= 116;
+
+    // K table is valid
+    ValidGlobals(globals);
+    ValidGlobal(K_SHA256s());
+    SeqLength(globals[K_SHA256s()]) == 256;
+    AddressOfGlobal(K_SHA256s()) + 256 < 0x1_0000_0000;
+    forall j :: 0 <= j < 64 ==> globals[K_SHA256s()][j] == K_SHA256(j);
+
+    let ctx := r0 in
+    let input_ptr := r1 in
+    let num_blocks := r2 in // Number of 64-byte blocks to process
+
+     // Old H values are laid out in memory pointed at by ctx
+        (forall j {ValidAddr(mem, ctx+j*4)} { mem?[ctx+j*4] } :: 0 <= j < 8 ==> ValidAddr(mem, ctx + j*4))
+     && last(trace_in.H)[0] == mem[ctx + 0*4]
+     && last(trace_in.H)[1] == mem[ctx + 1*4]
+     && last(trace_in.H)[2] == mem[ctx + 2*4]
+     && last(trace_in.H)[3] == mem[ctx + 3*4]
+     && last(trace_in.H)[4] == mem[ctx + 4*4]
+     && last(trace_in.H)[5] == mem[ctx + 5*4]
+     && last(trace_in.H)[6] == mem[ctx + 6*4]
+     && last(trace_in.H)[7] == mem[ctx + 7*4]
+
+     // Ghost input matches in-memory input
+     && SeqLength(input) == num_blocks*16
+     && input_ptr + num_blocks*16*4 < 0x1_0000_0000
+     && (forall j {ValidAddr(mem, input_ptr+j*4)} { mem?[input_ptr+j*4] } :: 
+            0 <= j < num_blocks*16 ==> ValidAddr(mem, input_ptr + j*4)
+                                   && mem[input_ptr + j*4] == input[j]
+         )
+
+     // Anti-aliasing
+     && (ctx + 32 < input_ptr || ctx > input_ptr + num_blocks*16*4)    // input_ptr != ctx
+     && (ctx + 32 < sp - 116 || ctx > sp)                              // ctx != sp
+     && (input_ptr + num_blocks*16*4 < sp - 116 || input_ptr >= sp);   // input_ptr != sp
+
+reads
+    globals;
+modifies
+    mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
+ensures
+    // Memory framing:  We only touch the stack and 8 bytes pointed to by ctx_ptr
+    forall addr:word :: old(mem)?[addr] && (addr < sp - 116 || addr >= sp) 
+                                        && (addr < old(r0) || addr >= old(r0) + 8 * 4) 
+                            ==> mem?[addr] && old(mem)[addr] == mem[addr];
+    forall j {ValidAddr(mem, old(r0)+j*4)} { mem?[old(r0)+j*4] } :: 0 <= j < 8 ==> ValidAddr(mem, old(r0) + j*4);
+
+    // Calling convention
+    r4 == old(r4);
+    r5 == old(r5);
+    r6 == old(r6);
+    r7 == old(r7);
+    r8 == old(r8);
+    r9 == old(r9);
+    r10== old(r10);
+    r11== old(r11);
+    sp == old(sp);  
+    lr == old(lr);
+
+    // SHA results
+    exists trace_out ::
+           IsCompleteSHA256Trace(trace_out)
+        && SHA256TraceIsCorrect(trace_out)
+        && SeqLength(trace_out.M) == SeqLength(trace_in.M) + old(r2)
+        && (forall i :: 0 <= i < old(r2) 
+             ==> trace_out.M[SeqLength(trace_in.M) + i] == bswap32_seq(SeqSlice(input, i*16, (i+1)*16))) 
+        && last(trace_out.H)[0] == mem[old(r0) + 0*4]
+        && last(trace_out.H)[1] == mem[old(r0) + 1*4]
+        && last(trace_out.H)[2] == mem[old(r0) + 2*4]
+        && last(trace_out.H)[3] == mem[old(r0) + 3*4]
+        && last(trace_out.H)[4] == mem[old(r0) + 4*4]
+        && last(trace_out.H)[5] == mem[old(r0) + 5*4]
+        && last(trace_out.H)[6] == mem[old(r0) + 6*4]
+        && last(trace_out.H)[7] == mem[old(r0) + 7*4]
+        ;
+{
+    // We need 10 slots to save/restore registers, and then the inner routine needs 19 slots for scratch space
+    rSUB(sp, sp, 116);
+
+    // Save nonvolatile registers
+    assert 112 == 28*4;
+    rSTR(lr,  sp, 112);
+    assert 108 == 27*4;
+    assert ValidAddr(old(mem), old(sp) - 116 + 27*4);
+    rSTR(r4,  sp, 108);
+    assert 104 == 26*4;
+    assert ValidAddr(old(mem), old(sp) - 116 + 26*4);
+    rSTR(r5,  sp, 104);
+    assert 100 == 25*4;
+    assert ValidAddr(old(mem), old(sp) - 116 + 25*4);
+    rSTR(r6,  sp, 100);
+    assert 96 == 24*4;
+    assert ValidAddr(old(mem), old(sp) - 116 + 24*4);
+    rSTR(r7,  sp, 96);
+    assert 92 == 23*4;
+    assert ValidAddr(old(mem), old(sp) - 116 + 23*4);
+    rSTR(r8,  sp, 92);
+    assert 88 == 22*4;
+    assert ValidAddr(old(mem), old(sp) - 116 + 22*4);
+    rSTR(r9,  sp, 88);
+    assert 84 == 21*4;
+    assert ValidAddr(old(mem), old(sp) - 116 + 21*4);
+    rSTR(r10, sp, 84);
+    assert 80 == 20*4;
+    assert ValidAddr(old(mem), old(sp) - 116 + 20*4);
+    rSTR(r11, sp, 80);
+    assert 76 == 19*4;
+    assert ValidAddr(old(mem), old(sp) - 116 + 19*4);
+    rSTR(r12, sp, 76);
+
+    
+    // Prove the stack is accessible (sigh)
+    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :| 0 <= j < 19 :: ValidAddr(mem, sp + j*4)
+    {
+        assert ValidAddr(old(mem), old(sp) - 116 + j*4);
+    }
+
+    // Prove that ctx is still accessible (sigh)
+    forall j {ValidAddr(mem, r0+j*4)} { mem?[r0+j*4] } :| 0 <= j < 8 :: ValidAddr(mem, r0 + j*4)
+    {
+        assert ValidAddr(old(mem), r0 + j*4);
+    }
+
+    // Prove that input is still accessible (sigh)
+    ghost var num_blocks := r2;
+    forall j {ValidAddr(mem, r1+j*4)} { mem?[r1+j*4] } :| 0 <= j < num_blocks*16 :: ValidAddr(mem, r1 + j*4)// && mem[r1 + j*4] == input[j];
+    {
+        assert ValidAddr(old(mem), r1 + j*4);
+    }
+
+    sha256_block_data_order_inner(trace_in, input);
+
+    // Restore the nonvolatile registers
+    rLDR(lr,  sp, 112);
+    rLDR(r4,  sp, 108);
+    rLDR(r5,  sp, 104);
+    rLDR(r6,  sp, 100);
+    rLDR(r7,  sp, 96);
+    rLDR(r8,  sp, 92);
+    rLDR(r9,  sp, 88);
+    rLDR(r10, sp, 84);
+    rLDR(r11, sp, 80);
+    rLDR(r12, sp, 76);
+
+    // Restore the stack pointer
+    rADDWrap(sp, sp, 116);
 }
 
 #verbatim

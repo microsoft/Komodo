@@ -20,7 +20,7 @@ predicate BlockInvariant(
             old_M_len:nat, old_mem:memmap, mem:memmap, sp:word, lr:word, r1:word, r12:word,
             a:word, b:word, c:word, d:word, e:word, f:word, g:word, h:word,
             input_ptr:word, ctx_ptr:word,             
-            num_blocks:nat, block:nat)
+            num_blocks:nat, block:nat)            
 {
  // Stack is accessible
     (forall j {:trigger ValidAddr(mem, sp + j * 4)} {:trigger sp + j * 4 in mem} :: 
@@ -76,6 +76,5 @@ predicate BlockInvariant(
                                          && (addr < ctx_ptr || addr >= ctx_ptr + 8 * 4) 
                      ==> addr in mem && old_mem[addr] == mem[addr])
 }
-
 
 }
