@@ -25,11 +25,16 @@ mkincs-nodir = $(call mkdfyincs,$(1),) $(call mksdfyincs,$(1),)
 	@which dos2unix >/dev/null && dos2unix $@ || true
 
 # Spartan direct verification, including cheesy workaround for broken error code.
+ifndef NO_SPARTAN_DIRECT
 %.verified %.log: %.sdfy %.gen.dfy
 	/bin/bash -c "$(SPARTAN) $(SPARTANFLAGS) $(call mkincs-dir,$*) $< \
 	-dafnyDirect $(DAFNYFLAGS) /compile:0 | tee $*.log; exit \$${PIPESTATUS[0]}"
 	@grep -q "^Dafny program verifier finished with [^0][0-9]* verified, 0 errors$$" $*.log $(if $(DAFNYPROC),,&& touch $*.verified)
 	@$(RM) $*.log
+else
+%.verified: %.gen.dfy
+	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< $(if $(DAFNYPROC),,&& touch $@)
+endif
 
 %.verified: %.dfy
 	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< $(if $(DAFNYPROC),,&& touch $@)
