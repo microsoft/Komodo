@@ -1600,7 +1600,7 @@ ensures exists trace_out ::
         assert ValidAddr(old(mem), input_ptr + j*4);
     }
 
-    assert BlockInvariant(trace_out, input, globals, old_M_length, old(mem), mem, sp, lr, r1, r12,
+    assert BlockInvariant(trace_out, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
                           r4, r5, r6, r7, r8, r9, r10, r11,
                           input_ptr, ctx_ptr, num_blocks, block+1);
 }
@@ -1775,15 +1775,15 @@ ensures
         assert ValidAddr(old(mem), input_ptr + j*4);
     }
 
-    ghost var prev_mem := mem;
-
     // OBSERVE
-    assert BlockInvariant(trace_in, input, globals, SeqLength(trace_in.M), prev_mem, mem, sp, lr, r1, r12,
+    ghost var prev_mem := mem;
+    ghost var len_M := SeqLength(trace_in.M);
+    assert BlockInvariant(trace_in, input, globals, len_M, prev_mem, mem, sp, lr, r1, r12,
                           r4, r5, r6, r7, r8, r9, r10, r11,
                           input_ptr, ctx_ptr, num_blocks, 0);
-    sha256_loop(ctx_ptr, input_ptr, input, num_blocks, SeqLength(trace_in.M), mem);
+    sha256_loop(ctx_ptr, input_ptr, input, num_blocks, len_M, mem);
     exists trace_out ::
-        BlockInvariant(trace_out, input, globals, SeqLength(trace_in.M), prev_mem, mem, sp, lr, r1, r12,
+        BlockInvariant(trace_out, input, globals, len_M, prev_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, num_blocks);
     assert IsCompleteSHA256Trace(trace_out);
