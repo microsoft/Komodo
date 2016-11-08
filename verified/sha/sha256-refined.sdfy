@@ -114,13 +114,13 @@ requires {:refined false}
     @h  == OReg(GetReg(4+ApplyPerm(7, perm)));
 requires/ensures
     // Stack is accessible
-    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 18 ==> ValidAddr(mem, sp + j*4);
+    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 19 ==> ValidAddr(mem, sp + j*4);
 
     // Ghost input matches in-memory input  
     SeqLength(input) == 16;
     i < 16 ==>
         (input_ptr + 16*4 < 0x1_0000_0000)
-     && (input_ptr + 16*4 < sp || sp + 18*4 <= input_ptr)    // input_ptr doesn't alias the stack
+     && (input_ptr + 16*4 < sp || sp + 19*4 <= input_ptr)    // input_ptr doesn't alias the stack
      && (forall j {ValidAddr(mem, input_ptr+j*4)} { mem?[input_ptr+j*4] } :: 
                 0 <= j < 16 ==> ValidAddr(mem, input_ptr + j*4)
                              && mem[input_ptr + j*4] == input[j]);
@@ -174,7 +174,7 @@ ensures
          else mem[sp+17*4] == old(mem[sp+17*4]));               // We preserved the input ptr on the stack
 
     // Memory framing: We only touch the stack
-    forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 18*4) ==> mem?[addr] && mem[addr] == old(mem)[addr];
+    forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 19*4) ==> mem?[addr] && mem[addr] == old(mem)[addr];
     mem[sp + 16*4] == old(mem)[sp + 16*4];
 
 // No longer need this in the ensures, since it's implied by the clauses below
@@ -276,7 +276,7 @@ ensures
     }
 
     // Prove that stack is still valid
-    forall j :| 0 <= j < 18 
+    forall j :| 0 <= j < 19 
         :: ValidAddr(mem, sp + j * 4)
     {
         assert ValidAddr(old(mem), sp + j * 4);
@@ -395,9 +395,9 @@ predicate Body_00_15LoopStateInvariantBreakdown(
     0 <= i <= 16
  // Stack is accessible in both old and new mem
  && (forall j {:trigger ValidAddr(orig_mem, sp+j*4)} {:trigger sp+j*4 in orig_mem } :: 
-         0 <= j < 18 ==> ValidAddr(orig_mem, sp + j*4))
+         0 <= j < 19 ==> ValidAddr(orig_mem, sp + j*4))
  && (forall j {:trigger ValidAddr(mem, sp+j*4)} {:trigger sp+j*4 in mem } :: 
-         0 <= j < 18 ==> ValidAddr(mem, sp + j*4))
+         0 <= j < 19 ==> ValidAddr(mem, sp + j*4))
  && ValidAddr(mem, sp + CheapMod16(i)*4)
  && ValidAddr(mem, sp + CheapMod16(i+9)*4)
 
@@ -413,7 +413,7 @@ predicate Body_00_15LoopStateInvariantBreakdown(
  && SeqLength(input) == 16
  && (i < 16 ==>
         (input_ptr + 16*4 < 0x1_0000_0000)
-     && (input_ptr + 16*4 < sp || sp + 18*4 <= input_ptr)    // input_ptr doesn't alias the stack
+     && (input_ptr + 16*4 < sp || sp + 19*4 <= input_ptr)    // input_ptr doesn't alias the stack
      && (forall j {:trigger ValidAddr(mem, input_ptr+j*4)} {:trigger input_ptr+j*4 in mem } :: 
                 0 <= j < 16 ==> ValidAddr(mem, input_ptr + j*4)
                              && mem[input_ptr + j*4] == input[j])
@@ -426,7 +426,7 @@ predicate Body_00_15LoopStateInvariantBreakdown(
  //&& t2 == Maj(a, b, c)
 
     // Memory framing: We only touch the stack
- && (forall addr:word :: addr in orig_mem && (addr < sp || addr >= sp + 18*4) ==> addr in mem && mem[addr] == orig_mem[addr])
+ && (forall addr:word :: addr in orig_mem && (addr < sp || addr >= sp + 19*4) ==> addr in mem && mem[addr] == orig_mem[addr])
  && mem[sp + 16*4] == orig_mem[sp + 16*4]
 
     // SHA semantics
@@ -749,7 +749,7 @@ procedure {:refined} Body_16_XX(
 
 requires/ensures
     // Stack is accessible
-    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 18 ==> ValidAddr(mem, sp + j*4);
+    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 19 ==> ValidAddr(mem, sp + j*4);
 reads 
     sp; globals;
 modifies 
@@ -815,7 +815,7 @@ ensures
     mem[sp+17*4] == old(mem[sp+17*4]);         // We preserved the input ptr on the stack
 
     // Memory framing: We only touch the stack
-    forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 18*4) ==> mem?[addr] && mem[addr] == old(mem)[addr];
+    forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 19*4) ==> mem?[addr] && mem[addr] == old(mem)[addr];
     mem[sp + 16*4] == old(mem)[sp + 16*4];
 
     exists trace_out:SHA256Trace ::
@@ -963,9 +963,9 @@ predicate Body_16_XXLoopStateInvariantBreakdown(
 {
     16 <= i <= 64
  && (forall j {:trigger ValidAddr(orig_mem, sp+j*4)} {:trigger sp+j*4 in orig_mem } :: 
-         0 <= j < 18 ==> ValidAddr(orig_mem, sp + j*4))
+         0 <= j < 19 ==> ValidAddr(orig_mem, sp + j*4))
  && (forall j {:trigger ValidAddr(mem, sp+j*4)} {:trigger sp+j*4 in mem } :: 
-         0 <= j < 18 ==> ValidAddr(mem, sp + j*4))
+         0 <= j < 19 ==> ValidAddr(mem, sp + j*4))
  && ValidAddr(mem, sp + CheapMod16(i)*4)
  && ValidAddr(mem, sp + CheapMod16(i+9)*4)
 
@@ -985,7 +985,7 @@ predicate Body_16_XXLoopStateInvariantBreakdown(
  && t3 == BitwiseXor(b, c)
 
     // Memory framing: We only touch the stack
- && (forall addr:word :: addr in orig_mem && (addr < sp || addr >= sp + 18*4) ==> addr in mem && mem[addr] == orig_mem[addr])
+ && (forall addr:word :: addr in orig_mem && (addr < sp || addr >= sp + 19*4) ==> addr in mem && mem[addr] == orig_mem[addr])
  && mem[sp + 16*4] == orig_mem[sp + 16*4]
 
     // SHA semantics
@@ -1272,12 +1272,12 @@ procedure {:refined} update_Hs(
     )
 requires/ensures
     // Stack is accessible
-    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 18 ==> ValidAddr(mem, sp + j*4);
+    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 19 ==> ValidAddr(mem, sp + j*4);
 
     base_ptr == mem[sp + 16*4];
 
     // Base_ptr doesn't alias the stack
-    base_ptr + 32 < sp || base_ptr > sp + 18*4;
+    base_ptr + 32 < sp || base_ptr > sp + 19*4;
 
     // Stack slot 16 holds a pointer to a valid region of memory with 8 words of data in it
 //    forall j {ValidAddr(mem, base_ptr+j*4)} { mem?[base_ptr+j*4] } :: 
@@ -1352,7 +1352,7 @@ ensures
     assert ValidAddr(old(mem), t3 + 28);     // OBSERVE
     rSTR(h, t3, 28); 
 
-    forall j :| 0 <= j < 18 :: ValidAddr(mem, sp + j*4)
+    forall j :| 0 <= j < 19 :: ValidAddr(mem, sp + j*4)
     {
         assert ValidAddr(old(mem), sp + j*4);
     }
@@ -1365,12 +1365,12 @@ procedure {:refined} sha256_one_block(
     )
 requires/ensures
     // Stack is accessible
-    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 18 ==> ValidAddr(mem, sp + j*4);
+    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 19 ==> ValidAddr(mem, sp + j*4);
 
     base_ptr == mem[sp + 16*4];
 
     // Base_ptr doesn't alias the stack
-    base_ptr + 32 < sp || base_ptr > sp + 18*4;
+    base_ptr + 32 < sp || base_ptr > sp + 19*4;
 
     // Stack slot 16 holds a pointer to a valid region of memory with 8 words of data in it
     forall addr {ValidAddr(mem, addr)} {mem?[addr]} :: 
@@ -1419,18 +1419,19 @@ requires
      // Ghost input matches in-memory input
      && SeqLength(input) == 16
      && (input_ptr + 16*4) < 0x1_0000_0000
-     && (input_ptr + 16*4 < sp || sp + 18*4 <= input_ptr)    // input_ptr doesn't alias the stack
+     && (input_ptr + 16*4 < sp || sp + 19*4 <= input_ptr)    // input_ptr doesn't alias the stack
      && (forall j {ValidAddr(mem, input_ptr+j*4)} { mem?[input_ptr+j*4] } :: 
             0 <= j < 16 ==> ValidAddr(mem, input_ptr + j*4)
                                    && mem[input_ptr + j*4] == input[j]
          )
+     ;
 reads
     sp; globals;
 modifies
     mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
 ensures
     // Memory framing: We only touch the stack and 8 bytes pointed to by the base_ptr
-    forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 18*4) && (addr < base_ptr && addr >= sp + 8*4)
+    forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 19*4) && (addr < base_ptr || addr >= base_ptr + 8*4)
                     ==> mem?[addr] && mem[addr] == old(mem)[addr];
 
     lr == AddressOfGlobal(K_SHA256s()) + 256;
@@ -1539,7 +1540,7 @@ procedure {:refined} sha256_block_data_order(
     )
 requires/ensures
     // Stack is accessible
-    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 18 ==> ValidAddr(mem, sp + j*4);
+    forall j {ValidAddr(mem, sp+j*4)} { mem?[sp+j*4] } :: 0 <= j < 19 ==> ValidAddr(mem, sp + j*4);
     
 requires
     IsCompleteSHA256Trace(trace_in);
@@ -1581,8 +1582,8 @@ requires
 
      // Anti-aliasing
      && (ctx + 7*4 < input_ptr || ctx > input_ptr + num_blocks*16)     // input_ptr != ctx
-     && (ctx + 7*4 < sp || ctx >= sp + 18*4)                           // ctx != sp
-     && (input_ptr + num_blocks*16*4 < sp || input_ptr >= sp + 18*4);              // input_ptr != sp
+     && (ctx + 7*4 < sp || ctx >= sp + 19*4)                           // ctx != sp
+     && (input_ptr + num_blocks*16*4 < sp || input_ptr >= sp + 19*4);              // input_ptr != sp
 
 reads
     sp; globals;
