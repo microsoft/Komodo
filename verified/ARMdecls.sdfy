@@ -621,6 +621,24 @@ rEORShift(out operand dst:word, operand src1:word, operand src2:snd, inline shif
     } 
 }
 
+procedure {:refined} {:instruction Ins(SUB(dst, src1, src2))}
+rSUB(out operand dst:word, operand src1:word, operand src2:word)
+    requires
+        src1 - src2 >= 0;
+    ensures
+        dst == old(src1 - src2); 
+{
+    reveal evalCodeOpaque;
+    reveal ValidRegState;
+    reveal ValidMemState;
+    reveal ValidConfig;
+    reveal ValidSRegState;
+
+    ghost if (!(old(this).ok && this.ok)) {
+        this := old(this).(ok := false);
+    } 
+}
+
 procedure {:refined} {:instruction Ins(ADD(dst, src1, src2))}
 rADDWrap(out operand dst:word, operand src1:word, operand src2:word)
     ensures

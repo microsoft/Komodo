@@ -1251,8 +1251,9 @@ import opened sha256_block_data_order_ARMdecls = ARMdecls
 import opened sha256_block_data_order_ARMspartan = ARMspartan
 import opened sha256_block_data_order_sha256_i = sha256_i
 import opened sha256_block_data_order_sha256_refined_helpers_i = sha256_refined_helpers_i
-import opened Body_00_15LoopUnrollableCode = Body_00_15LoopUnrollableCode
-import opened Body_16_XXLoopUnrollableCode = Body_16_XXLoopUnrollableCode
+import opened sha256_block_data_order_Body_00_15LoopUnrollableCode = Body_00_15LoopUnrollableCode
+import opened sha256_block_data_order_Body_16_XXLoopUnrollableCode = Body_16_XXLoopUnrollableCode
+import opened sha256_block_data_order_sha256_refined_invariants_i = sha256_refined_invariants_i
 #endverbatim
 
 procedure {:refined} update_Hs(
@@ -1532,6 +1533,49 @@ ensures
 //        && mem[base_ptr + 7*4] == r11 == last(trace_out.H)[7];
 }
 
+procedure {:refined} sha256_loop_body(
+    ghost ctx_ptr:word,
+    ghost trace_in:SHA256Trace,
+    ghost input_ptr:word,
+    ghost input:seq(word),
+    ghost num_blocks:nat,
+    ghost block:nat
+    )
+requires BlockInvariant(trace_in, input, globals, mem, sp, lr, r1,
+                        r4, r5, r6, r7, r8, r9, r10, r11,
+                        input_ptr, ctx_ptr, num_blocks, block);
+reads
+    sp; globals;
+modifies
+    mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
+ensures exists trace_out ::
+        BlockInvariant(trace_out, input, globals, mem, sp, lr, r1,
+                        r4, r5, r6, r7, r8, r9, r10, r11,
+                        input_ptr, ctx_ptr, num_blocks, block+1);
+{
+    ghost var block_input := SeqSlice(input, block*16, (block+1)*16);
+    sha256_one_block(ctx_ptr, trace_in, block_input);
+    exists trace_out:SHA256Trace ::
+           IsCompleteSHA256Trace(trace_out)
+        && SHA256TraceIsCorrect(trace_out)
+        && trace_out.M == trace_in.M + seq(bswap32_seq(input))
+        && mem[ctx_ptr + 0*4] ==  r4 == last(trace_out.H)[0]
+        && mem[ctx_ptr + 1*4] ==  r5 == last(trace_out.H)[1]
+        && mem[ctx_ptr + 2*4] ==  r6 == last(trace_out.H)[2]
+        && mem[ctx_ptr + 3*4] ==  r7 == last(trace_out.H)[3]
+        && mem[ctx_ptr + 4*4] ==  r8 == last(trace_out.H)[4]
+        && mem[ctx_ptr + 5*4] ==  r9 == last(trace_out.H)[5]
+        && mem[ctx_ptr + 6*4] == r10 == last(trace_out.H)[6]
+        && mem[ctx_ptr + 7*4] == r11 == last(trace_out.H)[7];
+
+    assert 68 == 17*4;
+    rLDR(r1, sp, 68); // Reload input_ptr
+    rSUB(lr, lr, 256);  // Reset lr
+
+    assert BlockInvariant(trace_out, input, globals, mem, sp, lr, r1,
+                          r4, r5, r6, r7, r8, r9, r10, r11,
+                          input_ptr, ctx_ptr, num_blocks, block+1);
+}
 
 /*
 procedure {:refined} sha256_block_data_order(
