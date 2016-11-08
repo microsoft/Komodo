@@ -1598,6 +1598,44 @@ ensures exists trace_out ::
                           input_ptr, ctx_ptr, num_blocks, block+1);
 }
 
+
+procedure {:refined} sha256_loop(
+    ghost ctx_ptr:word,
+    ghost trace_in:SHA256Trace,
+    ghost input_ptr:word,
+    ghost input:seq(word),
+    ghost num_blocks:nat
+    )
+requires BlockInvariant(trace_in, input, globals, mem, sp, lr, r1,
+                        r4, r5, r6, r7, r8, r9, r10, r11,
+                        input_ptr, ctx_ptr, num_blocks, 0);
+reads
+    sp; globals;
+modifies
+    mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
+ensures exists trace_out ::
+        BlockInvariant(trace_out, input, globals, mem, sp, lr, r1,
+                        r4, r5, r6, r7, r8, r9, r10, r11,
+                        input_ptr, ctx_ptr, num_blocks, num_blocks);
+{
+    ghost var block:nat := 0;
+    while (r1 < r12)
+        invariant
+            0 <= block <= num_blocks;
+            //r1 == input_ptr + block * 16 * 4;
+            block == num_blocks ==> r1 == r12;
+            old(r1) <= r1 <= r12;
+            exists trace :: 
+                BlockInvariant(trace, input, globals, mem, sp, lr, r1,
+                               r4, r5, r6, r7, r8, r9, r10, r11,
+                               input_ptr, ctx_ptr, num_blocks, block);
+         decreases r12 - r1;
+    {
+        sha256_loop_body(ctx_ptr, trace, input_ptr, input, num_blocks, block);
+        block := block + 1;
+    }
+}
+
 /*
 procedure {:refined} sha256_block_data_order(
     ghost trace_in:SHA256Trace,
