@@ -176,6 +176,7 @@ ensures
     // Memory framing: We only touch the stack
     forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 19*4) ==> mem?[addr] && mem[addr] == old(mem)[addr];
     mem[sp + 16*4] == old(mem)[sp + 16*4];
+    mem[sp + 18*4] == old(mem)[sp + 18*4];
 
 // No longer need this in the ensures, since it's implied by the clauses below
 //    let T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), BSIG1(e)),
@@ -428,6 +429,7 @@ predicate Body_00_15LoopStateInvariantBreakdown(
     // Memory framing: We only touch the stack
  && (forall addr:word :: addr in orig_mem && (addr < sp || addr >= sp + 19*4) ==> addr in mem && mem[addr] == orig_mem[addr])
  && mem[sp + 16*4] == orig_mem[sp + 16*4]
+ && mem[sp + 18*4] == orig_mem[sp + 18*4]
 
     // SHA semantics
  && SeqLength(current_trace.H) > 0
@@ -817,6 +819,7 @@ ensures
     // Memory framing: We only touch the stack
     forall addr:word :: old(mem)?[addr] && (addr < sp || addr >= sp + 19*4) ==> mem?[addr] && mem[addr] == old(mem)[addr];
     mem[sp + 16*4] == old(mem)[sp + 16*4];
+    mem[sp + 18*4] == old(mem)[sp + 18*4];
 
     exists trace_out:SHA256Trace ::
         IsSHA256TraceReadyForStep(trace_out, i+1)
@@ -987,6 +990,7 @@ predicate Body_16_XXLoopStateInvariantBreakdown(
     // Memory framing: We only touch the stack
  && (forall addr:word :: addr in orig_mem && (addr < sp || addr >= sp + 19*4) ==> addr in mem && mem[addr] == orig_mem[addr])
  && mem[sp + 16*4] == orig_mem[sp + 16*4]
+ && mem[sp + 18*4] == orig_mem[sp + 18*4]
 
     // SHA semantics
  && SeqLength(current_trace.H) > 0
@@ -1438,6 +1442,7 @@ ensures
     lr == AddressOfGlobal(K_SHA256s()) + 256;
 
     mem[sp+17*4] == old(r1) + 64;
+    mem[sp + 18*4] == old(mem)[sp + 18*4];
 
     exists trace_out:SHA256Trace ::
            IsCompleteSHA256Trace(trace_out)
@@ -1541,6 +1546,7 @@ procedure {:refined} sha256_loop_body(
     ghost num_blocks:nat,
     ghost block:nat
     )
+requires block < num_blocks;
 requires BlockInvariant(trace_in, input, globals, mem, sp, lr, r1,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, block);
@@ -1554,11 +1560,20 @@ ensures exists trace_out ::
                         input_ptr, ctx_ptr, num_blocks, block+1);
 {
     ghost var block_input := SeqSlice(input, block*16, (block+1)*16);
+
+    ghost var current_input_ptr := r1;  // == input_ptr + block*16*4
+    forall j :| 0 <= j < 16 :: ValidAddr(mem, current_input_ptr + j*4)
+                            && mem[current_input_ptr + j*4] == block_input[j]
+    {
+        assert current_input_ptr + j*4 == input_ptr + (block*16+j)*4;
+        assert ValidAddr(mem, current_input_ptr + j*4);
+    }
+
     sha256_one_block(ctx_ptr, trace_in, block_input);
     exists trace_out:SHA256Trace ::
            IsCompleteSHA256Trace(trace_out)
         && SHA256TraceIsCorrect(trace_out)
-        && trace_out.M == trace_in.M + seq(bswap32_seq(input))
+        && trace_out.M == trace_in.M + seq(bswap32_seq(block_input))
         && mem[ctx_ptr + 0*4] ==  r4 == last(trace_out.H)[0]
         && mem[ctx_ptr + 1*4] ==  r5 == last(trace_out.H)[1]
         && mem[ctx_ptr + 2*4] ==  r6 == last(trace_out.H)[2]
@@ -1571,6 +1586,19 @@ ensures exists trace_out ::
     assert 68 == 17*4;
     rLDR(r1, sp, 68); // Reload input_ptr
     rSUB(lr, lr, 256);  // Reset lr
+
+    forall j :| 0 <= j < num_blocks * 16 :: ValidAddr(mem, input_ptr + j*4) 
+                                         && mem[input_ptr + j*4] == input[j]
+    {
+        assert ValidAddr(old(mem), input_ptr + j*4);
+        assert ValidAddr(mem, input_ptr + j*4);
+        assert old(mem)?[input_ptr + j*4];
+        ghost var addr := input_ptr + j*4;
+        assert addr < sp_old_sp || addr >= sp_old_sp + 19*4;
+        assert addr < ctx_ptr || addr >= ctx_ptr + 8 * 4;
+        assert old(mem)[input_ptr + j*4] == mem[input_ptr + j*4] == input[j];
+    }
+
 
     assert BlockInvariant(trace_out, input, globals, mem, sp, lr, r1,
                           r4, r5, r6, r7, r8, r9, r10, r11,

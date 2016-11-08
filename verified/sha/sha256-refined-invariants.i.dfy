@@ -28,7 +28,7 @@ predicate BlockInvariant(
 
  // Pointer into our in-memory H[8] is valid
  && ctx_ptr == mem[sp + 16 * 4]
- && (ctx_ptr + 32 < sp || ctx_ptr > sp + 18 * 4)
+ && (ctx_ptr + 32 < sp || ctx_ptr > sp + 19 * 4)
  && (forall addr{:trigger ValidAddr(mem, addr)} {:trigger addr in mem} :: 
              ctx_ptr <= addr < ctx_ptr + 8 * 4
           && (addr - ctx_ptr) % 4 == 0 
