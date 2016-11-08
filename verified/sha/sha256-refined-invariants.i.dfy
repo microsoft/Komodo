@@ -17,7 +17,7 @@ import opened sha256_refined_invariants_i_ARMdecls = ARMdecls
 
 predicate BlockInvariant(
             trace:SHA256Trace, input:seq<word>, globals:map<operand, seq<word>>,
-            old_M_len:nat, old_mem:memmap, mem:memmap, sp:word, lr:word, r1:word,
+            old_M_len:nat, old_mem:memmap, mem:memmap, sp:word, lr:word, r1:word, r12:word,
             a:word, b:word, c:word, d:word, e:word, f:word, g:word, h:word,
             input_ptr:word, ctx_ptr:word,             
             num_blocks:nat, block:nat)
@@ -38,7 +38,7 @@ predicate BlockInvariant(
  && block <= num_blocks
  && SeqLength(input) == num_blocks*16
  && r1 == input_ptr + block * 16 * 4
- && input_ptr + num_blocks * 16 * 4 == mem[sp + 18*4]
+ && input_ptr + num_blocks * 16 * 4 == mem[sp + 18*4] == r12
  && input_ptr + num_blocks * 16 * 4 < 0x1_0000_0000
  && (input_ptr + num_blocks * 16 * 4 < sp || sp + 19 * 4 <= input_ptr)  // Doesn't alias sp
  && (input_ptr + num_blocks * 16 * 4 < ctx_ptr || ctx_ptr + 32 <= input_ptr)  // Doesn't alias input_ptr

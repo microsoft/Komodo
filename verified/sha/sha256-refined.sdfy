@@ -1497,7 +1497,7 @@ ensures
              Body_16_XXLoopStateInvariantBreakdown(mid_mem, mem, trace_00_15, trace_16_XX, 64, sp, globals, lr,
                                                    r2, r12, r3, r1, input,
                                                    r4, r5, r6, r7, r8, r9, r10, r11);
-    rADDWrap(r4, r4, r12);
+    rADDWrap(r4, r4, r12);      // Add final Maj into a
 
     forall addr :| base_ptr <= addr < base_ptr + 8 * 4 && (addr - base_ptr) % 4 == 0 
         :: ValidAddr(mem, addr)
@@ -1548,7 +1548,7 @@ procedure {:refined} sha256_loop_body(
     )
 requires block < num_blocks;
 requires exists trace_in ::
-         BlockInvariant(trace_in, input, globals, old_M_length, mem, mem, sp, lr, r1,
+         BlockInvariant(trace_in, input, globals, old_M_length, mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, block);
 reads
@@ -1556,7 +1556,7 @@ reads
 modifies
     mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
 ensures exists trace_out ::
-        BlockInvariant(trace_out, input, globals, old_M_length, old(mem), mem, sp, lr, r1,
+        BlockInvariant(trace_out, input, globals, old_M_length, old(mem), mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, block+1);
 {
@@ -1570,7 +1570,7 @@ ensures exists trace_out ::
         assert ValidAddr(mem, current_input_ptr + j*4);
     }
     exists trace_in ::
-         BlockInvariant(trace_in, input, globals, old_M_length, mem, mem, sp, lr, r1,
+         BlockInvariant(trace_in, input, globals, old_M_length, mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, block);
     sha256_one_block(ctx_ptr, trace_in, block_input);
@@ -1588,8 +1588,10 @@ ensures exists trace_out ::
         && mem[ctx_ptr + 7*4] == r11 == last(trace_out.H)[7];
 
     assert 68 == 17*4;
-    rLDR(r1, sp, 68); // Reload input_ptr
-    rSUB(lr, lr, 256);  // Reset lr
+    rLDR(r1, sp, 68);  // Reload input_ptr
+    assert 72 == 18*4; // Reload end_ptr
+    rLDR(r12, sp, 72); // Reload input_ptr
+    rSUB(lr, lr, 256); // Reset lr
 
     forall j :| 0 <= j < num_blocks * 16 :: ValidAddr(mem, input_ptr + j*4) 
                                          && mem[input_ptr + j*4] == input[j]
@@ -1597,7 +1599,7 @@ ensures exists trace_out ::
         assert ValidAddr(old(mem), input_ptr + j*4);
     }
 
-    assert BlockInvariant(trace_out, input, globals, old_M_length, old(mem), mem, sp, lr, r1,
+    assert BlockInvariant(trace_out, input, globals, old_M_length, old(mem), mem, sp, lr, r1, r12,
                           r4, r5, r6, r7, r8, r9, r10, r11,
                           input_ptr, ctx_ptr, num_blocks, block+1);
 }
@@ -1611,7 +1613,7 @@ procedure {:refined} sha256_loop(
     ghost old_M_length:nat
     )
 requires exists trace_in ::
-         BlockInvariant(trace_in, input, globals, old_M_length, mem, mem, sp, lr, r1,
+         BlockInvariant(trace_in, input, globals, old_M_length, mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, 0);
 reads
@@ -1619,7 +1621,7 @@ reads
 modifies
     mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
 ensures exists trace_out ::
-        BlockInvariant(trace_out, input, globals, old_M_length, old(mem), mem, sp, lr, r1,
+        BlockInvariant(trace_out, input, globals, old_M_length, old(mem), mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, num_blocks);
 {
@@ -1631,7 +1633,7 @@ ensures exists trace_out ::
             block == num_blocks ==> r1 == r12;
             old(r1) <= r1 <= r12;
             exists trace :: 
-                BlockInvariant(trace, input, globals, old_M_length, old(mem), mem, sp, lr, r1,
+                BlockInvariant(trace, input, globals, old_M_length, old(mem), mem, sp, lr, r1, r12,
                                r4, r5, r6, r7, r8, r9, r10, r11,
                                input_ptr, ctx_ptr, num_blocks, block);
          decreases r12 - r1;
@@ -1733,6 +1735,9 @@ ensures
     assert 72 == 18*4;
     assert ValidAddr(old(mem), sp + 18*4);      // OBSERVE
     rSTR(r2, sp, 72);
+    // Move end_ptr into r12 to satisfy the BlockInvariant. 
+    // Note: OpenSSL appears to avoid this by assuming num_blocks > 0
+    rMOV(r12, r2);  
 
     // Lots of OBSERVE
     assert ValidAddr(old(mem), r0 + 0*4);
@@ -1768,12 +1773,12 @@ ensures
     ghost var prev_mem := mem;
 
     // OBSERVE
-    assert BlockInvariant(trace_in, input, globals, SeqLength(trace_in.M), mem, mem, sp, lr, r1,
+    assert BlockInvariant(trace_in, input, globals, SeqLength(trace_in.M), mem, mem, sp, lr, r1, r12,
                           r4, r5, r6, r7, r8, r9, r10, r11,
                           input_ptr, ctx_ptr, num_blocks, 0);
     sha256_loop(ctx_ptr, input_ptr, input, num_blocks, SeqLength(trace_in.M));
     exists trace_out ::
-        BlockInvariant(trace_out, input, globals, SeqLength(trace_in.M), prev_mem, mem, sp, lr, r1,
+        BlockInvariant(trace_out, input, globals, SeqLength(trace_in.M), prev_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, num_blocks);
     assert IsCompleteSHA256Trace(trace_out);
