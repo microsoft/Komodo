@@ -394,18 +394,35 @@ lemma sp_lemma_ifElse(ifb:obool, ct:code, cf:code, s:sp_state, r:sp_state) retur
 
 predicate{:opaque} evalWhileOpaque(b:obool, c:code, n:nat, s:state, r:state)
 {
-    s.ok ==> evalWhile(b, c, n, s, r)
+    evalWhile(b, c, n, s, r)
+}
+
+predicate evalWhileLax(b:obool, c:code, n:nat, s:state, r:state)
+{
+    s.ok ==> evalWhileOpaque(b, c, n, s, r)
+}
+
+predicate ValidRegStateTransparent(regs:map<ARMReg, word>)
+{
+    forall r:ARMReg :: r in regs
+}
+
+predicate ValidStateTransparent(s:state)
+    ensures ValidStateTransparent(s) ==> ValidRegStateTransparent(s.regs);
+{
+    reveal_ValidRegState();
+    ValidState(s)
 }
 
 predicate sp_whileInv(b:obool, c:code, n:int, r1:sp_state, r2:sp_state)
 {
-    n >= 0 && r1.ok && evalWhileOpaque(b, c, n, to_state(r1), to_state(r2))
+    n >= 0 && ValidStateTransparent(r1) && evalWhileLax(b, c, n, to_state(r1), to_state(r2))
 }
 
 lemma sp_lemma_while(b:obool, c:code, s:sp_state, r:sp_state) returns(n:nat, r':sp_state)
     requires ValidState(s) && ValidOperand(b.o1) && ValidOperand(b.o2)
     requires sp_eval(While(b, c), s, r)
-    ensures  evalWhileOpaque(b, c, n, to_state(s), to_state(r))
+    ensures  evalWhileLax(b, c, n, to_state(s), to_state(r))
     //ensures  r'.ok
     ensures  ValidState(r');
     ensures  r' == s
@@ -425,15 +442,18 @@ lemma sp_lemma_while(b:obool, c:code, s:sp_state, r:sp_state) returns(n:nat, r':
 lemma sp_lemma_whileTrue(b:obool, c:code, n:sp_int, s:sp_state, r:sp_state) returns(s':sp_state, r':sp_state)
     requires ValidState(s) && ValidOperand(b.o1) && ValidOperand(b.o2);
     requires n > 0
-    requires evalWhileOpaque(b, c, n, to_state(s), to_state(r))
+    requires evalWhileLax(b, c, n, to_state(s), to_state(r))
     //ensures  ValidState(s) && r'.ok ==> ValidState(r');
-    ensures  s.ok && ValidState(s) ==> ValidState(s');
+    ensures  ValidState(s) ==> ValidState(s');
+    ensures  evalWhileLax(b, c, n-1, to_state(r'), to_state(r))
+    ensures  sp_eval(c, s', r');
+    ensures  ValidState(s) ==> if s.ok then evalGuard(s, b, s') else s' == s;
     ensures  if s.ok then
                     s'.ok
-                 && evalGuard(s, b, s')
+                 //&& evalGuard(s, b, s')
                  && evalOBool(s, b)
-                 && sp_eval(c, s', r')
-                 && evalWhileOpaque(b, c, n - 1, to_state(r'), to_state(r))
+                 //&& sp_eval(c, s', r')
+                 //&& evalWhileOpaque(b, c, n - 1, to_state(r'), to_state(r))
              else
                  true //!r.ok;
 {
@@ -441,35 +461,45 @@ lemma sp_lemma_whileTrue(b:obool, c:code, n:sp_int, s:sp_state, r:sp_state) retu
     reveal_evalWhileOpaque();
 
     if !s.ok {
+        s' := s;
+        r' := s;
         return;
     }
     assert evalWhile(b, c, n, to_state(s), to_state(r)); // TODO: Dafny reveal/opaque issue
 
-    var s'', r'':state :| evalGuard(to_state(s), b, s'') && evalOBool(to_state(s), b) && evalCode(c, s'', r'')
-        && evalWhile(b, c, n - 1, r'', to_state(r));
     if ValidState(s) {
+        var s'', r'':state :| evalGuard(to_state(s), b, s'') && evalOBool(to_state(s), b) && evalCode(c, s'', r'')
+            && evalWhile(b, c, n - 1, r'', to_state(r));
         code_state_validity(c, s'', r'');
         s' := s'';
         r' := r'';
+    } else {
+        s' := s.(ok := false);
+        r' := s.(ok := false);
     }
 }
 
 lemma sp_lemma_whileFalse(b:obool, c:code, s:sp_state, r:sp_state) returns(r':sp_state)
     requires ValidState(s) && ValidOperand(b.o1) && ValidOperand(b.o2);
-    requires evalWhileOpaque(b, c, 0, to_state(s), to_state(r))
+    requires evalWhileLax(b, c, 0, to_state(s), to_state(r))
     ensures  if s.ok then
-                    (ValidState(s) && r'.ok ==> ValidState(r'))
-                 && evalGuard(s, b, r')
-                 && !evalOBool(s, b)
-                 && r.ok
-                 && to_state(r') == to_state(r)
+                    (if ValidState(s) then
+                        (r'.ok ==> ValidState(r'))
+                     && evalGuard(s, b, r')
+                     && !evalOBool(s, b)
+                     && r.ok
+                     && to_state(r') == to_state(r)
+                     else 
+                        true)
+                 && r' == r
             else
-                true; //!r.ok;
+                r' == s
 {
     reveal_evalCodeOpaque();
     reveal_evalWhileOpaque();
 
     if !s.ok {
+        r' := s;
         return;
     }
 
