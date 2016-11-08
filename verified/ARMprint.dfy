@@ -1,5 +1,8 @@
 include "ARMdef.dfy"
 
+module ARMprint {
+import opened ARMprint_ARMdef = ARMdef
+
 function method user_continue_label(): string
 {
     "usermode_return_continue"
@@ -344,4 +347,6 @@ method printBss(gdecls: globaldecls)
 
 method printFooter()
 {
+}
+
 }
