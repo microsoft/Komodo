@@ -1253,6 +1253,7 @@ procedure {:refined} Body_16_XXLoopUnrolled(
 module sha256_block_data_order {
 import opened sha256_block_data_order_ARMdecls = ARMdecls
 import opened sha256_block_data_order_ARMspartan = ARMspartan
+import opened sha256_block_data_order_ARMprint = ARMprint
 import opened sha256_block_data_order_sha256_i = sha256_i
 import opened sha256_block_data_order_sha256_refined_helpers_i = sha256_refined_helpers_i
 import opened sha256_block_data_order_Body_00_15LoopUnrollableCode = Body_00_15LoopUnrollableCode
@@ -1969,5 +1970,14 @@ ensures
 }
 
 #verbatim
+
+method Main()
+{
+    printHeader();
+    var n := printFunction("sha256_block_data_order", sp_code_sha256_block_data_order(), 0);
+    printBss(KomGlobalDecls());
+    printFooter();
+}
+
 }
 #endverbatim
