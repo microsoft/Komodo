@@ -474,7 +474,7 @@ function havocPages(pages:set<addr>, s:memmap, r:memmap): memmap
 }
 
 // XXX: To be defined by application code
-predicate ApplicationUsermodeContinuationInvariant(s:state, r:state)
+predicate {:axiom} ApplicationUsermodeContinuationInvariant(s:state, r:state)
     requires ValidState(s)
     ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> ValidState(r)
     ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> r.ok
@@ -690,7 +690,7 @@ function RightShift(x:word, amount:word): word
     requires 0 <= amount < 32;
     { BitsAsWord(BitShiftRight(WordAsBits(x), amount)) }
 
-function RotateRight(x:word, amount:shift_amount) : word
+function {:axiom} RotateRight(x:word, amount:shift_amount) : word
 
 //-----------------------------------------------------------------------------
 // Functions for bytewise operations

@@ -13,7 +13,7 @@ type word = x | isUInt32(x)
 
 /* ================ Conversions ================ */
 
-lemma lemma_WordAsBits(i:word)
+lemma {:axiom} lemma_WordAsBits(i:word)
     ensures i == 0 ==> i as bv32 == 0
 
 function {:opaque} WordAsBits(i:word): bv32
@@ -23,7 +23,7 @@ function {:opaque} WordAsBits(i:word): bv32
     i as bv32
 }
 
-lemma lemma_BitsAsWord(b:bv32)
+lemma {:axiom} lemma_BitsAsWord(b:bv32)
     ensures isUInt32(b as int)
     ensures b == 0 ==> b as int == 0
 
