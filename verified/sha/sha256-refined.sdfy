@@ -1783,6 +1783,10 @@ ensures
                           r4, r5, r6, r7, r8, r9, r10, r11,
                           input_ptr, ctx_ptr, num_blocks, 0);
     sha256_loop(ctx_ptr, input_ptr, input, num_blocks, len_M, mem);
+    assert exists trace_out ::
+        BlockInvariant(trace_out, input, globals, len_M, prev_mem, mem, sp, lr, r1, r12,
+                        r4, r5, r6, r7, r8, r9, r10, r11,
+                        input_ptr, ctx_ptr, num_blocks, num_blocks);
     exists trace_out ::
         BlockInvariant(trace_out, input, globals, len_M, prev_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
