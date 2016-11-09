@@ -14,19 +14,11 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
     var extrabits := BitOr(BitOr(0xd76, nxbit), robit);
     var pteb := BitOr(WordAsBits(pa), extrabits);
 
-    if x {
-        if w {
-            assert extrabits == 0xd76 by { reveal_BitOr(); }
-        } else {
-            assert extrabits == 0xf76 by { reveal_BitOr(); }
-        }
-    } else {
-        if w {
-            assert extrabits == 0xd77 by { reveal_BitOr(); }
-        } else {
-            assert extrabits == 0xf77 by { reveal_BitOr(); }
-        }
-    }
+    assert extrabits == (
+        if x && w then 0xd76
+        else if x && !w then 0xf76
+        else if !x && w then 0xd77
+        else 0xf77) by { reveal_BitOr(); }
 
     assert ptew == BitsAsWord(pteb) by {
         calc {
@@ -41,7 +33,7 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
     lemma_WordBitEquiv(ptew, pteb);
 
     assert BitAnd(extrabits, 0xfffff000) == 0 by {
-        reveal_BitOr(); reveal_BitAnd();
+        reveal_BitAnd();
     }
 
     assert BitAnd(WordAsBits(pa), 0xfff) == 0 by {
@@ -77,7 +69,6 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
         { lemma_WordAsBitsAsWord(pa); }
         pa;
     }
-    assert BitwiseMaskHigh(ptew, 12) == pa;
 
     assert BitAnd(pteb, 0x3) == 2 || BitAnd(pteb, 0x3) == 3 by {
         calc {
@@ -154,6 +145,9 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
             robit;
         }
     }
+
+    assert ValidAbsL2PTEWord(ARM_L2PTE(pa, w, x));
+    assert ExtractAbsL2PTE(ARM_L2PTE(pa, w, x)) == Just(AbsPTE(pa, w, x));
 }
 
 lemma lemma_l1ptesmatch(e: Maybe<PageNr>, subpage:int)
