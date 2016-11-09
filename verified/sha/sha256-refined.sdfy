@@ -1958,6 +1958,7 @@ method Main()
 {
     printHeader();
     var n := printFunction("sha256_block_data_order", sp_code_sha256_block_data_order(), 0);
+    print "  BX lr"; nl();
     printBss(KomGlobalDecls());
     printFooter();
 }
