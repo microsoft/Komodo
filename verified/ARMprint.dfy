@@ -287,7 +287,7 @@ method printCode(c:code, n:int) returns(n':int)
           n' := printCode(loop, n + 2);
           printLabel(n2); print(":"); nl();
           printIns2Op("CMP", b.o1, b.o2);
-          printBcc(cmpNot(b.cmp)); printLabel(n1); nl();
+          printBcc(b.cmp); printLabel(n1); nl();
         }
     }
 }
