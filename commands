@@ -1,0 +1,3 @@
+make verified/ARMdecls.verified
+make [-B] verified/sha/sha256-refined.verified
+make verified/foo.i.verified (for foo.i.dfy)
