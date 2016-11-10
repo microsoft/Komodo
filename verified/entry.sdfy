@@ -6,7 +6,7 @@ predicate {:opaque} wellformed_banked_regs_stackframe(m:memstate, a:addr)
 {
     ValidMemRange(a, a + banked_regs_framesize())
     && forall i:int | 12 <= i <= 17 ::
-        ValidModeEncoding(psr_mask_mode(MemContents(m, a + i * 4)))
+        ValidPsrWord(MemContents(m, a + i * 4))
 }
 
 lemma lemma_wellformed_banked_regs_stackframe_preserved(m1:memstate, m2:memstate, a:addr)
@@ -18,7 +18,7 @@ lemma lemma_wellformed_banked_regs_stackframe_preserved(m1:memstate, m2:memstate
 {
     reveal_wellformed_banked_regs_stackframe();
     forall i:int | 12 <= i <= 17
-        ensures ValidModeEncoding(psr_mask_mode(MemContents(m2, a + i * 4)));
+        ensures ValidPsrWord(MemContents(m2, a + i * 4));
     {
         assert MemContents(m1, a + i * 4) == MemContents(m2, a + i * 4);
     }

@@ -73,7 +73,7 @@ $(dir)/pagedb.i.verified: $(dir)/pagedb.s.verified $(dir)/kom_common.i.verified
 $(dir)/ptables.i.verified: $(dir)/pagedb.i.verified $(dir)/entry.s.verified $(dir)/ptebits.i.verified
 $(dir)/ptebits.i.verified: $(dir)/pagedb.i.verified $(dir)/bitvectors.i.verified
 $(dir)/entry.s.verified: $(dir)/ARMdef.verified $(dir)/pagedb.s.verified $(dir)/abstate.s.verified
-$(dir)/entry.i.verified: $(dir)/entry.s.verified $(dir)/ptables.i.verified
+$(dir)/entry.i.verified: $(dir)/entry.s.verified $(dir)/ptables.i.verified $(dir)/psrbits.i.verified
 $(dir)/main.i.verified: $(dir)/ARMprint.verified $(dir)/smc_handler.verified $(dir)/exception_handlers.verified
 
 # variables used to emit deps/includes for all Spartan code
@@ -152,3 +152,4 @@ $(dir)/exception_handlers.verified: $(call mkdeps,exception_handlers)
 DAFNYFLAGS_bitvectors.s = /proverOpt:OPTIMIZE_FOR_BV=true
 DAFNYFLAGS_bitvectors.i = /proverOpt:OPTIMIZE_FOR_BV=true
 DAFNYFLAGS_ptebits.i = /proverOpt:OPTIMIZE_FOR_BV=true
+DAFNYFLAGS_psrbits.i = /proverOpt:OPTIMIZE_FOR_BV=true

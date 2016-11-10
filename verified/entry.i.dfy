@@ -1,5 +1,6 @@
 include "entry.s.dfy"
 include "ptables.i.dfy"
+include "psrbits.i.dfy"
 
 predicate validSysState'(s:SysState)
 {
@@ -41,6 +42,7 @@ function exceptionHandled_premium(us:state, ex:exception, s:state, d:PageDb, dis
         validPageDb(d)
 {
     exceptionHandledValidPageDb(us, ex, s, d, dispPg);
+    lemma_evalExceptionTaken_NonUser(us, ex, s);
     exceptionHandled(s, d, dispPg)
 }
 
@@ -48,13 +50,24 @@ lemma exceptionHandledValidPageDb(us:state, ex:exception, s:state, d:PageDb, dis
     requires ValidState(us) && mode_of_state(us) == User
     requires evalExceptionTaken(us, ex, s)
     requires validPageDb(d) && validDispatcherPage(d, dispPg)
-    ensures validPageDb(exceptionHandled(s, d, dispPg).2)
+    ensures validPageDb(lemma_evalExceptionTaken_NonUser(us, ex, s);exceptionHandled(s, d, dispPg).2)
 {
     reveal_validPageDb();
     reveal_ValidSRegState();
-    reveal_ValidRegState();
+    lemma_evalExceptionTaken_NonUser(us, ex, s);
     var (r0,r1,d') := exceptionHandled(s, d, dispPg);
 
+    if (ex != ExSVC) {
+        var dc := d'[dispPg].entry.ctxt;
+        lemma_update_psr(us.sregs[cpsr], encode_mode(mode_of_exception(us.conf, ex)),
+            ex == ExFIQ || mode_of_exception(us.conf, ex) == Monitor, true);
+        assert mode_of_state(s) == mode_of_exception(us.conf, ex);
+        assert dc.cpsr == s.sregs[spsr(mode_of_state(s))] == us.sregs[cpsr];
+        assert us.conf.cpsr == decode_psr(us.sregs[cpsr]);
+        assert us.conf.cpsr.m == User;
+        assert decode_mode'(psr_mask_mode(dc.cpsr)) == Just(User);
+        assert validDispatcherContext(dc);
+    }
     assert validPageDbEntry(d', dispPg);
 
     forall( p' | validPageNr(p') && d'[p'].PageDbEntryTyped? && p' != dispPg )
@@ -235,6 +248,7 @@ lemma exceptionTakenPreservesStuff(d:PageDb,s:state,ex:exception,s':state)
     reveal_ValidMemState();
     reveal_pageDbEntryCorresponds();
     reveal_pageContentsCorresponds();
+    lemma_evalExceptionTaken_NonUser(s, ex, s');
 }
 
 lemma lemma_evalMOVSPCLRUC(s:state, r:state, d:PageDb, dp:PageNr)
@@ -300,6 +314,7 @@ lemma lemma_validEnter(s0:state, s1:state, r:state, sd:PageDb,
         && ApplicationUsermodeContinuationInvariant(s4, r);
 
     assert entryTransition(s1, s2);
+    lemma_evalExceptionTaken_NonUser(s3, ex, s4);
     assert userspaceExecutionAndException(s2, s3, ex, s4);
 
     enterUserspacePreservesStuff(sd, s1,  s2);
@@ -344,6 +359,7 @@ lemma lemma_validResume(s0:state, s1:state, r:state, sd:PageDb, dp:word)
         && ApplicationUsermodeContinuationInvariant(s4, r);
 
     assert entryTransition(s1, s2);
+    lemma_evalExceptionTaken_NonUser(s3, ex, s4);
     assert userspaceExecutionAndException(s2, s3, ex, s4);
 
     enterUserspacePreservesStuff(sd, s1,  s2);
@@ -377,7 +393,21 @@ lemma lemma_ValidEntryPre(s0:state, s1:state, sd:PageDb, r:state, rd:PageDb, dp:
 lemma lemma_evalExceptionTaken_NonUser(s:state, e:exception, r:state)
     requires ValidState(s) && evalExceptionTaken(s, e, r)
     ensures mode_of_state(r) != User
-{}
+{
+    var newmode := mode_of_exception(s.conf, e);
+    assert newmode != User;
+    var f := e == ExFIQ || newmode == Monitor;
+    reveal_ValidSRegState();
+    
+    calc {
+        mode_of_state(r);
+        decode_psr(psr_of_exception(s, e)).m;
+        { lemma_update_psr(s.sregs[cpsr], encode_mode(newmode), f, true); }
+        decode_mode(encode_mode(newmode));
+        { mode_encodings_are_sane(); }
+        newmode;
+    }
+}
 
 lemma lemma_validEnterPost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp:word,
                            a1:word, a2:word, a3:word)

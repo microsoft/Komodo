@@ -231,10 +231,10 @@ method printIns(ins:ins)
         case MSR(dst, src) => printIns2Op("MSR", dst, src);
         case MRC(dst, src) => printMcr("MRC", src, dst);
         case MCR(dst,src) => printMcr("MCR", dst, src);
+        case CPSID_IAF(mod) => printIns1Op("CPSID iaf,", mod);
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE =>
             printInsFixed("MOVS", "pc, lr");
             print(user_continue_label()); print(":"); nl();
-        // case CPS(mod) => printIns1Op("CPS", mod);
     }
 }
 

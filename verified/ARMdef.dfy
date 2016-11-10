@@ -34,7 +34,7 @@ datatype SReg = cpsr | spsr(m:mode) | scr | ttbr0
 // ensuring that the correct values are stored/returned by instructions
 datatype config = Config(cpsr:PSR, spsr:map<mode,PSR>, scr:SCR, ttbr0:TTBR, 
     ex:exception, excount:nat, exstep:nat)
-datatype PSR  = PSR(m:mode)           // See B1.3.3
+datatype PSR  = PSR(m:mode, f:bool, i:bool) // See B1.3.3
 datatype SCR  = SCR(ns:world, irq:bool, fiq:bool) // See B4.1.129
 datatype TTBR = TTBR(ptbase:addr)      // See B4.1.154
 
@@ -109,10 +109,20 @@ function psr_mask_mode(v:word): word
     BitwiseAnd(v, 0x1f)
 }
 
+predicate ValidPsrWord(v:word)
+{
+    ValidModeEncoding(psr_mask_mode(v))
+}
+
 // See B1.3.3
 function decode_psr(v:word) : PSR
-    requires ValidModeEncoding(psr_mask_mode(v))
-    { PSR(decode_mode(psr_mask_mode(v))) }
+    requires ValidPsrWord(v)
+{
+    PSR(decode_mode(psr_mask_mode(v)),
+        BitwiseAnd(v, 0x40) != 0, // FIQ mask bit
+        BitwiseAnd(v, 0x80) != 0  // IRQ mask bit
+        )
+}
 
 // See B4.1.129
 function decode_scr(v:word) : SCR
@@ -139,7 +149,7 @@ predicate ValidSReg(sr:SReg)
 
 function update_config_from_sreg(s:state, sr:SReg, v:word): config
     requires ValidSRegState(s.sregs, s.conf) && ValidSReg(sr)
-    requires (sr.cpsr? || sr.spsr?) ==> ValidModeEncoding(psr_mask_mode(v))
+    requires (sr.cpsr? || sr.spsr?) ==> ValidPsrWord(v)
 {
     reveal_ValidSRegState();
     match sr
@@ -221,15 +231,15 @@ datatype ins =
     | STR(rdSTR:operand,  baseSTR:operand, ofsSTR:operand)
     | STR_global(rdSTRR_global:operand, globalSTR:operand,
                  baseSTR_global:operand, ofsSTR_global:operand)
-    // TODO: reinstate | CPSID_IAF(mod:operand)
     | MRS(dstMRS:operand, srcMRS: operand)
     | MSR(dstMSR:operand, srcMSR: operand)
     // Accesses to banked regs and SCR are supported
     // (See armv7a ref manual B4.1.129 "Accessing the SCR")
     | MRC(dstMRC:operand,srcMRC:operand)
     | MCR(dstMCR:operand,srcMCR:operand)
+    | CPSID_IAF(mod:operand)
     // go to usermode, take an exception, and return
-    // Only the special case where rd is pc
+    // Only the special case where rd is pc and src is lr
     // (See armv7a ref manual A8.8.105 and B9.3.20)
     | MOVS_PCLR_TO_USERMODE_AND_CONTINUE
 
@@ -263,12 +273,10 @@ predicate {:opaque} ValidRegState(regs:map<ARMReg, word>)
 predicate {:opaque} ValidSRegState(sregs:map<SReg, word>, c:config)
 {
     cpsr in sregs
-    && ValidModeEncoding(psr_mask_mode(sregs[cpsr]))
-    && c.cpsr == decode_psr(sregs[cpsr])
+    && ValidPsrWord(sregs[cpsr]) && c.cpsr == decode_psr(sregs[cpsr])
     && (forall m:mode :: (m != User) == (spsr(m) in sregs) == (m in c.spsr))
     && (forall m:mode :: m != User ==>
-        ValidModeEncoding(psr_mask_mode(sregs[spsr(m)]))
-        && c.spsr[m] == decode_psr(sregs[spsr(m)]))
+        ValidPsrWord(sregs[spsr(m)]) && c.spsr[m] == decode_psr(sregs[spsr(m)]))
     && ttbr0 in sregs && c.ttbr0 == decode_ttbr(sregs[ttbr0])
     && scr in sregs && c.scr == decode_scr(sregs[scr])
 }
@@ -397,6 +405,31 @@ function mode_of_exception(conf:config, e:exception): mode
         case ExSVC => Supervisor
 }
 
+function {:opaque} update_psr(oldpsr:word, newmode:word, maskfiq:bool, maskirq:bool): word
+    requires ValidPsrWord(oldpsr)
+    requires ValidModeEncoding(newmode)
+    //ensures ValidPsrWord(update_psr(oldpsr, newmode, maskfiq, maskirq))
+{
+    var maskbits := BitsAsWord(BitOr(if maskfiq then 0x40 else 0,
+                                     if maskirq then 0x80 else 0));
+    BitwiseOr(BitwiseAnd(oldpsr, 0xffffffe0), BitwiseOr(newmode, maskbits))
+}
+
+function psr_of_exception(s:state, e:exception): word
+    requires ValidState(s)
+{
+    reveal_ValidSRegState();
+
+    // per B1.9 exception descriptions, this models the CPSR updates
+    // as they affect our limited view of the PSRs; summary: all
+    // exceptions we care about mask IRQs, but FIQs are only masked by
+    // a FIQ exception or any exception taken to monitor mode
+    var newmode := mode_of_exception(s.conf, e);
+    var maskfiq := e == ExFIQ || newmode == Monitor;
+    var oldpsr := s.sregs[cpsr];
+    update_psr(s.sregs[cpsr], encode_mode(newmode), maskfiq, true)
+}
+
 predicate evalExceptionTaken(s:state, e:exception, r:state)
     requires ValidState(s)
     ensures evalExceptionTaken(s, e, r) ==> ValidState(r)
@@ -406,10 +439,10 @@ predicate evalExceptionTaken(s:state, e:exception, r:state)
     var oldmode := mode_of_state(s);
     var newmode := mode_of_exception(s.conf, e);
     // this does not model all of the CPSR update, since we don't model all the bits
-    var newpsr := BitwiseOr(BitwiseAnd(s.sregs[cpsr], 0xffffffe0), encode_mode(newmode));
-    ValidState(r) &&
+    var newpsr := psr_of_exception(s, e);
+    ValidPsrWord(newpsr) && ValidState(r) &&
     // update mode, copy CPSR of oldmode to SPSR of newmode, havoc LR
-    r == s.(conf := s.conf.(cpsr := PSR(newmode),
+    r == s.(conf := s.conf.(cpsr := decode_psr(newpsr),
                             spsr := s.conf.spsr[newmode := s.conf.cpsr],
                             ex := e, excount := s.conf.excount + 1, exstep := s.steps),
             sregs := s.sregs[cpsr := newpsr][spsr(newmode) := s.sregs[cpsr]],
@@ -744,7 +777,7 @@ predicate evalUpdate(s:state, o:operand, v:word, r:state)
     requires ValidRegOperand(o) || ValidBankedRegOperand(s,o)
         || ValidMrsMsrOperand(s,o) || ValidMcrMrcOperand(s,o)
     requires o.OSReg? ==> (ValidSReg(o.sr)
-        && (o.sr.cpsr? || o.sr.spsr? ==> ValidModeEncoding(psr_mask_mode(v))))
+        && (o.sr.cpsr? || o.sr.spsr? ==> ValidPsrWord(v)))
     ensures evalUpdate(s, o, v, r) ==> ValidState(r)
 {
     reveal_ValidRegState();
@@ -876,8 +909,7 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidRegOperand(dst) && ValidMrsMsrOperand(s,src)
         case MSR(dst, src) =>
             ValidRegOperand(src) && ValidMrsMsrOperand(s,dst)
-            && (dst.OSReg? && dst.sr.spsr? ==>
-                ValidModeEncoding(psr_mask_mode(OperandContents(s, src))))
+            && (dst.OSReg? && dst.sr.spsr? ==> ValidPsrWord(OperandContents(s, src)))
             && (dst.OSReg? && dst.sr.cpsr? ==>
                 ValidModeChange(s, OperandContents(s, src)))
         case MRC(dst, src) =>
@@ -886,6 +918,9 @@ predicate ValidInstruction(s:state, ins:ins)
         case MCR(dst, src) =>
             ValidMcrMrcOperand(s, dst) &&
             ValidRegOperand(src)
+        case CPSID_IAF(mod) =>
+            mod.OConst? && ValidModeEncoding(mod.n)
+            && ValidModeChange'(s, decode_mode(mod.n))
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE =>
             ValidState(s) &&
             ValidModeChange'(s, User) && spsr_of_state(s).m == User
@@ -944,7 +979,20 @@ predicate evalIns(ins:ins, s:state, r:state)
         case MSR(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
         case MRC(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
         case MCR(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
+        case CPSID_IAF(mod) => evalCPSID_IAF(s, mod.n, r)
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE => evalMOVSPCLRUC(s, r)
+}
+
+predicate evalCPSID_IAF(s:state, mod:word, r:state)
+    requires ValidState(s)
+    requires ValidModeEncoding(mod) && ValidModeChange'(s, decode_mode(mod))
+    ensures  evalCPSID_IAF(s, mod, r) ==> ValidState(r)
+{
+    reveal_ValidSRegState();
+    var newpsr := update_psr(s.sregs[cpsr], mod, true, true);
+    ValidPsrWord(newpsr) &&
+    r == takestep(s).(sregs := s.sregs[cpsr := newpsr],
+                      conf := s.conf.(cpsr := decode_psr(newpsr)))
 }
 
 predicate {:opaque} evalMOVSPCLRUC(s:state, r:state)

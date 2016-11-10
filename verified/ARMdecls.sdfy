@@ -368,6 +368,20 @@ MOVS_PCLR_TO_USERMODE_AND_CONTINUE()
     reveal_sp_eval();
 }
 
+procedure {:instruction Ins(CPSID_IAF(mod))} CPSID_IAF({:operand} mod:int)
+    requires/ensures
+        ValidState(this);
+    requires
+        @mod is OConst;
+        ValidModeEncoding(mod) && ValidModeChange'(this, decode_mode(mod));
+    ensures
+        evalCPSID_IAF(old(this), old(mod), this);
+        AllMemInvariant(old(this), this);
+        this.regs == old(this).regs;
+{
+    reveal_sp_eval();
+}
+
 procedure {:instruction Ins(LDR_reloc(rd, g))}
 LDRglobaladdr(out{:operand} rd:int, {:operand} g:string)
     requires

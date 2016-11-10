@@ -185,9 +185,11 @@ predicate entryTransition(s:state, s':state)
 
 predicate userspaceExecutionAndException(s:state, s':state, ex:exception, r:state)
     requires ValidState(s) && mode_of_state(s) == User
+    ensures userspaceExecutionAndException(s, s', ex, r) ==> mode_of_state(r) != User
 {
     evalUserspaceExecution(s, s')
     && evalExceptionTaken(s', ex, r)
+    && mode_of_state(r) != User // known, but we need a lemma to prove it
     && s.conf.excount + 1 == r.conf.excount
     && r.conf.exstep == r.steps
 }
