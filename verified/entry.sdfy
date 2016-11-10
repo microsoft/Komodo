@@ -89,6 +89,31 @@ lemma lemma_stackunstack_banked_regs(s1:state, m1:memstate, s2:state, m2:memstat
 }
 #endverbatim
 
+procedure MRS_STR(
+    {:operand} reg:int,
+    {:operand} base:int,
+    {:operand} ofs:int,
+    {:operand} tmp:int)
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidMrsMsrOperand(this, @reg);
+        ValidOperand(@base);
+        ValidOperand(@ofs);
+        ValidMem(base + ofs);
+        ValidRegOperand(@tmp);
+        @tmp != @sp && @tmp != @base && @tmp != @ofs;
+    ensures
+        RegPreservingExcept(old(this),this,set(@tmp));
+        sp == old(sp);
+        GlobalsInvariant(old(this),this);
+        MemPreservingExcept(old(this), this, old(base+ofs), old(base+ofs+4));
+        MemContents(this.m, old(base+ofs)) == old(reg);
+{
+    MRS(tmp, reg);
+    STR(tmp, base, ofs);
+}
+
 procedure stack_banked_regs({:operand} tmp:int, ghost stack_bytes_in:int)
           returns (ghost stack_bytes:int)
     requires/ensures
@@ -108,60 +133,48 @@ procedure stack_banked_regs({:operand} tmp:int, ghost stack_bytes_in:int)
         NonStackMemPreserving(old(this),this);
         ParentStackPreserving(old(this),this);
 {
-    reveal_wellformed_banked_regs_stackframe();
-
     SUB(sp, sp, sp_op_const(banked_regs_framesize()));
     stack_bytes := stack_bytes_in - banked_regs_framesize();
 
-    MRS(tmp, spsr_fiq);
-    assert ValidModeEncoding(psr_mask_mode(tmp)) by { reveal_ValidSRegState(); }
-    STR(tmp, sp, sp_op_const(12*4));
-    MRS(tmp, spsr_irq);
-    assert ValidModeEncoding(psr_mask_mode(tmp)) by { reveal_ValidSRegState(); }
-    STR(tmp, sp, sp_op_const(13*4));
-    MRS(tmp, spsr_svc);
-    assert ValidModeEncoding(psr_mask_mode(tmp)) by { reveal_ValidSRegState(); }
-    STR(tmp, sp, sp_op_const(14*4));
-    MRS(tmp, spsr_abt);
-    assert ValidModeEncoding(psr_mask_mode(tmp)) by { reveal_ValidSRegState(); }
-    STR(tmp, sp, sp_op_const(15*4));
-    MRS(tmp, spsr_und);
-    assert ValidModeEncoding(psr_mask_mode(tmp)) by { reveal_ValidSRegState(); }
-    STR(tmp, sp, sp_op_const(16*4));
-    MRS(tmp, spsr_mon);
-    assert ValidModeEncoding(psr_mask_mode(tmp)) by { reveal_ValidSRegState(); }
-    STR(tmp, sp, sp_op_const(17*4));
+    ghost var start := this;
 
-    assert wellformed_banked_regs_stackframe(this.m, sp);
-    assert RegPreservingExcept(old(this),this,set(@tmp,@sp));
+    MRS_STR(spsr_fiq, sp, sp_op_const(12*4), tmp);
+    MRS_STR(spsr_irq, sp, sp_op_const(13*4), tmp);
+    MRS_STR(spsr_svc, sp, sp_op_const(14*4), tmp);
+    MRS_STR(spsr_abt, sp, sp_op_const(15*4), tmp);
+    MRS_STR(spsr_und, sp, sp_op_const(16*4), tmp);
+    MRS_STR(spsr_mon, sp, sp_op_const(17*4), tmp);
 
-    MRS(tmp, sp_usr);
-    STR(tmp, sp, sp_op_const(0*4));
-    MRS(tmp, sp_fiq);
-    STR(tmp, sp, sp_op_const(1*4));
-    MRS(tmp, sp_irq);
-    STR(tmp, sp, sp_op_const(2*4));
-    MRS(tmp, sp_svc);
-    STR(tmp, sp, sp_op_const(3*4));
-    MRS(tmp, sp_abt);
-    STR(tmp, sp, sp_op_const(4*4));
-    MRS(tmp, sp_und);
-    STR(tmp, sp, sp_op_const(5*4));
+    ghost var midway := this;
 
-    MRS(tmp, lr_usr);
-    STR(tmp, sp, sp_op_const(6*4));
-    MRS(tmp, lr_fiq);
-    STR(tmp, sp, sp_op_const(7*4));
-    MRS(tmp, lr_irq);
-    STR(tmp, sp, sp_op_const(8*4));
-    MRS(tmp, lr_svc);
-    STR(tmp, sp, sp_op_const(9*4));
-    MRS(tmp, lr_abt);
-    STR(tmp, sp, sp_op_const(10*4));
-    MRS(tmp, lr_und);
-    STR(tmp, sp, sp_op_const(11*4));
+    assert wellformed_banked_regs_stackframe(this.m, sp) by {
+        reveal_wellformed_banked_regs_stackframe();
+        forall i:int :| 12 <= i <= 17 :: ValidPsrWord(MemContents(this.m, sp + i * 4))
+            { reveal_ValidSRegState(); }
+    }
+    assert RegPreservingExcept(start,this,set(@tmp));
+    assert MemPreservingExcept(old(this), this, sp + 12*4, sp + 18*4);
 
-    reveal_banked_regs_stackframe();
+    MRS_STR(sp_usr, sp, sp_op_const(0*4), tmp);
+    MRS_STR(sp_fiq, sp, sp_op_const(1*4), tmp);
+    MRS_STR(sp_irq, sp, sp_op_const(2*4), tmp);
+    MRS_STR(sp_svc, sp, sp_op_const(3*4), tmp);
+    MRS_STR(sp_abt, sp, sp_op_const(4*4), tmp);
+    MRS_STR(sp_und, sp, sp_op_const(5*4), tmp);
+
+    MRS_STR(lr_usr, sp, sp_op_const(6*4), tmp);
+    MRS_STR(lr_fiq, sp, sp_op_const(7*4), tmp);
+    MRS_STR(lr_irq, sp, sp_op_const(8*4), tmp);
+    MRS_STR(lr_svc, sp, sp_op_const(9*4), tmp);
+    MRS_STR(lr_abt, sp, sp_op_const(10*4), tmp);
+    MRS_STR(lr_und, sp, sp_op_const(11*4), tmp);
+
+    assert RegPreservingExcept(midway, this, set(@tmp));
+    assert MemPreservingExcept(midway, this, sp, sp + 12*4);
+    assert wellformed_banked_regs_stackframe(this.m, sp)
+        by { reveal_wellformed_banked_regs_stackframe(); }
+    assert banked_regs_stackframe(old(this), this.m, sp)
+        by { reveal_banked_regs_stackframe(); }
 }
 
 procedure unstack_banked_regs({:operand} tmp:int, ghost stack_bytes_in:int)
