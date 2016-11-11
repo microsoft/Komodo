@@ -565,8 +565,6 @@ procedure leave_secure_world({:operand} tmp:int)
 }
 
 #verbatim
-function exPageDb(t: (int, int, PageDb)): PageDb { t.2 }
-
 predicate SpsrsInvariant(s:state, r:state)
     requires ValidState(s) && ValidState(r)
 {

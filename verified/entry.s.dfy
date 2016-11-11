@@ -206,23 +206,23 @@ function exceptionHandled(s:state, d:PageDb, dispPg:PageNr) : (word, word, PageD
     reveal_validPageDb();
     reveal_ValidSRegState();
     reveal_ValidRegState();
-    if(s.conf.ex.ExSVC?) then
+    if s.conf.ex.ExSVC? || s.conf.ex.ExAbt? || s.conf.ex.ExUnd? then (
         var p := dispPg;
         var d' := d[ p := d[p].(entry := d[p].entry.(entered := false))];
-        (KOM_ERR_SUCCESS(), s.regs[R0], d')
-    else 
+        if s.conf.ex.ExSVC? then
+            (KOM_ERR_SUCCESS(), s.regs[R0], d')
+        else
+            (KOM_ERR_FAULT(), 0, d')
+    ) else (
+        assert s.conf.ex.ExIRQ? || s.conf.ex.ExFIQ?;
         var p := dispPg;
         var pc := OperandContents(s, OLR);
         var psr := s.sregs[spsr(mode_of_state(s))];
         var ctxt' := DispatcherContext(s.regs, pc, psr);
         var disp' := d[p].entry.(entered:=true, ctxt:=ctxt');
         var d' := d[ p := d[p].(entry := disp') ];
-        if s.conf.ex.ExIRQ? || s.conf.ex.ExFIQ? then
-            (KOM_ERR_INTERRUPTED(), 0, d')
-        else
-            assert s.conf.ex.ExAbt? || s.conf.ex.ExUnd? ||
-                s.conf.ex.ExUnd?;
-            (KOM_ERR_FAULT(), 0, d')
+        (KOM_ERR_INTERRUPTED(), 0, d')
+    )
 }
 
 predicate {:opaque} validExceptionTransition(s:SysState, s':SysState, dispPg: word)

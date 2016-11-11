@@ -57,7 +57,7 @@ lemma exceptionHandledValidPageDb(us:state, ex:exception, s:state, d:PageDb, dis
     lemma_evalExceptionTaken_NonUser(us, ex, s);
     var (r0,r1,d') := exceptionHandled(s, d, dispPg);
 
-    if (ex != ExSVC) {
+    if (!(ex.ExSVC? || ex.ExAbt? || ex.ExUnd?)) {
         var dc := d'[dispPg].entry.ctxt;
         lemma_update_psr(us.sregs[cpsr], encode_mode(mode_of_exception(us.conf, ex)),
             ex == ExFIQ || mode_of_exception(us.conf, ex) == Monitor, true);
@@ -464,3 +464,5 @@ lemma lemma_validResumePost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, d
         by { reveal_validExceptionTransition(); }
     assert (r2.regs[R0], r2.regs[R1], rd) == exceptionHandled(s4, sd, dp);
 }
+
+function exPageDb(t: (int, int, PageDb)): PageDb { t.2 }
