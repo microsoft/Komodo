@@ -654,7 +654,7 @@ procedure pre_entry_enter(
     // Update current dispatcher
     //-------------------------------------------------------------------------
     LDRglobaladdr(r12, CurDispatcherOp());
-    STRglobal(pagenr, CurDispatcherOp(), r12, 0);
+    STRglobal(r10, CurDispatcherOp(), r12, 0);
 
     //-------------------------------------------------------------------------
     //  Move arguments to regs
@@ -699,15 +699,15 @@ procedure pre_entry_resume(
     //-------------------------------------------------------------------------
     // Update current dispatcher
     //-------------------------------------------------------------------------
+    page_monvaddr_impl(lr,pagenr,r0);
     LDRglobaladdr(r2, CurDispatcherOp());
-    STRglobal(pagenr, CurDispatcherOp(), r2, 0);
+    STRglobal(lr, CurDispatcherOp(), r2, 0);
     // help dafny see pagedb invariant
     globalUnmodifiedImpliesCorrespondingPreserved(pagedb,old(this).m,this.m);
 
     //-------------------------------------------------------------------------
     // Restore SPSR
     //-------------------------------------------------------------------------
-    page_monvaddr_impl(lr,pagenr,r0);
     assert validDispatcherContext(pagedb[dispPg].entry.ctxt) by { reveal_validPageDb(); }
 
     LDR(r0,lr,sp_op_const(DISP_CTXT_PSR()));

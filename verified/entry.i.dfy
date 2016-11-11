@@ -390,9 +390,9 @@ lemma lemma_ValidEntryPre(s0:state, s1:state, sd:PageDb, r:state, rd:PageDb, dp:
     reveal_validResume();
 }
 
-lemma lemma_evalExceptionTaken_NonUser(s:state, e:exception, r:state)
+lemma lemma_evalExceptionTaken_Mode(s:state, e:exception, r:state)
     requires ValidState(s) && evalExceptionTaken(s, e, r)
-    ensures mode_of_state(r) != User
+    ensures mode_of_state(r) == mode_of_exception(s.conf, e)
 {
     var newmode := mode_of_exception(s.conf, e);
     assert newmode != User;
@@ -407,6 +407,13 @@ lemma lemma_evalExceptionTaken_NonUser(s:state, e:exception, r:state)
         { mode_encodings_are_sane(); }
         newmode;
     }
+}
+
+lemma lemma_evalExceptionTaken_NonUser(s:state, e:exception, r:state)
+    requires ValidState(s) && evalExceptionTaken(s, e, r)
+    ensures mode_of_state(r) != User
+{
+    lemma_evalExceptionTaken_Mode(s, e, r);
 }
 
 lemma lemma_validEnterPost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp:word,

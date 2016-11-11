@@ -37,6 +37,7 @@ var{:register OSReg(spsr(Supervisor))} spsr_svc:int;
 var{:register OSReg(spsr(Abort))}      spsr_abt:int;
 var{:register OSReg(spsr(Undefined))}  spsr_und:int;
 var{:register OSReg(spsr(Monitor))}    spsr_mon:int;
+var{:register OSReg(cpsr)}             cpsr:int;
 
 
 procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
