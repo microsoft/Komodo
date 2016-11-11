@@ -1,5 +1,5 @@
 DAFNYTIMELIMIT ?= 30
-DAFNYFLAGS = /trace /timeLimit:$(DAFNYTIMELIMIT) /ironDafny \
+DAFNYFLAGS = /trace /timeLimit:$(DAFNYTIMELIMIT) /ironDafny /allocated:1 \
     $(call mkdafnyflags,$(notdir $(*)),) $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
 
 # dafny flags: file-specific flags plus /noNLarith unless the file is named nlarith.x
