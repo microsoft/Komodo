@@ -62,6 +62,7 @@ procedure install_l1ptes'(
         RegPreservingExcept(old(this),this, set(@l2base, @l1index));
         MemPreservingExcept(old(this),this, l1base + old(l1index) * 16,
                             l1base + (old(l1index) + 1) * 16);
+        ValidMemRange(old(l1base) + old(l1index) * 16, old(l1base) + old(l1index + 1) * 16);
         forall i :: 0 <= i < 4 ==>
             MemContents(this.m, old(l1base) + old(l1index) * 16 + WordsToBytes(i))
                 == mkL1Pte(Just(l2pg), i);
@@ -70,18 +71,19 @@ procedure install_l1ptes'(
 
     lemma_LeftShift4(l1index);
     LSL(l1index, l1index, 4);
+    assert l1index == old(l1index) * 16;
 
     pa_implies_modl2p(old(l2base));
     lemma_ARM_L1PTE_Dual(old(l2base));
     ORR(l2base, l2base, 1);
     assert l2base == mkL1Pte(Just(l2pg), 0);
     WordAlignedAdd(l1base, l1index);
-    assert ValidMem(l1base + l1index);
     STR(l2base, l1base, l1index);
 
     assert RegPreservingExcept(old(this),this,set(@l1index, @l2base));
 
     ADD(l1index, l1index, 4);
+    assert l1index == old(l1index) * 16 + WordsToBytes(1);
     lemma_ARM_L1PTE_Dual(old(l2base) + 1 * ARM_L2PTABLE_BYTES());
     ADD(l2base, l2base, sp_op_const(ARM_L2PTABLE_BYTES()));
     assert l2base == mkL1Pte(Just(l2pg), 1);
@@ -90,6 +92,7 @@ procedure install_l1ptes'(
     assert RegPreservingExcept(old(this),this,set(@l1index, @l2base));
 
     ADD(l1index, l1index, 4);
+    assert l1index == old(l1index) * 16 + WordsToBytes(2);
     lemma_ARM_L1PTE_Dual(old(l2base) + 2 * ARM_L2PTABLE_BYTES());
     ADD(l2base, l2base, sp_op_const(ARM_L2PTABLE_BYTES()));
     assert l2base == mkL1Pte(Just(l2pg), 2);
@@ -98,6 +101,7 @@ procedure install_l1ptes'(
     assert RegPreservingExcept(old(this),this,set(@l1index, @l2base));
 
     ADD(l1index, l1index, 4);
+    assert l1index == old(l1index) * 16 + WordsToBytes(3);
     lemma_ARM_L1PTE_Dual(old(l2base) + 3 * ARM_L2PTABLE_BYTES());
     ADD(l2base, l2base, sp_op_const(ARM_L2PTABLE_BYTES()));
     assert l2base == mkL1Pte(Just(l2pg), 3);
