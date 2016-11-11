@@ -691,6 +691,8 @@ function RightShift(x:word, amount:word): word
     { BitsAsWord(BitShiftRight(WordAsBits(x), amount)) }
 
 function {:axiom} RotateRight(x:word, amount:shift_amount) : word
+    requires 0 <= amount < 32;
+    { BitsAsWord(BitRotateRight(WordAsBits(x), amount)) }
 
 //-----------------------------------------------------------------------------
 // Functions for bytewise operations

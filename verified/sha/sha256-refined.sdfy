@@ -231,7 +231,7 @@ ensures
     forall :: h == BitwiseAdd32(old_h, BSIG1(e))
     {
         reveal BSIG1;
-        lemma_RotateRightCommutesXor(e, 6, 11, 25);
+        lemma_BSIGOptimization(e, 6, 11, 25);
     }
 
     rAND(t1, t1, e);
@@ -273,7 +273,7 @@ ensures
     forall :: h == (old_h + BSIG0(a)) % 0x1_0000_0000
     {
         reveal BSIG0;
-        lemma_RotateRightCommutesXor(a, 2, 13, 22);
+        lemma_BSIGOptimization(a, 2, 13, 22);
     }
 
     // Prove that stack is still valid
@@ -860,7 +860,7 @@ ensures
     forall :: RotateRight(t0, Sigma1(0)) == BSIG1(e)
     {
         reveal BSIG1;
-        lemma_RotateRightCommutesXor(e, 6, 11, 25);
+        lemma_BSIGOptimization(e, 6, 11, 25);
     }
 
     rADDWrap(t1,t1,t4);      // X[i]
