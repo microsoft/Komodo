@@ -490,6 +490,7 @@ procedure kom_smc_map_secure(
         LDRglobal(r0, PageDb(), r12, r0);
 
         forall :: r0 == pageDbEntryTypeVal(pagedb[as_page]) {
+            extractPageDbToAbstractOne(this.m, as_page, PAGEDB_ENTRY_TYPE());
             reveal_pageDbEntryCorresponds();
         }
 
