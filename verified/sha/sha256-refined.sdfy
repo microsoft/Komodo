@@ -219,6 +219,7 @@ ensures
 
     rLDRglobal(t2, K_SHA256s().sym, lr, 0);
     rADDWrap(lr, lr, 4);    // TODO: OpenSSL does this in one instruction with a load-and-increment.  
+    lemma_mod_in_bounds2(i, AddressOfGlobal(K_SHA256s()), old(lr), lr);
     rADDWrap(h, h, t1);      //  h+=X[i]  BP: X[i] = input[i]?
     //assert h == BitwiseAdd32(old(h), bswap32(old(t1)));
     rSTR(t1, sp, input_slot);  // @ BP: Save a copy of input[i] for use in subsequent W calculations
