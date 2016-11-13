@@ -67,7 +67,7 @@ function method CheapMod16(j:int) : int
 
 #endverbatim
 
-procedure {:refined} Body_00_15(
+procedure {:refined} {:timeLimitMultiplier 2} Body_00_15(
     inline i:SHA_step,
     inline perm:perm_index,
     inline input_slot:word,
@@ -162,7 +162,7 @@ requires
 ensures
     t2 == BitwiseXor(a, b);
 //    t3 == Maj(a, b, c);
-    a == (if i < 16 then old(BitwiseAdd32(a, t2)) else old(a));
+    a == (if 0 < i < 16 then old(BitwiseAdd32(a, t2)) else old(a));
     i >= 15 ==> t4 == mem[sp+i_plus_15];
     lr == old(lr) + 4;
 
@@ -200,12 +200,12 @@ ensures
      // The atohs almost match the outgoing variables
      && last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), a, b, c, d, e, f, g);
 {
-    assume false;
-    /*
+    assert input_slot < 68;
     inline if (i < 16) {
         inline if (i == 15) {
             // Save a copy of the incremented input pointer, so we can free up t4
-            rSTR(t4, sp, 68 /*== 17*4*/);     
+            assert 68 == 17*4;
+            rSTR(t4, sp, 68);     
         }
 
         rEORShift(t0, e, e, RORShift(Sigma1(1) - Sigma1(0)));
@@ -253,10 +253,17 @@ ensures
 //    #endif
 
     inline if (i < 15) {    
+         assert ValidAddr(old(mem), input_ptr+(i+1)*4); // OBSERVE
          rLDR(t1, t4, 0);    // Prefetch
          rADDWrap(t4, t4, 4);   // Advance to the next input  // TODO: OpenSSL does this in one instruction with a load-and-increment
+         lemma_mod_in_bounds(i, input_ptr, old(t4), t4);
+//         assert old(t4) + 4 == input_ptr + (i+1)*4 + 4 == input_ptr + (i+2)*4;
+//         assert input_ptr + (i+2)*4 < 0x1_0000_0000;
+         assert t4 == old(t4) + 4;
          rEOR(t2, a, b);            //  a^b, b^c in next round
     } else {
+         assert ValidAddr(old(mem), sp+i_plus_2);  // OBSERVE
+         assert ValidAddr(old(mem), sp+i_plus_15); // OBSERVE
          rLDR(t1, sp, i_plus_2);     // @ from future BODY_16_xx 
          rEOR(t2, a, b);             //  a^b, b^c in next round
          rLDR(t4, sp, i_plus_15);    // @ from future BODY_16_xx
@@ -296,6 +303,7 @@ ensures
     ghost var old_atoh := old(atoh_c(old_a, b, c, d, e, f, g, h));
     //assert last(last(trace_in.atoh)) == old_atoh;                                   
     ghost var new_atoh := atoh_c(BitwiseAdd32(h, t3), old_a, old(b), old(c), d, old(e), old(f), old(g));
+    lemma_BitwiseAdd32_properties(old(a));
     assert i == 0 ==> BitwiseAdd32(old(a), 0) == old(a);   // OBSERVE
     assert old_atoh.a == a;     // OBSERVE
      
@@ -327,7 +335,15 @@ ensures
 //         last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), old_a, b, c, d, e, f, g));
      assert last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), a, b, c, d, e, f, g);
 
-  */
+
+     // Help prove that the input is still intact
+     ghost if (i < 16) {
+         forall j :| 0 <= j < 16 :: ValidAddr(mem, input_ptr + j*4)
+                                 && mem[input_ptr + j*4] == input[j]
+         {
+            assert ValidAddr(old(mem), input_ptr + j*4);
+         }
+     }
 }
 
 #verbatim

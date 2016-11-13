@@ -109,4 +109,27 @@ lemma lemma_obvious_mod_with_constants(i:int)
 {
 }
 
+lemma lemma_mod_in_bounds(i:int, base:int, old_val:int, val:int)
+    requires 0 <= i < 15;
+    requires 0 <= base;
+    requires old_val == base + (i + 1)*4;
+    requires val == (old_val + 4) % 0x1_0000_0000;
+    requires base + 16*4 < 0x1_0000_0000;
+    ensures  val == base + (i + 2)*4;
+{
+    calc {
+        val;
+        (old_val + 4) % 0x1_0000_0000;
+        (base + (i + 1)*4 + 4) % 0x1_0000_0000;
+        (base + i*4 + 4 + 4) % 0x1_0000_0000;
+        (base + (i+2)*4) % 0x1_0000_0000;
+    }
+    assert 0 <= base + (i+2) * 4 <= base + 16*4;
+}
+
+lemma lemma_BitwiseAdd32_properties(w:word)
+    ensures BitwiseAdd32(w, 0) == w;
+{ }
+
+
 }
