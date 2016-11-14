@@ -41,7 +41,7 @@ endif
 %.verified: %.dfy
 	$(DAFNY) $(DAFNYFLAGS) /compile:0 $< $(if $(DAFNYPROC),,&& touch $@)
 
-%.exe: %.i.dfy %.i.verified
+%.exe: %.dfy %.verified
 	$(DAFNY) $(DAFNYFLAGS) /noVerify /compile:2 /out:$@ $<
 
 %.S: %.exe
@@ -76,7 +76,7 @@ $(dir)/ptables.i.verified: $(dir)/pagedb.i.verified $(dir)/entry.s.verified $(di
 $(dir)/ptebits.i.verified: $(dir)/pagedb.i.verified $(dir)/bitvectors.i.verified
 $(dir)/entry.s.verified: $(dir)/ARMdef.verified $(dir)/pagedb.s.verified $(dir)/abstate.s.verified
 $(dir)/entry.i.verified: $(dir)/entry.s.verified $(dir)/ptables.i.verified $(dir)/psrbits.i.verified
-$(dir)/main.i.verified: $(dir)/ARMprint.verified $(dir)/smc_handler.verified $(dir)/exception_handlers.verified
+$(dir)/main.verified: $(dir)/ARMprint.verified $(dir)/smc_handler.verified $(dir)/exception_handlers.verified
 
 # variables used to emit deps/includes for all Spartan code
 ARMdecls_dep-dfy = ARMspartan
