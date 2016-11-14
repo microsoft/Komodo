@@ -236,7 +236,7 @@ ensures
     }
 
     rAND(t1, t1, e);
-    rADDWrap(h, h, OConst(K_SHA256(i)));      // h += K256(i)
+    rADDWrap(h, h, t2);      // h += K256(i)
     rEOR(t1, t1, g);     // Ch(e,f,g)
     
     assert t1 == Ch(e, f, g) by { lemma_Ch(e, f, g, t1); }
