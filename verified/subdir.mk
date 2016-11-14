@@ -1,4 +1,5 @@
 DAFNYTIMELIMIT ?= 60
+SPARTANDIRECT ?= 1
 DAFNYFLAGS = /trace /timeLimit:$(DAFNYTIMELIMIT) /ironDafny /allocated:1 \
     $(call mkdafnyflags,$(call dropdir,$(*))) $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
 
@@ -26,7 +27,7 @@ mkincs-nodir = $(call mkdfyincs,$(1),) $(call mksdfyincs,$(1),)
 	@which dos2unix >/dev/null && dos2unix $@ || true
 
 # Spartan direct verification, including cheesy workaround for broken error code.
-ifndef NO_SPARTAN_DIRECT
+ifeq ($(SPARTANDIRECT), 1)
 %.verified %.log: %.sdfy %.gen.dfy
 	/bin/bash -c "$(SPARTAN) $(SPARTANFLAGS) $(call mkincs-dir,$*) $< \
 	-dafnyDirect $(DAFNYFLAGS) /compile:0 | tee $*.log; exit \$${PIPESTATUS[0]}"
