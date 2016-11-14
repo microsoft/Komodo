@@ -140,9 +140,9 @@ lemma sp_lemma_GenericUnrolledChunk(
     assert sp_eval(sp_bL_expanded, sp_sL, sp_sM_preliminary) by
     {
         if sp_sL.ok {
-            var sL := to_state(sp_sL);
-            var sM := to_state(sp_sM_preliminary);
-            reveal_evalCodeOpaque();
+            var sL := sp_sL;
+            var sM := sp_sM_preliminary;
+            reveal_sp_eval();
             assert evalCode(sp_bL_expanded.block.hd, sL, sM);
             assert evalBlock(sp_bL_expanded.block.tl, sM, sM);
             assert evalBlock(sp_bL_expanded.block, sL, sM);

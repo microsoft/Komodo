@@ -67,7 +67,7 @@ function method CheapMod16(j:int) : int
 
 #endverbatim
 
-procedure {:refined} {:timeLimitMultiplier 2} Body_00_15(
+procedure {:refined} {:timeLimitMultiplier 1} Body_00_15(
     inline i:SHA_step,
     inline perm:perm_index,
     inline input_slot:word,
@@ -541,7 +541,7 @@ lemma {:timeLimitMultiplier 2} sp_lemma_GenericIterationPreservesInvariants(
     sp_sM:sp_state
     )
 {
-    reveal_evalCodeOpaque();
+    reveal_sp_eval();
     reveal_ValidRegState();
     reveal_ValidMemState();
     reveal_ValidConfig();
@@ -1096,7 +1096,7 @@ lemma {:timeLimitMultiplier 2} sp_lemma_GenericIterationPreservesInvariants(
 {
     var old_i := i;
     var i := old_i + 16;
-    reveal_evalCodeOpaque();
+    reveal_sp_eval();
     reveal_ValidRegState();
     reveal_ValidMemState();
     reveal_ValidConfig();

@@ -471,7 +471,7 @@ rLDR(out operand rd:word, operand base:word, operand ofs:word)
     ensures
         rd == mem[old(base) + old(ofs)];
 {
-    reveal evalCodeOpaque;
+    reveal sp_eval;
     reveal ValidRegState;
     reveal ValidMemState;
     reveal ValidConfig;
@@ -488,7 +488,7 @@ rLDRglobaladdr(out operand rd:word, inline g:global)
     ensures
         rd == AddressOfGlobal(OSymbol(g));
 {
-    reveal evalCodeOpaque;
+    reveal sp_eval;
     reveal ValidRegState;
     reveal ValidMemState;
     reveal ValidConfig;
@@ -526,7 +526,7 @@ rLDRglobal(out operand rd:word, inline g:global,
         rd == globals[OSymbol(g)][BytesToWords(base + ofs - AddressOfGlobal(OSymbol(g)))];
         //GlobalWord(this.m, g, base + ofs - g);
 {
-    reveal evalCodeOpaque;
+    reveal sp_eval;
     reveal ValidRegState;
     reveal ValidMemState;
     reveal ValidConfig;
@@ -546,7 +546,7 @@ rSTR(operand rd:reg, operand base:word, operand ofs:word)
     ensures
         mem == old(mem)[old(base+ofs) := rd];
 {
-    reveal evalCodeOpaque;
+    reveal sp_eval;
     reveal ValidRegState;
     reveal ValidMemState;
     reveal ValidConfig;
@@ -562,7 +562,7 @@ rMOV(out operand dst:word, operand src:word)
     ensures
         dst == old(src);
 {
-    reveal evalCodeOpaque;
+    reveal sp_eval;
     reveal ValidRegState;
     reveal ValidMemState;
     reveal ValidConfig;
@@ -578,7 +578,7 @@ rMOVShift(out operand dst:word, operand src:snd, inline shift:Shift)
     ensures
         dst == old(EvalShift(old(src), shift));
 {
-    reveal evalCodeOpaque;
+    reveal sp_eval;
     reveal ValidRegState;
     reveal ValidMemState;
     reveal ValidConfig;
@@ -594,7 +594,7 @@ rEOR(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == BitwiseXor(old(src1), old(src2));
 {
-    reveal evalCodeOpaque;
+    reveal sp_eval;
     reveal ValidRegState;
     reveal ValidMemState;
     reveal ValidConfig;
@@ -610,7 +610,7 @@ rEORShift(out operand dst:word, operand src1:word, operand src2:snd, inline shif
     ensures
         dst == BitwiseXor(old(src1), EvalShift(old(src2), shift));
 {
-    reveal evalCodeOpaque;
+    reveal sp_eval;
     reveal ValidRegState;
     reveal ValidMemState;
     reveal ValidConfig;
@@ -628,7 +628,7 @@ rSUB(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == old(src1 - src2); 
 {
-    reveal evalCodeOpaque;
+    reveal sp_eval;
     reveal ValidRegState;
     reveal ValidMemState;
     reveal ValidConfig;
@@ -645,7 +645,7 @@ rADDWrap(out operand dst:word, operand src1:word, operand src2:word)
         dst == old(src1 + src2) % 0x1_0000_0000;
         //WordAligned(old(src1)) && WordAligned(old(src2)) ==> WordAligned(dst);
 {
-    reveal evalCodeOpaque;
+    reveal sp_eval;
     reveal ValidRegState;
     reveal ValidMemState;
     reveal ValidConfig;
@@ -662,7 +662,7 @@ rADDWrapShift(out operand dst:word, operand src1:word, operand src2:snd, inline 
         dst == old(src1 + EvalShift(old(src2), shift)) % 0x1_0000_0000;
         //WordAligned(old(src1)) && WordAligned(old(EvalShift(old(src2), shift))) ==> WordAligned(dst);
 {
-    reveal evalCodeOpaque;
+    reveal sp_eval;
     reveal ValidRegState;
     reveal ValidMemState;
     reveal ValidConfig;
@@ -678,7 +678,7 @@ rAND(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == old(BitwiseAnd(src1, src2));
 {
-    reveal evalCodeOpaque;
+    reveal sp_eval;
     reveal ValidRegState;
     reveal ValidMemState;
     reveal ValidConfig;
@@ -695,7 +695,7 @@ rREV(out operand dst:word, operand src:reg)
     ensures
         dst == old(bswap32(src));
 {
-    reveal evalCodeOpaque;
+    reveal sp_eval;
     reveal ValidRegState;
     reveal ValidMemState;
     reveal ValidConfig;
