@@ -261,6 +261,7 @@ method printCode(c:code, n:int) returns(n':int)
           var n1 := n;
           var n2 := n + 1;
           print("  B "); printLabel(n2); nl();
+          print(".LTORG"); nl();
           printLabel(n1); print(":"); nl();
           n' := printCode(loop, n + 2);
           printLabel(n2); print(":"); nl();
