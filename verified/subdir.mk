@@ -1,6 +1,6 @@
 DAFNYTIMELIMIT ?= 60
 DAFNYFLAGS = /trace /timeLimit:$(DAFNYTIMELIMIT) /ironDafny /allocated:1 \
-    $(call mkdafnyflags,$(notdir $(*)),) $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
+    $(call mkdafnyflags,$(call dropdir,$(*))) $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
 
 # dafny flags: file-specific flags plus /noNLarith unless the file is named nlarith.x
 mkdafnyflags = $(DAFNYFLAGS_$(1)) $(if $(filter nlarith.%,$(1)),,/noNLarith)
@@ -9,9 +9,10 @@ mkdafnyflags = $(DAFNYFLAGS_$(1)) $(if $(filter nlarith.%,$(1)),,/noNLarith)
 .PHONY: verified
 verified: $(dir)/main.S
 
-mkdeps = $(foreach n,$($(notdir $(1))_dep-dfy) $($(notdir $(1))_dep-sdfy),$(dir)/$(n).verified)
-mkdfyincs = $(foreach n,$($(notdir $(1))_dep-dfy),-i $(2)$(n).dfy)
-mksdfyincs = $(foreach n,$($(notdir $(1))_dep-sdfy),-i $(2)$(n).gen.dfy -include $(dir)/$(n).sdfy)
+dropdir = $(subst $(dir)/,,$(1))
+mkdeps = $(foreach n,$($(call dropdir,$(1))_dep-dfy) $($(call dropdir,$(1))_dep-sdfy),$(dir)/$(n).verified)
+mkdfyincs = $(foreach n,$($(call dropdir,$(1))_dep-dfy),-i $(2)$(n).dfy)
+mksdfyincs = $(foreach n,$($(call dropdir,$(1))_dep-sdfy),-i $(2)$(n).gen.dfy -include $(dir)/$(n).sdfy)
 mkincs-dir = $(call mkdfyincs,$(1),$(dir)/) $(call mksdfyincs,$(1),$(dir)/)
 mkincs-nodir = $(call mkdfyincs,$(1),) $(call mksdfyincs,$(1),)
 
