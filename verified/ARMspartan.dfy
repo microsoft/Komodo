@@ -254,14 +254,13 @@ predicate AllRegsInvariant(s:state, s':state)
 // Control Flow Lemmas
 //-----------------------------------------------------------------------------
 
-function to_state(s:sp_state):state { s }
 predicate valid_state(s:sp_state) { ValidState(s) }
 
 lemma sp_lemma_empty(s:sp_state, r:sp_state) returns(r':sp_state)
     requires sp_eval(Block(sp_CNil()), s, r)
     ensures  s.ok ==> r.ok
     ensures  r' == s
-    ensures  s.ok ==> to_state(r) == to_state(s)
+    ensures  s.ok ==> r == s
 {
     reveal_evalCodeOpaque();
     r' := s;
@@ -364,11 +363,11 @@ lemma sp_lemma_block(b:codes, s0:sp_state, r:sp_state) returns(r1:sp_state, c0:c
     c0 := b.hd;
     b1 := b.tl;
     if s0.ok {
-        assert evalBlock(b, to_state(s0), to_state(r));
-        var r':state :| evalCode(b.hd, to_state(s0), r') && evalBlock(b.tl, r', to_state(r));
+        assert evalBlock(b, s0, r);
+        var r':state :| evalCode(b.hd, s0, r') && evalBlock(b.tl, r', r);
         r1 := r';
         if ValidState(s0) {
-            code_state_validity(c0, to_state(s0), to_state(r1));
+            code_state_validity(c0, s0, r1);
         }
         assert sp_eval(c0, s0, r1);
     } else {
@@ -390,9 +389,9 @@ lemma sp_lemma_ifElse(ifb:obool, ct:code, cf:code, s:sp_state, r:sp_state) retur
 {
     reveal_evalCodeOpaque();
     if s.ok {
-        assert evalIfElse(ifb, ct, cf, to_state(s), to_state(r));
+        assert evalIfElse(ifb, ct, cf, s, r);
         cond := evalOBool(s, ifb);
-        var t:state :| evalGuard(to_state(s), ifb, t) && (if cond then evalCode(ct, t, to_state(r)) else evalCode(cf, t, to_state(r)));
+        var t:state :| evalGuard(s, ifb, t) && (if cond then evalCode(ct, t, r) else evalCode(cf, t, r));
         s' := t;
     }
 }
@@ -421,13 +420,13 @@ predicate ValidStateTransparent(s:state)
 
 predicate sp_whileInv(b:obool, c:code, n:int, r1:sp_state, r2:sp_state)
 {
-    n >= 0 && ValidStateTransparent(r1) && evalWhileLax(b, c, n, to_state(r1), to_state(r2))
+    n >= 0 && ValidStateTransparent(r1) && evalWhileLax(b, c, n, r1, r2)
 }
 
 lemma sp_lemma_while(b:obool, c:code, s:sp_state, r:sp_state) returns(n:nat, r':sp_state)
     requires ValidState(s) && ValidOperand(b.o1) && ValidOperand(b.o2)
     requires sp_eval(While(b, c), s, r)
-    ensures  evalWhileLax(b, c, n, to_state(s), to_state(r))
+    ensures  evalWhileLax(b, c, n, s, r)
     //ensures  r'.ok
     ensures  ValidState(r');
     ensures  r' == s
@@ -436,8 +435,8 @@ lemma sp_lemma_while(b:obool, c:code, s:sp_state, r:sp_state) returns(n:nat, r':
     reveal_evalWhileOpaque();
 //    unpack_eval_while(b, c, s, r);
     if s.ok {
-        assert evalCode(While(b, c), to_state(s), to_state(r));
-        n :| evalWhile(b, c, n, to_state(s), to_state(r));
+        assert evalCode(While(b, c), s, r);
+        n :| evalWhile(b, c, n, s, r);
     } else {
         n := 0;
     }
@@ -447,10 +446,10 @@ lemma sp_lemma_while(b:obool, c:code, s:sp_state, r:sp_state) returns(n:nat, r':
 lemma sp_lemma_whileTrue(b:obool, c:code, n:sp_int, s:sp_state, r:sp_state) returns(s':sp_state, r':sp_state)
     requires ValidState(s) && ValidOperand(b.o1) && ValidOperand(b.o2);
     requires n > 0
-    requires evalWhileLax(b, c, n, to_state(s), to_state(r))
+    requires evalWhileLax(b, c, n, s, r)
     //ensures  ValidState(s) && r'.ok ==> ValidState(r');
     ensures  ValidState(s) ==> ValidState(s');
-    ensures  evalWhileLax(b, c, n-1, to_state(r'), to_state(r))
+    ensures  evalWhileLax(b, c, n-1, r', r)
     ensures  sp_eval(c, s', r');
     ensures  ValidState(s) ==> if s.ok then evalGuard(s, b, s') else s' == s;
     ensures  if s.ok then
@@ -458,7 +457,7 @@ lemma sp_lemma_whileTrue(b:obool, c:code, n:sp_int, s:sp_state, r:sp_state) retu
                  //&& evalGuard(s, b, s')
                  && evalOBool(s, b)
                  //&& sp_eval(c, s', r')
-                 //&& evalWhileOpaque(b, c, n - 1, to_state(r'), to_state(r))
+                 //&& evalWhileOpaque(b, c, n - 1, r', r)
              else
                  true //!r.ok;
 {
@@ -470,11 +469,11 @@ lemma sp_lemma_whileTrue(b:obool, c:code, n:sp_int, s:sp_state, r:sp_state) retu
         r' := s;
         return;
     }
-    assert evalWhile(b, c, n, to_state(s), to_state(r)); // TODO: Dafny reveal/opaque issue
+    assert evalWhile(b, c, n, s, r); // TODO: Dafny reveal/opaque issue
 
     if ValidState(s) {
-        var s'', r'':state :| evalGuard(to_state(s), b, s'') && evalOBool(to_state(s), b) && evalCode(c, s'', r'')
-            && evalWhile(b, c, n - 1, r'', to_state(r));
+        var s'', r'':state :| evalGuard(s, b, s'') && evalOBool(s, b) && evalCode(c, s'', r'')
+            && evalWhile(b, c, n - 1, r'', r);
         code_state_validity(c, s'', r'');
         s' := s'';
         r' := r'';
@@ -486,14 +485,14 @@ lemma sp_lemma_whileTrue(b:obool, c:code, n:sp_int, s:sp_state, r:sp_state) retu
 
 lemma sp_lemma_whileFalse(b:obool, c:code, s:sp_state, r:sp_state) returns(r':sp_state)
     requires ValidState(s) && ValidOperand(b.o1) && ValidOperand(b.o2);
-    requires evalWhileLax(b, c, 0, to_state(s), to_state(r))
+    requires evalWhileLax(b, c, 0, s, r)
     ensures  if s.ok then
                     (if ValidState(s) then
                         (r'.ok ==> ValidState(r'))
                      && evalGuard(s, b, r')
                      && !evalOBool(s, b)
                      && r.ok
-                     && to_state(r') == to_state(r)
+                     && r' == r
                      else 
                         true)
                  && r' == r
