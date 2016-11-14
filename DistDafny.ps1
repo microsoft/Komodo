@@ -3,9 +3,10 @@
 $server = "baumann-desk"
 $dafny = "c:\Users\baumann\src\spartan\tools\Dafny\Dafny.exe"
 $remoteboogie = "Boogie.exe"
+$args_ignore = @("/ironDafny","/compile:0")
 $args_keep = @("/trace")
-$args_ignore = "/ironDafny","/compile:0"
-$argpats_keep = "/timeLimit","/proverOpt","/proc"
+$argpats_ignore = @("/allocated")
+$argpats_keep = @("/timeLimit","/proverOpt","/proc")
 
 $dafnyargs = @()
 $boogieargs = @()
@@ -20,17 +21,16 @@ if ($args -notcontains "/compile:0") {
 
 if (-not $runlocal) {
     foreach ($arg in $args) {
-        if ($args_ignore -contains $arg) {
+        if (($args_ignore -contains $arg) -or
+                ($arg.contains(":") -and ($argpats_ignore -contains $arg.split(":")[0]))) {
             $dafnyargs += $arg
+        } elseif (($args_keep -contains $arg) -or
+                ($arg.contains(":") -and ($argpats_keep -contains $arg.split(":")[0]))) {
+            $dafnyargs += $arg
+            $boogieargs += $arg
         } elseif ($arg -eq "/noNLarith") {
             $dafnyargs += $arg
             $boogieargs += "/z3opt:smt.arith.nl=false"
-        } elseif ($args_keep -contains $arg) {
-            $dafnyargs += $arg
-            $boogieargs += $arg
-        } elseif ($arg.contains(":") -and ($argpats_keep -contains $arg.split(":")[0])) {
-            $dafnyargs += $arg
-            $boogieargs += $arg
         } elseif (-not $arg.StartsWith("/") -and $dafnysrc -eq $null) {
             $dafnysrc = $arg
         } else {
@@ -55,6 +55,9 @@ if ($LastExitCode) {
     Remove-Item $localboogiefile -force
     exit $LastExitCode
 }
+
+$ErrorActionPreference = "Stop"
+$ProgressPreference="SilentlyContinue"
 
 $pss = New-PSSession $server
 
