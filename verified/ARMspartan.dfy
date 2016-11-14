@@ -22,14 +22,9 @@ type sp_state = state
 
 function method sp_op(o:sp_operand_lemma):sp_operand_code { o }
 
-predicate {:opaque} evalCodeOpaque(c:code, s:state, r:state)
+predicate {:opaque} sp_eval(c:code, s:state, r:state)
 {
-    evalCode(c, s, r)
-}
-
-predicate sp_eval(c:code, s:state, r:state)
-{
-    s.ok ==> evalCodeOpaque(c, s, r)
+    s.ok ==> evalCode(c, s, r)
 }
 
 function sp_eval_op(s:state, o:operand): word
@@ -72,18 +67,18 @@ predicate sp_require(b0:codes, c1:code, s0:sp_state, sN:sp_state)
  && ValidRegState'(s0.regs)
 }
 
-// Weaker form of sp_eval that we can actually ensure generically in instructions
-predicate eval_weak(c:code, s:sp_state, r:sp_state) 
-{ 
-    s.ok && r.ok ==> evalCodeOpaque(c, s, r) 
-}
+//// Weaker form of sp_eval that we can actually ensure generically in instructions
+//predicate eval_weak(c:code, s:sp_state, r:sp_state) 
+//{ 
+//    s.ok && r.ok ==> evalCodeOpaque(c, s, r) 
+//}
 
 predicate sp_ensure(b0:codes, b1:codes, s0:sp_state, s1:sp_state, sN:sp_state)
 {
     sp_cTailIs(b0, b1)
 // && s1.ok
 // && sp_eval(sp_cHead(b0), s0, s1)
- && eval_weak(sp_cHead(b0), s0, s1)
+// && eval_weak(sp_cHead(b0), s0, s1)
  && sp_eval(sp_Block(b1), s1, sN)
  && ValidState(s1)
  && ValidRegState'(s1.regs)
@@ -261,8 +256,9 @@ lemma sp_lemma_empty(s:sp_state, r:sp_state) returns(r':sp_state)
     ensures  s.ok ==> r.ok
     ensures  r' == s
     ensures  s.ok ==> r == s
+    ensures  forall b, s' :: sp_eval(b, r, s') ==> sp_eval(b, s, s')
 {
-    reveal_evalCodeOpaque();
+    reveal_sp_eval();
     r' := s;
 }
 
@@ -359,7 +355,7 @@ lemma sp_lemma_block(b:codes, s0:sp_state, r:sp_state) returns(r1:sp_state, c0:c
     ensures  sp_eval(c0, s0, r1)
     ensures  sp_eval(Block(b1), r1, r)
 {
-    reveal_evalCodeOpaque();
+    reveal_sp_eval();
     c0 := b.hd;
     b1 := b.tl;
     if s0.ok {
@@ -378,6 +374,7 @@ lemma sp_lemma_block(b:codes, s0:sp_state, r:sp_state) returns(r1:sp_state, c0:c
 lemma sp_lemma_ifElse(ifb:obool, ct:code, cf:code, s:sp_state, r:sp_state) returns(cond:bool, s':sp_state)
     requires ValidState(s) && ValidOperand(ifb.o1) && ValidOperand(ifb.o2)
     requires sp_eval(IfElse(ifb, ct, cf), s, r)
+    ensures  forall c, t, t' :: sp_eval(c, t, t') == (t.ok ==> sp_eval(c, t, t'));
     ensures  if s.ok then
                     s'.ok
                  && ValidState(s')
@@ -387,7 +384,7 @@ lemma sp_lemma_ifElse(ifb:obool, ct:code, cf:code, s:sp_state, r:sp_state) retur
              else
                  true //!r.ok;
 {
-    reveal_evalCodeOpaque();
+    reveal_sp_eval();
     if s.ok {
         assert evalIfElse(ifb, ct, cf, s, r);
         cond := evalOBool(s, ifb);
@@ -430,8 +427,9 @@ lemma sp_lemma_while(b:obool, c:code, s:sp_state, r:sp_state) returns(n:nat, r':
     //ensures  r'.ok
     ensures  ValidState(r');
     ensures  r' == s
+    ensures  forall c', t, t' :: sp_eval(c', t, t') == (t.ok ==> sp_eval(c', t, t'));
 {
-    reveal_evalCodeOpaque();
+    reveal_sp_eval();
     reveal_evalWhileOpaque();
 //    unpack_eval_while(b, c, s, r);
     if s.ok {
@@ -452,6 +450,7 @@ lemma sp_lemma_whileTrue(b:obool, c:code, n:sp_int, s:sp_state, r:sp_state) retu
     ensures  evalWhileLax(b, c, n-1, r', r)
     ensures  sp_eval(c, s', r');
     ensures  ValidState(s) ==> if s.ok then evalGuard(s, b, s') else s' == s;
+    ensures  forall c', t, t' :: sp_eval(c', t, t') == (t.ok ==> sp_eval(c', t, t'));
     ensures  if s.ok then
                     s'.ok
                  //&& evalGuard(s, b, s')
@@ -461,7 +460,7 @@ lemma sp_lemma_whileTrue(b:obool, c:code, n:sp_int, s:sp_state, r:sp_state) retu
              else
                  true //!r.ok;
 {
-    reveal_evalCodeOpaque();
+    reveal_sp_eval();
     reveal_evalWhileOpaque();
 
     if !s.ok {
@@ -486,6 +485,7 @@ lemma sp_lemma_whileTrue(b:obool, c:code, n:sp_int, s:sp_state, r:sp_state) retu
 lemma sp_lemma_whileFalse(b:obool, c:code, s:sp_state, r:sp_state) returns(r':sp_state)
     requires ValidState(s) && ValidOperand(b.o1) && ValidOperand(b.o2);
     requires evalWhileLax(b, c, 0, s, r)
+    ensures  forall c', t, t' :: sp_eval(c', t, t') == (t.ok ==> sp_eval(c', t, t'));
     ensures  if s.ok then
                     (if ValidState(s) then
                         (r'.ok ==> ValidState(r'))
@@ -499,7 +499,7 @@ lemma sp_lemma_whileFalse(b:obool, c:code, s:sp_state, r:sp_state) returns(r':sp
             else
                 r' == s
 {
-    reveal_evalCodeOpaque();
+    reveal_sp_eval();
     reveal_evalWhileOpaque();
 
     if !s.ok {
