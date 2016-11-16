@@ -40,12 +40,12 @@ var{:register OSReg(spsr(Monitor))}    spsr_mon:int;
 var{:register OSReg(cpsr)}             cpsr:int;
 
 
-procedure operator(:=) (out{:operand} dst:int, {:operand} src:int) := MOV
+procedure operator(:=) (out operand dst:int, operand src:int) := MOV
 
-function{:operand} sp_op_const(n:word):operand
+function sp_op_const(n:word):sp_operand
 
 procedure {:instruction Ins(ADD(dst, src1, src2))}
-ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+ADD(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -63,7 +63,7 @@ ADD(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(ADD(dst, src1, src2))}
-ADDWrap(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+ADDWrap(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -80,7 +80,7 @@ ADDWrap(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(SUB(dst, src1, src2))}
-SUB(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+SUB(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -97,7 +97,7 @@ SUB(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(MUL(dst, src1, src2))}
-MUL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+MUL(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -114,7 +114,7 @@ MUL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(UDIV(dst, src1, src2))}
-UDIV(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+UDIV(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -132,7 +132,7 @@ UDIV(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(AND(dst, src1, src2))}
-AND(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+AND(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -148,7 +148,7 @@ AND(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(ORR(dst, src1, src2))}
-ORR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+ORR(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -164,7 +164,7 @@ ORR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(EOR(dst, src1, src2))}
-EOR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+EOR(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -180,7 +180,7 @@ EOR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(LSL(dst, src1, src2))}
-LSL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+LSL(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -198,7 +198,7 @@ LSL(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(LSR(dst, src1, src2))}
-LSR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
+LSR(out operand dst:int, operand src1:int, operand src2:int)
     requires/ensures
         ValidState(this);
     requires
@@ -216,7 +216,7 @@ LSR(out{:operand} dst:int, {:operand} src1:int, {:operand} src2:int)
 }
 
 procedure {:instruction Ins(REV(dst, src))}
-REV(out{:operand} dst:int, {:operand} src:int)
+REV(out operand dst:int, operand src:int)
     requires/ensures
         ValidState(this);
     requires
@@ -231,7 +231,7 @@ REV(out{:operand} dst:int, {:operand} src:int)
 }
 
 procedure {:instruction Ins(MVN(dst, src))}
-MVN(out{:operand} dst:int, {:operand} src:int)
+MVN(out operand dst:int, operand src:int)
     requires/ensures
         ValidState(this);
     requires
@@ -246,7 +246,7 @@ MVN(out{:operand} dst:int, {:operand} src:int)
 }
 
 procedure {:instruction Ins(MOV(dst, src))}
-MOV(out{:operand} dst:int, {:operand} src:int)
+MOV(out operand dst:int, operand src:int)
     requires/ensures
         ValidState(this);
     requires
@@ -261,7 +261,7 @@ MOV(out{:operand} dst:int, {:operand} src:int)
 }
 
 procedure {:instruction Ins(LDR(rd, base, ofs))}
-LDR(out{:operand} rd:int, {:operand} base:int, {:operand} ofs:int)
+LDR(out operand rd:int, operand base:int, operand ofs:int)
     requires/ensures
         ValidState(this);
     requires
@@ -278,7 +278,7 @@ LDR(out{:operand} rd:int, {:operand} base:int, {:operand} ofs:int)
 }
 
 procedure {:instruction Ins(STR(rd, base, ofs))}
-STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
+STR(operand rd:int, out operand base:int, operand ofs:int)
     requires/ensures
         ValidState(this);
     requires
@@ -295,7 +295,7 @@ STR({:operand} rd:int, out{:operand} base:int, {:operand} ofs:int)
 }
 
 procedure {:instruction Ins(MRS(dst, src))}
-MRS({:operand} dst:int, {:operand} src:int)
+MRS(operand dst:int, operand src:int)
     requires/ensures
         ValidState(this);
     requires
@@ -311,7 +311,7 @@ MRS({:operand} dst:int, {:operand} src:int)
 }
 
 procedure {:instruction Ins(MSR(dst, src))}
-MSR({:operand} dst:int, {:operand} src:int)
+MSR(operand dst:int, operand src:int)
     requires/ensures
         ValidState(this);
     requires
@@ -328,7 +328,7 @@ MSR({:operand} dst:int, {:operand} src:int)
 }
 
 procedure {:instruction Ins(MRC(dst, src))}
-MRC({:operand} dst:int, {:operand} src:int)
+MRC(operand dst:int, operand src:int)
     requires/ensures
         ValidState(this);
     requires
@@ -343,7 +343,7 @@ MRC({:operand} dst:int, {:operand} src:int)
 }
 
 procedure {:instruction Ins(MCR(dst, src))}
-MCR({:operand} dst:int, {:operand} src:int)
+MCR(operand dst:int, operand src:int)
     requires/ensures
         ValidState(this);
     requires
@@ -369,7 +369,7 @@ MOVS_PCLR_TO_USERMODE_AND_CONTINUE()
     reveal_sp_eval();
 }
 
-procedure {:instruction Ins(CPSID_IAF(mod))} CPSID_IAF({:operand} mod:int)
+procedure {:instruction Ins(CPSID_IAF(mod))} CPSID_IAF(operand mod:int)
     requires/ensures
         ValidState(this);
     requires
@@ -384,7 +384,7 @@ procedure {:instruction Ins(CPSID_IAF(mod))} CPSID_IAF({:operand} mod:int)
 }
 
 procedure {:instruction Ins(LDR_reloc(rd, g))}
-LDRglobaladdr(out{:operand} rd:int, {:operand} g:string)
+LDRglobaladdr(out operand rd:int, operand g:string)
     requires
         ValidState(this);
         ValidRegOperand(@rd);
@@ -398,8 +398,8 @@ LDRglobaladdr(out{:operand} rd:int, {:operand} g:string)
 }
 
 procedure {:instruction Ins(LDR_global(rd, g, base, ofs))}
-LDRglobal(out{:operand} rd:int, {:operand} g:string,
-          {:operand} base:int, {:operand} ofs:int)
+LDRglobal(out operand rd:int, operand g:string,
+          operand base:int, operand ofs:int)
     requires
         ValidState(this);
         ValidRegOperand(@rd);
@@ -416,8 +416,8 @@ LDRglobal(out{:operand} rd:int, {:operand} g:string,
 }
 
 procedure {:instruction Ins(STR_global(rd, g, base, ofs))}
-STRglobal({:operand} rd:int, {:operand} g:string,
-          {:operand} base:int, {:operand} ofs:int)
+STRglobal(operand rd:int, operand g:string,
+          operand base:int, operand ofs:int)
     requires
         ValidState(this);
         ValidRegOperand(@rd);

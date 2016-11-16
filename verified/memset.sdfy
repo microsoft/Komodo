@@ -1,4 +1,4 @@
-procedure memset(inout {:operand} base:int, {:operand} val:int, inout {:operand} size:int)
+procedure memset(inout operand base:int, operand val:int, inout operand size:int)
     requires/ensures
         SaneState(this);
     requires

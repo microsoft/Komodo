@@ -36,9 +36,9 @@ lemma pa_implies_modl2p(p:int)
 
 // updates portion of install_l1ptes
 procedure install_l1ptes'(
-    {:operand} l1base:addr,
-    inout {:operand} l2base:addr,
-    inout {:operand} l1index:int,
+    operand l1base:addr,
+    inout operand l2base:addr,
+    inout operand l1index:int,
     ghost l2pg:PageNr)
     requires/ensures
         SaneState(this);
@@ -109,10 +109,10 @@ procedure install_l1ptes'(
 }
 
 procedure install_l1ptes(
-    {:operand} l1pt_va:addr,
-    inout {:operand} l2_pg:int,
-    inout {:operand} l1index:int,
-    out {:operand} tmp:int,
+    operand l1pt_va:addr,
+    inout operand l2_pg:int,
+    inout operand l1index:int,
+    out operand tmp:int,
     ghost pagedb_in:PageDb,
     ghost as_pg:PageNr,
     ghost l1pg:PageNr) returns (ghost pagedb: PageDb)
@@ -187,12 +187,12 @@ procedure install_l1ptes(
 }
 
 procedure init_l2ptable_success(
-    inout {:operand} l2_pg:int, // trashed
-    {:operand} as_pg:int,
-    inout {:operand} l1index:int, // trashed
-    out {:operand} tmp1:int,
-    out {:operand} tmp2:int,
-    out {:operand} tmp3:int,
+    inout operand l2_pg:int, // trashed
+    operand as_pg:int,
+    inout operand l1index:int, // trashed
+    out operand tmp1:int,
+    out operand tmp2:int,
+    out operand tmp3:int,
     ghost pagedb_in: PageDb,
     ghost l1pg: int) returns (ghost pagedb: PageDb)
     requires/ensures

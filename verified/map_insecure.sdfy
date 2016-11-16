@@ -35,7 +35,7 @@ procedure mkl2pte_insecure(
     ARM_L2PTE_impl(mapping,page,r4,newabs_mapping);
 }
 
-procedure phys_page_is_insecure_ram({:operand} phys_page:int, out {:operand} ret:int)
+procedure phys_page_is_insecure_ram(operand phys_page:int, out operand ret:int)
     requires/ensures
         SaneState(this);
     requires

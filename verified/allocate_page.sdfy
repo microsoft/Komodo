@@ -38,8 +38,8 @@ lemma AllocatePageImpliesIncrefAddrspace(dbin: PageDb, pg: PageNr,
 #endverbatim
 
 procedure addrspace_incref(
-    {:operand} as_va:addr,
-    out {:operand} tmp:int,
+    operand as_va:addr,
+    out operand tmp:int,
     ghost pagedb_in:PageDb,
     ghost pagenr:PageNr)
     returns (ghost pagedb: PageDb)
@@ -101,12 +101,12 @@ procedure addrspace_incref(
 }
 
 procedure allocate_page_success(
-    {:operand} pagenr:int,
-    {:operand} as_va:addr,
-    {:operand} typeval:int,
-    {:operand} pagedb_base:addr,
-    out {:operand} tmp:int,
-    out {:operand} tmp2:int,
+    operand pagenr:int,
+    operand as_va:addr,
+    operand typeval:int,
+    operand pagedb_base:addr,
+    out operand tmp:int,
+    out operand tmp2:int,
     ghost pagedb_in:PageDb,
     ghost entry:PageDbEntry)
     returns (ghost pagedb: PageDb)
@@ -195,13 +195,13 @@ procedure allocate_page_success(
 }
 
 procedure allocate_page(
-    {:operand} pagenr:int,
-    {:operand} as_pagenr:int,
-    {:operand} typeval:int,
-    {:operand} pagedb_base:addr,
-    out {:operand} tmp:int,
-    out {:operand} tmp2:int,
-    out {:operand} err:int,
+    operand pagenr:int,
+    operand as_pagenr:int,
+    operand typeval:int,
+    operand pagedb_base:addr,
+    out operand tmp:int,
+    out operand tmp2:int,
+    out operand err:int,
     ghost pagedb_in:PageDb,
     ghost entry:PageDbEntry)
     returns (ghost pagedb: PageDb)

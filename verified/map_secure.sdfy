@@ -115,9 +115,9 @@ procedure update_l2pte(
 }
 
 procedure is_valid_mapping_target(
-    {:operand} addr:int,
-    {:operand} mapping:int,
-    out {:operand} l1pte:int,
+    operand addr:int,
+    operand mapping:int,
+    out operand l1pte:int,
     out {:register OReg(R0)} err:int,
     ghost d:PageDb)
     requires/ensures
@@ -241,8 +241,8 @@ procedure is_valid_mapping_target(
 }
 
 procedure phys_page_is_insecure_ram_nz(
-    {:operand} phys_page:int,
-    out {:operand} ret:int)
+    operand phys_page:int,
+    out operand ret:int)
     requires/ensures
         SaneState(this);
     requires
@@ -368,9 +368,9 @@ lemma lemma_ARM_L2PTE_impl(pa: word, w: bool, x:bool, ptew: word)
 #endverbatim
 
 procedure ARM_L2PTE_impl(
-    {:operand} mapping:int,
-    inout {:operand} pte:int, // paddr at input time; pte at return
-    out {:operand} tmp:int,
+    operand mapping:int,
+    inout operand pte:int, // paddr at input time; pte at return
+    out operand tmp:int,
     ghost abs_mapping:Mapping
 )
     requires/ensures

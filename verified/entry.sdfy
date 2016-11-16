@@ -90,10 +90,10 @@ lemma lemma_stackunstack_banked_regs(s1:state, m1:memstate, s2:state, m2:memstat
 #endverbatim
 
 procedure MRS_STR(
-    {:operand} reg:int,
-    {:operand} base:int,
-    {:operand} ofs:int,
-    {:operand} tmp:int)
+    operand reg:int,
+    operand base:int,
+    operand ofs:int,
+    operand tmp:int)
     requires/ensures
         SaneState(this);
     requires
@@ -114,7 +114,7 @@ procedure MRS_STR(
     STR(tmp, base, ofs);
 }
 
-procedure stack_banked_regs({:operand} tmp:int, ghost stack_bytes_in:int)
+procedure stack_banked_regs(operand tmp:int, ghost stack_bytes_in:int)
           returns (ghost stack_bytes:int)
     requires/ensures
         SaneState(this);
@@ -177,7 +177,7 @@ procedure stack_banked_regs({:operand} tmp:int, ghost stack_bytes_in:int)
         by { reveal_banked_regs_stackframe(); }
 }
 
-procedure unstack_banked_regs({:operand} tmp:int, ghost stack_bytes_in:int)
+procedure unstack_banked_regs(operand tmp:int, ghost stack_bytes_in:int)
           returns (ghost stack_bytes:int)
     requires/ensures
         SaneState(this);
@@ -537,7 +537,7 @@ procedure switch_addrspace(
     assert this.conf.ttbr0.ptbase == page_paddr(l1p);
 }
 
-procedure leave_secure_world({:operand} tmp:int)
+procedure leave_secure_world(operand tmp:int)
     requires/ensures
         SaneState(this);
     requires
@@ -854,7 +854,7 @@ procedure smc_enterresume_success(
     MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
     lemma_evalMOVSPCLRUC(s1, this, pagedb_in, dispPg);
 
-    if ghost (isEnter) {
+    ghost if (isEnter) {
         exs, pagedb := lemma_validEnter(s0, s1, this, pagedb_in, dispPg,
                                         old(arg1), old(arg2), old(arg3));
     } else {
@@ -889,8 +889,8 @@ procedure kom_smc_enterresume(
     {:register OReg(R2)} arg1:int,
     {:register OReg(R3)} arg2:int,
     {:register OReg(R4)} arg3:int,
-    out {:register OReg(R0)} err:int,
-    out {:register OReg(R1)} val:int,
+    inout {:register OReg(R0)} err:int,
+    inout {:register OReg(R1)} val:int,
     ghost pagedb_in:PageDb,
     ghost stack_bytes: int)
     returns (ghost pagedb:PageDb)

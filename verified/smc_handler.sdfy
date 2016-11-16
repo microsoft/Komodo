@@ -135,7 +135,7 @@ procedure smc_handler(
         assert SpsrsInvariant(old(this), this);
     }
 
-    if ghost (entry) {
+    ghost if (entry) {
         assert validExceptionTransition(SysState(prePopThis, pagedb),
                                         SysState(this, pagedb), old(arg1))
             by { reveal_validExceptionTransition(); }

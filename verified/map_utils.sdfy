@@ -1,8 +1,8 @@
 procedure fetch_l1pte(
-    {:operand} l1pt_va:addr,
-    {:operand} l1index:int,
-    out {:operand} tmp:int,
-    out {:operand} res:int,
+    operand l1pt_va:addr,
+    operand l1index:int,
+    out operand tmp:int,
+    out operand res:int,
     ghost pagedb:PageDb,
     ghost l1pg:int)
     requires/ensures

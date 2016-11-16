@@ -1,4 +1,4 @@
-procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:operand} tmp:int)
+procedure page_paddr_impl(out operand phys:int, operand pagenr:int, out operand tmp:int)
     requires/ensures
         SaneState(this);
     requires
@@ -29,7 +29,7 @@ procedure page_paddr_impl(out {:operand} phys:int, {:operand} pagenr:int, out {:
     ADD(phys, phys, tmp);
 }
 
-procedure paddr_page_impl(out {:operand} pagenr:int, {:operand} phys:int, out {:operand} tmp:int)
+procedure paddr_page_impl(out operand pagenr:int, operand phys:int, out operand tmp:int)
     requires/ensures
         SaneState(this);
     requires
@@ -61,7 +61,7 @@ procedure paddr_page_impl(out {:operand} pagenr:int, {:operand} phys:int, out {:
     assert pagenr == oldpagenr / PAGESIZE();
 }
 
-procedure page_monvaddr_impl(out {:operand} virt:int, {:operand} pagenr:int, out {:operand} tmp:int)
+procedure page_monvaddr_impl(out operand virt:int, operand pagenr:int, out operand tmp:int)
     requires/ensures
         SaneState(this);
     requires
