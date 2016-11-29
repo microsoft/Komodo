@@ -24,9 +24,8 @@ procedure fetch_l1pte(
 {
     reveal_pageDbL1PTableCorresponds();
     reveal_pageContentsCorresponds();
-    tmp := 16;
-    assert l1index < NR_L1PTES(); // sigh.
-    MUL(tmp, l1index, tmp);
+    lemma_LeftShift4(l1index);
+    LSL(tmp, l1index, 4);
     LDR(res, l1pt_va, tmp);
     assert res == MemContents(this.m, l1pteoffset(l1pt_va, l1index, 0));
     assert res == mkL1Pte(pagedb[l1pg].entry.l1pt[l1index], 0);

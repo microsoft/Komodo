@@ -504,8 +504,8 @@ procedure switch_addrspace(
     assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
     ghost var l1p := l1pOfDispatcher(pagedb, pagenr);
 
-    r11 := sp_op_const(PAGEDB_ENTRY_SIZE());
-    MUL(r10,pagenr,r11);
+    lemma_LeftShift3(pagenr);
+    LSL(r10, pagenr, sp_op_const(PAGEDB_ENTRY_SHIFT()));
     assert r10 == G_PAGEDB_ENTRY(pagenr);
     ADD(r10, r10, sp_op_const(PAGEDB_ENTRY_ADDRSPACE())); 
     assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE();

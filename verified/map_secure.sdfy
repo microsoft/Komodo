@@ -409,6 +409,8 @@ procedure ARM_L2PTE_impl(
     ORR(pte, pte, tmp);
     assert pte == BitwiseOr(BitwiseOr(pa, L2PTE_CONST_WORD()), nxbit);
 
+    assert RegPreservingExcept(old(this),this,set(@pte,@tmp));
+
     // compute robit
     ghost var robit := if abs_mapping.perm.w then 0 else BitsAsWord(ARM_L2PTE_RO_BIT());
     AND(tmp,mapping,sp_op_const(KOM_MAPPING_W()));
@@ -482,8 +484,8 @@ procedure kom_smc_map_secure(
         assert validPageNr(as_page);
         LDRglobaladdr(r12, PageDb());
         assert sp_eval_op_addr(this, @r12) == AddressOfGlobal(PageDb());
-        r0 := sp_op_const(PAGEDB_ENTRY_SIZE());
-        MUL(r0,as_page,r0);
+        lemma_LeftShift3(as_page);
+        LSL(r0, as_page, sp_op_const(PAGEDB_ENTRY_SHIFT()));
         assert r0 == G_PAGEDB_ENTRY(as_page) + PAGEDB_ENTRY_TYPE();
         LDRglobal(r0, PageDb(), r12, r0);
 

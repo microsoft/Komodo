@@ -22,8 +22,8 @@ procedure kom_smc_finalise(
     } else {
         assert validPageNr(as_page);
         LDRglobaladdr(r12, PageDb());
-        r3 := sp_op_const(PAGEDB_ENTRY_SIZE());
-        MUL(r4,as_page,r3);
+        lemma_LeftShift3(as_page);
+        LSL(r4, as_page, sp_op_const(PAGEDB_ENTRY_SHIFT()));
         assert r4 == G_PAGEDB_ENTRY(as_page) + PAGEDB_ENTRY_TYPE();
         LDRglobal(r3, PageDb(), r12, r4);
 
