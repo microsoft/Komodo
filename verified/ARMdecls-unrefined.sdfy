@@ -1,0 +1,42 @@
+include "ARMdecls-common.sdfy"
+
+var{:register OReg(R0)}  r0:int;
+var{:register OReg(R1)}  r1:int;
+var{:register OReg(R2)}  r2:int;
+var{:register OReg(R3)}  r3:int;
+var{:register OReg(R4)}  r4:int;
+var{:register OReg(R5)}  r5:int;
+var{:register OReg(R6)}  r6:int;
+var{:register OReg(R7)}  r7:int;
+var{:register OReg(R8)}  r8:int;
+var{:register OReg(R9)}  r9:int;
+var{:register OReg(R10)} r10:int;
+var{:register OReg(R11)} r11:int;
+var{:register OReg(R12)} r12:int;
+
+var{:register OSP} sp:int;
+var{:register OLR} lr:int;
+
+var{:register OReg(SP(User))}       sp_usr:int;
+var{:register OReg(SP(FIQ))}        sp_fiq:int;
+var{:register OReg(SP(IRQ))}        sp_irq:int;
+var{:register OReg(SP(Supervisor))} sp_svc:int;
+var{:register OReg(SP(Abort))}      sp_abt:int;
+var{:register OReg(SP(Undefined))}  sp_und:int;
+var{:register OReg(SP(Monitor))}    sp_mon:int;
+
+var{:register OReg(LR(User))}       lr_usr:int;
+var{:register OReg(LR(FIQ))}        lr_fiq:int;
+var{:register OReg(LR(IRQ))}        lr_irq:int;
+var{:register OReg(LR(Supervisor))} lr_svc:int;
+var{:register OReg(LR(Abort))}      lr_abt:int;
+var{:register OReg(LR(Undefined))}  lr_und:int;
+var{:register OReg(LR(Monitor))}    lr_mon:int;
+
+var{:register OSReg(spsr(FIQ))}        spsr_fiq:int;
+var{:register OSReg(spsr(IRQ))}        spsr_irq:int;
+var{:register OSReg(spsr(Supervisor))} spsr_svc:int;
+var{:register OSReg(spsr(Abort))}      spsr_abt:int;
+var{:register OSReg(spsr(Undefined))}  spsr_und:int;
+var{:register OSReg(spsr(Monitor))}    spsr_mon:int;
+var{:register OSReg(cpsr)}             cpsr:int;

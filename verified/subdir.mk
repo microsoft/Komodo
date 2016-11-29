@@ -79,46 +79,50 @@ $(dir)/entry.i.verified: $(dir)/entry.s.verified $(dir)/ptables.i.verified $(dir
 $(dir)/main.verified: $(dir)/ARMprint.verified $(dir)/smc_handler.verified $(dir)/exception_handlers.verified
 
 # variables used to emit deps/includes for all Spartan code
-ARMdecls_dep-dfy = ARMspartan
-$(dir)/ARMdecls.verified: $(call mkdeps,ARMdecls)
+ARMdecls-common_dep-dfy = ARMspartan
+$(dir)/ARMdecls-common.verified: $(call mkdeps,ARMdecls-common)
 
-kom_utils_dep-sdfy = ARMdecls
+ARMdecls-unrefined_dep-sdfy = ARMdecls-common
+ARMdecls-unrefined_dep-dfy = ARMspartan
+$(dir)/ARMdecls-unrefined.verified: $(call mkdeps,ARMdecls-unrefined)
+
+kom_utils_dep-sdfy = ARMdecls-unrefined
 kom_utils_dep-dfy = ARMspartan kom_common.i kom_common.s bitvectors.i
 $(dir)/kom_utils.verified: $(call mkdeps,kom_utils)
 
-map_utils_dep-sdfy = ARMdecls
+map_utils_dep-sdfy = ARMdecls-unrefined
 map_utils_dep-dfy = ARMspartan kom_common.i kom_common.s bitvectors.i pagedb.i
 $(dir)/map_utils.verified: $(call mkdeps,kom_utils)
 
-memset_dep-sdfy = ARMdecls
+memset_dep-sdfy = ARMdecls-unrefined
 memset_dep-dfy = ARMspartan kom_common.i kom_common.s
 $(dir)/memset.verified: $(call mkdeps,memset)
 
-allocate_page_dep-sdfy = ARMdecls kom_utils
+allocate_page_dep-sdfy = ARMdecls-unrefined kom_utils
 allocate_page_dep-dfy = ARMspartan Sets kom_common.i pagedb.i smcapi.i
 $(dir)/allocate_page.verified: $(call mkdeps,allocate_page)
 
-init_addrspace_dep-sdfy = ARMdecls kom_utils memset
+init_addrspace_dep-sdfy = ARMdecls-unrefined kom_utils memset
 init_addrspace_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/init_addrspace.verified: $(call mkdeps,init_addrspace)
 
-init_dispatcher_dep-sdfy = ARMdecls kom_utils allocate_page memset
+init_dispatcher_dep-sdfy = ARMdecls-unrefined kom_utils allocate_page memset
 init_dispatcher_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/init_dispatcher.verified: $(call mkdeps,init_dispatcher)
 
-init_l2ptable_dep-sdfy = ARMdecls kom_utils allocate_page memset map_utils
+init_l2ptable_dep-sdfy = ARMdecls-unrefined kom_utils allocate_page memset map_utils
 init_l2ptable_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i bitvectors.i ptebits.i
 $(dir)/init_l2ptable.verified: $(call mkdeps,init_l2ptable)
 
-map_secure_dep-sdfy = ARMdecls kom_utils allocate_page map_utils
+map_secure_dep-sdfy = ARMdecls-unrefined kom_utils allocate_page map_utils
 map_secure_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i ptebits.i
 $(dir)/map_secure.verified: $(call mkdeps,map_secure)
 
-map_insecure_dep-sdfy = ARMdecls kom_utils allocate_page map_utils map_secure
+map_insecure_dep-sdfy = ARMdecls-unrefined kom_utils allocate_page map_utils map_secure
 map_insecure_dep-dfy  = ARMspartan kom_common.i pagedb.i smcapi.i ptebits.i
 $(dir)/map_insecure.verified: $(call mkdeps,map_insecure)
 
-entry_dep-sdfy = ARMdecls kom_utils
+entry_dep-sdfy = ARMdecls-unrefined kom_utils
 entry_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i abstate.s entry.i
 $(dir)/entry.verified: $(call mkdeps,entry)
 
@@ -128,25 +132,25 @@ sha256_dep-sdfy = ARMdecls
 sha256_dep-dfy = ARMspartan words_and_bytes.s kom_common.s sha/sha256.i sha/bit-vector-lemmas.i
 $(dir)/sha256.verified: $(call mkdeps,sha256)
 
-finalise_dep-sdfy = ARMdecls kom_utils
+finalise_dep-sdfy = ARMdecls-unrefined kom_utils
 finalise_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/finalise.verified: $(call mkdeps,finalise)
 
-stop_dep-sdfy = ARMdecls kom_utils
+stop_dep-sdfy = ARMdecls-unrefined kom_utils
 stop_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/stop.verified: $(call mkdeps,stop)
 
-remove_dep-sdfy = ARMdecls kom_utils
+remove_dep-sdfy = ARMdecls-unrefined kom_utils
 remove_dep-dfy  = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/remove.verified: $(call mkdeps,remove)
 
-smc_handler_dep-sdfy = ARMdecls kom_utils init_addrspace init_dispatcher \
+smc_handler_dep-sdfy = ARMdecls-unrefined kom_utils init_addrspace init_dispatcher \
     init_l2ptable map_secure map_insecure entry finalise \
     stop remove
 smc_handler_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i
 $(dir)/smc_handler.verified: $(call mkdeps,smc_handler)
 
-exception_handlers_dep-sdfy = ARMdecls
+exception_handlers_dep-sdfy = ARMdecls-unrefined
 exception_handlers_dep-dfy = ARMspartan kom_common.i pagedb.i smcapi.i entry.i
 $(dir)/exception_handlers.verified: $(call mkdeps,exception_handlers)
 
