@@ -124,7 +124,6 @@ method printOperand(o:operand)
         }
         case OSP => print("sp");
         case OLR => print("lr");
-        case OSymbol(sym) => print "="; print(sym);
 }
 
 method printIns3Op(instr:string, dest:operand, src1:operand, src2:operand)
@@ -166,6 +165,17 @@ method printInsFixed(instr:string, ops:string)
     print(instr);
     print(" ");
     print(ops);
+    nl();
+}
+
+method printInsReloc(instr:string, op:operand, sym:symbol)
+{
+    print("  ");
+    print(instr);
+    print(" ");
+    printOperand(op);
+    print(", =");
+    print(sym);
     nl();
 }
 
@@ -223,7 +233,7 @@ method printIns(ins:ins)
         case MVN(dest, src) => printIns2Op("MVN", dest, src);
         case LDR(rd, base, ofs) => printInsLdStr("LDR", rd, base, ofs);
         case LDR_global(rd, global, base, ofs) => printInsLdStr("LDR", rd, base, ofs);
-        case LDR_reloc(rd, sym) => printIns2Op("LDR", rd, sym);
+        case LDR_reloc(rd, sym) => printInsReloc("LDR", rd, sym);
         case STR(rd, base, ofs) => printInsLdStr("STR", rd, base, ofs);
         case STR_global(rd, global, base, ofs) => printInsLdStr("STR", rd, base, ofs);
         case MOV(dst, src) => printIns2Op("MOV", dst, src);
@@ -338,12 +348,6 @@ method printGlobal(symname: string, bytes: int)
     nl();
 }
 
-function method SymbolName(o:operand): string
-    requires o.OSymbol?
-{
-    match o case OSymbol(name) => name
-}
-
 method printBss(gdecls: globaldecls)
     requires ValidGlobalDecls(gdecls)
 {
@@ -354,7 +358,7 @@ method printBss(gdecls: globaldecls)
         invariant forall s :: s in syms ==> s in gdecls;
     {
         var s :| s in syms;
-        printGlobal(SymbolName(s), gdecls[s]);
+        printGlobal(s, gdecls[s]);
         syms := syms - {s};
     }
 }

@@ -88,9 +88,9 @@ function method PAGEDB_ENTRY_SIZE():int { 8 }
 function method G_PAGEDB_SIZE():int
     { KOM_SECURE_NPAGES() * PAGEDB_ENTRY_SIZE() }
 
-function method {:opaque} PageDb(): operand { OSymbol("g_pagedb") }
-function method {:opaque} SecurePhysBaseOp(): operand { OSymbol("g_secure_physbase") }
-function method {:opaque} CurDispatcherOp(): operand { OSymbol("g_cur_dispatcher") }
+function method {:opaque} PageDb(): symbol { "g_pagedb" }
+function method {:opaque} SecurePhysBaseOp(): symbol {"g_secure_physbase" }
+function method {:opaque} CurDispatcherOp(): symbol { "g_cur_dispatcher" }
 
 // the phys base is unknown, but never changes
 function method {:axiom} SecurePhysBase(): addr
@@ -152,7 +152,7 @@ predicate SaneConstants()
 predicate SaneState(s:state)
 {
     SaneConstants()
-    && ValidState(s) 
+    && ValidState(s) && s.ok
     && SaneStack(s)
     && SaneMem(s.m)
     && mode_of_state(s) == Monitor

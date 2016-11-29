@@ -125,9 +125,8 @@ procedure kom_smc_remove(
     } else {
         assert validPageNr(page);
         LDRglobaladdr(r4,PageDb());
-        r5 := sp_op_const(PAGEDB_ENTRY_SIZE());
-        assert page < KOM_SECURE_NPAGES() && r5 == 8; // sigh
-        MUL(r5, page, r5);
+        lemma_LeftShift3(page);
+        LSL(r5,page,sp_op_const(PAGEDB_ENTRY_SHIFT()));
         assert r5 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE();
         LDRglobal(r6,PageDb(),r4,r5);
         assert r6 == pageDbEntryTypeVal(pagedb[page])
@@ -194,6 +193,7 @@ procedure kom_smc_remove(
                 forall :: r6 == page_monvaddr(as_page) {
                     reveal_pageDbEntryCorresponds();
                     extractPageDbToAbstractOne(this.m, as_page, PAGEDB_ENTRY_ADDRSPACE());
+                    reveal ValidGlobalStateOpaque; // XXX: Dafny bug
                 }
 
                 forall :: pagedb[as_page] is PageDbEntryTyped &&

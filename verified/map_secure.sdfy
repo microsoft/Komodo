@@ -191,11 +191,9 @@ procedure is_valid_mapping_target(
                     err := sp_op_const(KOM_ERR_INVALID_MAPPING());
                     assert err == specResult;
                 } else {
-
                     LDRglobaladdr(l1pte,PageDb());
-                    r9 := sp_op_const(PAGEDB_ENTRY_SIZE());
-                    assert r9 == 8 && validPageNr(addr);
-                    MUL(r9,addr,r9);
+                    lemma_LeftShift3(addr);
+                    LSL(r9,addr,sp_op_const(PAGEDB_ENTRY_SHIFT()));
                     assert r9 == G_PAGEDB_ENTRY(addr) + PAGEDB_ENTRY_TYPE();
                     LDRglobal(r9,PageDb(),l1pte,r9);
                     forall :: validAddrspacePage(d, addr) {

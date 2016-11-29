@@ -60,9 +60,9 @@ predicate RegPreservingExcept(s:state, r:state, trashed:set<operand>)
     && BankedRegsInvariant(s, r)
 }
 
-predicate GlobalsPreservingExcept(s:state, r:state, trashed:set<operand>)
+predicate GlobalsPreservingExcept(s:state, r:state, trashed:set<symbol>)
     requires ValidState(s) && ValidState(r);
-    requires forall o :: o in trashed ==> ValidGlobal(o);
+    requires forall g :: g in trashed ==> ValidGlobal(g);
 {
     reveal_ValidMemState();
     forall glob | glob !in trashed && ValidGlobal(glob) ::

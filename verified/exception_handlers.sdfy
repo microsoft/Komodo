@@ -2,6 +2,7 @@ procedure switch_to_monitor()
     requires
         SaneConstants() && ValidState(this)  && SaneStack(this) && SaneMem(this.m);
         priv_of_state(this) == PL1 && world_of_state(this) == Secure;
+        this.ok;
     ensures
         SaneState(this);
         AllMemInvariant(old(this), this);
@@ -20,6 +21,7 @@ procedure svc_handler(
     ghost dispPg: PageNr) returns (ghost pagedb: PageDb)
     requires
         SaneConstants() && ValidState(this)  && SaneStack(this) && SaneMem(this.m);
+        this.ok;
         StackBytesRemaining(this, stack_bytes);
         ValidState(user_state) && mode_of_state(user_state) == User;
         evalExceptionTaken(user_state, ExSVC, this);
@@ -87,6 +89,7 @@ procedure abort_handler(
     ghost dispPg: PageNr) returns (ghost pagedb: PageDb)
     requires
         SaneConstants() && ValidState(this)  && SaneStack(this) && SaneMem(this.m);
+        this.ok;
         StackBytesRemaining(this, stack_bytes);
         ValidState(user_state) && mode_of_state(user_state) == User;
         ex == ExAbt || ex == ExUnd;

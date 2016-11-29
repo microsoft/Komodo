@@ -45,13 +45,14 @@ datatype Shift = LSLShift(amount_lsl:shift_amount)
 datatype operand = OConst(n:word)
     | OReg(r:ARMReg)
     | OShift(reg:ARMReg, s:Shift)
-    | OSymbol(sym:string)
     | OSReg(sr:SReg)
     | OSP | OLR
 
 type memmap = map<addr, word>
+type symbol = string
+type globalsmap = map<symbol, seq<word>>
 datatype memstate = MemState(addresses:memmap,
-                             globals:map<operand, seq<word>>)
+                             globals:globalsmap)
 
 datatype state = State(regs:map<ARMReg, word>,
                        sregs:map<SReg, word>,
@@ -225,11 +226,11 @@ datatype ins =
     | MOV(dstMOV:operand, srcMOV:operand)
     | MVN(dstMVN:operand, srcMVN:operand)
     | LDR(rdLDR:operand,  baseLDR:operand, ofsLDR:operand)
-    | LDR_global(rdLDR_global:operand, globalLDR:operand,
+    | LDR_global(rdLDR_global:operand, globalLDR:symbol,
                  baseLDR_global:operand, ofsLDR_global:operand)
-    | LDR_reloc(rdLDR_reloc:operand, symLDR_reloc:operand)
+    | LDR_reloc(rdLDR_reloc:operand, symLDR_reloc:symbol)
     | STR(rdSTR:operand,  baseSTR:operand, ofsSTR:operand)
-    | STR_global(rdSTRR_global:operand, globalSTR:operand,
+    | STR_global(rdSTRR_global:operand, globalSTR:symbol,
                  baseSTR_global:operand, ofsSTR_global:operand)
     | MRS(dstMRS:operand, srcMRS: operand)
     | MSR(dstMSR:operand, srcMSR: operand)
@@ -287,14 +288,23 @@ function {:axiom} TheValidAddresses(): set<addr>
 
 predicate {:opaque} ValidMemState(s:memstate)
 {
-    // regular mem
-    (forall m:addr :: m in TheValidAddresses() <==> m in s.addresses)
-    // globals: same names/sizes as decls
-    && (forall g :: g in TheGlobalDecls() <==> g in s.globals)
-    && (forall g :: g in TheGlobalDecls()
-        ==> |s.globals[g]| == BytesToWords(TheGlobalDecls()[g]))
+    ValidAddrMemState(s.addresses) && ValidGlobalState(s.globals)
 }
 
+predicate ValidAddrMemState(mem: memmap)
+{
+    (forall a:addr :: a in TheValidAddresses() <==> a in mem)
+}
+
+predicate ValidGlobalState(globals: globalsmap)
+{
+    // globals: same names/sizes as decls
+    (forall g :: g in TheGlobalDecls() <==> g in globals)
+    && (forall g :: g in TheGlobalDecls()
+        ==> |globals[g]| == BytesToWords(TheGlobalDecls()[g]))
+}
+
+// XXX: ValidOperand is just the subset used in "normal" integer instructions
 predicate ValidOperand(o:operand)
 {
     match o
@@ -303,7 +313,6 @@ predicate ValidOperand(o:operand)
         case OShift(_,_) => false
         case OSP => true
         case OLR => true
-        case OSymbol(s) => false
         case OSReg(sr) => false
 }
 
@@ -340,6 +349,12 @@ predicate ValidMcrMrcOperand(s:state,o:operand)
     && (o.sr.scr? || o.sr.ttbr0?)
 }
 
+predicate ValidAnySrcOperand(s:state, o:operand)
+{
+    ValidOperand(o) || ValidSecondOperand(o)
+    || ValidBankedRegOperand(s,o) || ValidMrsMsrOperand(s,o) || ValidMcrMrcOperand(s,o)
+}
+
 predicate ValidMem(addr:int)
 {
     isUInt32(addr) && WordAligned(addr) && addr in TheValidAddresses()
@@ -361,34 +376,34 @@ predicate ValidRegOperand(o:operand)
 //-----------------------------------------------------------------------------
 // Globals
 //-----------------------------------------------------------------------------
-type globaldecls = map<operand, addr>
+type globaldecls = map<symbol, addr>
 
-predicate ValidGlobal(o:operand)
+predicate ValidGlobal(g:symbol)
 {
-    o.OSymbol? && o in TheGlobalDecls()
+    g in TheGlobalDecls()
 }
 
 predicate ValidGlobalDecls(decls:globaldecls)
 {
-    forall d :: d in decls ==> d.OSymbol? && decls[d] != 0
+    forall d :: d in decls ==> decls[d] != 0
 }
 
-predicate ValidGlobalAddr(g:operand, addr:int)
+predicate ValidGlobalAddr(g:symbol, addr:int)
 {
     ValidGlobal(g) && WordAligned(addr) 
  && AddressOfGlobal(g) <= addr < AddressOfGlobal(g) + SizeOfGlobal(g)
 }
 
-predicate ValidGlobalOffset(g:operand, offset:int)
+predicate ValidGlobalOffset(g:symbol, offset:int)
 {
     ValidGlobal(g) && WordAligned(offset) 
  && 0 <= offset < SizeOfGlobal(g)
 }
 
 // globals have an unknown (uint32) address, only establised by LDR-reloc
-function {:axiom} AddressOfGlobal(g:operand): addr
+function {:axiom} AddressOfGlobal(g:symbol): addr
 
-function SizeOfGlobal(g:operand): word
+function SizeOfGlobal(g:symbol): word
     requires ValidGlobal(g)
     ensures WordAligned(SizeOfGlobal(g))
 {
@@ -735,9 +750,8 @@ function EvalShift(w:word, shift:Shift) : word
 }
 
 function OperandContents(s:state, o:operand): word
-    requires ValidOperand(o) || ValidSecondOperand(o)
-        || ValidBankedRegOperand(s,o) || ValidMrsMsrOperand(s,o) || ValidMcrMrcOperand(s,o)
     requires ValidState(s)
+    requires ValidAnySrcOperand(s, o)
 {
     reveal_ValidRegState();
     reveal_ValidSRegState();
@@ -759,7 +773,7 @@ function MemContents(s:memstate, m:addr): word
     s.addresses[m]
 }
 
-function GlobalFullContents(s:memstate, g:operand): seq<word>
+function GlobalFullContents(s:memstate, g:symbol): seq<word>
     requires ValidMemState(s)
     requires ValidGlobal(g)
     ensures WordsToBytes(|GlobalFullContents(s, g)|) == SizeOfGlobal(g)
@@ -768,7 +782,7 @@ function GlobalFullContents(s:memstate, g:operand): seq<word>
     s.globals[g]
 }
 
-function GlobalWord(s:memstate, g:operand, offset:word): word
+function GlobalWord(s:memstate, g:symbol, offset:word): word
     requires ValidGlobalOffset(g, offset)
     requires ValidMemState(s)
 {
@@ -806,7 +820,7 @@ predicate evalMemUpdate(s:state, m:addr, v:word, r:state)
     r == takestep(s).(m := s.m.(addresses := s.m.addresses[m := v]))
 }
 
-predicate evalGlobalUpdate(s:state, g:operand, offset:word, v:word, r:state)
+predicate evalGlobalUpdate(s:state, g:symbol, offset:word, v:word, r:state)
     requires ValidState(s)
     requires ValidGlobalOffset(g, offset)
     ensures evalGlobalUpdate(s, g, offset, v, r) ==> ValidState(r) && GlobalWord(r.m, g, offset) == v
@@ -896,7 +910,6 @@ predicate ValidInstruction(s:state, ins:ins)
         case LDR_global(rd, global, base, ofs) => 
             ValidRegOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
-            ValidGlobalOffset(global, OperandContents(s, base) + OperandContents(s, ofs) - AddressOfGlobal(global)) &&
             ValidGlobalAddr(global, OperandContents(s, base) + OperandContents(s, ofs))
         case LDR_reloc(rd, global) => 
             ValidRegOperand(rd) && ValidGlobal(global)
@@ -908,7 +921,6 @@ predicate ValidInstruction(s:state, ins:ins)
         case STR_global(rd, global, base, ofs) => 
             ValidRegOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
-            ValidGlobalOffset(global, OperandContents(s, base) + OperandContents(s, ofs) - AddressOfGlobal(global)) &&
             ValidGlobalAddr(global, OperandContents(s, base) + OperandContents(s, ofs))
         case MOV(dst, src) => ValidRegOperand(dst) &&
             ValidSecondOperand(src)
