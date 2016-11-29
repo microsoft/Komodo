@@ -77,10 +77,26 @@ ADD(out operand dst:word, operand src1:word, operand src2:word)
         isUInt32(src1 + src2);
     ensures
         dst == old(src1 + src2);
-    ensures {:refined false}
-        ValidState(this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
+{
+    reveal sp_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
+}
+
+procedure {:bridge} {:refined} {:instruction Ins(ADD(dst, src1, src2))}
+ADDWrap(out operand dst:word, operand src1:word, operand src2:word)
+    ensures
+        dst == old(src1 + src2) % 0x1_0000_0000;
+{
+    reveal sp_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
+}
+
+procedure {:bridge} {:refined} {:instruction Ins(ADD(dst, src1, OShift(GetProbableReg(src2), shift)))}
+ADDWrapShift(out operand dst:word, operand src1:word, operand src2:snd, inline shift:Shift)
+    ensures
+        dst == old(src1 + EvalShift(old(src2), shift)) % 0x1_0000_0000;
 {
     reveal sp_eval;
     reveal ValidRegState;
@@ -93,10 +109,6 @@ SUB(out operand dst:word, operand src1:word, operand src2:word)
         isUInt32(src1 - src2);
     ensures
         dst == old(src1 - src2);
-    ensures {:refined false}
-        ValidState(this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
 {
     reveal sp_eval;
     reveal ValidRegState;
@@ -109,10 +121,6 @@ MUL(out operand dst:word, operand src1:reg, operand src2:reg)
         isUInt32(src1 * src2);
     ensures
         dst == old(src1 * src2);
-    ensures {:refined false}
-        ValidState(this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
 {
     reveal sp_eval;
     reveal ValidRegState;
@@ -126,10 +134,6 @@ UDIV(out operand dst:word, operand src1:word, operand src2:word)
         isUInt32(src1 / src2);
     ensures
         dst == old(src1 / src2);
-    ensures {:refined false}
-        ValidState(this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
 {
     reveal sp_eval;
     reveal ValidRegState;
@@ -140,10 +144,6 @@ procedure {:bridge} {:refined} {:instruction Ins(AND(dst, src1, src2))}
 AND(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == old(BitwiseAnd(src1, src2));
-    ensures {:refined false}
-        ValidState(this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
 {
     reveal sp_eval;
     reveal ValidRegState;
@@ -154,10 +154,6 @@ procedure {:bridge} {:refined} {:instruction Ins(ORR(dst, src1, src2))}
 ORR(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == old(BitwiseOr(src1, src2));
-    ensures {:refined false}
-        ValidState(this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
 {
     reveal sp_eval;
     reveal ValidRegState;
@@ -168,10 +164,16 @@ procedure {:bridge} {:refined} {:instruction Ins(EOR(dst, src1, src2))}
 EOR(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == old(BitwiseXor(src1, src2));
-    ensures {:refined false}
-        ValidState(this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
+{
+    reveal sp_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
+}
+
+procedure {:bridge} {:refined} {:instruction Ins(EOR(dst, src1, OShift(GetProbableReg(src2), shift)))}
+EORShift(out operand dst:word, operand src1:word, operand src2:snd, inline shift:Shift)
+    ensures
+        dst == BitwiseXor(old(src1), EvalShift(old(src2), shift));
 {
     reveal sp_eval;
     reveal ValidRegState;
@@ -186,10 +188,6 @@ LSL(out operand dst:word, operand src1:word, operand src2:word)
         @src2 is OConst;
     ensures
         dst == old(LeftShift(src1, src2));
-    ensures {:refined false}
-        ValidState(this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
 {
     reveal sp_eval;
     reveal ValidRegState;
@@ -204,10 +202,6 @@ LSR(out operand dst:word, operand src1:word, operand src2:word)
         @src2 is OConst;
     ensures
         dst == old(RightShift(src1, src2));
-    ensures {:refined false}
-        ValidState(this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
 {
     reveal sp_eval;
     reveal ValidRegState;
@@ -218,10 +212,6 @@ procedure {:bridge} {:refined} {:instruction Ins(REV(dst, src))}
 REV(out operand dst:word, operand src:reg)
     ensures
         dst == old(bswap32(src));
-    ensures {:refined false}
-        ValidState(this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
 {
     reveal sp_eval;
     reveal ValidRegState;
@@ -232,10 +222,6 @@ procedure {:bridge} {:refined} {:instruction Ins(MVN(dst, src))}
 MVN(out operand dst:word, operand src:word)
     ensures
         dst == old(BitwiseNot(src));
-    ensures {:refined false}
-        ValidState(this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
 {
     reveal sp_eval;
     reveal ValidRegState;
@@ -246,10 +232,16 @@ procedure {:bridge} {:refined} {:instruction Ins(MOV(dst, src))}
 MOV(out operand dst:word, operand src:word)
     ensures
         dst == old(src);
-    ensures {:refined false}
-        ValidState(this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
+{
+    reveal sp_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
+}
+
+procedure {:bridge} {:refined} {:instruction Ins(MOV(dst, OShift(GetProbableReg(src), shift)))}
+MOVShift(out operand dst:word, operand src:snd, inline shift:Shift)
+    ensures
+        dst == old(EvalShift(old(src), shift));
 {
     reveal sp_eval;
     reveal ValidRegState;
@@ -268,8 +260,6 @@ LDR(out operand dst:word, operand base:word, operand ofs:word)
     ensures {:refined false}
         ValidState(this);
         this.ok ==> ValidMem(old(base + ofs)) && dst == MemContents(this.m, old(base + ofs));
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
 {
     reveal sp_eval;
     reveal ValidRegState;
@@ -285,11 +275,6 @@ STR(operand rd:reg, operand base:word, operand ofs:word)
         ValidMem(base + ofs);
     ensures
         mem == AddrMemUpdate(old(mem), old(base + ofs), old(rd));
-    ensures {:refined false}
-        ValidState(this);
-        //evalMemUpdate(old(this), old(base + ofs), old(rd), this);
-        AllRegsInvariant(old(this), this);
-        GlobalsInvariant(old(this), this);
 {
     reveal sp_eval;
     reveal ValidRegState;
@@ -307,8 +292,6 @@ MRS(operand dst:int, operand src:int)
     ensures
         //dst == old(src);
         evalUpdate(old(this), @dst, old(src), this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
 {
     reveal sp_eval;
 }
@@ -326,7 +309,6 @@ MSR(operand dst:int, operand src:int)
     ensures
         //dst == old(src);
         evalUpdate(old(this), @dst, old(src), this);
-        AllMemInvariant(old(this), this);
 {
     reveal sp_eval;
 }
@@ -341,8 +323,6 @@ MRC(operand dst:int, operand src:int)
     ensures
         //dst == old(src);
         evalUpdate(old(this), @dst, old(src), this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
 {
     reveal sp_eval;
 }
@@ -357,7 +337,6 @@ MCR(operand dst:int, operand src:int)
     ensures
         //dst == old(src);
         evalUpdate(old(this), @dst, old(src), this);
-        AllMemInvariant(old(this), this);
 {
     reveal sp_eval;
 }
@@ -383,8 +362,6 @@ procedure {:instruction Ins(CPSID_IAF(mod))} CPSID_IAF(operand mod:int)
         ValidModeEncoding(mod) && ValidModeChange'(this, decode_mode(mod));
     ensures
         evalCPSID_IAF(old(this), old(mod), this);
-        AllMemInvariant(old(this), this);
-        this.regs == old(this).regs;
 {
     reveal sp_eval;
 }
@@ -395,10 +372,6 @@ LDRglobaladdr(out operand dst:word, inline g:symbol)
         ValidGlobal(g);
     ensures
         dst == AddressOfGlobal(g);
-    ensures {:refined false}
-        ValidState(this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
 {
     reveal sp_eval;
     reveal ValidRegState;
@@ -415,10 +388,6 @@ LDRglobal(out operand dst:word, inline g:symbol,
         ValidGlobalAddr(g, base + ofs);
     ensures
         dst == GlobalContents(globals, g, old(base + ofs));
-    ensures {:refined false}
-        ValidState(this);
-        SRegsInvariant(old(this), this);
-        AllMemInvariant(old(this), this);
 {
     reveal sp_eval;
     reveal ValidRegState;
@@ -436,165 +405,6 @@ STRglobal(operand rd:reg, inline g:symbol,
     ensures
         ValidGlobalStateOpaque(globals);
         globals == GlobalUpdate(old(globals), g, old(base + ofs), old(rd));
-    ensures {:refined false}
-        ValidState(this);
-        AllRegsInvariant(old(this), this);
-        AddrMemInvariant(old(this), this);
-{
-    reveal sp_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-//
-//   Support for Spartan's refined mode
-//
-////////////////////////////////////////////////////////////////////////////////
-/*
-procedure {:refined} {:instruction Ins(LDR(rd, base, ofs))}
-rLDR(out operand rd:word, operand base:word, operand ofs:word)
-    requires
-        ValidAddr(mem, base + ofs);
-    reads mem;
-    ensures
-        rd == mem[old(base) + old(ofs)];
-{
-    reveal sp_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-*/
-procedure {:refined} {:instruction Ins(LDR_reloc(rd, g))}
-rLDRglobaladdr(out operand rd:word, inline g:symbol)
-    requires
-        ValidGlobal(g);
-    ensures
-        rd == AddressOfGlobal(g);
-{
-    reveal sp_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-
-procedure {:refined} {:instruction Ins(LDR_global(rd, g, base, ofs))}
-rLDRglobal(out operand rd:word, inline g:symbol,
-          operand base:word, operand ofs:word)
-    reads
-        globals;
-    requires
-        ValidGlobalState(globals);
-        ValidGlobalAddr(g, base + ofs);
-    ensures
-        rd == globals[g][BytesToWords(old(base + ofs) - AddressOfGlobal(g))];
-        //GlobalWord(this.m, g, base + ofs - g);
-{
-    reveal sp_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-/*
-procedure {:refined} {:instruction Ins(STR(rd, base, ofs))}
-rSTR(operand rd:reg, operand base:word, operand ofs:word)
-    requires/ensures
-        ValidAddr(mem, base + ofs);
-    modifies
-        mem;
-    ensures
-        mem == old(mem)[old(base+ofs) := rd];
-{
-    reveal sp_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-*/
-procedure {:refined} {:instruction Ins(MOV(dst, src))}
-rMOV(out operand dst:word, operand src:word)
-    ensures
-        dst == old(src);
-{
-    reveal sp_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-
-procedure {:refined} {:instruction Ins(MOV(dst, OShift(GetProbableReg(src), shift)))}
-rMOVShift(out operand dst:word, operand src:snd, inline shift:Shift)
-    ensures
-        dst == old(EvalShift(old(src), shift));
-{
-    reveal sp_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-
-procedure {:refined} {:instruction Ins(EOR(dst, src1, src2))}
-rEOR(out operand dst:word, operand src1:word, operand src2:word)
-    ensures
-        dst == BitwiseXor(old(src1), old(src2));
-{
-    reveal sp_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-
-procedure {:refined} {:instruction Ins(EOR(dst, src1, OShift(GetProbableReg(src2), shift)))}
-rEORShift(out operand dst:word, operand src1:word, operand src2:snd, inline shift:Shift)
-    ensures
-        dst == BitwiseXor(old(src1), EvalShift(old(src2), shift));
-{
-    reveal sp_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-
-procedure {:refined} {:instruction Ins(SUB(dst, src1, src2))}
-rSUB(out operand dst:word, operand src1:word, operand src2:word)
-    requires
-        src1 - src2 >= 0;
-    ensures
-        dst == old(src1 - src2); 
-{
-    reveal sp_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-
-procedure {:refined} {:instruction Ins(ADD(dst, src1, src2))}
-rADDWrap(out operand dst:word, operand src1:word, operand src2:word)
-    ensures
-        dst == old(src1 + src2) % 0x1_0000_0000;
-{
-    reveal sp_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-
-procedure {:refined} {:instruction Ins(ADD(dst, src1, OShift(GetProbableReg(src2), shift)))}
-rADDWrapShift(out operand dst:word, operand src1:word, operand src2:snd, inline shift:Shift)
-    ensures
-        dst == old(src1 + EvalShift(old(src2), shift)) % 0x1_0000_0000;
-{
-    reveal sp_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-
-procedure {:refined} {:instruction Ins(AND(dst, src1, src2))}
-rAND(out operand dst:word, operand src1:word, operand src2:word)
-    ensures
-        dst == old(BitwiseAnd(src1, src2));
-{
-    reveal sp_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-
-
-procedure {:refined} {:instruction Ins(REV(dst, src))}
-rREV(out operand dst:word, operand src:reg)
-    ensures
-        dst == old(bswap32(src));
 {
     reveal sp_eval;
     reveal ValidRegState;
