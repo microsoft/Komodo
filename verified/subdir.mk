@@ -15,7 +15,6 @@ verified: $(dir)/main.S
 # a given source has been verified.
 
 # Spartan-to-Dafny
-# NB: Spartan include paths are relative to the (generated) dfy file, not the CWD
 %.gen.dfy: %.sdfy $(SPARTAN)
 	$(SPARTAN) $(SPARTANFLAGS) $< -out $@
 	@which dos2unix >/dev/null && dos2unix $@ || true
