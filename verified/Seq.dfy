@@ -3,6 +3,9 @@
 //-----------------------------------------------------------------------------
 
 function SeqLength<T>(s:seq<T>) : int { |s| }
+function SeqSlice<T>(s:seq<T>, start:int, end:int) : seq<T>
+    requires 0 <= start <= end <= |s|;
+    { s[start..end] }
 function SeqDrop<T>(s:seq<T>, tail:int) : seq<T> 
     requires 0 <= tail <= |s|;                                           
     { s[..tail] }

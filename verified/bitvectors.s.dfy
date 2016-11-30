@@ -114,8 +114,7 @@ function {:opaque} BitShiftRight(x:bv32, amount:int): bv32
 function {:opaque} BitRotateRight(x:bv32, amount:int): bv32
     requires 0 <= amount < 32;
 {
-    // I assume Dafny doesn't have a builtin operator for this?
-    (x >> amount) | (x << (32 - amount))
+    x.RotateRight(amount)
 }
 
 /* ================ Axioms relating the primitives ================ */

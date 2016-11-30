@@ -94,8 +94,7 @@ predicate IsSHA256TraceReadyForStep(z:SHA256Trace, nextStep:int)
     requires 0 <= nextStep <= 64;
 {
        PartialSHA256TraceIsCorrect(z)
-    && |z.W| == |z.H|
-    && |z.atoh| == |z.H|
+    && |z.W| == |z.H| == |z.atoh| 
     && (forall blk {:trigger |z.atoh[blk]|}:: 0 <= blk < |z.H|-1 ==> |z.atoh[blk]| == 65)
     && |z.atoh[|z.H|-1]| == nextStep+1
 }
@@ -136,7 +135,7 @@ predicate{:opaque} TheAToHsAreOK(z:SHA256Trace, blk:int, t:word)
     z.atoh[blk][t+1].a == BitwiseAdd32(T1, T2)
 }
 
-lemma lemma_SHA256TransitionOKAfterSettingAtoHStep1Helper1(z:SHA256Trace, ghost blk:int, t:word)
+lemma lemma_SHA256TransitionOKAfterSettingAtoHStep1Helper1(z:SHA256Trace, blk:int, t:word)
     requires 0 <= t <= 63;
     requires 0 <= blk;
     requires |z.atoh| > blk;
@@ -151,7 +150,7 @@ lemma lemma_SHA256TransitionOKAfterSettingAtoHStep1Helper1(z:SHA256Trace, ghost 
     reveal_PartialSHA256TraceHasCorrectatohsOpaque();
 }
 
-lemma Lemma_TheAToHsAreOKIsStable(z1:SHA256Trace, z2:SHA256Trace, ghost blk:int, t:word)
+lemma Lemma_TheAToHsAreOKIsStable(z1:SHA256Trace, z2:SHA256Trace, blk:int, t:word)
     requires 0 <= t <= 63;
     requires 0 <= blk;
     requires |z1.atoh| == |z2.atoh| > blk as int;
@@ -337,4 +336,217 @@ lemma lemma_SHA256TransitionOKAfterSettingAtoH(
         }
         assert CorrectlyAccumulatedHsForBlock(z2, blk);
     }
+}
+
+
+lemma lemma_SHA256DigestOneBlockHelper1(
+    z:SHA256Trace,
+    W:seq<word>,
+    atoh:atoh_Type,
+    M:seq<word>
+    ) returns (
+    z':SHA256Trace
+    )
+    requires IsCompleteSHA256Trace(z);
+    requires SHA256TraceIsCorrect(z);
+    requires |W| == 64;
+    requires |M| == 16;
+    requires forall t:word {:trigger TStep(t)} :: TStep(t) && 0 <= t < 16 ==> W[t] == M[t];
+    requires forall t:word {:trigger TStep(t)} :: TStep(t) && 16 <= t <= 63 ==> W[t] == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(SSIG1(W[t-2]), W[t-7]), SSIG0(W[t-15])), W[t-16]);
+    requires atoh == atoh_c(last(z.H)[0], last(z.H)[1], last(z.H)[2], last(z.H)[3], 
+                            last(z.H)[4], last(z.H)[5], last(z.H)[6], last(z.H)[7]);
+    ensures  z' == z.(M := z.M + [M], W := z.W + [W], atoh := z.atoh + [[atoh]]);
+    ensures  IsSHA256TraceReadyForStep(z', 0);
+{
+    z' := z.(M := z.M + [M], W := z.W + [W[..]], atoh := z.atoh + [[atoh]]);
+
+    forall blk {:trigger CorrectlyAccumulatedHsForBlock(z', blk)} | 0 <= blk < |z'.H|-1
+        ensures |z'.atoh[blk]| == 65;
+        ensures CorrectlyAccumulatedHsForBlock(z', blk);
+    {
+        assert TBlk(blk);
+    }
+    assert CorrectlyAccumulatedHsForAllBlocks(z');
+
+    forall blk:int {:trigger TBlk(blk)} | 0 <= blk < |z'.atoh|
+        ensures |z'.atoh[blk]| <= 65;
+        ensures |z'.W[blk]| == 64;
+        ensures (|z'.atoh[blk]| > 0 ==> |z'.H[blk]| == 8 && ConvertAtoHToSeq(z'.atoh[blk][0]) == z'.H[blk]);
+    {
+    }
+    assert PartialSHA256TraceHasCorrectatohsWf(z');
+
+    forall blk {:trigger z'.W[blk]} {:trigger z'.M[blk]} | 0 <= blk < |z'.W|
+        ensures |z'.W[blk]| == 64;
+        ensures |z'.M[blk]| == 16;
+        ensures forall t {:trigger TStep(t)} :: TStep(t) && 0 <= t < 64 ==>
+                     (0 <= t <= 15 ==> z'.W[blk][t] == z'.M[blk][t])
+                     && (16 <= t <= 63 ==> z'.W[blk][t] == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(SSIG1(z'.W[blk][t-2]), z'.W[blk][t-7]), SSIG0(z'.W[blk][t-15])), z'.W[blk][t-16]));
+    {
+        assert TBlk(blk);
+    }
+    assert PartialSHA256TraceHasCorrectWs(z');
+
+    reveal_PartialSHA256TraceHasCorrectatohsOpaque();
+
+    assert IsSHA256TraceReadyForStep(z', 0);
+}
+
+
+lemma lemma_SHA256DigestOneBlockHelper2(
+    z:SHA256Trace,
+    old_H:seq<word>,
+    H:seq<word>
+    ) returns (
+    z':SHA256Trace//,
+    //processed_bytes':seq<uint8>
+    )
+    requires |H| == |old_H| == 8;
+    requires |z.M| == |z.H| > 0;
+    requires last(z.H) == old_H;
+    requires IsSHA256TraceReadyForStep(z, 64);
+    requires H[0] == BitwiseAdd32(last(last(z.atoh)).a, old_H[0]);
+    requires H[1] == BitwiseAdd32(last(last(z.atoh)).b, old_H[1]);
+    requires H[2] == BitwiseAdd32(last(last(z.atoh)).c, old_H[2]);
+    requires H[3] == BitwiseAdd32(last(last(z.atoh)).d, old_H[3]);
+    requires H[4] == BitwiseAdd32(last(last(z.atoh)).e, old_H[4]);
+    requires H[5] == BitwiseAdd32(last(last(z.atoh)).f, old_H[5]);
+    requires H[6] == BitwiseAdd32(last(last(z.atoh)).g, old_H[6]);
+    requires H[7] == BitwiseAdd32(last(last(z.atoh)).h, old_H[7]);
+    //requires WordSeqToBytes(ConcatenateSeqs(z.M[..|z.H|-1])) == ctx.processed_bytes;
+    ensures  z' == z.(H := z.H + [H]);
+    ensures  IsCompleteSHA256Trace(z');
+    ensures  SHA256TraceIsCorrect(z');
+    //ensures  WordSeqToBytes(ConcatenateSeqs(z'.M)) == processed_bytes';
+    //ensures  processed_bytes' == ctx.processed_bytes + WordSeqToBytes(last(z.M));
+//    ensures  |processed_bytes'| == |ctx.processed_bytes| + 64;
+//    ensures  |processed_bytes'| % 64 == 0;
+//    ensures  H == last(z'.H);
+{
+    z' := z.(H := z.H + [H]);
+    var atoh := last(last(z.atoh));
+
+    forall blk:int {:trigger TBlk(blk)} | TBlk(blk)
+        ensures forall j :: 0 <= blk < |z'.M| && 0 <= j < 8 ==> z'.H[blk+1][j] == BitwiseAdd32(ConvertAtoHToSeq(z'.atoh[blk][64])[j], z'.H[blk][j]);
+    {
+        if 0 <= blk < |z.H|-1 {
+            assert PartialSHA256TraceIsCorrect(z);
+            assert CorrectlyAccumulatedHsForBlock(z, blk);
+            forall j | 0 <= j < 8
+                ensures z.H[blk+1][j] == BitwiseAdd32(ConvertAtoHToSeq(z.atoh[blk][64])[j], z.H[blk][j]);
+            {
+                assert TStep(j);
+            }
+        }
+        else if blk == |z.H|-1 {
+            forall j | 0 <= j < 8
+                ensures z'.H[blk+1][j] == BitwiseAdd32(ConvertAtoHToSeq(z'.atoh[blk][64])[j], z'.H[blk][j]);
+            {
+                assert z'.atoh[blk][64] == atoh;
+                assert z'.H[blk][j] == old_H[j];
+                assert z'.H[blk+1][j] == H[j] as word;
+                ghost var atoh_seq := ConvertAtoHToSeq(atoh);
+                     if j == 0 { assert H[0] == BitwiseAdd32(atoh.a, old_H[0]); }
+                else if j == 1 { assert H[1] == BitwiseAdd32(atoh.b, old_H[1]); }
+                else if j == 2 { assert H[2] == BitwiseAdd32(atoh.c, old_H[2]); }
+                else if j == 3 { assert H[3] == BitwiseAdd32(atoh.d, old_H[3]); }
+                else if j == 4 { assert H[4] == BitwiseAdd32(atoh.e, old_H[4]); }
+                else if j == 5 { assert H[5] == BitwiseAdd32(atoh.f, old_H[5]); }
+                else if j == 6 { assert H[6] == BitwiseAdd32(atoh.g, old_H[6]); }
+                else if j == 7 { assert H[7] == BitwiseAdd32(atoh.h, old_H[7]); }
+            }
+        }
+    }
+
+    forall blk | 0 <= blk < |z'.M|
+        ensures ConvertAtoHToSeq(z'.atoh[blk][0]) == z'.H[blk];
+        ensures forall t:word {:trigger TStep(t)} :: TStep(t) && 0 <= t <= 63 ==>
+            (var T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(z'.atoh[blk][t].h, BSIG1(z'.atoh[blk][t].e)),
+                                      Ch(z'.atoh[blk][t].e, z'.atoh[blk][t].f, z'.atoh[blk][t].g)), K_SHA256(t)),
+                              z'.W[blk][t]);
+            var T2 := BitwiseAdd32(BSIG0(z'.atoh[blk][t].a), Maj(z'.atoh[blk][t].a, z'.atoh[blk][t].b, z'.atoh[blk][t].c));
+            z'.atoh[blk][t+1].h == z'.atoh[blk][t].g &&
+            z'.atoh[blk][t+1].g == z'.atoh[blk][t].f &&
+            z'.atoh[blk][t+1].f == z'.atoh[blk][t].e &&
+            z'.atoh[blk][t+1].e == BitwiseAdd32(z'.atoh[blk][t].d, T1) &&
+            z'.atoh[blk][t+1].d == z'.atoh[blk][t].c &&
+            z'.atoh[blk][t+1].c == z'.atoh[blk][t].b &&
+            z'.atoh[blk][t+1].b == z'.atoh[blk][t].a &&
+            z'.atoh[blk][t+1].a == BitwiseAdd32(T1, T2))
+    {
+        forall t:word {:trigger TStep(t)}
+            ensures TStep(t) && 0 <= t <= 63 ==>
+                (var T1 := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(z'.atoh[blk][t].h, BSIG1(z'.atoh[blk][t].e)),
+                                          Ch(z'.atoh[blk][t].e, z'.atoh[blk][t].f, z'.atoh[blk][t].g)), K_SHA256(t)),
+                                  z'.W[blk][t]);
+                var T2 := BitwiseAdd32(BSIG0(z'.atoh[blk][t].a), Maj(z'.atoh[blk][t].a, z'.atoh[blk][t].b, z'.atoh[blk][t].c));
+                z'.atoh[blk][t+1].h == z'.atoh[blk][t].g &&
+                z'.atoh[blk][t+1].g == z'.atoh[blk][t].f &&
+                z'.atoh[blk][t+1].f == z'.atoh[blk][t].e &&
+                z'.atoh[blk][t+1].e == BitwiseAdd32(z'.atoh[blk][t].d, T1) &&
+                z'.atoh[blk][t+1].d == z'.atoh[blk][t].c &&
+                z'.atoh[blk][t+1].c == z'.atoh[blk][t].b &&
+                z'.atoh[blk][t+1].b == z'.atoh[blk][t].a &&
+                z'.atoh[blk][t+1].a == BitwiseAdd32(T1, T2));
+        {
+            assert PartialSHA256TraceIsCorrect(z);
+            assert TBlk(blk);
+            assert z'.atoh[blk] == z.atoh[blk];
+            reveal_PartialSHA256TraceHasCorrectatohsOpaque();
+        }
+
+        assert PartialSHA256TraceIsCorrect(z);
+        assert PartialSHA256TraceHasCorrectatohsWf(z);
+        assert TBlk(blk);
+        assert |z.atoh[blk]| > 0;
+        assert ConvertAtoHToSeq(z.atoh[blk][0]) == z.H[blk];
+        assert ConvertAtoHToSeq(z'.atoh[blk][0]) == z'.H[blk];
+    }
+
+//    processed_bytes' := ctx.processed_bytes + WordSeqToBytes(last(z.M));
+//    lemma_EffectOfAddingBytesOnWordSeqToBytesOfConcatenateSeqs(z.M[..|z.H|-1], ctx.processed_bytes, last(z.M), processed_bytes');
+//    assert z.M[..|z.H|-1] + [last(z.M)] == z'.M;
+//    lemma_AddingMultipleOfNDoesntChangeModN(|WordSeqToBytes(last(z.M))|, |ctx.processed_bytes|, 64);
+}
+
+ghost method ComputeWs(input:seq<word>) returns (W:seq<word>)
+    requires |input| == 16;
+    ensures |W| == 64;
+    ensures forall t:word {:trigger TStep(t)} :: TStep(t) && 0 <= t < 64 ==>
+                     (0 <= t <= 15 ==> W[t] == input[t])
+                  && (16 <= t <= 63 ==> W[t] == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(SSIG1(W[t-2]), 
+                                                                                       W[t-7]), 
+                                                                          SSIG0(W[t-15])), 
+                                                             W[t-16]));
+{
+    W := input;
+    var i := 16;
+    while i < 64
+        invariant 16 <= i <= 64;
+        invariant |W| == i;
+        invariant 
+            forall t:word {:trigger TStep(t)} :: TStep(t) && 0 <= t < i ==>
+                     (0 <= t <= 15 ==> W[t] == input[t])
+                  && (16 <= t <= i ==> W[t] == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(SSIG1(W[t-2]), 
+                                                                                      W[t-7]), 
+                                                                          SSIG0(W[t-15])), 
+                                                            W[t-16]));
+
+    {
+        var new_W := BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(SSIG1(W[i-2]), 
+                                                            W[i-7]), 
+                                               SSIG0(W[i-15])), 
+                                 W[i-16]);
+        W := W + [new_W];
+        i := i + 1;
+    }
+
+}
+
+function {:opaque} bswap32_seq(input:seq<word>) : seq<word>
+    ensures |bswap32_seq(input)| == |input|;
+    ensures forall i :: 0 <= i < |bswap32_seq(input)| ==> bswap32_seq(input)[i] == bswap32(input[i]);
+{
+    if input == [] then []
+    else [bswap32(input[0])] + bswap32_seq(input[1..])
 }

@@ -91,6 +91,7 @@ function method G_PAGEDB_SIZE():int
 function method {:opaque} PageDb(): symbol { "g_pagedb" }
 function method {:opaque} SecurePhysBaseOp(): symbol {"g_secure_physbase" }
 function method {:opaque} CurDispatcherOp(): symbol { "g_cur_dispatcher" }
+function method {:opaque} K_SHA256s(): symbol { "g_k_sha256" }
 
 // the phys base is unknown, but never changes
 function method {:axiom} SecurePhysBase(): addr
@@ -100,10 +101,11 @@ function method {:axiom} SecurePhysBase(): addr
 function method KomGlobalDecls(): globaldecls
     ensures ValidGlobalDecls(KomGlobalDecls());
 {
-    reveal_PageDb(); reveal_SecurePhysBaseOp(); reveal_CurDispatcherOp();
     map[SecurePhysBaseOp() := 4, //BytesPerWord() 
         CurDispatcherOp() := 4,   //BytesPerWord()
-        PageDb() := G_PAGEDB_SIZE()]
+        PageDb() := G_PAGEDB_SIZE(),
+        K_SHA256s() := 256
+        ]
 }
 
 //-----------------------------------------------------------------------------
@@ -146,7 +148,10 @@ predicate SaneConstants()
     // XXX: workaround so dafny sees that these are distinct
     && SecurePhysBaseOp() != PageDb()
     && SecurePhysBaseOp() != CurDispatcherOp()
+    && SecurePhysBaseOp() != K_SHA256s()
     && CurDispatcherOp() != PageDb()
+    && CurDispatcherOp() != K_SHA256s()
+    && PageDb() != K_SHA256s()
 }
 
 predicate SaneState(s:state)

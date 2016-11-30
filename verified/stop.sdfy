@@ -37,6 +37,7 @@ procedure kom_smc_stop(
         LDRglobal(r3, PageDb(), r12, r4);
 
         forall :: r3 == pageDbEntryTypeVal(pagedb[as_page]) {
+            extractPageDbToAbstractOne(this.m, as_page, PAGEDB_ENTRY_TYPE());
             reveal_pageDbEntryCorresponds();
         }
 

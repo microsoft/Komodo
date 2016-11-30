@@ -82,4 +82,3 @@ predicate WordSeqIsProperlySHAPaddedByteSeq(ws:seq<word>, bytes:seq<byte>)
 //- if the trigger is a[i] and the i+1 in the body is used to instantiate the i in the trigger)
 function TBlk(blk:int):bool { true }
 function TStep(t:word):bool { true }
-
