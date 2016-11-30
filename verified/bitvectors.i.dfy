@@ -11,12 +11,6 @@ lemma lemma_BitShiftsRightSum(x: bv32, a: nat, b: nat)
     ensures BitShiftRight(x, a + b) == BitShiftRight(BitShiftRight(x, a), b)
 { reveal_BitShiftRight(); }
 
-lemma lemma_BitShiftsSum(x: bv32, a: nat, b: nat)
-    requires 0 <= a + b < 32
-    ensures BitShiftLeft(x, a + b) == BitShiftLeft(BitShiftLeft(x, a), b)
-    ensures BitShiftRight(x, a + b) == BitShiftRight(BitShiftRight(x, a), b)
-{ lemma_BitShiftsLeftSum(x, a, b); lemma_BitShiftsRightSum(x, a, b); }
-
 lemma lemma_BitOrCommutative(a: bv32, b:bv32)
     ensures BitOr(a, b) == BitOr(b, a)
 { reveal_BitOr(); }
@@ -133,7 +127,7 @@ lemma lemma_ShiftsAdd(x: word, a: nat, b: nat)
     calc {
         LeftShift(x, a + b);
         BitsAsWord(BitShiftLeft(WordAsBits(x), a + b));
-        { lemma_BitShiftsSum(WordAsBits(x), a, b); }
+        { lemma_BitShiftsLeftSum(WordAsBits(x), a, b); }
         BitsAsWord(BitShiftLeft(BitShiftLeft(WordAsBits(x), a), b));
         { lemma_BitsAsWordAsBits(BitShiftLeft(WordAsBits(x), a)); }
         BitsAsWord(BitShiftLeft(WordAsBits(BitsAsWord(BitShiftLeft(WordAsBits(x), a))), b));
@@ -144,7 +138,7 @@ lemma lemma_ShiftsAdd(x: word, a: nat, b: nat)
     calc {
         RightShift(x, a + b);
         BitsAsWord(BitShiftRight(WordAsBits(x), a + b));
-        { lemma_BitShiftsSum(WordAsBits(x), a, b); }
+        { lemma_BitShiftsRightSum(WordAsBits(x), a, b); }
         BitsAsWord(BitShiftRight(BitShiftRight(WordAsBits(x), a), b));
         { lemma_BitsAsWordAsBits(BitShiftRight(WordAsBits(x), a)); }
         BitsAsWord(BitShiftRight(WordAsBits(BitsAsWord(BitShiftRight(WordAsBits(x), a))), b));
