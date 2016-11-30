@@ -58,7 +58,12 @@ lemma lemma_update_psr(oldpsr:word, newmode:word, f:bool, i:bool)
         { lemma_BitsAndWordConversions(); }
         BitsAsWord(BitAnd(BitOr(BitAnd(oldpsrb, 0xffffffe0),
             BitOr(newmodeb, maskbits)), 0x40)) != 0;
-        { reveal_BitAnd(); reveal_BitOr(); }
+        { calc {
+            BitAnd(BitOr(BitAnd(oldpsrb, 0xffffffe0),
+                BitOr(newmodeb, maskbits)), 0x40);
+            { reveal_BitAnd(); reveal_BitOr(); }
+            BitAnd(BitOr(oldpsrb, maskbits), 0x40);
+        } }
         BitsAsWord(BitAnd(BitOr(oldpsrb, maskbits), 0x40)) != 0;
         {
             calc {
