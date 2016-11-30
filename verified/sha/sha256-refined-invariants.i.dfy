@@ -3,26 +3,22 @@ include "../words_and_bytes.s.dfy"
 include "../kom_common.s.dfy"
 include "../sha/sha256.i.dfy"
 include "../sha/bit-vector-lemmas.i.dfy"
-include "../ARMdecls.gen.dfy"
+include "../ARMdecls-refined.gen.dfy"
 
 predicate BlockInvariant(
-            trace:SHA256Trace, input:seq<word>, globals:map<operand, seq<word>>,
+            trace:SHA256Trace, input:seq<word>, globals:globalsmap,
             old_M_len:nat, old_mem:memmap, mem:memmap, sp:word, lr:word, r1:word, r12:word,
             a:word, b:word, c:word, d:word, e:word, f:word, g:word, h:word,
             input_ptr:word, ctx_ptr:word,             
             num_blocks:nat, block:nat)            
 {
  // Stack is accessible
-    (forall j {:trigger ValidAddr(mem, sp + j * 4)} {:trigger sp + j * 4 in mem} :: 
-               0 <= j < 19 ==> ValidAddr(mem, sp + j * 4))
+    ValidAddrs(mem, sp, 19)
 
  // Pointer into our in-memory H[8] is valid
  && ctx_ptr == mem[sp + 16 * 4]
  && (ctx_ptr + 32 < sp || ctx_ptr > sp + 19 * 4)
- && (forall addr{:trigger ValidAddr(mem, addr)} {:trigger addr in mem} :: 
-             ctx_ptr <= addr < ctx_ptr + 8 * 4
-          && (addr - ctx_ptr) % 4 == 0 
-          ==> ValidAddr(mem, addr))
+ && ValidAddrs(mem, ctx_ptr, 8)
 
  // Input properties
  && block <= num_blocks
@@ -32,9 +28,9 @@ predicate BlockInvariant(
  && input_ptr + num_blocks * 16 * 4 < 0x1_0000_0000
  && (input_ptr + num_blocks * 16 * 4 < sp || sp + 19 * 4 <= input_ptr)  // Doesn't alias sp
  && (input_ptr + num_blocks * 16 * 4 < ctx_ptr || ctx_ptr + 32 <= input_ptr)  // Doesn't alias input_ptr
- && (forall j {:trigger ValidAddr(mem, input_ptr + j * 4)} {:trigger input_ptr + j * 4 in mem} ::
-            0 <= j < num_blocks * 16 ==> ValidAddr(mem, input_ptr + j * 4) 
-                                      && mem[input_ptr + j * 4] == input[j])
+ && ValidAddrs(mem, input_ptr, num_blocks * 16)
+ && (forall j {:trigger input_ptr + j * 4 in mem} ::
+            0 <= j < num_blocks * 16 ==> mem[input_ptr + j * 4] == input[j])
 
  // Trace properties
  && IsCompleteSHA256Trace(trace)
@@ -44,7 +40,7 @@ predicate BlockInvariant(
              ==> trace.M[old_M_len + i] == bswap32_seq(input[i*16..(i+1)*16])) 
 
  // Globals properties
- && ValidGlobalsAddr(globals, K_SHA256s().sym, lr) 
+ && ValidGlobalAddr(K_SHA256s(), lr) 
  && K_SHA256s() in globals
  && AddressOfGlobal(K_SHA256s()) + 256 < 0x1_0000_0000 
  && lr == AddressOfGlobal(K_SHA256s()) 

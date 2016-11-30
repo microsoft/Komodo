@@ -13,6 +13,12 @@ lemma {:axiom} lemma_DivBounds'(a:int, b:int)
     ensures a / b < a
 /* FIXME: this is unstable, but proves in some versions of Dafny/Z3 */
 
+lemma lemma_AddWrapAssociates(x1:nat, x2:nat, x3:nat)
+    ensures (((x1 + x2) % 0x1_0000_0000) + x3) % 0x1_0000_0000
+         == (x1 + ((x2 + x3) % 0x1_0000_0000)) % 0x1_0000_0000;
+{
+}
+
 lemma lemma_DivBounds(a:int, b:int)
     requires a >= 0 && b > 0
     ensures 0 <= (a / b) <= a

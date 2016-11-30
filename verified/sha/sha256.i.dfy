@@ -550,3 +550,8 @@ function {:opaque} bswap32_seq(input:seq<word>) : seq<word>
     if input == [] then []
     else [bswap32(input[0])] + bswap32_seq(input[1..])
 }
+
+predicate ValidAddrs(mem:memmap, base:int, num_words:int)
+{
+    ValidAddrMemState(mem) && ValidMem(base) && ValidMemRange(base, base + num_words * 4)
+}

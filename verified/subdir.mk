@@ -1,11 +1,10 @@
 DAFNYTIMELIMIT ?= 60
 SPARTANDIRECT ?= 1
 DAFNYFLAGS = /trace /timeLimit:$(DAFNYTIMELIMIT) /ironDafny /allocated:1 \
-    $(call mkdafnyflags,$(call dropdir,$(*))) $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
+    $(call mkdafnyflags,$(notdir $(*))) $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
 
 # dafny flags: file-specific flags plus /noNLarith unless the file is named nlarith.x
 mkdafnyflags = $(DAFNYFLAGS_$(1)) $(if $(filter nlarith.%,$(1)),,/noNLarith)
-dropdir = $(subst $(dir)/,,$(1))
 
 # top-level target
 .PHONY: verified
