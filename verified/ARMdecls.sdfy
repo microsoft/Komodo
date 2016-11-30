@@ -545,6 +545,7 @@ rSTR(operand rd:reg, operand base:word, operand ofs:word)
         mem;
     ensures
         mem == old(mem)[old(base+ofs) := rd];
+        forall addr {ValidAddr(mem, addr)} :: ValidAddr(old(mem), addr) ==> ValidAddr(mem, addr);
 {
     reveal sp_eval;
     reveal ValidRegState;

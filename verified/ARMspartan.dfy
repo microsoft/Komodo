@@ -212,6 +212,15 @@ predicate ValidAddr(m:memmap, addr:int)
  && addr in m
 }
 
+predicate ValidAddrs(mem:memmap, base:int, num_words:int)
+{
+    //forall j {:trigger ValidAddr(mem, base+j*4)} {:trigger  base+j*4 in mem } :: 0 <= j < num_words ==> ValidAddr(mem, base + j*4)
+    forall addr {:trigger ValidAddr(mem, addr)}
+                {:trigger addr in mem } ::
+        base <= addr < base + num_words*4 && (addr - base) % 4 == 0 ==> ValidAddr(mem, addr)
+}
+
+
 //-----------------------------------------------------------------------------
 // Useful invariants preserved by instructions
 //-----------------------------------------------------------------------------
