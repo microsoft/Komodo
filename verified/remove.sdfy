@@ -1,3 +1,12 @@
+include verbatim "kom_common.i.dfy"
+include verbatim "pagedb.i.dfy"
+include verbatim "smcapi.i.dfy"
+
+include "ARMdecls-unrefined.sdfy"
+include verbatim "ARMdecls-unrefined.gen.dfy"
+include "kom_utils.sdfy"
+include verbatim "kom_utils.gen.dfy"
+
 procedure kom_smc_remove_non_addr_success(
     {:register OReg(R1)} page:int,
     {:register OReg(R4)} pagedb_addr:int,

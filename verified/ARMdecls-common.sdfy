@@ -1,3 +1,5 @@
+include verbatim "ARMspartan.dfy"
+
 var{:state ok()}  ok:bool;
 var{:state mem()} mem:memmap;
 var{:state globals()} globals:globalsmap;

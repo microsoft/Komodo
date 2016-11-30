@@ -1,3 +1,17 @@
+include verbatim "kom_common.i.dfy"
+include verbatim "pagedb.i.dfy"
+include verbatim "smcapi.i.dfy"
+include verbatim "ptebits.i.dfy"
+
+include "ARMdecls-unrefined.sdfy"
+include verbatim "ARMdecls-unrefined.gen.dfy"
+include "kom_utils.sdfy"
+include verbatim "kom_utils.gen.dfy"
+include "allocate_page.sdfy"
+include verbatim "allocate_page.gen.dfy"
+include "map_utils.sdfy"
+include verbatim "map_utils.gen.dfy"
+
 procedure update_l2pte(
     {:register OReg(R2)} as_page:int,
     {:register OReg(R3)} mapping:int,

@@ -1,3 +1,7 @@
+include verbatim "kom_common.i.dfy"
+include "ARMdecls-unrefined.sdfy"
+include verbatim "ARMdecls-unrefined.gen.dfy"
+
 procedure memset(inout operand base:int, operand val:int, inout operand size:int)
     requires/ensures
         SaneState(this);

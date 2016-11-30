@@ -1,4 +1,5 @@
 include "ARMdecls-common.sdfy"
+include verbatim "ARMdecls-common.gen.dfy"
 
 var{:register OReg(R0)}  r0:int;
 var{:register OReg(R1)}  r1:int;

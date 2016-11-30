@@ -1,3 +1,12 @@
+include verbatim "kom_common.i.dfy"
+include verbatim "pagedb.i.dfy"
+include verbatim "smcapi.i.dfy"
+
+include "ARMdecls-unrefined.sdfy"
+include verbatim "ARMdecls-unrefined.gen.dfy"
+include "kom_utils.sdfy"
+include verbatim "kom_utils.gen.dfy"
+
 procedure kom_smc_stop(
     {:register OReg(R1)} as_page:int,
     out {:register OReg(R0)} err:int,

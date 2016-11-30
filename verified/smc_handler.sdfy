@@ -1,3 +1,30 @@
+include verbatim "kom_common.i.dfy"
+include verbatim "pagedb.i.dfy"
+include verbatim "smcapi.i.dfy"
+
+include "ARMdecls-unrefined.sdfy"
+include verbatim "ARMdecls-unrefined.gen.dfy"
+include "kom_utils.sdfy"
+include verbatim "kom_utils.gen.dfy"
+include "init_addrspace.sdfy"
+include verbatim "init_addrspace.gen.dfy"
+include "init_dispatcher.sdfy"
+include verbatim "init_dispatcher.gen.dfy"
+include "init_l2ptable.sdfy"
+include verbatim "init_l2ptable.gen.dfy"
+include "map_secure.sdfy"
+include verbatim "map_secure.gen.dfy"
+include "map_insecure.sdfy"
+include verbatim "map_insecure.gen.dfy"
+include "entry.sdfy"
+include verbatim "entry.gen.dfy"
+include "finalise.sdfy"
+include verbatim "finalise.gen.dfy"
+include "stop.sdfy"
+include verbatim "stop.gen.dfy"
+include "remove.sdfy"
+include verbatim "remove.gen.dfy"
+
 //=============================================================================
 // Top-level SMC handler
 //=============================================================================

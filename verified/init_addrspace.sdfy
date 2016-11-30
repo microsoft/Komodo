@@ -1,6 +1,13 @@
-//=============================================================================
-// Init addrspace
-//=============================================================================
+include verbatim "kom_common.i.dfy"
+include verbatim "pagedb.i.dfy"
+include verbatim "smcapi.i.dfy"
+
+include "ARMdecls-unrefined.sdfy"
+include verbatim "ARMdecls-unrefined.gen.dfy"
+include "kom_utils.sdfy"
+include verbatim "kom_utils.gen.dfy"
+include "memset.sdfy"
+include verbatim "memset.gen.dfy"
 
 /* Register allocation for init_addrspace paths:
  * r0 temp / err out
