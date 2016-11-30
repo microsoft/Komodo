@@ -22,8 +22,8 @@ verified: $(dir)/main.S
 # Spartan direct verification, including cheesy workaround for broken error code.
 ifeq ($(SPARTANDIRECT), 1)
 %.verified %.log: %.sdfy %.gen.dfy
-	/bin/bash -c "$(SPARTAN) $(SPARTANFLAGS) $< \
-	-dafnyDirect $(DAFNYFLAGS) /compile:0 | tee $*.log; exit \$${PIPESTATUS[0]}"
+	/bin/bash -c "$(SPARTAN) $(SPARTANFLAGS) $< -dafnyDirect \
+	$(DAFNYFLAGS) /compile:0 | tee $*.log; exit \$${PIPESTATUS[0]}"
 	@grep -q "^Dafny program verifier finished with [^0][0-9]* verified, 0 errors$$" $*.log $(if $(DAFNYPROC),,&& touch $*.verified)
 	@$(RM) $*.log
 else
@@ -47,7 +47,7 @@ $(dir)/%.img: $(dir)/%.o
 # auto dependencies for Dafny/Spartan code
 findsrc = $(wildcard $(1)/*.sdfy) $(filter-out %.gen.dfy,$(wildcard $(1)/*.dfy))
 DEPSRC = $(call findsrc,$(dir)) $(call findsrc,$(dir)/sha)
-$(dir)/dfydeps.d: $(DEPSRC)
+$(dir)/dfydeps.d: $(dir)/mkdep.py $(DEPSRC)
 	python $(dir)/mkdep.py $(DEPSRC) > $(dir)/dfydeps.d
 include $(dir)/dfydeps.d
 
