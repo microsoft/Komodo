@@ -1,6 +1,42 @@
 include "bitvectors.s.dfy"
 include "ARMdef.dfy"
 
+lemma lemma_BitShiftsLeftSum(x: bv32, a: nat, b: nat)
+    requires 0 <= a + b < 32
+    ensures BitShiftLeft(x, a + b) == BitShiftLeft(BitShiftLeft(x, a), b)
+{ reveal_BitShiftLeft(); }
+
+lemma lemma_BitShiftsRightSum(x: bv32, a: nat, b: nat)
+    requires 0 <= a + b < 32
+    ensures BitShiftRight(x, a + b) == BitShiftRight(BitShiftRight(x, a), b)
+{ reveal_BitShiftRight(); }
+
+lemma lemma_BitShiftsSum(x: bv32, a: nat, b: nat)
+    requires 0 <= a + b < 32
+    ensures BitShiftLeft(x, a + b) == BitShiftLeft(BitShiftLeft(x, a), b)
+    ensures BitShiftRight(x, a + b) == BitShiftRight(BitShiftRight(x, a), b)
+{ lemma_BitShiftsLeftSum(x, a, b); lemma_BitShiftsRightSum(x, a, b); }
+
+lemma lemma_BitOrCommutative(a: bv32, b:bv32)
+    ensures BitOr(a, b) == BitOr(b, a)
+{ reveal_BitOr(); }
+
+lemma lemma_BitOrAssociative(a: bv32, b:bv32, c: bv32)
+    ensures BitOr(a, BitOr(b, c)) == BitOr(BitOr(a, b), c)
+{ reveal_BitOr(); }
+
+lemma lemma_BitAndCommutative(a: bv32, b:bv32)
+    ensures BitAnd(a, b) == BitAnd(b, a)
+{ reveal_BitAnd(); }
+
+lemma lemma_BitAndAssociative(a: bv32, b:bv32, c: bv32)
+    ensures BitAnd(a, BitAnd(b, c)) == BitAnd(BitAnd(a, b), c)
+{ reveal_BitAnd(); }
+
+lemma lemma_BitOrAndRelation(a: bv32, b:bv32, c: bv32)
+    ensures BitAnd(BitOr(a, b), c) == BitOr(BitAnd(a, c), BitAnd(b, c))
+{ reveal_BitAnd(); reveal_BitOr(); }
+
 lemma lemma_BitPos12()
     ensures BitsAsWord(BitAtPos(12)) == 0x1000
 {

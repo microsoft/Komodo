@@ -146,27 +146,6 @@ lemma {:axiom} lemma_BitCmpEquiv(x:word, y:word)
     ensures x < y ==> WordAsBits(x) < WordAsBits(y)
     ensures x == y ==> WordAsBits(x) == WordAsBits(y)
 
-lemma {:axiom} lemma_BitShiftsSum(x: bv32, a: nat, b: nat)
-    requires 0 <= a + b < 32
-    ensures BitShiftLeft(x, a + b) == BitShiftLeft(BitShiftLeft(x, a), b)
-    ensures BitShiftRight(x, a + b) == BitShiftRight(BitShiftRight(x, a), b)
-
-lemma {:axiom} lemma_BitOrCommutative(a: bv32, b:bv32)
-    ensures BitOr(a, b) == BitOr(b, a)
-
-lemma {:axiom} lemma_BitOrAssociative(a: bv32, b:bv32, c: bv32)
-    ensures BitOr(a, BitOr(b, c)) == BitOr(BitOr(a, b), c)
-
-lemma {:axiom} lemma_BitAndCommutative(a: bv32, b:bv32)
-    ensures BitAnd(a, b) == BitAnd(b, a)
-
-lemma {:axiom} lemma_BitAndAssociative(a: bv32, b:bv32, c: bv32)
-    ensures BitAnd(a, BitAnd(b, c)) == BitAnd(BitAnd(a, b), c)
-
-lemma {:axiom} lemma_BitOrAndRelation(a: bv32, b:bv32, c: bv32)
-    ensures BitAnd(BitOr(a, b), c) == BitOr(BitAnd(a, c), BitAnd(b, c))
-
-
 /* ================ Higher-level operations (needed for spec) ================ */
 
 function {:opaque} pow2(n:nat): nat
