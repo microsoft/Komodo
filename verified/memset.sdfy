@@ -2,15 +2,13 @@ include verbatim "kom_common.i.dfy"
 include "ARMdecls-unrefined.sdfy"
 include verbatim "ARMdecls-unrefined.gen.dfy"
 
-procedure memset(inout operand base:int, operand val:int, inout operand size:int)
+procedure memset(inout operand base:addr, operand val:word, inout operand size:addr)
     requires/ensures
         SaneState(this);
     requires
         DistinctRegOperands(set(@base, @val, @size), 3);
         WordAligned(base);
         WordAligned(size);
-        isUInt32(val);
-        isUInt32(base + size);
         ValidMemRange(base, base + size);
         base >= StackBase() || base + size <= StackLimit();
     ensures
@@ -48,7 +46,52 @@ procedure memset(inout operand base:int, operand val:int, inout operand size:int
         STR(val, base, 0);
         assert forall p :: ValidMem(p) && p != base
             ==> MemContents(prevThis.m, p) == MemContents(this.m, p);
-        assert WordAligned(base + 4);
+        WordAlignedAdd(base, 4);
         ADD(base, base, 4);
+    }
+}
+
+procedure memcpy(operand dst:addr, operand src:addr, inout operand size:addr,
+                 out operand tmp:int)
+    requires/ensures
+        SaneState(this);
+    requires
+        DistinctRegOperands(set(@dst, @src, @size, @tmp), 4);
+        WordAligned(dst);
+        WordAligned(src);
+        WordAligned(size);
+        ValidMemRange(dst, dst + size);
+        ValidMemRange(src, src + size);
+        dst + size <= src || src + size <= dst;
+        dst >= StackBase() || dst + size <= StackLimit();
+    ensures
+        GlobalsInvariant(old(this),this);
+        SmcProcedureInvariant(old(this),this);
+        RegPreservingExcept(old(this), this, set(@size, @tmp));
+        MemPreservingExcept(old(this), this, old(dst), old(dst + size));
+        forall i :: 0 <= i < old(size) && WordAligned(i)
+            ==> MemContents(this.m, old(dst) + i) == old(MemContents(this.m, src + i));
+{
+    while (size > 0)
+        invariant
+            SaneState(this);
+            GlobalsInvariant(old(this),this);
+            SmcProcedureInvariant(old(this),this);
+            RegPreservingExcept(old(this), this, set(@size, @tmp));
+            WordAligned(size) && 0 <= size <= old(size);
+            MemPreservingExcept(old(this), this, dst + size, dst + old(size));
+            forall i :: (size <= i < old(size)) && WordAligned(i)
+                ==> MemContents(this.m, dst + i) == old(MemContents(this.m, src + i));
+        decreases
+            size;
+    {
+        ghost var prevThis := this;
+        SUB(size, size, 4);
+        assert WordAligned(size);
+        LDR(tmp, src, size);
+        STR(tmp, dst, size);
+        assert MemContents(this.m, dst + size) == MemContents(old(this.m), src + size);
+        assert forall p :: ValidMem(p) && p != dst + size
+            ==> MemContents(prevThis.m, p) == MemContents(this.m, p);
     }
 }
