@@ -50,6 +50,9 @@ predicate sp_require(b0:codes, c1:code, s0:sp_state, sN:sp_state)
     sp_cHeadIs(b0, c1)
  && sp_eval(Block(b0), s0, sN)
  && ValidState(s0)
+ // XXX: workaround dafny opaque bugs! these are needed in sp_refined lemmas
+ && forall regs :: ValidRegState(regs) ==> (forall r:ARMReg :: r in regs)
+ && forall mem :: ValidAddrMemStateOpaque(mem) ==> ValidAddrMemState(mem)
 }
 
 predicate sp_ensure(b0:codes, b1:codes, s0:sp_state, s1:sp_state, sN:sp_state)
@@ -96,11 +99,13 @@ function sp_get_reg(r:ARMReg, s:state):word
 }
 
 function sp_get_mem(s:state):memmap
-    ensures ValidMemState(s.m) ==> ValidAddrMemStateOpaque(sp_get_mem(s))
+    requires ValidState(s)
+    ensures ValidAddrMemStateOpaque(sp_get_mem(s))
 { reveal_ValidMemState(); reveal_ValidAddrMemStateOpaque(); s.m.addresses }
 
 function sp_get_globals(s:state):globalsmap
-    ensures ValidMemState(s.m) ==> ValidGlobalStateOpaque(sp_get_globals(s))
+    requires ValidState(s)
+    ensures ValidGlobalStateOpaque(sp_get_globals(s))
 { reveal_ValidMemState(); reveal_ValidGlobalStateOpaque(); s.m.globals }
 
 function sp_get_osp(s:state):word 
@@ -118,13 +123,17 @@ function sp_get_olr(s:state):word
 
 function sp_update_ok(sM:state, sK:state):state { sK.(ok := sM.ok, steps := sM.steps) }
 function sp_update_reg(r:ARMReg, sM:state, sK:state):state 
-    requires ValidRegState(sM.regs)
+    requires ValidRegState(sK.regs) && ValidRegState(sM.regs)
+    ensures ValidRegState(sp_update_reg(r, sM, sK).regs)
 {
     reveal_ValidRegState();
     sK.(regs := sK.regs[r := sM.regs[r]])
 }
 function sp_update_mem(sM:state, sK:state):state
+    requires ValidAddrMemStateOpaque(sM.m.addresses)
+    ensures ValidAddrMemStateOpaque(sp_update_mem(sM, sK).m.addresses)
 {
+    reveal_ValidAddrMemStateOpaque();
     sK.(m := sK.m.(addresses := sM.m.addresses))
 }
 function sp_update_globals(sM:state, sK:state):state
@@ -132,21 +141,21 @@ function sp_update_globals(sM:state, sK:state):state
     sK.(m := sK.m.(globals := sM.m.globals))
 }
 function sp_update_osp(sM:state, sK:state):state 
-    requires ValidRegState(sM.regs)
+    requires ValidRegState(sK.regs) && ValidRegState(sM.regs)
+    ensures ValidRegState(sp_update_osp(sM, sK).regs)
 { 
-    reveal_ValidRegState();
     sp_update_reg(SP(mode_of_state(sM)), sM, sK)
 }
 function sp_update_olr(sM:state, sK:state):state 
-    requires ValidRegState(sM.regs)
+    requires ValidRegState(sK.regs) && ValidRegState(sM.regs)
+    ensures ValidRegState(sp_update_olr(sM, sK).regs)
 { 
-    reveal_ValidRegState();
     sp_update_reg(LR(mode_of_state(sM)), sM, sK)
 }
 
 function sp_update(o:operand, sM:state, sK:state):state
     requires ValidRegOperand(o)
-    requires ValidRegState(sM.regs)
+    requires ValidRegState(sK.regs) && ValidRegState(sM.regs)
 {
     match o
         case OReg(r) => sp_update_reg(o.r, sM, sK)

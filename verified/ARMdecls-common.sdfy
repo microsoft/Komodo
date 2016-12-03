@@ -214,8 +214,9 @@ procedure {:bridge} {:refined} {:instruction Ins(STR(rd, base, ofs))}
 STR(operand rd:reg, operand base:word, operand ofs:word)
     modifies
         mem;
-    requires
+    requires/ensures
         ValidAddrMemStateOpaque(mem);
+    requires
         ValidMem(base + ofs);
     ensures
         mem == AddrMemUpdate(old(mem), old(base + ofs), old(rd));

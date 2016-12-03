@@ -169,15 +169,6 @@ lemma lemma_BitwiseAdd32_properties(w:word)
     ensures BitwiseAdd32(w, 0) == w;
 { }
 
-lemma lemma_ValidAddrsPreservation(old_mem:memmap, mem:memmap, base:nat, num_words:nat,
-    update_addr1:nat, update_addr2:nat)
-    requires ValidAddrs(old_mem, base, num_words);
-    requires ValidAddrMemStateOpaque(mem);
-    //requires update_addr1 in mem;
-    //requires update_addr2 in mem;
-    //requires mem == old_mem[update_addr1 := mem[update_addr1]][update_addr2 := mem[update_addr2]];
-    ensures  ValidAddrs(mem, base, num_words);
-{ reveal_ValidAddrMemStateOpaque(); }
 /*
 lemma lemma_ValidSrcAddrsPreservation(old_mem:memmap, mem:memmap, base:nat, num_words:nat, taint:taint,
                                       update_addr1:nat, update_addr2:nat)
@@ -246,37 +237,40 @@ lemma lemma_ValidSrcAddrsIncrement(old_mem:memmap, mem:memmap, base:nat, num_wor
 }
 */
 predicate InputMatchesMemory(input:seq<word>, input_ptr:word, num_words:nat, mem:memmap)
-    requires ValidAddrs(mem, input_ptr, num_words);
+    requires ValidAddrMemStateOpaque(mem);
+    requires ValidAddrs(input_ptr, num_words);
     requires |input| >= num_words;
 {
-    forall j {:trigger input_ptr+j*4 in mem } :: 0 <= j < num_words ==> mem[input_ptr + j*4] == input[j]
+    forall j {:trigger ValidMem(input_ptr+j*4)} {:trigger AddrMemContents(mem, input_ptr + j*4)} :: 0 <= j < num_words ==> AddrMemContents(mem, input_ptr + j*4) == input[j]
 }
 
 lemma lemma_InputPreservation(old_mem:memmap, mem:memmap, input:seq<word>, input_ptr:word, num_words:nat,
                               update_addr1:nat, update_addr2:nat)
-    requires ValidAddrs(old_mem, input_ptr, num_words);
+    requires ValidAddrs(input_ptr, num_words);
+    requires ValidAddrMemStateOpaque(old_mem);
     requires ValidAddrMemStateOpaque(mem);
     requires |input| >= num_words;
     requires InputMatchesMemory(input, input_ptr, num_words, old_mem);
-    requires update_addr1 in mem;
-    requires update_addr2 in mem;
+    requires ValidMem(update_addr1);
+    requires ValidMem(update_addr2);
     requires update_addr1 < input_ptr || update_addr1 >= input_ptr + num_words*4;
     requires update_addr2 < input_ptr || update_addr2 >= input_ptr + num_words*4;
-    requires mem == old_mem[update_addr1 := mem[update_addr1]][update_addr2 := mem[update_addr2]];
-    ensures  ValidAddrs(mem, input_ptr, num_words);
+    requires mem == AddrMemUpdate(AddrMemUpdate(old_mem, update_addr1, AddrMemContents(mem, update_addr1)), update_addr2, AddrMemContents(mem, update_addr2));
     ensures  InputMatchesMemory(input, input_ptr, num_words, mem);
 {
-    lemma_ValidAddrsPreservation(old_mem, mem, input_ptr, num_words, update_addr1, update_addr2);
+    assert forall j :: 0 <= j < num_words
+        ==> AddrMemContents(old_mem, input_ptr + j*4) == AddrMemContents(mem, input_ptr + j*4);
 }
 
 predicate WsMatchMemory(trace:SHA256Trace, i:int, base:word, mem:memmap)
-        requires 0 <= i <= 64;
-        requires |trace.W| > 0;
-        requires |last(trace.W)| == 64
-        requires ValidAddrs(mem, base, 19);
+    requires 0 <= i <= 64;
+    requires |trace.W| > 0;
+    requires |last(trace.W)| == 64
+    requires ValidAddrs(base, 19);
+    requires ValidAddrMemStateOpaque(mem);
 {
-          (i < 16 ==> (forall j :: 0 <= j < i ==> last(trace.W)[j] == mem[base + j*4]))
- && (16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(trace.W)[j] == mem[base + CheapMod16(j)*4]))
+    (i < 16 ==> (forall j :: 0 <= j < i ==> last(trace.W)[j] == AddrMemContents(mem, base + j*4)))
+ && (16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(trace.W)[j] == AddrMemContents(mem, base + CheapMod16(j)*4)))
 }
 
 lemma lemma_WsIncrement(old_mem:memmap, mem:memmap, trace1:SHA256Trace, trace2:SHA256Trace, base:word,
@@ -284,18 +278,18 @@ lemma lemma_WsIncrement(old_mem:memmap, mem:memmap, trace1:SHA256Trace, trace2:S
     requires 0 <= step < 64;
     requires |trace1.W| > 0;
     requires |last(trace1.W)| == 64
-    requires ValidAddrs(old_mem, base, 19);
+    requires ValidAddrs(base, 19);
+    requires ValidAddrMemStateOpaque(old_mem);
+    requires ValidAddrMemStateOpaque(mem);
     requires |trace2.W| > 0;
     requires last(trace2.W) == last(trace1.W);
-    requires ValidAddrs(mem, base, 19);
     requires WsMatchMemory(trace1, step, base, old_mem);
-    requires update_addr1 in mem;
-    requires update_addr2 in mem;
+    requires ValidMem(update_addr1);
+    requires ValidMem(update_addr2);
     requires update_addr1 < base || update_addr1 >= base + 16*4;
     requires update_addr2 == base + CheapMod16(step) * 4;
-    requires mem == old_mem[update_addr1 := mem[update_addr1]][update_addr2 := mem[update_addr2]];
-    requires mem[update_addr2] == last(trace1.W)[step];
-    ensures  ValidAddrs(mem, base, 19);
+    requires mem == AddrMemUpdate(AddrMemUpdate(old_mem, update_addr1, AddrMemContents(mem, update_addr1)), update_addr2, AddrMemContents(mem, update_addr2));
+    requires AddrMemContents(mem, update_addr2) == last(trace1.W)[step];
     ensures  WsMatchMemory(trace2, step + 1, base, mem);
 {
 }
