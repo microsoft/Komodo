@@ -28,7 +28,7 @@ for srcfile in sys.argv[1:]:
             if m:
                 deps = mkdeps(m.group(2))
                 if basedir:
-                    deps = [os.path.join(basedir, d) for d in deps]
+                    deps = [os.path.normpath(os.path.join(basedir, d)) for d in deps]
                 alldeps.update(deps)
 
     if alldeps:
