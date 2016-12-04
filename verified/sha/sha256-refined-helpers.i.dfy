@@ -41,6 +41,11 @@ function{:opaque} seq8(a:word, b:word, c:word, d:word, e:word, f:word, g:word, h
     [a, b, c, d, e, f, g, h]
 }
 
+lemma lemma_BitwiseAdd32Commutes2(x1:word, x2:word)
+    ensures BitwiseAdd32(x1, x2) == BitwiseAdd32(x2, x1);
+{
+}
+
 lemma lemma_BitwiseAdd32Associates3'(x1:word, x2:word, x3:word)
     ensures BitwiseAdd32(BitwiseAdd32(x1, x2), x3) == BitwiseAdd32(x1, BitwiseAdd32(x2, x3));
 {
@@ -85,7 +90,7 @@ lemma lemma_BitwiseAdd32Associates4(x1:word, x2:word, x3:word, x4:word, result:w
     calc {
         result ;
         BitwiseAdd32(BitwiseAdd32(x4, BitwiseAdd32(x1, x3)), x2);
-            { assert BitwiseAdd32(BitwiseAdd32(x1, x3), x4) == BitwiseAdd32(x4, BitwiseAdd32(x1, x3)); }
+            { lemma_BitwiseAdd32Commutes2(BitwiseAdd32(x1, x3), x4); }
         BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(x1, x3), x4), x2);
             { lemma_BitwiseAdd32Associates3(BitwiseAdd32(x1, x3), x4, x2); }
         BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(x1, x3), x2), x4);
