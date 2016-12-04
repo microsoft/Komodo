@@ -50,9 +50,6 @@ predicate sp_require(b0:codes, c1:code, s0:sp_state, sN:sp_state)
     sp_cHeadIs(b0, c1)
  && sp_eval(Block(b0), s0, sN)
  && ValidState(s0)
- // XXX: workaround dafny opaque bugs! these are needed in sp_refined lemmas
- && forall regs :: ValidRegState(regs) ==> (forall r:ARMReg :: r in regs)
- && forall mem :: ValidAddrMemStateOpaque(mem) ==> ValidAddrMemState(mem)
 }
 
 predicate sp_ensure(b0:codes, b1:codes, s0:sp_state, s1:sp_state, sN:sp_state)
@@ -130,14 +127,19 @@ function sp_update_reg(r:ARMReg, sM:state, sK:state):state
     sK.(regs := sK.regs[r := sM.regs[r]])
 }
 function sp_update_mem(sM:state, sK:state):state
-    requires ValidAddrMemStateOpaque(sM.m.addresses)
+    requires ValidMemState(sM.m) && ValidMemState(sK.m)
+    ensures ValidMemState(sp_update_mem(sM, sK).m)
     ensures ValidAddrMemStateOpaque(sp_update_mem(sM, sK).m.addresses)
 {
-    reveal_ValidAddrMemStateOpaque();
+    reveal_ValidMemState(); reveal_ValidAddrMemStateOpaque();
     sK.(m := sK.m.(addresses := sM.m.addresses))
 }
 function sp_update_globals(sM:state, sK:state):state
+    requires ValidMemState(sM.m) && ValidMemState(sK.m)
+    ensures ValidMemState(sp_update_mem(sM, sK).m)
+    ensures ValidGlobalStateOpaque(sp_update_mem(sM, sK).m.globals)
 {
+    reveal_ValidMemState(); reveal_ValidGlobalStateOpaque();
     sK.(m := sK.m.(globals := sM.m.globals))
 }
 function sp_update_osp(sM:state, sK:state):state 

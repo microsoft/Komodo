@@ -293,7 +293,6 @@ ensures
         reveal ValidAddrMemStateOpaque; // XXX: dafny opaque bug #63
     }
     ghost if (i < 16) {
-        reveal ValidAddrMemStateOpaque; // XXX: dafny opaque bug #63
         lemma_InputPreservation(old(mem), mem, input, input_ptr, 16, sp + 17*4, sp + input_slot);
 
         // Prove input is still valid src
@@ -1518,53 +1517,25 @@ ensures
     SUB(sp, sp, 116);
 
     // Save nonvolatile registers
-    assert 112 == 28*4;
     STR(lr,  sp, 112);
-    assert 108 == 27*4;
-    assert ValidMem(old(sp) - 116 + 27*4);
     STR(r4,  sp, 108);
-    assert 104 == 26*4;
-    assert ValidMem(old(sp) - 116 + 26*4);
     STR(r5,  sp, 104);
-    assert 100 == 25*4;
-    assert ValidMem(old(sp) - 116 + 25*4);
     STR(r6,  sp, 100);
-    assert 96 == 24*4;
-    assert ValidMem(old(sp) - 116 + 24*4);
     STR(r7,  sp, 96);
-    assert 92 == 23*4;
-    assert ValidMem(old(sp) - 116 + 23*4);
     STR(r8,  sp, 92);
-    assert 88 == 22*4;
-    assert ValidMem(old(sp) - 116 + 22*4);
     STR(r9,  sp, 88);
-    assert 84 == 21*4;
-    assert ValidMem(old(sp) - 116 + 21*4);
     STR(r10, sp, 84);
-    assert 80 == 20*4;
-    assert ValidMem(old(sp) - 116 + 20*4);
     STR(r11, sp, 80);
-    assert 76 == 19*4;
-    assert ValidMem(old(sp) - 116 + 19*4);
     STR(r12, sp, 76);
 
-    // Prove the stack is accessible (sigh)
-    forall j {ValidMem(sp+j*4)} :| 0 <= j < 19 :: ValidMem(sp + j*4)
-    {
-        assert ValidMem(old(sp) - 116 + j*4);
-    }
-
-    // Prove that ctx is still accessible (sigh)
-    assert forall addr :: r0 <= addr < r0 + 8 * 4 && (addr - r0) % 4 == 0
-        ==> ValidMem(addr);
-
-    // Prove that input is still accessible (sigh)
-    ghost var num_blocks := r2;
-    assert forall addr :: r1 <= addr < r1 + (num_blocks*16) * 4 && (addr - r1) % 4 == 0
-        ==> ValidMem(addr);
-
+    ghost var old_mem := mem;
+    assert forall j :: 0 <= j < r2*16 ==> AddrMemContents(mem, r1 + j*4)
+            == AddrMemContents(old(mem), r1 + j*4) == input[j];
     sha256_block_data_order_inner(trace_in, input);
-    assume ValidAddrMemStateOpaque(mem); // FIXME! sha256_block_data_order_inner ensures this
+
+    assert forall addr:word :: ValidMem(addr) && (addr < sp || addr >= sp + 19 * 4)
+                                        && (addr < old(r0) || addr >= old(r0) + 8 * 4)
+        ==> AddrMemContents(old_mem, addr) == AddrMemContents(mem, addr);
 
     // Restore the nonvolatile registers
     LDR(lr,  sp, 112);
