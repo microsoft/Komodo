@@ -171,20 +171,24 @@ lemma lemma_l1ptesmatch(e: Maybe<PageNr>, subpage:int)
         assert ptew == ARM_L1PTE(pa);
 
         calc {
-            1;
-            { lemma_BitOrOneIsLikePlus(pa); }
-            BitwiseMaskLow(ptew, 10);
-            { reveal_BitwiseMaskLow(); }
-            BitsAsWord(BitAnd(WordAsBits(ptew), BitmaskLow(10)));
-            { lemma_Bitmask10(); }
-            BitsAsWord(BitAnd(WordAsBits(ptew), 0x3ff));
             BitsAsWord(BitAnd(pteb, 0x3ff));
+            BitsAsWord(BitAnd(WordAsBits(ptew), 0x3ff));
+            { lemma_Bitmask10(); }
+            BitsAsWord(BitAnd(WordAsBits(ptew), BitmaskLow(10)));
+            { reveal_BitwiseMaskLow(); }
+            BitwiseMaskLow(ptew, 10);
+            BitwiseMaskLow(ARM_L1PTE(pa), 10);
+            BitwiseMaskLow(BitwiseOr(pa, 1), 10);
+            { lemma_BitOrOneIsLikePlus(pa); }
+            BitwiseMaskLow(pa + 1, 10);
+            (pa + 1) % 0x400;
+            1;
         }
         calc {
-            1;
-            WordAsBits(BitsAsWord(BitAnd(pteb, 0x3ff)));
-            { lemma_BitsAsWordAsBits(BitAnd(pteb, 0x3ff)); }
             BitAnd(pteb, 0x3ff);
+            { lemma_BitsAsWordAsBits(BitAnd(pteb, 0x3ff)); }
+            WordAsBits(BitsAsWord(BitAnd(pteb, 0x3ff)));
+            1;
         }
 
         assert BitwiseAnd(ptew, 0x3) == 1 && BitwiseAnd(ptew, 0x3fc) == 0 by {
