@@ -2,7 +2,7 @@ include verbatim "kom_common.i.dfy"
 include "ARMdecls-unrefined.sdfy"
 include verbatim "ARMdecls-unrefined.gen.dfy"
 
-procedure memset(inout operand base:addr, operand val:word, inout operand size:addr)
+procedure memset(operand base:addr, operand val:word, inout operand size:addr)
     requires/ensures
         SaneState(this);
     requires
@@ -14,40 +14,31 @@ procedure memset(inout operand base:addr, operand val:word, inout operand size:a
     ensures
         GlobalsInvariant(old(this),this);
         SmcProcedureInvariant(old(this),this);
-        RegPreservingExcept(old(this), this, set(@base,@size));
+        RegPreservingExcept(old(this), this, set(@size));
         MemPreservingExcept(old(this), this, old(base), old(base + size));
-        forall i :: old(base) <= i < old(base + size) && WordAligned(i)
-            ==> MemContents(this.m,i) == old(val);
+        forall i :: 0 <= i < old(size) && WordAligned(i)
+            ==> MemContents(this.m, old(base) + i) == old(val);
 {
-    ghost var lower := base;
-    ghost var limit := base + size;
-
-    // beyond this point, "base" is where we're up to, and "size" is the limit
-    ADD(size, size, base);
-
-    while (base < size)
+    while (size > 0)
         invariant
             SaneState(this);
             GlobalsInvariant(old(this),this);
             SmcProcedureInvariant(old(this),this);
-            WordAligned(base);
-            size == limit;
-            lower <= base <= limit;
-            lower >= StackBase() || limit <= StackLimit();
-            forall i :: (lower <= i < base) && WordAligned(i)
-                ==> MemContents(this.m,i) == old(val);
-            MemPreservingExcept(old(this), this, lower, limit);
-            RegPreservingExcept(old(this), this, set(@base, @size));
-            val == old(val);
+            RegPreservingExcept(old(this), this, set(@size));
+            WordAligned(size) && 0 <= size <= old(size);
+            MemPreservingExcept(old(this), this, base + size, base + old(size));
+            forall i :: (size <= i < old(size)) && WordAligned(i)
+                ==> MemContents(this.m, base + i) == val;
         decreases
-            size - base;
+            size;
     {
         ghost var prevThis := this;
-        STR(val, base, 0);
-        assert forall p :: ValidMem(p) && p != base
+        SUB(size, size, 4);
+        assert WordAligned(size);
+        STR(val, base, size);
+        assert MemContents(this.m, base + size) == val;
+        assert forall p :: ValidMem(p) && p != base + size
             ==> MemContents(prevThis.m, p) == MemContents(this.m, p);
-        WordAlignedAdd(base, 4);
-        ADD(base, base, 4);
     }
 }
 
