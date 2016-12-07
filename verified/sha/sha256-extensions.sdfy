@@ -1,0 +1,112 @@
+///////////////////////////////////////////////////
+//
+//  Filling in additional SHA functionality
+//
+///////////////////////////////////////////////////
+
+
+include{:verbatim} "sha256.i.dfy"
+//include verbatim "sha256-refined-helpers.i.dfy"
+//include verbatim "sha256-refined-invariants.i.dfy"
+
+include "../ARMdecls-refined.sdfy"
+include{:verbatim} "../ARMdecls-refined.gen.dfy"
+
+
+procedure {:refined} load_32_bit_const(
+    inline c:word,
+    out operand dst:word
+    ) 
+ensures 
+    dst == c;
+{
+    STR(c / 0x1_0000_0000, dst, 0);
+    LSL(dst, dst, 16);
+    STR(c % 0x1_0000_0000, dst, 0);
+}
+
+procedure {:refined} sha256_init() returns (ghost trace_out:SHA256_trace)
+requires/ensures
+    ValidAddrMemStateOpaque(mem);
+    ValidAddrs(r0, 8);
+reads r0; 
+modifies mem; r1;
+ensures
+    forall addr :: ValidMem(addr) && (addr < r0 || addr >= r0 + 8*4)
+                ==> AddrMemContents(old(mem), addr) == AddrMemContents(mem, addr);
+    IsCompleteSHA256Trace(trace_out);
+    SHA256TraceIsCorrect(trace_out);
+    forall i :: 0 <= i < 8 ==> trace_out.H[i] == AddrMemContents(mem, r0 + 4*i);
+{
+    load_32_bit_const(1779033703, r1);
+    STR(r1, r0, 0);
+    load_32_bit_const(3144134277, r1);
+    STR(r1, r0, 4);
+    load_32_bit_const(1013904242, r1);
+    STR(r1, r0, 8);
+    load_32_bit_const(2773480762, r1);
+    STR(r1, r0, 12);
+    load_32_bit_const(1359893119, r1);
+    STR(r1, r0, 16);
+    load_32_bit_const(2600822924, r1);
+    STR(r1, r0, 20);
+    load_32_bit_const(528734635, r1);
+    STR(r1, r0, 24);
+    load_32_bit_const(1541459225, r1);
+    STR(r1, r0, 28);
+
+    reveal InitialH_SHA256;
+}
+
+// TODO: Update to satisfy all of sha256_block_order's pre/post-conditions
+procedure {:refined} sha256_finalize(
+        ghost trace_in:SHA256_trace,
+        ghost input:seq(word)
+    ) returns (
+        ghost trace_out:SHA256_trace
+    )
+requires/ensures
+    ValidAddrMemStateOpaque(mem);
+    ValidAddrs(r0, 8);      // Current hash value
+    ValidAddrs(sp, 32);     // Temp buffer for padding+length
+reads r0; r1; sp;
+requires 
+    //r1 == data_length_in_bytes;
+    IsCompleteSHA256Trace(trace_in);
+    SHA256TraceIsCorrect(trace_in);
+    forall i :: 0 <= i < 8 ==> trace_out.H[i] == AddrMemContents(mem, r0 + 4*i);
+modifies mem;
+ensures
+    // Framing
+    forall addr :: ValidMem(addr) && (addr < r0 || addr >= r0 + 8*4)
+                ==> AddrMemContents(old(mem), addr) == AddrMemContents(mem, addr);
+    // Need more framing copied from block_data_order
+
+    forall i :: 0 <= i < 8 ==> trace_out.H[i] == AddrMemContents(mem, r0 + 4*i);
+
+    SHA(input) == 
+{
+    STR(0x80, sp, 0);
+
+    // Fill sp buffer with 0s
+    STR(0, sp,  4); 
+    STR(0, sp,  8);
+    STR(0, sp, 16);
+    STR(0, sp, 20);
+    STR(0, sp, 24);
+    STR(0, sp, 28);
+    STR(0, sp, 32);
+    STR(0, sp, 36);
+    STR(0, sp, 40);
+    STR(0, sp, 44);
+    STR(0, sp, 48);
+    STR(0, sp, 52);
+    STR(0, sp, 56);
+
+    // Store the length
+    STR(r1, sp, 60);
+
+    // Compute one last compression
+    sha256_block_data_order(trace_in, input);
+}
+
