@@ -20,7 +20,7 @@ procedure fetch_l1pte(
         validPageNr(l1pg) && pagedb[l1pg] is PageDbEntryTyped
             && pagedb[l1pg].entry is L1PTable;
         l1pt_va == page_monvaddr(l1pg);
-        0 <= l1index < NR_L1PTES();
+        0 <= l1index < NR_L1PTES;
     ensures
         AllMemInvariant(old(this),this);
         SmcProcedureInvariant(old(this),this);

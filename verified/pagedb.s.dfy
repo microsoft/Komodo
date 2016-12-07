@@ -14,27 +14,27 @@ function sp_eval_op_PageNr(s:state, o:operand): word
     requires ValidOperand(o)
     { OperandContents(s,o) }
 
-function method NR_L1PTES(): int { 256 }
-function method NR_L2PTES(): int { 1024 }
+const NR_L1PTES: int := 256;
+const NR_L2PTES: int := 1024;
 
 predicate validPageNr(p: int)
 {
-    0 <= p < KOM_SECURE_NPAGES()
+    0 <= p < KOM_SECURE_NPAGES
 }
 
 predicate validInsecurePageNr(p: int)
 {
-    0 <= p < KOM_PHYSMEM_LIMIT() / PAGESIZE()
+    0 <= p < KOM_PHYSMEM_LIMIT / PAGESIZE
 }
 
 function page_paddr(p: PageNr): addr
     requires validPageNr(p)
     ensures PageAligned(page_paddr(p))
-    ensures SecurePhysBase() <= page_paddr(p) < SecurePhysBase() + KOM_SECURE_RESERVE()
+    ensures SecurePhysBase() <= page_paddr(p) < SecurePhysBase() + KOM_SECURE_RESERVE
 {
-    assert PageAligned(PAGESIZE());
+    assert PageAligned(PAGESIZE);
     assert PageAligned(SecurePhysBase());
-    SecurePhysBase() + p * PAGESIZE()
+    SecurePhysBase() + p * PAGESIZE
 }
 
 function page_monvaddr(p: PageNr): addr
@@ -42,26 +42,26 @@ function page_monvaddr(p: PageNr): addr
     ensures PageAligned(page_monvaddr(p))
     ensures address_is_secure(page_monvaddr(p))
 {
-    assert p < KOM_SECURE_NPAGES();
+    assert p < KOM_SECURE_NPAGES;
     var pa := page_paddr(p);
-    assert pa < SecurePhysBase() + KOM_SECURE_RESERVE();
-    pa + KOM_DIRECTMAP_VBASE()
+    assert pa < SecurePhysBase() + KOM_SECURE_RESERVE;
+    pa + KOM_DIRECTMAP_VBASE
 }
 
 predicate addrInPage(m:addr, p:PageNr)
 {
-    page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE()
+    page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE
 }
 
 predicate physPageIsInsecureRam(physPage: int)
 {
-    physPage * PAGESIZE() < SecurePhysBase()
+    physPage * PAGESIZE < SecurePhysBase()
 }
 
 predicate physPageIsSecure(physPage: int)
 {
-    var paddr := physPage * PAGESIZE();
-    SecurePhysBase() <= paddr < SecurePhysBase() + KOM_SECURE_RESERVE()
+    var paddr := physPage * PAGESIZE;
+    SecurePhysBase() <= paddr < SecurePhysBase() + KOM_SECURE_RESERVE
 }
 
 datatype PageDbEntryTyped
@@ -100,8 +100,8 @@ predicate wellFormedPageDbEntry(e: PageDbEntry)
 
 predicate wellFormedPageDbEntryTyped(e: PageDbEntryTyped)
 {
-    (e.L1PTable? ==> |e.l1pt| == NR_L1PTES())
-    && (e.L2PTable? ==> |e.l2pt| == NR_L2PTES())
+    (e.L1PTable? ==> |e.l1pt| == NR_L1PTES)
+    && (e.L2PTable? ==> |e.l2pt| == NR_L2PTES)
     && (e.Dispatcher? ==> wellformedDispatcherContext(e.ctxt))
 }
 
@@ -223,7 +223,7 @@ predicate addrspaceL1Unique(d: PageDb, n: PageNr)
 function {:opaque} validPageNrs(): set<PageNr>
     ensures forall n :: n in validPageNrs() <==> validPageNr(n)
 {
-    SetOfNumbersInRightExclusiveRange(0, KOM_SECURE_NPAGES())
+    SetOfNumbersInRightExclusiveRange(0, KOM_SECURE_NPAGES)
 }
 
 // returns the set of references to an addrspace page with the given index
@@ -325,8 +325,8 @@ predicate validMapping(m:Mapping,d:PageDb,a:PageNr)
 {
     reveal_validPageDb();
     validPageDb(d) && isAddrspace(d,a) && validAddrspace(d,a) 
-    && validPageNr(m.l1index) && 0 <= m.l1index < NR_L1PTES()
-    && validPageNr(m.l2index) && 0 <= m.l2index < NR_L2PTES()
+    && validPageNr(m.l1index) && 0 <= m.l1index < NR_L1PTES
+    && validPageNr(m.l2index) && 0 <= m.l2index < NR_L2PTES
     && (var addrspace := d[a].entry;
         addrspace.state == InitState &&
         (var l1 := d[addrspace.l1ptnr].entry;
@@ -341,9 +341,9 @@ function l2indexFromMapping(arg:word) : word
 
 function permFromMapping(arg:word) : Perm
 {
-    Perm(BitwiseAnd(arg,KOM_MAPPING_R()) != 0,
-        BitwiseAnd(arg,KOM_MAPPING_W()) != 0,
-        BitwiseAnd(arg,KOM_MAPPING_X()) != 0)
+    Perm(BitwiseAnd(arg,KOM_MAPPING_R) != 0,
+        BitwiseAnd(arg,KOM_MAPPING_W) != 0,
+        BitwiseAnd(arg,KOM_MAPPING_X) != 0)
 }
 
 function {:opaque} wordToMapping(arg:word) : Mapping

@@ -23,10 +23,10 @@ procedure page_paddr_impl(out operand phys:int, operand pagenr:int, out operand 
         phys == page_paddr(old(pagenr));
         PageAligned(phys);
 {
-    assert pagenr < KOM_SECURE_NPAGES();
+    assert pagenr < KOM_SECURE_NPAGES;
     lemma_LeftShift12(pagenr);
     LSL(phys, pagenr, 12);
-    assert phys == old(pagenr) * PAGESIZE();
+    assert phys == old(pagenr) * PAGESIZE;
 
     LDRglobaladdr(tmp, SecurePhysBaseOp());
     LDRglobal(tmp, SecurePhysBaseOp(), tmp, 0);
@@ -47,7 +47,7 @@ procedure paddr_page_impl(out operand pagenr:int, operand phys:int, out operand 
         @tmp != OSP;
         @pagenr != OSP;
         PageAligned(phys);
-        SecurePhysBase() <= phys < SecurePhysBase() + KOM_SECURE_RESERVE();
+        SecurePhysBase() <= phys < SecurePhysBase() + KOM_SECURE_RESERVE;
     ensures
         GlobalsInvariant(old(this),this);
         RegPreservingExcept(old(this), this, set(@pagenr, @tmp));
@@ -63,7 +63,7 @@ procedure paddr_page_impl(out operand pagenr:int, operand phys:int, out operand 
     ghost var oldpagenr := pagenr;
     LSR(pagenr, pagenr, 12);
     lemma_RightShift12(oldpagenr);
-    assert pagenr == oldpagenr / PAGESIZE();
+    assert pagenr == oldpagenr / PAGESIZE;
 }
 
 procedure page_monvaddr_impl(out operand virt:int, operand pagenr:int, out operand tmp:int)
@@ -87,7 +87,7 @@ procedure page_monvaddr_impl(out operand virt:int, operand pagenr:int, out opera
         isUInt32(virt);
 {
     page_paddr_impl(virt, pagenr, tmp);
-    ADD(virt, virt, sp_op_const(KOM_DIRECTMAP_VBASE()));
+    ADD(virt, virt, sp_op_const(KOM_DIRECTMAP_VBASE));
 }
 
 procedure stack_nonvolatiles(ghost stack_bytes:int) returns (ghost stack_bytes_ret:int)

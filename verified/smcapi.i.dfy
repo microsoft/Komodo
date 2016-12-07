@@ -97,7 +97,7 @@ lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
     var pageDbOut := result.0;
     var errOut := result.1;
 
-    if( errOut != KOM_ERR_SUCCESS() ) {
+    if( errOut != KOM_ERR_SUCCESS ) {
         // The error case is trivial because PageDbOut == PageDbIn
     } else {
         // Necessary semi-manual proof of validPageDbEntry(pageDbOut, l1PTPage)
@@ -130,9 +130,9 @@ lemma installL1PTEPreservesPageDbValidity(pageDbIn: PageDb, l1ptnr: PageNr,
     requires validL1PTE(pageDbIn, l2page)
         && pageDbIn[l2page].addrspace == pageDbIn[l1ptnr].addrspace
     // no double mapping
-    requires forall i :: 0 <= i < NR_L1PTES() && i != l1index
+    requires forall i :: 0 <= i < NR_L1PTES && i != l1index
         ==> pageDbIn[l1ptnr].entry.l1pt[i] != Just(l2page)
-    requires 0 <= l1index < NR_L1PTES()
+    requires 0 <= l1index < NR_L1PTES
     ensures validPageDb(installL1PTEInPageDb(pageDbIn, l1ptnr, l2page, l1index))
 {
     reveal_validPageDb();
@@ -159,13 +159,13 @@ lemma initL2PTablePreservesPageDBValidity(pageDbIn: PageDb, page: word,
     reveal_validPageDb();
     var (pageDbOut, errOut)
         := smc_initL2PTable(pageDbIn, page, addrspacePage, l1index);
-    if( errOut != KOM_ERR_SUCCESS() ) {
+    if( errOut != KOM_ERR_SUCCESS ) {
         // trivial
     } else {
         var l1ptnr := pageDbIn[addrspacePage].entry.l1ptnr;
         var l1pt := pageDbIn[l1ptnr].entry.l1pt;
         // no refs to the free page
-        forall (i | 0 <= i < NR_L1PTES())
+        forall (i | 0 <= i < NR_L1PTES)
             ensures l1pt[i] != Just(page)
         {
             assert pageIsFree(pageDbIn, page);
@@ -173,9 +173,9 @@ lemma initL2PTablePreservesPageDBValidity(pageDbIn: PageDb, page: word,
             assert validL1PTable(pageDbIn, l1ptnr);
             assert l1pt[i].Just? ==> validL1PTE(pageDbIn, fromJust(l1pt[i]));
         }
-        assert forall i :: 0 <= i < NR_L1PTES()
+        assert forall i :: 0 <= i < NR_L1PTES
         ==> pageDbIn[l1ptnr].entry.l1pt[i] != Just(page);
-        var l2pt := L2PTable(SeqRepeat(NR_L2PTES(), NoMapping));
+        var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
         var pageDbTmp := allocatePage(pageDbIn, page, addrspacePage, l2pt).0;
         installL1PTEPreservesPageDbValidity(pageDbTmp, l1ptnr, page, l1index);
     }
@@ -190,7 +190,7 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: word)
     var pageDbOut := result.0;
     var errOut := result.1;
 
-    if ( errOut != KOM_ERR_SUCCESS() ){
+    if ( errOut != KOM_ERR_SUCCESS ){
        // trivial
     } else if( pageDbIn[page].PageDbEntryFree?) {
         // trivial
@@ -278,7 +278,7 @@ lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: word,
     var err := smc_mapSecure(
         pageDbIn, page, addrspacePage, map_word, physPage).1;
 
-    if( err != KOM_ERR_SUCCESS() ){
+    if( err != KOM_ERR_SUCCESS ){
     } else {
         assert validPageDbEntryTyped(pageDbOut, page);
         
@@ -331,7 +331,7 @@ lemma mapInsecurePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word,
     var err := smc_mapInsecure(
         pageDbIn, addrspacePage, physPage, map_word).1;
 
-    if( err != KOM_ERR_SUCCESS() ){
+    if( err != KOM_ERR_SUCCESS ){
     } else {        
         forall( n | validPageNr(n) && pageDbOut[n].PageDbEntryTyped?)
             ensures validPageDbEntryTyped(pageDbOut, n);
@@ -372,7 +372,7 @@ lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word)
     var pageDbOut := smc_finalise(pageDbIn, addrspacePage).0;
     var err := smc_finalise(pageDbIn, addrspacePage).1;
 
-    if( err != KOM_ERR_SUCCESS() ){
+    if( err != KOM_ERR_SUCCESS ){
     } else {
         var a := addrspacePage;
         assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
@@ -399,7 +399,7 @@ lemma enterPreservesPageDbValidity(s:state, pageDbIn: PageDb, s':state,
     requires smc_enter(s, pageDbIn, s', pageDbOut, dispPage, arg1, arg2, arg3)
     ensures validPageDb(pageDbOut)
 {
-    if (smc_enter_err(pageDbIn, dispPage, false) == KOM_ERR_SUCCESS()) {
+    if (smc_enter_err(pageDbIn, dispPage, false) == KOM_ERR_SUCCESS) {
         assert validEnter(SysState(s, pageDbIn), SysState(s', pageDbOut),
                           dispPage, arg1, arg2, arg3);
         assert validDispatcherPage(pageDbIn, dispPage) by { reveal_validPageDb(); }
@@ -418,7 +418,7 @@ lemma resumePreservesPageDbValidity(s:state, pageDbIn: PageDb, s':state,
     requires smc_resume(s, pageDbIn, s', pageDbOut, dispPage)
     ensures validPageDb(pageDbOut)
 {
-    if (smc_enter_err(pageDbIn, dispPage, true) == KOM_ERR_SUCCESS()) {
+    if (smc_enter_err(pageDbIn, dispPage, true) == KOM_ERR_SUCCESS) {
         assert validResume(SysState(s, pageDbIn), SysState(s', pageDbOut), dispPage);
         assert validDispatcherPage(pageDbIn, dispPage) by { reveal_validPageDb(); }
         reveal_validResume();
@@ -438,7 +438,7 @@ lemma stopPreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word)
     var pageDbOut := smc_stop(pageDbIn, addrspacePage).0;
     var err := smc_stop(pageDbIn, addrspacePage).1;
 
-    if( err != KOM_ERR_SUCCESS() ){
+    if( err != KOM_ERR_SUCCESS ){
     } else {
         var a := addrspacePage;
         assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
@@ -470,9 +470,9 @@ lemma lemma_allocatePage_preservesMappingGoodness(
     requires (pageDbOut, err) == allocatePage(pageDbIn,securePage,
         addrspacePage,entry)
     requires isValidMappingTarget(pageDbIn,addrspacePage,abs_mapping) ==
-        KOM_ERR_SUCCESS();
+        KOM_ERR_SUCCESS;
     ensures isValidMappingTarget(pageDbOut,addrspacePage,abs_mapping) ==
-        KOM_ERR_SUCCESS();
+        KOM_ERR_SUCCESS;
     ensures validPageDb(pageDbOut)
 {
     reveal_validPageDb();
@@ -492,24 +492,24 @@ lemma smchandlerPreservesPageDbValidity(s: state, pageDbIn: PageDb, s':state,
 
     reveal_validPageDb();
 
-    if (callno == KOM_SMC_INIT_ADDRSPACE()) {
+    if (callno == KOM_SMC_INIT_ADDRSPACE) {
         initAddrspacePreservesPageDBValidity(pageDbIn, arg1, arg2);
-    } else if(callno == KOM_SMC_INIT_DISPATCHER()) {
-    } else if(callno == KOM_SMC_INIT_L2PTABLE()) {
+    } else if(callno == KOM_SMC_INIT_DISPATCHER) {
+    } else if(callno == KOM_SMC_INIT_L2PTABLE) {
         initL2PTablePreservesPageDBValidity(pageDbIn, arg1, arg2, arg3);
-    } else if(callno == KOM_SMC_MAP_SECURE()) {
+    } else if(callno == KOM_SMC_MAP_SECURE) {
         mapSecurePreservesPageDBValidity(pageDbIn, arg1, arg2, arg3, arg4);
-    } else if(callno == KOM_SMC_MAP_INSECURE()) {
+    } else if(callno == KOM_SMC_MAP_INSECURE) {
         mapInsecurePreservesPageDbValidity(pageDbIn, arg1, arg2, arg3);
-    } else if(callno == KOM_SMC_REMOVE()) {
+    } else if(callno == KOM_SMC_REMOVE) {
         removePreservesPageDBValidity(pageDbIn, arg1);
-    } else if(callno == KOM_SMC_FINALISE()) {
+    } else if(callno == KOM_SMC_FINALISE) {
         finalisePreservesPageDbValidity(pageDbIn, arg1);
-    } else if(callno == KOM_SMC_ENTER()) {
+    } else if(callno == KOM_SMC_ENTER) {
         enterPreservesPageDbValidity(s, pageDbIn, s', pageDbOut, arg1, arg2, arg3, arg4);
-    } else if(callno == KOM_SMC_RESUME()) {
+    } else if(callno == KOM_SMC_RESUME) {
         resumePreservesPageDbValidity(s, pageDbIn, s', pageDbOut, arg1);
-    } else if(callno == KOM_SMC_STOP()) {
+    } else if(callno == KOM_SMC_STOP) {
         stopPreservesPageDbValidity(pageDbIn, arg1);
     }
 }
@@ -571,7 +571,7 @@ lemma lemma_updateL2PtePreservesPageDb(d:PageDb,a:PageNr,mapping:Mapping,l2e:L2P
 
        assert |l2pt| == |l2pt'|;
 
-       forall ( i | 0 <= i < NR_L2PTES() && i != l2index )
+       forall ( i | 0 <= i < NR_L2PTES && i != l2index )
             ensures validL2PTE(d',a,l2pt'[i])
        {
             assert l2pt'[i] == l2pt[i];

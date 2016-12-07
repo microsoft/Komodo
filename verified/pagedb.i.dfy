@@ -7,65 +7,65 @@ include "kom_common.i.dfy"
 // computes byte offset of a specific pagedb entry
 function method G_PAGEDB_ENTRY(pageno:PageNr): addr
 {
-    assert WordAligned(PAGEDB_ENTRY_SIZE());
-    pageno * PAGEDB_ENTRY_SIZE()
+    assert WordAligned(PAGEDB_ENTRY_SIZE);
+    pageno * PAGEDB_ENTRY_SIZE
 }
 
 // entry = start offset of pagedb entry
-function method PAGEDB_ENTRY_TYPE():int      { 0 }
-function method PAGEDB_ENTRY_ADDRSPACE():int { 4 }
+const PAGEDB_ENTRY_TYPE:int     := 0;
+const PAGEDB_ENTRY_ADDRSPACE:int := 4;
 
 //-----------------------------------------------------------------------------
 // Addrspace Fields
 //-----------------------------------------------------------------------------
 // addrspc = start address of address space metadata
 // TODO requires that this thing is an addrspce?
-function method ADDRSPACE_L1PT():int        {  0 }
-function method ADDRSPACE_L1PT_PHYS():int   {  4 }
-function method ADDRSPACE_REF():int         {  8 }
-function method ADDRSPACE_STATE():int       { 12 }
-function method ADDRSPACE_SIZE():int        { 16 }
+const ADDRSPACE_L1PT:int        := 0;
+const ADDRSPACE_L1PT_PHYS:int   := 4;
+const ADDRSPACE_REF:int         := 8;
+const ADDRSPACE_STATE:int       := 12;
+const ADDRSPACE_SIZE:int        := 16;
 
 //-----------------------------------------------------------------------------
 // Dispatcher Fields
 //-----------------------------------------------------------------------------
-function method DISPATCHER_ENTERED():int    { 0 }
-function method DISPATCHER_ENTRYPOINT():int { 4 }
+const DISPATCHER_ENTERED:int    := 0;
+const DISPATCHER_ENTRYPOINT:int := 4;
 
-function method DISP_CTXT_R0():int   { 8 }
-function method DISP_CTXT_R1():int   { 12 }
-function method DISP_CTXT_R2():int   { 16 }
-function method DISP_CTXT_R3():int   { 20 }
-function method DISP_CTXT_R4():int   { 24 }
-function method DISP_CTXT_R5():int   { 28 }
-function method DISP_CTXT_R6():int   { 32 }
-function method DISP_CTXT_R7():int   { 36 }
-function method DISP_CTXT_R8():int   { 40 }
-function method DISP_CTXT_R9():int   { 44 }
-function method DISP_CTXT_R10():int  { 48 }
-function method DISP_CTXT_R11():int  { 52 }
-function method DISP_CTXT_R12():int  { 56 }
-function method DISP_CTXT_LR():int   { 60 }
-function method DISP_CTXT_SP():int   { 64 }
-function method DISP_CTXT_PC():int   { 68 }
-function method DISP_CTXT_PSR():int  { 72 }
+const DISP_CTXT_R0:int          := 8;
+const DISP_CTXT_R1:int          := 12;
+const DISP_CTXT_R2:int          := 16;
+const DISP_CTXT_R3:int          := 20;
+const DISP_CTXT_R4:int          := 24;
+const DISP_CTXT_R5:int          := 28;
+const DISP_CTXT_R6:int          := 32;
+const DISP_CTXT_R7:int          := 36;
+const DISP_CTXT_R8:int          := 40;
+const DISP_CTXT_R9:int          := 44;
+const DISP_CTXT_R10:int         := 48;
+const DISP_CTXT_R11:int         := 52;
+const DISP_CTXT_R12:int         := 56;
+const DISP_CTXT_LR:int          := 60;
+const DISP_CTXT_SP:int          := 64;
+const DISP_CTXT_PC:int          := 68;
+const DISP_CTXT_PSR:int         := 72;
 
 //-----------------------------------------------------------------------------
 // Page Types
 //-----------------------------------------------------------------------------
-function method KOM_PAGE_FREE():int         { 0 }
-function method KOM_PAGE_ADDRSPACE():int    { 1 }
-function method KOM_PAGE_DISPATCHER():int   { 2 }
-function method KOM_PAGE_L1PTABLE():int     { 3 }
-function method KOM_PAGE_L2PTABLE():int     { 4 }
-function method KOM_PAGE_DATA():int         { 5 }
+const KOM_PAGE_FREE:int         := 0;
+const KOM_PAGE_ADDRSPACE:int    := 1;
+const KOM_PAGE_DISPATCHER:int   := 2;
+const KOM_PAGE_L1PTABLE:int     := 3;
+const KOM_PAGE_L2PTABLE:int     := 4;
+const KOM_PAGE_DATA:int         := 5;
 
 //-----------------------------------------------------------------------------
 // Address Space States
 //-----------------------------------------------------------------------------
-function method KOM_ADDRSPACE_INIT():int    { 0 }
-function method KOM_ADDRSPACE_FINAL():int   { 1 }
-function method KOM_ADDRSPACE_STOPPED():int { 2 }
+const KOM_ADDRSPACE_INIT:int    := 0;
+const KOM_ADDRSPACE_FINAL:int   := 1;
+const KOM_ADDRSPACE_STOPPED:int := 2;
 
 //-----------------------------------------------------------------------------
 //
@@ -82,26 +82,25 @@ function extractPage(s:memstate, p:PageNr): memmap
 {
     reveal_ValidMemState();
     // XXX: expanded addrInPage() to help Dafny see a bounded set
-    var res := (map m:addr {:trigger addrInPage(m, p), MemContents(s, m)}
-        | page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE()
-        // XXX: this mess seems to be needed to help Dafny see that we have a legit word
-        :: var v:word := MemContents(s, m); assert isUInt32(v); v);
+    var res := (map m:addr {:trigger addrInPage(m, p)} {:trigger MemContents(s, m)}
+        | page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE
+        :: MemContents(s, m));
     res
 }
 
 
 function extractPageDbEntry(s:memstate, p:PageNr): seq<word>
     requires SaneMem(s)
-    ensures |extractPageDbEntry(s,p)| == BytesToWords(PAGEDB_ENTRY_SIZE())
-    // ensures forall o | WordAligned(o) && 0 <= o < PAGEDB_ENTRY_SIZE() ::
+    ensures |extractPageDbEntry(s,p)| == BytesToWords(PAGEDB_ENTRY_SIZE)
+    // ensures forall o | WordAligned(o) && 0 <= o < PAGEDB_ENTRY_SIZE ::
     //    GlobalWord(s, PageDb(), G_PAGEDB_ENTRY(p) + o)
     //        == extractPageDbEntry(s,p)[BytesToWords(o)]
 {
     var fulldb := GlobalFullContents(s, PageDb());
-    assert |fulldb| == BytesToWords(G_PAGEDB_SIZE());
-    var entrylen := BytesToWords(PAGEDB_ENTRY_SIZE());
+    assert |fulldb| == BytesToWords(G_PAGEDB_SIZE);
+    var entrylen := BytesToWords(PAGEDB_ENTRY_SIZE);
     //fulldb[p*entrylen..p*entrylen+entrylen]
-    fulldb[p*BytesToWords(PAGEDB_ENTRY_SIZE())..(p+1)*BytesToWords(PAGEDB_ENTRY_SIZE())]
+    fulldb[p*BytesToWords(PAGEDB_ENTRY_SIZE)..(p+1)*BytesToWords(PAGEDB_ENTRY_SIZE)]
 }
 
 predicate pageDbCorresponds(s:memstate, pagedb:PageDb)
@@ -110,8 +109,8 @@ predicate pageDbCorresponds(s:memstate, pagedb:PageDb)
 {
     // XXX: unpack the entry and page contents here to help dafny see
     // that we have no other dependencies on the state
-    var db := (map p | 0 <= p < KOM_SECURE_NPAGES() :: extractPageDbEntry(s,p));
-    var secpages := (map p | 0 <= p < KOM_SECURE_NPAGES() :: extractPage(s,p));
+    var db := (map p | 0 <= p < KOM_SECURE_NPAGES :: extractPageDbEntry(s,p));
+    var secpages := (map p | 0 <= p < KOM_SECURE_NPAGES :: extractPage(s,p));
     forall p {:trigger validPageNr(p)} | validPageNr(p) :: 
         pageDbEntryCorresponds(pagedb[p], db[p])
             && pageContentsCorresponds(p, pagedb[p], secpages[p])
@@ -145,14 +144,14 @@ predicate pageDbCorrespondsOnly(s:memstate, pagedb:PageDb, p:PageNr)
 }
 
 predicate {:opaque} pageDbEntryCorresponds(e:PageDbEntry, entryWords:seq<word>)
-    requires |entryWords| == BytesToWords(PAGEDB_ENTRY_SIZE())
+    requires |entryWords| == BytesToWords(PAGEDB_ENTRY_SIZE)
     requires wellFormedPageDbEntry(e)
 {
-    pageDbEntryTypeVal(e) == entryWords[BytesToWords(PAGEDB_ENTRY_TYPE())]
+    pageDbEntryTypeVal(e) == entryWords[BytesToWords(PAGEDB_ENTRY_TYPE)]
     && match e {
         case PageDbEntryFree => true
         case PageDbEntryTyped(addrspace, entry) =>
-            entryWords[BytesToWords(PAGEDB_ENTRY_ADDRSPACE())]
+            entryWords[BytesToWords(PAGEDB_ENTRY_ADDRSPACE)]
                 == page_monvaddr(addrspace)
     }
 }
@@ -177,10 +176,10 @@ predicate {:opaque} pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, pag
 {
     var base := page_monvaddr(p);
     assert base in page;
-    page[base + ADDRSPACE_L1PT()] == page_monvaddr(e.l1ptnr)
-    && page[base + ADDRSPACE_L1PT_PHYS()] == page_paddr(e.l1ptnr)
-    && page[base + ADDRSPACE_REF()] == e.refcount
-    && page[base + ADDRSPACE_STATE()] == pageDbAddrspaceStateVal(e.state)
+    page[base + ADDRSPACE_L1PT] == page_monvaddr(e.l1ptnr)
+    && page[base + ADDRSPACE_L1PT_PHYS] == page_paddr(e.l1ptnr)
+    && page[base + ADDRSPACE_REF] == e.refcount
+    && page[base + ADDRSPACE_STATE] == pageDbAddrspaceStateVal(e.state)
 }
 
 function  to_i(b:bool):int { if(b) then 1 else 0 }
@@ -192,29 +191,29 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
     var base := page_monvaddr(p);
     assert base in page;
     assert wellformedDispatcherContext(e.ctxt);
-    page[base + DISPATCHER_ENTERED()] == to_i(e.entered)
-    && page[base + DISPATCHER_ENTRYPOINT()] == e.entrypoint
-    && page[base + DISP_CTXT_PC()]  == e.ctxt.pc
-    && page[base + DISP_CTXT_PSR()] == e.ctxt.cpsr
-    && page[base + DISP_CTXT_LR()]  == e.ctxt.regs[LR(User)]
-    && page[base + DISP_CTXT_SP()]  == e.ctxt.regs[SP(User)]
-    && page[base + DISP_CTXT_R0()]  == e.ctxt.regs[R0]
-    && page[base + DISP_CTXT_R1()]  == e.ctxt.regs[R1]
-    && page[base + DISP_CTXT_R2()]  == e.ctxt.regs[R2]
-    && page[base + DISP_CTXT_R3()]  == e.ctxt.regs[R3]
-    && page[base + DISP_CTXT_R4()]  == e.ctxt.regs[R4]
-    && page[base + DISP_CTXT_R5()]  == e.ctxt.regs[R5]
-    && page[base + DISP_CTXT_R6()]  == e.ctxt.regs[R6]
-    && page[base + DISP_CTXT_R7()]  == e.ctxt.regs[R7]
-    && page[base + DISP_CTXT_R8()]  == e.ctxt.regs[R8]
-    && page[base + DISP_CTXT_R9()]  == e.ctxt.regs[R9]
-    && page[base + DISP_CTXT_R10()] == e.ctxt.regs[R10]
-    && page[base + DISP_CTXT_R11()] == e.ctxt.regs[R11]
-    && page[base + DISP_CTXT_R12()] == e.ctxt.regs[R12]
+    page[base + DISPATCHER_ENTERED] == to_i(e.entered)
+    && page[base + DISPATCHER_ENTRYPOINT] == e.entrypoint
+    && page[base + DISP_CTXT_PC]  == e.ctxt.pc
+    && page[base + DISP_CTXT_PSR] == e.ctxt.cpsr
+    && page[base + DISP_CTXT_LR]  == e.ctxt.regs[LR(User)]
+    && page[base + DISP_CTXT_SP]  == e.ctxt.regs[SP(User)]
+    && page[base + DISP_CTXT_R0]  == e.ctxt.regs[R0]
+    && page[base + DISP_CTXT_R1]  == e.ctxt.regs[R1]
+    && page[base + DISP_CTXT_R2]  == e.ctxt.regs[R2]
+    && page[base + DISP_CTXT_R3]  == e.ctxt.regs[R3]
+    && page[base + DISP_CTXT_R4]  == e.ctxt.regs[R4]
+    && page[base + DISP_CTXT_R5]  == e.ctxt.regs[R5]
+    && page[base + DISP_CTXT_R6]  == e.ctxt.regs[R6]
+    && page[base + DISP_CTXT_R7]  == e.ctxt.regs[R7]
+    && page[base + DISP_CTXT_R8]  == e.ctxt.regs[R8]
+    && page[base + DISP_CTXT_R9]  == e.ctxt.regs[R9]
+    && page[base + DISP_CTXT_R10] == e.ctxt.regs[R10]
+    && page[base + DISP_CTXT_R11] == e.ctxt.regs[R11]
+    && page[base + DISP_CTXT_R12] == e.ctxt.regs[R12]
 }
 
 function ARM_L1PTE(paddr: word): word
-    requires paddr % ARM_L2PTABLE_BYTES() == 0
+    requires paddr % ARM_L2PTABLE_BYTES == 0
     //ensures ValidAbsL1PTEWord(ARM_L1PTE(paddr))
 {
     BitwiseOr(paddr, 1) // type = 1, pxn = 0, ns = 0, domain = 0
@@ -224,10 +223,10 @@ function ARM_L2PTE(paddr: word, write: bool, exec: bool): word
     requires PageAligned(paddr)
     //ensures ValidAbsL2PTEWord(ARM_L2PTE(paddr, write, exec))
 {
-    var nxbits:bv32 := if exec then 0 else ARM_L2PTE_NX_BIT();
-    var robits:bv32 := if write then 0 else ARM_L2PTE_RO_BIT();
+    var nxbits:bv32 := if exec then 0 else ARM_L2PTE_NX_BIT;
+    var robits:bv32 := if write then 0 else ARM_L2PTE_RO_BIT;
     BitsAsWord(BitOr(WordAsBits(paddr), BitOr(
-        BitOr(ARM_L2PTE_CONST_BITS() | 0x2, nxbits), robits)))
+        BitOr(ARM_L2PTE_CONST_BITS | 0x2, nxbits), robits)))
 }
 
 function mkL1Pte(e: Maybe<PageNr>, subpage:int): int
@@ -237,13 +236,13 @@ function mkL1Pte(e: Maybe<PageNr>, subpage:int): int
     match e
         case Nothing => 0
         case Just(pgNr) =>
-            assert ARM_L2PTABLE_BYTES() == 0x400; // grumble
-            ARM_L1PTE(page_paddr(pgNr) + subpage * ARM_L2PTABLE_BYTES())
+            assert ARM_L2PTABLE_BYTES == 0x400; // grumble
+            ARM_L1PTE(page_paddr(pgNr) + subpage * ARM_L2PTABLE_BYTES)
 }
 
 function l1pteoffset(base: addr, i: int, j: int): addr
     requires base < 0xfffff000
-    requires 0 <= i < NR_L1PTES() && 0 <= j < 4
+    requires 0 <= i < NR_L1PTES && 0 <= j < 4
 {
     base + 4 * (i * 4 + j)
 }
@@ -254,7 +253,7 @@ predicate {:opaque} pageDbL1PTableCorresponds(p:PageNr, e:PageDbEntryTyped,
     requires e.L1PTable? && wellFormedPageDbEntryTyped(e)
 {
     var base := page_monvaddr(p);
-    forall i, j :: 0 <= i < NR_L1PTES() && 0 <= j < 4
+    forall i, j :: 0 <= i < NR_L1PTES && 0 <= j < 4
         ==> page[l1pteoffset(base, i, j)] == mkL1Pte(e.l1pt[i], j)
 }
 
@@ -265,8 +264,8 @@ function mkL2Pte(pte: L2PTE): word
         case SecureMapping(pg, w, x) => ARM_L2PTE(page_paddr(pg), w, x)
         case InsecureMapping(ipg, w) => (
             assert validInsecurePageNr(ipg);
-            assert PAGESIZE() == 0x1000; // sigh
-            var pa := ipg * PAGESIZE();
+            assert PAGESIZE == 0x1000; // sigh
+            var pa := ipg * PAGESIZE;
             assert PageAligned(pa); // double sigh
             ARM_L2PTE(pa, w, false))
         case NoMapping => 0
@@ -278,7 +277,7 @@ predicate {:opaque} pageDbL2PTableCorresponds(p:PageNr, e:PageDbEntryTyped,
     requires e.L2PTable? && wellFormedPageDbEntryTyped(e)
 {
     var base := page_monvaddr(p);
-    forall i :: 0 <= i < NR_L2PTES() ==>
+    forall i :: 0 <= i < NR_L2PTES ==>
         var a := base + WordsToBytes(i);
         assert a in page;
         page[a] == mkL2Pte(e.l2pt[i])
@@ -286,22 +285,22 @@ predicate {:opaque} pageDbL2PTableCorresponds(p:PageNr, e:PageDbEntryTyped,
 
 function pageDbEntryTypeVal(e: PageDbEntry): word
 {
-    if e.PageDbEntryFree? then KOM_PAGE_FREE()
+    if e.PageDbEntryFree? then KOM_PAGE_FREE
     else match e.entry {
-        case Addrspace(l1pt, ref, state) => KOM_PAGE_ADDRSPACE()
-        case Dispatcher(ep, entered, ctxt) => KOM_PAGE_DISPATCHER()
-        case L1PTable(pt) => KOM_PAGE_L1PTABLE()
-        case L2PTable(pt) => KOM_PAGE_L2PTABLE()
-        case DataPage => KOM_PAGE_DATA()
+        case Addrspace(l1pt, ref, state) => KOM_PAGE_ADDRSPACE
+        case Dispatcher(ep, entered, ctxt) => KOM_PAGE_DISPATCHER
+        case L1PTable(pt) => KOM_PAGE_L1PTABLE
+        case L2PTable(pt) => KOM_PAGE_L2PTABLE
+        case DataPage => KOM_PAGE_DATA
     }
 }
 
 function pageDbAddrspaceStateVal(s: AddrspaceState): word
 {
     match s {
-    case InitState => KOM_ADDRSPACE_INIT()
-    case FinalState => KOM_ADDRSPACE_FINAL()
-    case StoppedState => KOM_ADDRSPACE_STOPPED()
+    case InitState => KOM_ADDRSPACE_INIT
+    case FinalState => KOM_ADDRSPACE_FINAL
+    case StoppedState => KOM_ADDRSPACE_STOPPED
     }
 }
 
@@ -356,7 +355,7 @@ lemma PageDbCorrespondsImpliesEntryCorresponds(s:memstate, d:PageDb, n:PageNr)
 lemma AllButOnePagePreserving(n:PageNr,s:state,r:state)
     requires SaneState(s) && SaneState(r)
     requires MemPreservingExcept(s, r, page_monvaddr(n),
-                                 page_monvaddr(n) + PAGESIZE())
+                                 page_monvaddr(n) + PAGESIZE)
     ensures forall p :: validPageNr(p) && p != n
         ==> extractPage(s.m, p) == extractPage(r.m, p)
 {
@@ -368,7 +367,7 @@ lemma AllButOnePagePreserving(n:PageNr,s:state,r:state)
 
 lemma extractPageDbToAbstract(s:memstate, p:PageNr)
     requires SaneMem(s)
-    ensures forall o | WordAligned(o) && 0 <= o < PAGEDB_ENTRY_SIZE() ::
+    ensures forall o | WordAligned(o) && 0 <= o < PAGEDB_ENTRY_SIZE ::
         GlobalWord(s, PageDb(), G_PAGEDB_ENTRY(p) + o)
             == extractPageDbEntry(s,p)[BytesToWords(o)]
 {
@@ -376,7 +375,7 @@ lemma extractPageDbToAbstract(s:memstate, p:PageNr)
 
 lemma extractPageDbToAbstractOne(s:memstate, p:PageNr, o:int)
     requires SaneMem(s)
-    requires WordAligned(o) && 0 <= o < PAGEDB_ENTRY_SIZE()
+    requires WordAligned(o) && 0 <= o < PAGEDB_ENTRY_SIZE
     ensures GlobalWord(s, PageDb(), G_PAGEDB_ENTRY(p) + o)
         == extractPageDbEntry(s,p)[BytesToWords(o)]
 {

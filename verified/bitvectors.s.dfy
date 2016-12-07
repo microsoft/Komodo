@@ -1,6 +1,7 @@
 include "nlarith.s.dfy"
 
-predicate isUInt32(i:int) { 0 <= i < 0x1_0000_0000 }
+const UINT32_LIM:int := 0x1_0000_0000;
+predicate isUInt32(i:int) { 0 <= i < UINT32_LIM }
 type word = x | isUInt32(x)
 
 /* Z3 gets hopelessly lost thinking about bitvectors, so we wrap both

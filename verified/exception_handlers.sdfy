@@ -52,14 +52,14 @@ procedure svc_handler(
     ghost var start := this;
 
     r1 := r0;
-    r0 := sp_op_const(KOM_ERR_SUCCESS());
+    r0 := sp_op_const(KOM_ERR_SUCCESS);
 
     LDRglobaladdr(r2, CurDispatcherOp());
     LDRglobal(r2, CurDispatcherOp(), r2, 0);
     assert r2 == page_monvaddr(dispPg);
 
     assert r0 == 0;
-    STR(r0, r2, sp_op_const(DISPATCHER_ENTERED()));
+    STR(r0, r2, sp_op_const(DISPATCHER_ENTERED));
 
     ghost var dispEntry := pagedb_in[dispPg].entry.(entered := false);
     ghost var pg := extractPage(this.m, dispPg);
@@ -68,9 +68,9 @@ procedure svc_handler(
         reveal_pageDbDispatcherCorresponds();
         assert pageDbDispatcherCorresponds(dispPg, pagedb_in[dispPg].entry, oldpg)
             by { reveal_pageContentsCorresponds(); }
-        assert pg[page_monvaddr(dispPg) + DISPATCHER_ENTERED()] == 0;
+        assert pg[page_monvaddr(dispPg) + DISPATCHER_ENTERED] == 0;
         assert forall a:addr :: addrInPage(a, dispPg)
-            && a != page_monvaddr(dispPg) + DISPATCHER_ENTERED()
+            && a != page_monvaddr(dispPg) + DISPATCHER_ENTERED
             ==> pg[a] == oldpg[a];
     }
 
@@ -124,10 +124,10 @@ procedure abort_handler(
     LDRglobal(r2, CurDispatcherOp(), r2, 0);
     assert r2 == page_monvaddr(dispPg);
 
-    r0 := sp_op_const(KOM_ERR_FAULT());
+    r0 := sp_op_const(KOM_ERR_FAULT);
     r1 := 0;
 
-    STR(r1, r2, sp_op_const(DISPATCHER_ENTERED()));
+    STR(r1, r2, sp_op_const(DISPATCHER_ENTERED));
 
     ghost var dispEntry := pagedb_in[dispPg].entry.(entered := false);
     ghost var pg := extractPage(this.m, dispPg);
@@ -136,9 +136,9 @@ procedure abort_handler(
         reveal_pageDbDispatcherCorresponds();
         assert pageDbDispatcherCorresponds(dispPg, pagedb_in[dispPg].entry, oldpg)
             by { reveal_pageContentsCorresponds(); }
-        assert pg[page_monvaddr(dispPg) + DISPATCHER_ENTERED()] == 0;
+        assert pg[page_monvaddr(dispPg) + DISPATCHER_ENTERED] == 0;
         assert forall a:addr :: addrInPage(a, dispPg)
-            && a != page_monvaddr(dispPg) + DISPATCHER_ENTERED()
+            && a != page_monvaddr(dispPg) + DISPATCHER_ENTERED
             ==> pg[a] == oldpg[a];
     }
 

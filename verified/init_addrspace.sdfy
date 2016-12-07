@@ -29,7 +29,7 @@ function initAddrspaceEntry(addrspace_page:PageNr, l1pt_page:PageNr): PageDbEntr
 
 function initL1PTEntry(addrspace_page:PageNr): PageDbEntry
 {
-    PageDbEntryTyped(addrspace_page, L1PTable(SeqRepeat(NR_L1PTES(), Nothing)))
+    PageDbEntryTyped(addrspace_page, L1PTable(SeqRepeat(NR_L1PTES, Nothing)))
 }
 #endverbatim
 
@@ -48,8 +48,8 @@ procedure init_addrspace_mem(
         GlobalsInvariant(old(this),this);
         SmcProcedureInvariant(old(this),this);
         forall i :: ValidMem(i)
-            && !(page_monvaddr(addrspace_page) <= i < page_monvaddr(addrspace_page) + PAGESIZE())
-            && !(page_monvaddr(l1pt_page) <= i < page_monvaddr(l1pt_page) + PAGESIZE())
+            && !(page_monvaddr(addrspace_page) <= i < page_monvaddr(addrspace_page) + PAGESIZE)
+            && !(page_monvaddr(l1pt_page) <= i < page_monvaddr(l1pt_page) + PAGESIZE)
             ==> MemContents(this.m,i) == MemContents(old(this).m,i);
         RegPreservingExcept(old(this),this, set(@r0, @r3, @r7));
         pageContentsCorresponds(old(addrspace_page), initAddrspaceEntry(addrspace_page, l1pt_page), extractPage(this.m, old(addrspace_page)));
@@ -60,34 +60,36 @@ procedure init_addrspace_mem(
 
     page_paddr_impl(r7,l1pt_page,r0);
 
-    STR(r7,r6,sp_op_const(ADDRSPACE_L1PT_PHYS()));
-    assert MemContents(this.m,addrspace_va + ADDRSPACE_L1PT_PHYS()) == page_paddr(l1pt_page);
+    STR(r7,r6,sp_op_const(ADDRSPACE_L1PT_PHYS));
+    assert MemContents(this.m,addrspace_va + ADDRSPACE_L1PT_PHYS) == page_paddr(l1pt_page);
 
-    ADD(r7, r7, sp_op_const(KOM_DIRECTMAP_VBASE()));
+    ADD(r7, r7, sp_op_const(KOM_DIRECTMAP_VBASE));
     assert r7 == page_monvaddr(l1pt_page);
-    STR(r7,r6,sp_op_const(ADDRSPACE_L1PT()));
-    assert MemContents(this.m,addrspace_va + ADDRSPACE_L1PT()) == page_monvaddr(l1pt_page);
+    STR(r7,r6,sp_op_const(ADDRSPACE_L1PT));
+    assert MemContents(this.m,addrspace_va + ADDRSPACE_L1PT) == page_monvaddr(l1pt_page);
 
     r0 := 1;
-    STR(r0,r6,sp_op_const(ADDRSPACE_REF()));
-    assert MemContents(this.m,addrspace_va + ADDRSPACE_REF()) == 1;
+    STR(r0,r6,sp_op_const(ADDRSPACE_REF));
+    assert MemContents(this.m,addrspace_va + ADDRSPACE_REF) == 1;
 
-    r0 := sp_op_const(KOM_ADDRSPACE_INIT());
-    STR(r0,r6,sp_op_const(ADDRSPACE_STATE()));
-    assert MemContents(this.m,addrspace_va + ADDRSPACE_STATE()) == KOM_ADDRSPACE_INIT();
+    r0 := sp_op_const(KOM_ADDRSPACE_INIT);
+    STR(r0,r6,sp_op_const(ADDRSPACE_STATE));
+    assert MemContents(this.m,addrspace_va + ADDRSPACE_STATE) == KOM_ADDRSPACE_INIT;
 
-    r3 := sp_op_const(PAGESIZE());
+    r3 := sp_op_const(PAGESIZE);
     r0 := 0;
     memset(r7,r0,r3);
 
     ghost var l1pg := extractPage(this.m, old(l1pt_page));
-    ghost var emptyptes := SeqRepeat(NR_L1PTES(), Nothing);
-    // XXX: FIXME: workaround dafny bug #40
-    //assume initL1PTEntry(addrspace_page).entry == L1PTable(emptyptes);
-    forall :: pageDbL1PTableCorresponds(l1pt_page, L1PTable(emptyptes), l1pg)
-    {
+    ghost var emptyptes := SeqRepeat(NR_L1PTES, Nothing);
+    assert pageDbL1PTableCorresponds(l1pt_page, L1PTable(emptyptes), l1pg)
+    by {
         reveal_pageDbL1PTableCorresponds();
-        assert forall m:addr :: addrInPage(m, l1pt_page) ==> l1pg[m] == 0;
+        forall m:addr :| addrInPage(m, l1pt_page) :: l1pg[m] == 0
+        {
+            assert page_monvaddr(l1pt_page) <= m < page_monvaddr(l1pt_page) + PAGESIZE;
+            assert MemContents(this.m, m) == 0;
+        }
     }
 }
 
@@ -123,35 +125,36 @@ procedure init_addrspace_pagedb(
     reveal_pageDbEntryCorresponds();
 
     /* update addrspace entry in pagedb */
-    r0 := sp_op_const(KOM_PAGE_ADDRSPACE());
+    r0 := sp_op_const(KOM_PAGE_ADDRSPACE);
     STRglobal(r0, PageDb(), pagedb_base, addrspace_entry);
-    reveal ValidGlobalStateOpaque; // XXX: workaround Dafny opaque bug
-    assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_TYPE())
-        == KOM_PAGE_ADDRSPACE();
+    assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(addrspace_page)
+                          + PAGEDB_ENTRY_TYPE) == KOM_PAGE_ADDRSPACE;
 
     page_monvaddr_impl(r6,addrspace_page,r0);
-    ADD(r4, r4, sp_op_const(PAGEDB_ENTRY_ADDRSPACE()));
-    assert r4 == G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_ADDRSPACE();
+    ADD(r4, r4, sp_op_const(PAGEDB_ENTRY_ADDRSPACE));
+    assert r4 == G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_ADDRSPACE;
     STRglobal(r6, PageDb(), r12, r4);
-    assert extractPageDbEntry(this.m, addrspace_page)[BytesToWords(PAGEDB_ENTRY_ADDRSPACE())]
-           == page_monvaddr(addrspace_page);
-
+    assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(addrspace_page)
+                          + PAGEDB_ENTRY_TYPE) == KOM_PAGE_ADDRSPACE;
+    assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(addrspace_page)
+                          + PAGEDB_ENTRY_ADDRSPACE) == page_monvaddr(addrspace_page);
+    extractPageDbToAbstract(this.m, addrspace_page);
     assert extractPageDbEntry(this.m, addrspace_page)
-        == seq(KOM_PAGE_ADDRSPACE(), old(page_monvaddr(addrspace_page)));
+        == seq(KOM_PAGE_ADDRSPACE, old(page_monvaddr(addrspace_page)));
 
     /* Update l1pt entry in pagedb */
-    r0 := sp_op_const(KOM_PAGE_L1PTABLE());
+    r0 := sp_op_const(KOM_PAGE_L1PTABLE);
     STRglobal(r0, PageDb(), r12, r5);
     assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
-                          + PAGEDB_ENTRY_TYPE()) == KOM_PAGE_L1PTABLE();
-    ADD(r5, r5, sp_op_const(PAGEDB_ENTRY_ADDRSPACE()));
-    assert r5 == G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_ADDRSPACE();
+                          + PAGEDB_ENTRY_TYPE) == KOM_PAGE_L1PTABLE;
+    ADD(r5, r5, sp_op_const(PAGEDB_ENTRY_ADDRSPACE));
+    assert r5 == G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_ADDRSPACE;
     STRglobal(r6, PageDb(), r12, r5);
     assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(l1pt_page)
-                          + PAGEDB_ENTRY_ADDRSPACE()) == page_monvaddr(addrspace_page);
+                          + PAGEDB_ENTRY_ADDRSPACE) == page_monvaddr(addrspace_page);
 
     assert extractPageDbEntry(this.m, l1pt_page)
-        == seq(KOM_PAGE_L1PTABLE(), old(page_monvaddr(addrspace_page)));
+        == seq(KOM_PAGE_L1PTABLE, old(page_monvaddr(addrspace_page)));
 }
 
 procedure init_addrspace(
@@ -269,42 +272,42 @@ procedure kom_smc_init_addrspace(
     assert r0 == l1pt_page % 4;
 
     if (addrspace_page == l1pt_page) {
-        err := sp_op_const(KOM_ERR_INVALID_PAGENO());
-    } else if (addrspace_page >= sp_op_const(KOM_SECURE_NPAGES())) {
-        err := sp_op_const(KOM_ERR_INVALID_PAGENO());
-    } else if (l1pt_page >= sp_op_const(KOM_SECURE_NPAGES())) {
-        err := sp_op_const(KOM_ERR_INVALID_PAGENO());
+        err := sp_op_const(KOM_ERR_INVALID_PAGENO);
+    } else if (addrspace_page >= sp_op_const(KOM_SECURE_NPAGES)) {
+        err := sp_op_const(KOM_ERR_INVALID_PAGENO);
+    } else if (l1pt_page >= sp_op_const(KOM_SECURE_NPAGES)) {
+        err := sp_op_const(KOM_ERR_INVALID_PAGENO);
     } else if (r0 != 0) {
-        err := sp_op_const(KOM_ERR_INVALID_PAGENO());
+        err := sp_op_const(KOM_ERR_INVALID_PAGENO);
     } else {
         LDRglobaladdr(r12, PageDb());
         assert validPageNr(addrspace_page) && validPageNr(l1pt_page);
         lemma_LeftShift3(addrspace_page);
-        LSL(r4,addrspace_page,sp_op_const(PAGEDB_ENTRY_SHIFT()));
-        assert r4 == G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_TYPE();
-        assert r4 < G_PAGEDB_SIZE();
+        LSL(r4,addrspace_page,sp_op_const(PAGEDB_ENTRY_SHIFT));
+        assert r4 == G_PAGEDB_ENTRY(addrspace_page) + PAGEDB_ENTRY_TYPE;
+        assert r4 < G_PAGEDB_SIZE;
         LDRglobal(r3, PageDb(), r12, r4);
         assert pageDbEntryCorresponds(pagedb[addrspace_page], extractPageDbEntry(this.m, addrspace_page));
-        extractPageDbToAbstractOne(this.m, addrspace_page, PAGEDB_ENTRY_TYPE());
+        extractPageDbToAbstractOne(this.m, addrspace_page, PAGEDB_ENTRY_TYPE);
         assert r3 == GlobalWord(this.m, PageDb(), r4) == pageDbEntryTypeVal(pagedb[addrspace_page]);
-        if (r3 == sp_op_const(KOM_PAGE_FREE())) {
+        if (r3 == sp_op_const(KOM_PAGE_FREE)) {
             assert pageIsFree(pagedb, addrspace_page);
             lemma_LeftShift3(l1pt_page);
-            LSL(r5,l1pt_page,sp_op_const(PAGEDB_ENTRY_SHIFT()));
-            assert r5 == G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_TYPE();
+            LSL(r5,l1pt_page,sp_op_const(PAGEDB_ENTRY_SHIFT));
+            assert r5 == G_PAGEDB_ENTRY(l1pt_page) + PAGEDB_ENTRY_TYPE;
             LDRglobal(r0, PageDb(), r12, r5);
             assert pageDbEntryCorresponds(pagedb[l1pt_page], extractPageDbEntry(this.m, l1pt_page));
-            extractPageDbToAbstractOne(this.m, l1pt_page, PAGEDB_ENTRY_TYPE());
+            extractPageDbToAbstractOne(this.m, l1pt_page, PAGEDB_ENTRY_TYPE);
             assert r0 == GlobalWord(this.m, PageDb(), r5) == pageDbEntryTypeVal(pagedb[l1pt_page]);
-            if (r0 == sp_op_const(KOM_PAGE_FREE())) {
+            if (r0 == sp_op_const(KOM_PAGE_FREE)) {
                 assert pageIsFree(pagedb, l1pt_page);
                 pagedb := init_addrspace(addrspace_page, l1pt_page, r4, r5, r12, pagedb);
-                err := OConst(KOM_ERR_SUCCESS());
+                err := OConst(KOM_ERR_SUCCESS);
             } else {
-                err := sp_op_const(KOM_ERR_PAGEINUSE());
+                err := sp_op_const(KOM_ERR_PAGEINUSE);
             }
         } else {
-            err := sp_op_const(KOM_ERR_PAGEINUSE());
+            err := sp_op_const(KOM_ERR_PAGEINUSE);
         }
     }
 

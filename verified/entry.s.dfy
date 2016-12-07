@@ -27,29 +27,29 @@ function smc_enter_err(d: PageDb, p: word, isresume: bool): word
 {
     reveal_validPageDb();
     if (!(validPageNr(p) && d[p].PageDbEntryTyped? && d[p].entry.Dispatcher?)) then
-        KOM_ERR_INVALID_PAGENO()
+        KOM_ERR_INVALID_PAGENO
     else if (var a := d[p].addrspace; d[a].entry.state != FinalState) then
-        KOM_ERR_NOT_FINAL()
+        KOM_ERR_NOT_FINAL
     else if (!isresume && d[p].entry.entered) then
-        KOM_ERR_ALREADY_ENTERED()
+        KOM_ERR_ALREADY_ENTERED
     else if (isresume && !d[p].entry.entered) then
-        KOM_ERR_NOT_ENTERED()
-    else KOM_ERR_SUCCESS()
+        KOM_ERR_NOT_ENTERED
+    else KOM_ERR_SUCCESS
 }
 
 function securePageFromPhysAddr(phys:int): PageNr
     requires PageAligned(phys)
     requires SecurePhysBase() <= phys < SecurePhysBase() +
-        KOM_SECURE_NPAGES() * PAGESIZE() // physPageIsSecure(phys/PAGESIZE())
+        KOM_SECURE_NPAGES * PAGESIZE // physPageIsSecure(phys/PAGESIZE)
     ensures validPageNr(securePageFromPhysAddr(phys))
 {
-    (phys - SecurePhysBase()) / PAGESIZE()
+    (phys - SecurePhysBase()) / PAGESIZE
 }
 
 predicate {:opaque} validEnter(s:SysState,s':SysState,
     dispPg:word,a1:word,a2:word,a3:word)
     requires validSysState(s)
-    requires smc_enter_err(s.d, dispPg, false) == KOM_ERR_SUCCESS()
+    requires smc_enter_err(s.d, dispPg, false) == KOM_ERR_SUCCESS
 {
     reveal_ValidRegState();
     reveal_validExceptionTransition();
@@ -63,7 +63,7 @@ predicate {:opaque} validEnter(s:SysState,s':SysState,
 
 predicate {:opaque} validResume(s:SysState,s':SysState,dispPg:word)
     requires validSysState(s)
-    requires smc_enter_err(s.d, dispPg, true) == KOM_ERR_SUCCESS()
+    requires smc_enter_err(s.d, dispPg, true) == KOM_ERR_SUCCESS
 {
      
     reveal_ValidRegState();
@@ -83,7 +83,7 @@ predicate smc_enter(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb,
 {
     reveal_ValidRegState();
     var err := smc_enter_err(pageDbIn, dispPage, false);
-    if err != KOM_ERR_SUCCESS() then
+    if err != KOM_ERR_SUCCESS then
         pageDbOut == pageDbIn && s'.regs[R0] == err && s'.regs[R1] == 0
     else
         validEnter(SysState(s, pageDbIn), SysState(s', pageDbOut), dispPage,
@@ -96,7 +96,7 @@ predicate smc_resume(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb,
 {
     reveal_ValidRegState();
     var err := smc_enter_err(pageDbIn, dispPage, true);
-    if err != KOM_ERR_SUCCESS() then
+    if err != KOM_ERR_SUCCESS then
         pageDbOut == pageDbIn && s'.regs[R0] == err && s'.regs[R1] == 0
     else
         validResume(SysState(s, pageDbIn), SysState(s', pageDbOut), dispPage)
@@ -106,11 +106,11 @@ predicate preEntryEnter(s:state,s':state,d:PageDb,
     dispPage:PageNr,a1:word,a2:word,a3:word)
     requires ValidState(s)
     requires validPageDb(d)
-    requires smc_enter_err(d, dispPage, false) == KOM_ERR_SUCCESS()
+    requires smc_enter_err(d, dispPage, false) == KOM_ERR_SUCCESS
     ensures preEntryEnter(s,s',d,dispPage,a1,a2,a3) ==>
         PageAligned(s'.conf.ttbr0.ptbase) &&
         SecurePhysBase() <= s'.conf.ttbr0.ptbase < SecurePhysBase() +
-            KOM_SECURE_NPAGES() * PAGESIZE()
+            KOM_SECURE_NPAGES * PAGESIZE
     ensures preEntryEnter(s,s',d,dispPage,a1,a2,a3) ==>
         nonStoppedL1(d, securePageFromPhysAddr(s'.conf.ttbr0.ptbase));
 {
@@ -135,11 +135,11 @@ predicate preEntryEnter(s:state,s':state,d:PageDb,
 
 predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
     requires ValidState(s) && validPageDb(d)
-    requires smc_enter_err(d, dispPage, true) == KOM_ERR_SUCCESS()
+    requires smc_enter_err(d, dispPage, true) == KOM_ERR_SUCCESS
     ensures preEntryResume(s,s',d,dispPage) ==>
         PageAligned(s'.conf.ttbr0.ptbase) &&
         SecurePhysBase() <= s'.conf.ttbr0.ptbase < SecurePhysBase() +
-            KOM_SECURE_NPAGES() * PAGESIZE()
+            KOM_SECURE_NPAGES * PAGESIZE
     ensures preEntryResume(s,s',d,dispPage) ==>
         nonStoppedL1(d, securePageFromPhysAddr(s'.conf.ttbr0.ptbase));
 {
@@ -210,9 +210,9 @@ function exceptionHandled(s:state, d:PageDb, dispPg:PageNr) : (word, word, PageD
         var p := dispPg;
         var d' := d[ p := d[p].(entry := d[p].entry.(entered := false))];
         if s.conf.ex.ExSVC? then
-            (KOM_ERR_SUCCESS(), s.regs[R0], d')
+            (KOM_ERR_SUCCESS, s.regs[R0], d')
         else
-            (KOM_ERR_FAULT(), 0, d')
+            (KOM_ERR_FAULT, 0, d')
     ) else (
         assert s.conf.ex.ExIRQ? || s.conf.ex.ExFIQ?;
         var p := dispPg;
@@ -221,7 +221,7 @@ function exceptionHandled(s:state, d:PageDb, dispPg:PageNr) : (word, word, PageD
         var ctxt' := DispatcherContext(s.regs, pc, psr);
         var disp' := d[p].entry.(entered:=true, ctxt:=ctxt');
         var d' := d[ p := d[p].(entry := disp') ];
-        (KOM_ERR_INTERRUPTED(), 0, d')
+        (KOM_ERR_INTERRUPTED, 0, d')
     )
 }
 

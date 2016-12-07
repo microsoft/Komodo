@@ -59,7 +59,7 @@ procedure update_l2pte(
     lemma_ARM_L1PTE_Dual(page_paddr(l1pte_abs));
     SUB(r12,l1pte,1);
     assert r12 == page_paddr(l1pte_abs);
-    ADD(r12, r12, sp_op_const(KOM_DIRECTMAP_VBASE()));
+    ADD(r12, r12, sp_op_const(KOM_DIRECTMAP_VBASE));
     assert r12 == page_monvaddr(l1pte_abs);
 
     LSR(r8,mapping,12);
@@ -92,7 +92,7 @@ procedure update_l2pte(
                 assert pageDbCorrespondsOnly(old(this.m), d, p);
             }
             reveal_pageDbL2PTableCorresponds();
-            forall i :| 0 <= i < NR_L2PTES() && i != abs_mapping.l2index
+            forall i :| 0 <= i < NR_L2PTES && i != abs_mapping.l2index
                 :: mem_page[base+WordsToBytes(i)] == mkL2Pte(d'[p].entry.l2pt[i])
             {
                 assert base + WordsToBytes(i) !=
@@ -147,7 +147,7 @@ procedure is_valid_mapping_target(
         AllMemInvariant(old(this),this);
         SmcProcedureInvariant(old(this),this);
         err == isValidMappingTarget(d, addr, mapping);
-        err == KOM_ERR_SUCCESS() ==>(
+        err == KOM_ERR_SUCCESS ==>(
             validAddrspacePage(d,addr) && 
             l1pte == mkL1Pte(d[d[addr].entry.l1ptnr].entry.l1pt[
                 wordToMapping(mapping).l1index], 0) );
@@ -158,14 +158,14 @@ procedure is_valid_mapping_target(
         && @l1pte != @r7 && @l1pte != @r8 && @l1pte != @r9;
 
     page_monvaddr_impl(r7,addr,r8);
-    LDR(r8,r7,sp_op_const(ADDRSPACE_STATE()));
+    LDR(r8,r7,sp_op_const(ADDRSPACE_STATE));
     forall :: r8 == pageDbAddrspaceStateVal(d[addr].entry.state)
     {
         reveal_pageContentsCorresponds();
         reveal_pageDbAddrspaceCorresponds();
     }
-    if ( r8 != sp_op_const(KOM_ADDRSPACE_INIT()) ){
-        err := sp_op_const(KOM_ERR_ALREADY_FINAL());
+    if ( r8 != sp_op_const(KOM_ADDRSPACE_INIT) ){
+        err := sp_op_const(KOM_ERR_ALREADY_FINAL);
         assert err == specResult;
     } else {
         ghost var abs_mapping := wordToMapping(mapping);
@@ -180,35 +180,35 @@ procedure is_valid_mapping_target(
             reveal_wordToMapping();
             assert r8 == l2indexFromMapping(mapping);
         }
-        if(r7 >= sp_op_const(KOM_SECURE_NPAGES())){
-            err := sp_op_const(KOM_ERR_INVALID_MAPPING());
+        if(r7 >= sp_op_const(KOM_SECURE_NPAGES)){
+            err := sp_op_const(KOM_ERR_INVALID_MAPPING);
             assert err == specResult;
-        } else if(r8 >= sp_op_const(KOM_SECURE_NPAGES())){
-            err := sp_op_const(KOM_ERR_INVALID_MAPPING());
+        } else if(r8 >= sp_op_const(KOM_SECURE_NPAGES)){
+            err := sp_op_const(KOM_ERR_INVALID_MAPPING);
             assert err == specResult;
         } else {
-            //if(!perm.r) then KOM_ERR_INVALID_MAPPING()
-            AND(r9,mapping,sp_op_const(KOM_MAPPING_R()));
+            //if(!perm.r) then KOM_ERR_INVALID_MAPPING
+            AND(r9,mapping,sp_op_const(KOM_MAPPING_R));
             forall :: r9 == 0 <==> !abs_mapping.perm.r
             {
                 reveal_wordToMapping();
                 assert r9 != 0 <==> permFromMapping(mapping).r;
             }
             if(r9 == 0){
-                err := sp_op_const(KOM_ERR_INVALID_MAPPING());
+                err := sp_op_const(KOM_ERR_INVALID_MAPPING);
                 assert err == specResult;
             } else {
-                if(r7 >= sp_op_const(NR_L1PTES())){
-                    err := sp_op_const(KOM_ERR_INVALID_MAPPING());
+                if(r7 >= sp_op_const(NR_L1PTES)){
+                    err := sp_op_const(KOM_ERR_INVALID_MAPPING);
                     assert err == specResult;
-                } else if (r8 >= sp_op_const(NR_L2PTES())) {
-                    err := sp_op_const(KOM_ERR_INVALID_MAPPING());
+                } else if (r8 >= sp_op_const(NR_L2PTES)) {
+                    err := sp_op_const(KOM_ERR_INVALID_MAPPING);
                     assert err == specResult;
                 } else {
                     LDRglobaladdr(l1pte,PageDb());
                     lemma_LeftShift3(addr);
-                    LSL(r9,addr,sp_op_const(PAGEDB_ENTRY_SHIFT()));
-                    assert r9 == G_PAGEDB_ENTRY(addr) + PAGEDB_ENTRY_TYPE();
+                    LSL(r9,addr,sp_op_const(PAGEDB_ENTRY_SHIFT));
+                    assert r9 == G_PAGEDB_ENTRY(addr) + PAGEDB_ENTRY_TYPE;
                     LDRglobal(r9,PageDb(),l1pte,r9);
                     forall :: validAddrspacePage(d, addr) {
                         assert isAddrspace(d, addr);
@@ -216,7 +216,7 @@ procedure is_valid_mapping_target(
 
                     page_monvaddr_impl(r8,addr,l1pte);
 
-                    LDR(r9,r8,sp_op_const(ADDRSPACE_L1PT())); 
+                    LDR(r9,r8,sp_op_const(ADDRSPACE_L1PT)); 
 
                     ghost var l1p := d[addr].entry.l1ptnr;
                     forall :: validL1PTPage(d,l1p)
@@ -241,9 +241,9 @@ procedure is_valid_mapping_target(
                     assert l1pte == 0 <==> d[l1p].entry.l1pt[l1index] == Nothing;
 
                     if( l1pte == 0 ) {
-                        err := sp_op_const(KOM_ERR_INVALID_MAPPING());
+                        err := sp_op_const(KOM_ERR_INVALID_MAPPING);
                     } else {
-                        err := sp_op_const(KOM_ERR_SUCCESS());
+                        err := sp_op_const(KOM_ERR_SUCCESS);
                     }
 
                 }
@@ -276,7 +276,7 @@ procedure phys_page_is_insecure_ram_nz(
         LDRglobal(ret, SecurePhysBaseOp(), ret, 0);
         lemma_RightShift12(ret);
         LSR(ret,ret,12);
-        assert ret == SecurePhysBase() / PAGESIZE();
+        assert ret == SecurePhysBase() / PAGESIZE;
 
         if(phys_page < ret)
         {
@@ -290,86 +290,86 @@ procedure phys_page_is_insecure_ram_nz(
 
 #verbatim
 function method L2PTE_CONST_WORD():word
-    { (ARM_L2PTE_CONST_BITS() | 0x2) as word }
+    { (ARM_L2PTE_CONST_BITS | 0x2) as word }
 
 lemma lemma_extract_kom_mapping_w(mapping:word, res:word)
-    requires res == BitwiseXor(BitwiseAnd(mapping,KOM_MAPPING_W()),KOM_MAPPING_W())
-    ensures res == KOM_MAPPING_W() || res == 0
+    requires res == BitwiseXor(BitwiseAnd(mapping,KOM_MAPPING_W),KOM_MAPPING_W)
+    ensures res == KOM_MAPPING_W || res == 0
     ensures res == 0 <==> wordToMapping(mapping).perm.w
 {
-    assert WordAsBits(KOM_MAPPING_W()) == 2 by { reveal_WordAsBits(); }
-    lemma_WordBitEquiv(KOM_MAPPING_W(), 2);
+    assert WordAsBits(KOM_MAPPING_W) == 2 by { reveal_WordAsBits(); }
+    lemma_WordBitEquiv(KOM_MAPPING_W, 2);
 
-    var tmp := BitwiseAnd(mapping,KOM_MAPPING_W());
-    assert (tmp == KOM_MAPPING_W() || tmp == 0)
+    var tmp := BitwiseAnd(mapping,KOM_MAPPING_W);
+    assert (tmp == KOM_MAPPING_W || tmp == 0)
         by { reveal_BitAnd(); }
     assert wordToMapping(mapping).perm.w <==> tmp != 0
         by { reveal_wordToMapping(); }
 
-    assert res == if tmp == 0 then KOM_MAPPING_W() else 0
+    assert res == if tmp == 0 then KOM_MAPPING_W else 0
         by { reveal_BitXor(); }
 }
 
 lemma lemma_extract_kom_mapping_x(mapping:word, res:word)
-    requires res == BitwiseXor(BitwiseAnd(mapping,KOM_MAPPING_X()),KOM_MAPPING_X())
-    ensures res == KOM_MAPPING_X() || res == 0
+    requires res == BitwiseXor(BitwiseAnd(mapping,KOM_MAPPING_X),KOM_MAPPING_X)
+    ensures res == KOM_MAPPING_X || res == 0
     ensures res == 0 <==> wordToMapping(mapping).perm.x
 {
-    assert WordAsBits(KOM_MAPPING_X()) == 4 by { reveal_WordAsBits(); }
-    lemma_WordBitEquiv(KOM_MAPPING_X(), 4);
+    assert WordAsBits(KOM_MAPPING_X) == 4 by { reveal_WordAsBits(); }
+    lemma_WordBitEquiv(KOM_MAPPING_X, 4);
 
-    var tmp := BitwiseAnd(mapping,KOM_MAPPING_X());
-    assert (tmp == KOM_MAPPING_X() || tmp == 0)
+    var tmp := BitwiseAnd(mapping,KOM_MAPPING_X);
+    assert (tmp == KOM_MAPPING_X || tmp == 0)
         by { reveal_BitAnd(); }
     assert wordToMapping(mapping).perm.x <==> tmp != 0
         by { reveal_wordToMapping(); }
 
-    assert res == if tmp == 0 then KOM_MAPPING_X() else 0
+    assert res == if tmp == 0 then KOM_MAPPING_X else 0
         by { reveal_BitXor(); }
 }
 
 lemma lemma_shift_robit()
     ensures LeftShift(0, 8) == 0;
-    ensures LeftShift(KOM_MAPPING_W(), 8) == BitsAsWord(ARM_L2PTE_RO_BIT());
+    ensures LeftShift(KOM_MAPPING_W, 8) == BitsAsWord(ARM_L2PTE_RO_BIT);
 {
-    assert WordAsBits(KOM_MAPPING_W()) == 2 by { reveal_WordAsBits(); }
-    assert BitsAsWord(ARM_L2PTE_RO_BIT()) == 0x200 by { reveal_BitsAsWord(); }
+    assert WordAsBits(KOM_MAPPING_W) == 2 by { reveal_WordAsBits(); }
+    assert BitsAsWord(ARM_L2PTE_RO_BIT) == 0x200 by { reveal_BitsAsWord(); }
     reveal_BitShiftLeft();
 }
 
 lemma lemma_shift_nxbit()
     ensures RightShift(0, 2) == 0;
-    ensures RightShift(KOM_MAPPING_X(), 2) == BitsAsWord(ARM_L2PTE_NX_BIT())
+    ensures RightShift(KOM_MAPPING_X, 2) == BitsAsWord(ARM_L2PTE_NX_BIT)
 {
-    assert WordAsBits(KOM_MAPPING_X()) == 4 by { reveal_WordAsBits(); }
-    assert BitsAsWord(ARM_L2PTE_NX_BIT()) == 1 by { reveal_BitsAsWord(); }
+    assert WordAsBits(KOM_MAPPING_X) == 4 by { reveal_WordAsBits(); }
+    assert BitsAsWord(ARM_L2PTE_NX_BIT) == 1 by { reveal_BitsAsWord(); }
     reveal_BitShiftRight();
 }
 
 lemma lemma_ARM_L2PTE_impl(pa: word, w: bool, x:bool, ptew: word)
     requires PageAligned(pa)
     requires ptew == BitwiseOr(BitwiseOr(BitwiseOr(pa, L2PTE_CONST_WORD()),
-                        if x then 0 else BitsAsWord(ARM_L2PTE_NX_BIT())),
-                        if w then 0 else BitsAsWord(ARM_L2PTE_RO_BIT()))
+                        if x then 0 else BitsAsWord(ARM_L2PTE_NX_BIT)),
+                        if w then 0 else BitsAsWord(ARM_L2PTE_RO_BIT))
     ensures ptew == ARM_L2PTE(pa, w, x)
 {
-    var constbits := ARM_L2PTE_CONST_BITS() | 0x2;
+    var constbits := ARM_L2PTE_CONST_BITS | 0x2;
     assert L2PTE_CONST_WORD() == BitsAsWord(constbits) by { reveal_BitsAsWord(); }
     lemma_WordBitEquiv(L2PTE_CONST_WORD(), constbits);
-    var nxbit := if x then 0 else ARM_L2PTE_NX_BIT();
+    var nxbit := if x then 0 else ARM_L2PTE_NX_BIT;
     var nxword := BitsAsWord(nxbit);
     lemma_WordBitEquiv(nxword, nxbit);
-    var robit := if w then 0 else ARM_L2PTE_RO_BIT();
+    var robit := if w then 0 else ARM_L2PTE_RO_BIT;
     var roword := BitsAsWord(robit);
     lemma_WordBitEquiv(roword, robit);
 
     calc {
          ptew;
-         BitwiseOr(BitwiseOr(BitwiseOr(pa,L2PTE_CONST_WORD()),nxword),roword);
+         BitwiseOr(BitwiseOr(BitwiseOr(pa,L2PTE_CONST_WORD()), nxword), roword);
          { lemma_BitwiseOrAssociative(pa, L2PTE_CONST_WORD(), nxword); }
-         BitwiseOr(BitwiseOr(pa,BitwiseOr(L2PTE_CONST_WORD(),nxword)),roword);
-         { lemma_BitwiseOrAssociative(pa, BitwiseOr(L2PTE_CONST_WORD(),nxword), roword); }
-         BitwiseOr(pa,BitwiseOr(BitwiseOr(L2PTE_CONST_WORD(),nxword),roword));
+         BitwiseOr(BitwiseOr(pa,BitwiseOr(L2PTE_CONST_WORD(), nxword)), roword);
+         { lemma_BitwiseOrAssociative(pa, BitwiseOr(L2PTE_CONST_WORD(), nxword), roword); }
+         BitwiseOr(pa,BitwiseOr(BitwiseOr(L2PTE_CONST_WORD(), nxword), roword));
          { lemma_ExpandBitwiseOr(L2PTE_CONST_WORD(), nxword, roword); }
          BitwiseOr(pa, BitsAsWord(BitOr(BitOr(constbits, nxbit), robit)));
          { lemma_BitsAsWordAsBits(BitOr(BitOr(constbits, nxbit), robit)); }
@@ -409,15 +409,15 @@ procedure ARM_L2PTE_impl(
     assert pte == BitwiseOr(pa, L2PTE_CONST_WORD());
 
     // compute nxbit
-    ghost var nxbit := if abs_mapping.perm.x then 0 else BitsAsWord(ARM_L2PTE_NX_BIT());
-    AND(tmp,mapping,sp_op_const(KOM_MAPPING_X()));
-    EOR(tmp,tmp,sp_op_const(KOM_MAPPING_X()));
+    ghost var nxbit := if abs_mapping.perm.x then 0 else BitsAsWord(ARM_L2PTE_NX_BIT);
+    AND(tmp,mapping,sp_op_const(KOM_MAPPING_X));
+    EOR(tmp,tmp,sp_op_const(KOM_MAPPING_X));
     lemma_extract_kom_mapping_x(mapping, tmp);
-    assert (tmp == 0 || tmp == KOM_MAPPING_X())
+    assert (tmp == 0 || tmp == KOM_MAPPING_X)
            && (tmp == 0 <==> abs_mapping.perm.x);
     LSR(tmp,tmp,2);
     lemma_shift_nxbit();
-    assert (tmp == 0 || tmp == BitsAsWord(ARM_L2PTE_NX_BIT()))
+    assert (tmp == 0 || tmp == BitsAsWord(ARM_L2PTE_NX_BIT))
            && (tmp == 0 <==> abs_mapping.perm.x);
     assert tmp == nxbit;
     ORR(pte, pte, tmp);
@@ -426,15 +426,15 @@ procedure ARM_L2PTE_impl(
     assert RegPreservingExcept(old(this),this,set(@pte,@tmp));
 
     // compute robit
-    ghost var robit := if abs_mapping.perm.w then 0 else BitsAsWord(ARM_L2PTE_RO_BIT());
-    AND(tmp,mapping,sp_op_const(KOM_MAPPING_W()));
-    EOR(tmp,tmp,sp_op_const(KOM_MAPPING_W()));
+    ghost var robit := if abs_mapping.perm.w then 0 else BitsAsWord(ARM_L2PTE_RO_BIT);
+    AND(tmp,mapping,sp_op_const(KOM_MAPPING_W));
+    EOR(tmp,tmp,sp_op_const(KOM_MAPPING_W));
     lemma_extract_kom_mapping_w(mapping, tmp);
-    assert (tmp == 0 || tmp == KOM_MAPPING_W())
+    assert (tmp == 0 || tmp == KOM_MAPPING_W)
            && (tmp == 0 <==> abs_mapping.perm.w);
     LSL(tmp,tmp,8);
     lemma_shift_robit();
-    assert (tmp == 0 || tmp == BitsAsWord(ARM_L2PTE_RO_BIT()))
+    assert (tmp == 0 || tmp == BitsAsWord(ARM_L2PTE_RO_BIT))
            && (tmp == 0 <==> abs_mapping.perm.w);
     assert tmp == robit;
     ORR(pte, pte, tmp);
@@ -492,25 +492,25 @@ procedure kom_smc_map_secure(
     ghost var specResult := smc_mapSecure_premium(pagedb, page, as_page,
             mapping, phys_page);
 
-    if (as_page >= sp_op_const(KOM_SECURE_NPAGES())) {
-        err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE());
+    if (as_page >= sp_op_const(KOM_SECURE_NPAGES)) {
+        err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE);
     } else {
         assert validPageNr(as_page);
         LDRglobaladdr(r12, PageDb());
         assert sp_eval_op_addr(this, @r12) == AddressOfGlobal(PageDb());
         lemma_LeftShift3(as_page);
-        LSL(r0, as_page, sp_op_const(PAGEDB_ENTRY_SHIFT()));
-        assert r0 == G_PAGEDB_ENTRY(as_page) + PAGEDB_ENTRY_TYPE();
+        LSL(r0, as_page, sp_op_const(PAGEDB_ENTRY_SHIFT));
+        assert r0 == G_PAGEDB_ENTRY(as_page) + PAGEDB_ENTRY_TYPE;
         LDRglobal(r0, PageDb(), r12, r0);
 
         forall :: r0 == pageDbEntryTypeVal(pagedb[as_page]) {
-            extractPageDbToAbstractOne(this.m, as_page, PAGEDB_ENTRY_TYPE());
+            extractPageDbToAbstractOne(this.m, as_page, PAGEDB_ENTRY_TYPE);
             reveal_pageDbEntryCorresponds();
         }
 
-        if (r0 != sp_op_const(KOM_PAGE_ADDRSPACE())) {
+        if (r0 != sp_op_const(KOM_PAGE_ADDRSPACE)) {
             assert !isAddrspace(pagedb, as_page);
-            err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE());
+            err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE);
             assert err == specErr(specResult);
         } else {
             assert as_page == old(as_page);
@@ -518,12 +518,12 @@ procedure kom_smc_map_secure(
             is_valid_mapping_target(as_page,mapping,r10,err,pagedb);
             // NB: r10 := l1pte
             assert as_page == old(as_page);
-            if( err != sp_op_const(KOM_ERR_SUCCESS()) ) {
+            if( err != sp_op_const(KOM_ERR_SUCCESS) ) {
                 assert err == specErr(specResult);
             } else {
                 phys_page_is_insecure_ram_nz(phys_page, r0);
                 if(r0 == 0) {
-                    err := sp_op_const(KOM_ERR_INVALID_PAGENO());
+                    err := sp_op_const(KOM_ERR_INVALID_PAGENO);
                     assert err == specErr(specResult);
                 } else {
                     ghost var entry := PageDbEntryTyped(as_page, DataPage); 
@@ -531,17 +531,17 @@ procedure kom_smc_map_secure(
                     assert validAddrspacePage(pagedb, entry.addrspace);
                     assert page == old(page);
                     pagedb := allocate_page(page,as_page,
-                        sp_op_const(KOM_PAGE_DATA()),
+                        sp_op_const(KOM_PAGE_DATA),
                         r12,r11,r9,err,pagedb,entry);
-                    assert err == KOM_ERR_SUCCESS() ==>
+                    assert err == KOM_ERR_SUCCESS ==>
                         (pageDbCorrespondsExcluding(this.m, pagedb, page)
                         && pageDbEntryCorresponds(pagedb[page],extractPageDbEntry(this.m, page)));
-                    if( err != sp_op_const(KOM_ERR_SUCCESS()) ){
+                    if( err != sp_op_const(KOM_ERR_SUCCESS) ){
                         assert err == specErr(specResult);
                         assert pagedb == specPageDb(specResult);
                         assert pageDbCorresponds(this.m,pagedb);
                     } else {
-                        assert err == KOM_ERR_SUCCESS();
+                        assert err == KOM_ERR_SUCCESS;
                         assert page == old(page);
                         assert as_page == old(as_page);
                         assert pageDbCorrespondsExcluding(this.m,pagedb,page);
@@ -549,9 +549,9 @@ procedure kom_smc_map_secure(
                                 extractPageDbEntry(this.m,page));
                         ghost var abs_mapping := wordToMapping(mapping);
                         assert isValidMappingTarget(pagedb_in, as_page, mapping)
-                            == KOM_ERR_SUCCESS();
+                            == KOM_ERR_SUCCESS;
                         forall :: isValidMappingTarget(pagedb, as_page, mapping)
-                            == KOM_ERR_SUCCESS()
+                            == KOM_ERR_SUCCESS
                         {
                             lemma_allocatePage_preservesMappingGoodness(
                                 pagedb_in,page,as_page,entry.entry,
@@ -570,7 +570,7 @@ procedure kom_smc_map_secure(
                             abs_mapping,l2pte);
                         assert pageDbCorresponds(this.m, pagedb);
                         //assert pagedb == updateL2Pte(d', as_page, abs_mapping, l2pte);
-                        err := sp_op_const(KOM_ERR_SUCCESS());
+                        err := sp_op_const(KOM_ERR_SUCCESS);
                         assert err == specErr(specResult);
                         assert pagedb == specPageDb(specResult);
                         assert pageDbCorresponds(this.m,pagedb);

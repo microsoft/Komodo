@@ -6,7 +6,7 @@ include "pagedb.s.dfy"
 // Constants
 //-----------------------------------------------------------------------------
 
-function method PAGEDB_ENTRY_SHIFT():int { 3 }
+const PAGEDB_ENTRY_SHIFT:int := 3;
 
 //-----------------------------------------------------------------------------
 // Stack/procedure invariants
@@ -114,16 +114,16 @@ function monvaddr_page(mva:addr): PageNr
     ensures validPageNr(monvaddr_page(mva))
     ensures page_monvaddr(monvaddr_page(mva)) == mva
 {
-    (mva - KOM_DIRECTMAP_VBASE() - SecurePhysBase()) / PAGESIZE()
+    (mva - KOM_DIRECTMAP_VBASE - SecurePhysBase()) / PAGESIZE
 }
 
 function paddr_page(p:addr): PageNr
     requires PageAligned(p)
-    requires SecurePhysBase() <= p < SecurePhysBase() + KOM_SECURE_RESERVE()
+    requires SecurePhysBase() <= p < SecurePhysBase() + KOM_SECURE_RESERVE
     ensures validPageNr(paddr_page(p))
     ensures page_paddr(paddr_page(p)) == p
 {
-    (p - SecurePhysBase()) / PAGESIZE()
+    (p - SecurePhysBase()) / PAGESIZE
 }
 
 // workarounds for Spartan's lack of Dafny language features

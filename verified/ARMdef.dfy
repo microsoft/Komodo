@@ -7,13 +7,15 @@ include "words_and_bytes.s.dfy"
 //-----------------------------------------------------------------------------
 // Core types (for a 32-bit word-aligned machine)
 //-----------------------------------------------------------------------------
-//predicate isUInt32(i:int) { 0 <= i < 0x1_0000_0000 }
-function  BytesPerWord() : int { 4 }
-predicate WordAligned(i:int) { i % 4 == 0 }
-function  WordsToBytes(w:int) : int { 4 * w }
-function  BytesToWords(b:int) : int requires WordAligned(b) { b / 4 }
+const WORDSIZE:int := 4;
+predicate WordAligned(i:int) { i % WORDSIZE == 0 }
+function  WordsToBytes(w:int): int
+    ensures WordAligned(WordsToBytes(w))
+{ WORDSIZE * w }
+function  BytesToWords(b:int): int
+    requires WordAligned(b)
+{ b / WORDSIZE }
 
-//type word = x | isUInt32(x)
 type addr = x | isUInt32(x) && WordAligned(x)
 type shift_amount = s | 0 <= s < 32 // Some shifts allow s=32, but we'll be conservative for simplicity
 
@@ -362,8 +364,8 @@ predicate ValidMem(addr:int)
 
 predicate ValidMemRange(base:int, limit:int)
 {
-    isUInt32(base) && isUInt32(limit) &&
-    forall m:addr :: base <= m < limit && WordAligned(m) ==> m in TheValidAddresses()
+    ValidMem(base) && ValidMem(limit - WORDSIZE)
+    && forall a:addr :: base <= a < limit && WordAligned(a) ==> ValidMem(a)
 }
 
 predicate ValidShiftOperand(s:state, o:operand)
@@ -486,7 +488,7 @@ predicate evalEnterUserspace(s:state, r:state)
     evalUpdate(s, OSReg(cpsr), OperandContents(s, spsr), r)
 }
 
-predicate evalUserspaceExecution(s:state, r:state)
+predicate {:opaque} evalUserspaceExecution(s:state, r:state)
     requires ValidState(s)
     ensures  evalUserspaceExecution(s, r) ==>
         ValidState(r) && mode_of_state(r) == User;
@@ -524,13 +526,13 @@ predicate {:axiom} ApplicationUsermodeContinuationInvariant(s:state, r:state)
 // Model of page tables for userspace execution
 //-----------------------------------------------------------------------------
 
-function method PAGESIZE():int { 0x1000 }
+const PAGESIZE:int := 0x1000;
 
 predicate PageAligned(addr:int)
     ensures PageAligned(addr) ==> WordAligned(addr)
 {
     lemma_PageAlignedImpliesWordAligned(addr);
-    addr % PAGESIZE() == 0
+    addr % PAGESIZE == 0
 }
 
 // We model a trivial memory map (for our own code and page tables)
@@ -544,24 +546,20 @@ type AbsPTable = seq<Maybe<AbsL2PTable>>
 type AbsL2PTable = seq<Maybe<AbsPTE>>
 datatype AbsPTE = AbsPTE(phys: addr, write: bool, exec: bool)
 
-function method ARM_L1PTES(): int { 1024 }
-function method ARM_L1PTABLE_BYTES(): int
-    ensures ARM_L1PTABLE_BYTES() == WordsToBytes(ARM_L1PTES())
-{ 0x1000 }
-function method ARM_L2PTES(): int { 256 }
-function method ARM_L2PTABLE_BYTES(): int
-    ensures ARM_L2PTABLE_BYTES() == WordsToBytes(ARM_L2PTES())
-{ 0x400 }
+const ARM_L1PTES:int := 1024;
+const ARM_L1PTABLE_BYTES:int := PAGESIZE; // WordsToBytes(ARM_L1PTES)
+const ARM_L2PTES:int := 256;
+const ARM_L2PTABLE_BYTES:int := 0x400; // WordsToBytes(ARM_L2PTES)
 
 predicate WellformedAbsPTable(pt: AbsPTable)
 {
-    |pt| == ARM_L1PTES()
+    |pt| == ARM_L1PTES
         && forall i :: 0 <= i < |pt| && pt[i].Just? ==> WellformedAbsL2PTable(fromJust(pt[i]))
 }
 
 predicate WellformedAbsL2PTable(pt: AbsL2PTable)
 {
-    |pt| == ARM_L2PTES() && forall i :: 0 <= i < |pt| ==> WellformedAbsPTE(pt[i])
+    |pt| == ARM_L2PTES && forall i :: 0 <= i < |pt| ==> WellformedAbsPTE(pt[i])
 }
 
 predicate WellformedAbsPTE(pte: Maybe<AbsPTE>)
@@ -591,13 +589,18 @@ function WritablePagesInTable(pt:AbsPTable): set<addr>
           pt[i].v[j].v.phys + PhysBase()))
 }
 
+function WordOffset(a:addr, i:int): addr
+    requires isUInt32(a + WordsToBytes(i))
+    ensures WordAligned(WordOffset(a, i))
+{ a + WordsToBytes(i) }
+
 predicate ValidAbsL1PTable(m:memstate, vbase:int)
     requires ValidMemState(m)
 {
-    WordAligned(vbase) && ValidMemRange(vbase, vbase + ARM_L1PTABLE_BYTES())
+    WordAligned(vbase) && ValidMemRange(vbase, vbase + ARM_L1PTABLE_BYTES)
     // all L1 PTEs are valid, and all non-zero PTEs point to valid L2 tables
-    && forall i | 0 <= i < ARM_L1PTES() :: (
-        var ptew := MemContents(m, vbase + WordsToBytes(i));
+    && forall i | 0 <= i < ARM_L1PTES :: (
+        var ptew := MemContents(m, WordOffset(vbase, i));
         ValidAbsL1PTEWord(ptew) &&
             var ptem := ExtractAbsL1PTE(ptew);
             ptem.Just? ==> (
@@ -610,11 +613,11 @@ function ExtractAbsL1PTable(m:memstate, vbase:addr): AbsPTable
     requires ValidAbsL1PTable(m, vbase)
     ensures WellformedAbsPTable(ExtractAbsL1PTable(m, vbase))
 {
-    var f := imap i | 0 <= i < ARM_L1PTES() :: (
-        var pte := ExtractAbsL1PTE(MemContents(m, vbase + WordsToBytes(i)));
+    var f := imap i | 0 <= i < ARM_L1PTES :: (
+        var pte := ExtractAbsL1PTE(MemContents(m, WordOffset(vbase, i)));
         if pte.Nothing? then Nothing else Just(ExtractAbsL2PTable(m, pte.v + PhysBase()))
         );
-    var indices := SeqOfNumbersInRightExclusiveRange(0, ARM_L1PTES());
+    var indices := SeqOfNumbersInRightExclusiveRange(0, ARM_L1PTES);
     IMapSeqToSeq(indices, f)
 }
 
@@ -645,8 +648,8 @@ predicate ValidAbsL2PTable(m:memstate, vbase:addr)
     requires ValidMemState(m)
 {
     WordAligned(vbase)
-        && ValidMemRange(vbase, vbase + ARM_L2PTABLE_BYTES())
-        && forall i | 0 <= i < ARM_L2PTES() :: ValidAbsL2PTEWord(MemContents(m, vbase + WordsToBytes(i)))
+        && ValidMemRange(vbase, vbase + ARM_L2PTABLE_BYTES)
+        && forall i | 0 <= i < ARM_L2PTES :: ValidAbsL2PTEWord(MemContents(m, WordOffset(vbase, i)))
 }
 
 function ExtractAbsL2PTable(m:memstate, vbase:addr): AbsL2PTable
@@ -654,20 +657,14 @@ function ExtractAbsL2PTable(m:memstate, vbase:addr): AbsL2PTable
     requires ValidAbsL2PTable(m, vbase)
     ensures WellformedAbsL2PTable(ExtractAbsL2PTable(m, vbase))
 {
-    var f := imap i | 0 <= i < ARM_L2PTES() :: ExtractAbsL2PTE(MemContents(m, vbase + WordsToBytes(i)));
-    var indices := SeqOfNumbersInRightExclusiveRange(0, ARM_L2PTES());
+    var f := imap i | 0 <= i < ARM_L2PTES :: ExtractAbsL2PTE(MemContents(m, WordOffset(vbase, i)));
+    var indices := SeqOfNumbersInRightExclusiveRange(0, ARM_L2PTES);
     IMapSeqToSeq(indices, f)
 }
 
-function method ARM_L2PTE_NX_BIT(): bv32
-{
-    0x1 // XN
-}
-
-function method ARM_L2PTE_RO_BIT(): bv32
-{
-    0x200 // AP2
-}
+const ARM_L2PTE_NX_BIT: bv32 := 0x1; // XN
+const ARM_L2PTE_RO_BIT: bv32 := 0x200; // AP2
+const ARM_L2PTE_CONST_BITS: bv32 := 0xd74; // B, AP0, AP1, TEX, S, NG
 
 predicate ValidAbsL2PTEWord(pteword:word)
 {
@@ -675,7 +672,7 @@ predicate ValidAbsL2PTEWord(pteword:word)
     var typebits := BitAnd(pte, 0x3);
     var lowbits := BitAnd(pte, 0xdfc);
     var pagebase := BitwiseMaskHigh(pteword, 12);
-    typebits == 0 || (typebits != 1 && lowbits == ARM_L2PTE_CONST_BITS() && isUInt32(pagebase + PhysBase()))
+    typebits == 0 || (typebits != 1 && lowbits == ARM_L2PTE_CONST_BITS && isUInt32(pagebase + PhysBase()))
 }
 
 function ExtractAbsL2PTE(pteword:word): Maybe<AbsPTE>
@@ -684,21 +681,12 @@ function ExtractAbsL2PTE(pteword:word): Maybe<AbsPTE>
 {
     var pte := WordAsBits(pteword);
     var typebits := BitAnd(pte, 0x3);
-    var exec := BitAnd(pte, ARM_L2PTE_NX_BIT()) == 0;
-    var write := BitAnd(pte, ARM_L2PTE_RO_BIT()) == 0;
+    var exec := BitAnd(pte, ARM_L2PTE_NX_BIT) == 0;
+    var write := BitAnd(pte, ARM_L2PTE_RO_BIT) == 0;
     var pagebase := BitwiseMaskHigh(pteword, 12); // BitwiseAnd(pteword, 0xfffff000);
     assert PageAligned(pagebase);
     // if the type is zero, it's an invalid entry, which is fine (maps nothing)
     if typebits == 0 then Nothing else Just(AbsPTE(pagebase, write, exec))
-}
-
-function method ARM_L2PTE_CONST_BITS(): bv32
-{
-    0x4 /* B */
-        | 0x30 /* AP0, AP1 */
-        | 0x140 /* TEX */
-        | 0x400 /* S */
-        | 0x800 /* NG */
 }
 
 //-----------------------------------------------------------------------------

@@ -74,7 +74,7 @@ method Main()
         ensures exists p2:PageDb :: smchandler(s1, p1, s2, p2)
             && validPageDb(p2) && pageDbCorresponds(s2.m, p2)
     {
-        var stack_bytes := KOM_STACK_SIZE() - BytesPerWord();
+        var stack_bytes := KOM_STACK_SIZE - WORDSIZE;
         assert StackBytesRemaining(s1, stack_bytes);
         reveal_sp_eval();
         var block := sp_CCons(smc_handler, sp_CNil());

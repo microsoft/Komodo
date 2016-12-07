@@ -6,11 +6,9 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
     ensures ValidAbsL2PTEWord(ARM_L2PTE(pa, w, x))
     ensures ExtractAbsL2PTE(ARM_L2PTE(pa, w, x)) == Just(AbsPTE(pa, w, x))
 {
-    lemma_Bitmask12();
-
     var ptew := ARM_L2PTE(pa, w, x);
-    var nxbit:bv32 := if x then 0 else ARM_L2PTE_NX_BIT();
-    var robit:bv32 := if w then 0 else ARM_L2PTE_RO_BIT();
+    var nxbit:bv32 := if x then 0 else ARM_L2PTE_NX_BIT;
+    var robit:bv32 := if w then 0 else ARM_L2PTE_RO_BIT;
     var extrabits := BitOr(BitOr(0xd76, nxbit), robit);
     var pteb := BitOr(WordAsBits(pa), extrabits);
 
@@ -24,8 +22,8 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
         calc {
             ptew;
             ARM_L2PTE(pa, w, x);
-            BitsAsWord(BitOr(WordAsBits(pa), BitOr(BitOr(ARM_L2PTE_CONST_BITS() | 0x2, nxbit), robit)));
-            { assert ARM_L2PTE_CONST_BITS() | 0x2 == 0xd76; }
+            BitsAsWord(BitOr(WordAsBits(pa), BitOr(BitOr(ARM_L2PTE_CONST_BITS | 0x2, nxbit), robit)));
+            { assert ARM_L2PTE_CONST_BITS | 0x2 == 0xd76; }
             BitsAsWord(BitOr(WordAsBits(pa), BitOr(BitOr(0xd76, nxbit), robit)));
             BitsAsWord(BitOr(WordAsBits(pa), extrabits));
         }
@@ -42,6 +40,7 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
             BitwiseMaskLow(pa, 12);
             { reveal_BitwiseMaskLow(); }
             BitsAsWord(BitAnd(WordAsBits(pa), BitmaskLow(12)));
+            { lemma_Bitmask12(); }
             BitsAsWord(BitAnd(WordAsBits(pa), 0xfff));
         }
     }
@@ -50,6 +49,7 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
         BitwiseMaskHigh(ptew, 12);
         { reveal_BitwiseMaskHigh(); }
         BitsAsWord(BitAnd(WordAsBits(ptew), BitmaskHigh(12)));
+        { lemma_Bitmask12(); }
         BitsAsWord(BitAnd(pteb, 0xfffff000));
         BitsAsWord(BitAnd(BitOr(WordAsBits(pa), extrabits), 0xfffff000));
         {
@@ -88,7 +88,7 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
         reveal_BitAnd();
     }
 
-    assert BitAnd(pteb, 0xdfc) == ARM_L2PTE_CONST_BITS() by {
+    assert BitAnd(pteb, 0xdfc) == ARM_L2PTE_CONST_BITS by {
         calc {
             BitAnd(pteb, 0xdfc);
             BitAnd(BitOr(WordAsBits(pa), extrabits), 0xdfc);
@@ -104,13 +104,13 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
             BitAnd(extrabits, 0xdfc);
             { reveal_BitAnd(); }
             0xd74;
-            ARM_L2PTE_CONST_BITS();
+            ARM_L2PTE_CONST_BITS;
         }
     }
 
-    assert x == (BitAnd(pteb, ARM_L2PTE_NX_BIT()) == 0) by {
+    assert x == (BitAnd(pteb, ARM_L2PTE_NX_BIT) == 0) by {
         calc {
-            BitAnd(pteb, ARM_L2PTE_NX_BIT());
+            BitAnd(pteb, ARM_L2PTE_NX_BIT);
             BitAnd(BitOr(WordAsBits(pa), extrabits), 1);
             { lemma_BitOrAndRelation(WordAsBits(pa), extrabits, 1); }
             BitOr(BitAnd(WordAsBits(pa), 1), BitAnd(extrabits, 1));
@@ -127,9 +127,9 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
         }
     }
 
-    assert w == (BitAnd(pteb, ARM_L2PTE_RO_BIT()) == 0) by {
+    assert w == (BitAnd(pteb, ARM_L2PTE_RO_BIT) == 0) by {
         calc {
-            BitAnd(pteb, ARM_L2PTE_RO_BIT());
+            BitAnd(pteb, ARM_L2PTE_RO_BIT);
             BitAnd(BitOr(WordAsBits(pa), extrabits), 0x200);
             { lemma_BitOrAndRelation(WordAsBits(pa), extrabits, 0x200); }
             BitOr(BitAnd(WordAsBits(pa), 0x200), BitAnd(extrabits, 0x200));
@@ -152,7 +152,7 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
 
 lemma lemma_l1ptesmatch(e: Maybe<PageNr>, subpage:int)
     requires 0 <= subpage < 4
-    requires PhysBase() == KOM_DIRECTMAP_VBASE()
+    requires PhysBase() == KOM_DIRECTMAP_VBASE
     ensures ValidAbsL1PTEWord(mkL1Pte(e, subpage))
     ensures ExtractAbsL1PTE(mkL1Pte(e, subpage)) == mkAbsL1PTE(e, subpage)
 {
@@ -166,8 +166,8 @@ lemma lemma_l1ptesmatch(e: Maybe<PageNr>, subpage:int)
     match e {
     case Nothing => assert ptew == 0; reveal_BitAnd();
     case Just(pg) => {
-        var pa := page_paddr(pg) + subpage * ARM_L2PTABLE_BYTES();
-        assert pa % ARM_L2PTABLE_BYTES() == 0;
+        var pa := page_paddr(pg) + subpage * ARM_L2PTABLE_BYTES;
+        assert pa % ARM_L2PTABLE_BYTES == 0;
         assert ptew == ARM_L1PTE(pa);
 
         calc {
@@ -220,12 +220,12 @@ lemma lemma_l1ptesmatch(e: Maybe<PageNr>, subpage:int)
                 { reveal_BitOr(); }
                 BitAnd(WordAsBits(pa), 0xfffffc00);
                 { calc {
-                    0;
-                    BitwiseMaskLow(pa, 10);
-                    { reveal_BitwiseMaskLow(); }
-                    BitsAsWord(BitAnd(WordAsBits(pa), BitmaskLow(10)));
-                    { lemma_Bitmask10(); }
                     BitsAsWord(BitAnd(WordAsBits(pa), 0x3ff));
+                    { lemma_Bitmask10(); }
+                    BitsAsWord(BitAnd(WordAsBits(pa), BitmaskLow(10)));
+                    { reveal_BitwiseMaskLow(); }
+                    BitwiseMaskLow(pa, 10);
+                    0;
                 } assert BitAnd(WordAsBits(pa), 0x3ff) == 0; reveal_BitAnd(); }
                 WordAsBits(pa);
             } }
@@ -242,11 +242,11 @@ function nonexec_mapping(mapping: Mapping): Mapping
 }
 
 function method NOT_KOM_MAPPING_X(): word
-    ensures NOT_KOM_MAPPING_X() == BitwiseNot(KOM_MAPPING_X())
+    ensures NOT_KOM_MAPPING_X() == BitwiseNot(KOM_MAPPING_X)
     ensures NOT_KOM_MAPPING_X() == BitsAsWord(0xfffffffb)
 {
     assert 0xfffffffb == BitsAsWord(0xfffffffb) by { reveal_BitsAsWord(); }
-    assert WordAsBits(KOM_MAPPING_X()) == 4 by { reveal_WordAsBits(); }
+    assert WordAsBits(KOM_MAPPING_X) == 4 by { reveal_WordAsBits(); }
     reveal_BitNot();
     0xfffffffb
 }
@@ -278,33 +278,33 @@ lemma lemma_nonexec_mapping(mapping: Mapping, x: word)
     }
 
     assert permFromMapping(y) == permFromMapping(x).(x := false) by {
-        assert WordAsBits(KOM_MAPPING_R()) == 1 && WordAsBits(KOM_MAPPING_W()) == 2
-            && WordAsBits(KOM_MAPPING_X()) == 4 by { reveal_WordAsBits(); }
+        assert WordAsBits(KOM_MAPPING_R) == 1 && WordAsBits(KOM_MAPPING_W) == 2
+            && WordAsBits(KOM_MAPPING_X) == 4 by { reveal_WordAsBits(); }
 
         calc {
-            BitwiseAnd(y, KOM_MAPPING_R());
+            BitwiseAnd(y, KOM_MAPPING_R);
             BitsAsWord(BitAnd(yb, 1));
             BitsAsWord(BitAnd(BitAnd(xb, 0xfffffffb), 1));
             { lemma_BitAndAssociative(xb, 0xfffffffb, 1); }
             BitsAsWord(BitAnd(xb, BitAnd(0xfffffffb, 1)));
             { assert BitAnd(0xfffffffb, 1) == 1 by { reveal_BitAnd(); } }
             BitsAsWord(BitAnd(xb, 1));
-            BitwiseAnd(x, KOM_MAPPING_R());
+            BitwiseAnd(x, KOM_MAPPING_R);
         }
 
         calc {
-            BitwiseAnd(y, KOM_MAPPING_W());
+            BitwiseAnd(y, KOM_MAPPING_W);
             BitsAsWord(BitAnd(yb, 2));
             BitsAsWord(BitAnd(BitAnd(xb, 0xfffffffb), 2));
             { lemma_BitAndAssociative(xb, 0xfffffffb, 2); }
             BitsAsWord(BitAnd(xb, BitAnd(0xfffffffb, 2)));
             { assert BitAnd(0xfffffffb, 2) == 2 by { reveal_BitAnd(); } }
             BitsAsWord(BitAnd(xb, 2));
-            BitwiseAnd(x, KOM_MAPPING_W());
+            BitwiseAnd(x, KOM_MAPPING_W);
         }
 
         calc {
-            BitwiseAnd(y, KOM_MAPPING_X());
+            BitwiseAnd(y, KOM_MAPPING_X);
             BitsAsWord(BitAnd(yb, 4));
             BitsAsWord(BitAnd(BitAnd(xb, 0xfffffffb), 4));
             { lemma_BitAndAssociative(xb, 0xfffffffb, 4); }
@@ -320,7 +320,7 @@ lemma lemma_nonexec_mapping(mapping: Mapping, x: word)
 }
 
 lemma lemma_ARM_L1PTE_Dual(paddr: word)
-    requires paddr % ARM_L2PTABLE_BYTES() == 0
+    requires paddr % ARM_L2PTABLE_BYTES == 0
     ensures ARM_L1PTE(paddr) == paddr + 1
 {
     assert paddr % 0x400 == 0 && paddr % 2 == 0;
@@ -333,5 +333,5 @@ function mkAbsL1PTE(e: Maybe<PageNr>, subpage:int): Maybe<addr>
     match e
         case Nothing => Nothing
         case Just(pgNr) =>
-            Just(page_paddr(pgNr) + subpage * ARM_L2PTABLE_BYTES())
+            Just(page_paddr(pgNr) + subpage * ARM_L2PTABLE_BYTES)
 }
