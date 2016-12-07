@@ -1,5 +1,4 @@
 include "ARMdecls-common.sdfy"
-include{:verbatim} "ARMdecls-common.gen.dfy"
 
 var{:state osp()} sp:word;
 var{:state olr()} lr:word;

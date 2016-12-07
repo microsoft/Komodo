@@ -1,12 +1,10 @@
-include verbatim "kom_common.i.dfy"
-include verbatim "pagedb.i.dfy"
-include verbatim "smcapi.i.dfy"
-include verbatim "entry.i.dfy"
+include {:verbatim} "kom_common.i.dfy"
+include {:verbatim} "pagedb.i.dfy"
+include {:verbatim} "smcapi.i.dfy"
+include {:verbatim} "entry.i.dfy"
 
 include "ARMdecls-unrefined.sdfy"
-include verbatim "ARMdecls-unrefined.gen.dfy"
 include "kom_utils.sdfy"
-include verbatim "kom_utils.gen.dfy"
 
 #verbatim
 function method banked_regs_framesize(): int { 18*4 }

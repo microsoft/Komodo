@@ -1,6 +1,5 @@
-include verbatim "kom_common.i.dfy"
+include {:verbatim} "kom_common.i.dfy"
 include "ARMdecls-unrefined.sdfy"
-include verbatim "ARMdecls-unrefined.gen.dfy"
 
 procedure memcpy(operand dst:addr, operand src:addr, inout operand size:addr,
                  out operand tmp:int)

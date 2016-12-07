@@ -1,10 +1,9 @@
-include verbatim "kom_common.i.dfy"
-include verbatim "pagedb.i.dfy"
-include verbatim "smcapi.i.dfy"
-include verbatim "entry.i.dfy"
+include {:verbatim} "kom_common.i.dfy"
+include {:verbatim} "pagedb.i.dfy"
+include {:verbatim} "smcapi.i.dfy"
+include {:verbatim} "entry.i.dfy"
 
 include "ARMdecls-unrefined.sdfy"
-include verbatim "ARMdecls-unrefined.gen.dfy"
 
 procedure switch_to_monitor()
     requires

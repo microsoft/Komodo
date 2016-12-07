@@ -16,7 +16,7 @@ def mkdeps(filename):
 
 # this isn't perfect, but it should be good enough
 # (if people are writing adversarial dafny we've got bigger problems!)
-INCLUDE_RE = re.compile(r'^\s*include\s+(\w+\s*)?"([^"]*)"')
+INCLUDE_RE = re.compile(r'^\s*include\s+([^"]+\s*)?"([^"]*)"')
 
 for srcfile in sys.argv[1:]:
     basedir = os.path.dirname(srcfile)

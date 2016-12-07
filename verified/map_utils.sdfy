@@ -1,8 +1,7 @@
-include verbatim "kom_common.i.dfy"
-include verbatim "bitvectors.i.dfy"
-include verbatim "pagedb.i.dfy"
+include {:verbatim} "kom_common.i.dfy"
+include {:verbatim} "bitvectors.i.dfy"
+include {:verbatim} "pagedb.i.dfy"
 include "ARMdecls-unrefined.sdfy"
-include verbatim "ARMdecls-unrefined.gen.dfy"
 
 procedure fetch_l1pte(
     operand l1pt_va:addr,
