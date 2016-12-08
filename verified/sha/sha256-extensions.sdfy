@@ -8,6 +8,7 @@
 include{:verbatim} "sha256.i.dfy"
 //include verbatim "sha256-refined-helpers.i.dfy"
 //include verbatim "sha256-refined-invariants.i.dfy"
+include{:verbatim} "bit-vector-lemmas.i.dfy"
 
 include "../ARMdecls-refined.sdfy"
 
@@ -20,8 +21,8 @@ ensures
     dst == c;
 {
     STR(c / 0x1_0000_0000, dst, 0);
-    LSL(dst, dst, 16);
-    STR(c % 0x1_0000_0000, dst, 0);
+    ADDWrapShift(dst, c % 0x1_0000_0000, dst, LSLShift(16));
+    lemma_32bit_const_load(c);
 }
 
 procedure {:refined} sha256_init() returns (ghost trace_out:SHA256_trace)
@@ -66,14 +67,39 @@ procedure {:refined} sha256_finalize(
     )
 requires/ensures
     ValidAddrMemStateOpaque(mem);
-    ValidAddrs(r0, 8);      // Current hash value
-    ValidAddrs(sp, 32);     // Temp buffer for padding+length
 reads r0; r1; sp;
 requires 
-    //r1 == data_length_in_bytes;
+    // 
+    // sha256_block_data_order's requires:
+    // 
     IsCompleteSHA256Trace(trace_in);
     SHA256TraceIsCorrect(trace_in);
-    forall i :: 0 <= i < 8 ==> trace_out.H[i] == AddrMemContents(mem, r0 + 4*i);
+
+    // Stack is accessible
+    sp >= 116 + 64;                  // Add some stack for storing the last block
+    ValidAddrs(sp-(116+64), 29 + 16);
+
+    // K table is valid
+    SaneShaGlobal(globals);
+    lr == AddressOfGlobal(K_SHA256s());
+    ValidGlobalAddr(K_SHA256s(), lr);
+
+    let ctx := r0 in
+     // Old H values are laid out in memory pointed at by ctx
+        ValidAddrs(ctx, 8)
+     && last(trace_in.H)[0] == AddrMemContents(mem, ctx + 0*4)
+     && last(trace_in.H)[1] == AddrMemContents(mem, ctx + 1*4)
+     && last(trace_in.H)[2] == AddrMemContents(mem, ctx + 2*4)
+     && last(trace_in.H)[3] == AddrMemContents(mem, ctx + 3*4)
+     && last(trace_in.H)[4] == AddrMemContents(mem, ctx + 4*4)
+     && last(trace_in.H)[5] == AddrMemContents(mem, ctx + 5*4)
+     && last(trace_in.H)[6] == AddrMemContents(mem, ctx + 6*4)
+     && last(trace_in.H)[7] == AddrMemContents(mem, ctx + 7*4)
+
+     // Anti-aliasing
+     && (ctx + 32 < sp - 116 || ctx > sp)                              // ctx != sp
+    ;
+reads globals
 modifies mem;
 ensures
     // Framing
@@ -83,8 +109,17 @@ ensures
 
     forall i :: 0 <= i < 8 ==> trace_out.H[i] == AddrMemContents(mem, r0 + 4*i);
 
-    SHA(input) == 
+//    SHA(input) == seq(AddrMemContents(mem, old(r0) + 0*4),
+//                      AddrMemContents(mem, old(r0) + 1*4),
+//                      AddrMemContents(mem, old(r0) + 2*4),
+//                      AddrMemContents(mem, old(r0) + 3*4),
+//                      AddrMemContents(mem, old(r0) + 4*4),
+//                      AddrMemContents(mem, old(r0) + 5*4),
+//                      AddrMemContents(mem, old(r0) + 6*4),
+//                      AddrMemContents(mem, old(r0) + 7*4))
 {
+    SUB(esp, esp, 64);      // Make room for the final 256-bit input buffer
+
     STR(0x80, sp, 0);
 
     // Fill sp buffer with 0s
@@ -105,7 +140,15 @@ ensures
     // Store the length
     STR(r1, sp, 60);
 
+    // Parameters to sha256_block_data_order
+    // r0 is already set to ctx
+    MOV(sp, r1);    // input_ptr
+    MOV(1, r2);     // num_blocks
+
     // Compute one last compression
-    sha256_block_data_order(trace_in, input);
+    ghost var last_block := seq(0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, r1);
+    sha256_block_data_order(trace_in, last_block);
+
+    // Probably need to call lemma_SHA256FinalHelper1 here
 }
 
