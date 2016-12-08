@@ -70,3 +70,15 @@ lemma lemma_XorSelfIsZero()
         lemma_BitsAndWordConversions();
     }
 }
+
+lemma lemma_32bit_const_load(c:word)
+    ensures LeftShift(c / 0x1_0000_0000, 16) + c % 0x1_0000_0000 == c;
+{
+    var top := c / 0x1_0000_0000;
+    calc {
+        LeftShift(top, 16) + (c % 0x1_0000_0000);
+            { lemma_ShiftsAdd(top, 4, 12);  lemma_LeftShift4(top); lemma_LeftShift12(top * 16); }
+        top * 0x1_0000_0000 + (c % 0x1_0000_0000);
+        c;
+    }
+}
