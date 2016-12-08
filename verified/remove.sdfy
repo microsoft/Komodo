@@ -162,7 +162,7 @@ procedure kom_smc_remove(
                     assert err == specE;
                 } else {
                     assert pagedb[page].entry.refcount == 0;
-                    assert r7 == KOM_PAGE_FREE; // FREE is 0
+                    assert r7 == KOM_PAGE_FREE == 0;
                     assert r5 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE;
                     STRglobal(r7,PageDb(),r4,r5);
                     err := sp_op_const(KOM_ERR_SUCCESS);
@@ -173,6 +173,7 @@ procedure kom_smc_remove(
                         reveal_pageDbEntryCorresponds();
                         reveal_pageContentsCorresponds();
                         assert specD[page] is PageDbEntryFree;
+                        extractPageDbToAbstract(this.m, page);
                         assert pageDbEntryCorresponds(specD[page], 
                             extractPageDbEntry(this.m, page));
                         assert pageDbCorrespondsOnly(this.m, specD, page);
