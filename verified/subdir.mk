@@ -1,5 +1,5 @@
 DAFNYTIMELIMIT ?= 60
-SPARTANDIRECT ?= 1
+SPARTANDIRECT ?= 0
 DAFNYFLAGS = /trace /errorTrace:0 /timeLimit:$(DAFNYTIMELIMIT) /ironDafny /allocated:1 \
     $(call mkdafnyflags,$(notdir $(*))) $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
 SPARTANFLAGS = -includeSuffix .sdfy .gen.dfy
