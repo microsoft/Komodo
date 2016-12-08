@@ -19,8 +19,10 @@ procedure memcpy(operand dst:addr, operand src:addr, inout operand size:addr,
         SmcProcedureInvariant(old(this),this);
         RegPreservingExcept(old(this), this, set(@size, @tmp));
         MemPreservingExcept(old(this), this, old(dst), old(dst + size));
-        forall i :: 0 <= i < old(size) && WordAligned(i)
-            ==> MemContents(this.m, old(dst) + i) == old(MemContents(this.m, src + i));
+        //forall i :: 0 <= i < old(size) && WordAligned(i)
+        //    ==> MemContents(this.m, old(dst) + i) == old(MemContents(this.m, src + i));
+        forall a :: old(dst) <= a < old(dst + size) && WordAligned(a)
+            ==> MemContents(this.m, a) == old(MemContents(this.m, a - dst + src));
 {
     while (size > 0)
         invariant
@@ -30,8 +32,11 @@ procedure memcpy(operand dst:addr, operand src:addr, inout operand size:addr,
             RegPreservingExcept(old(this), this, set(@size, @tmp));
             WordAligned(size) && 0 <= size <= old(size);
             MemPreservingExcept(old(this), this, dst + size, dst + old(size));
-            forall i :: (size <= i < old(size)) && WordAligned(i)
-                ==> MemContents(this.m, dst + i) == old(MemContents(this.m, src + i));
+            dst == old(dst);
+            //forall i :: (size <= i < old(size)) && WordAligned(i)
+            //    ==> MemContents(this.m, dst + i) == old(MemContents(this.m, src + i));
+            forall a :: dst + size <= a < old(dst + size) && WordAligned(a)
+                ==> MemContents(this.m, a) == old(MemContents(this.m, a - dst + src));
         decreases
             size;
     {
