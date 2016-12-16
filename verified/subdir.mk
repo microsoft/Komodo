@@ -1,5 +1,5 @@
 DAFNYTIMELIMIT ?= 60
-SPARTANDIRECT ?= 0
+SPARTANDIRECT ?= 1
 DAFNYFLAGS = /trace /errorTrace:0 /timeLimit:$(DAFNYTIMELIMIT) /ironDafny /allocated:1 \
     $(call mkdafnyflags,$(notdir $(*))) $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
 SPARTANFLAGS = -includeSuffix .sdfy .gen.dfy
@@ -24,7 +24,7 @@ ifeq ($(SPARTANDIRECT), 1)
 %.verified %.log: %.sdfy %.gen.dfy
 	/bin/bash -c "$(SPARTAN) $(SPARTANFLAGS) $< -dafnyDirect \
 	$(DAFNYFLAGS) /compile:0 | tee $*.log; exit \$${PIPESTATUS[0]}"
-	@grep -q "^Dafny program verifier finished with [^0][0-9]* verified, 0 errors$$" $*.log $(if $(DAFNYPROC),,&& touch $*.verified)
+	@grep -q "^Dafny program verifier finished with [0-9]* verified, 0 errors$$" $*.log $(if $(DAFNYPROC),,&& touch $*.verified)
 	@$(RM) $*.log
 else
 %.verified: %.gen.dfy

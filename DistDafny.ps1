@@ -95,7 +95,7 @@ if ($BoogieExitCode) {
     # boogie appeared to succeed, but it isn't good at reporting
     # failures, so we grep the output to double-check
     if ($boogieoutput | Select-String -CaseSensitive -Quiet -Pattern `
-      "^Boogie program verifier finished with [^0][0-9]* verified, 0 errors$") {
+      "^Boogie program verifier finished with [0-9]* verified, 0 errors$") {
         exit 0
     } else {
         exit 1
