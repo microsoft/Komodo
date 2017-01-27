@@ -1,15 +1,15 @@
 include "bitvectors.s.dfy"
 include "ARMdef.dfy"
 
-lemma lemma_BitShiftsLeftSum(x: bv32, a: nat, b: nat)
-    requires 0 <= a + b < 32
-    ensures BitShiftLeft(x, a + b) == BitShiftLeft(BitShiftLeft(x, a), b)
-{ reveal_BitShiftLeft(); }
-
 lemma lemma_BitShiftsRightSum(x: bv32, a: nat, b: nat)
     requires 0 <= a + b < 32
     ensures BitShiftRight(x, a + b) == BitShiftRight(BitShiftRight(x, a), b)
 { reveal_BitShiftRight(); }
+
+lemma lemma_BitShiftsLeftSum(x: bv32, a: nat, b: nat)
+    requires 0 <= a + b < 32
+    ensures BitShiftLeft(x, a + b) == BitShiftLeft(BitShiftLeft(x, a), b)
+{ reveal_BitShiftLeft(); }
 
 lemma lemma_BitOrCommutative(a: bv32, b:bv32)
     ensures BitOr(a, b) == BitOr(b, a)
