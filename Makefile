@@ -7,9 +7,8 @@ PREFIX ?= arm-eabi-
 INSTALLDIR ?= .
 GUEST_KERNEL ?= kernel7.img
 GUEST_DISKIMG ?= raspbian.img
-IRON_TOOLS_PATH ?= $(HOME)/src/Komodo-tools
-SPARTAN ?= $(IRON_TOOLS_PATH)/spartan.exe
-DAFNY ?= $(IRON_TOOLS_PATH)/Dafny.exe
+VALE ?= vale.exe
+DAFNY ?= Dafny.exe
 #-----------------------------------------------------------------------------
 
 AS = $(PREFIX)as

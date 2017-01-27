@@ -3,202 +3,201 @@ include "ARMdef.dfy"
 //-----------------------------------------------------------------------------
 // Spartan Types
 //-----------------------------------------------------------------------------
-type sp_int = int
-type sp_bool = bool
-type sp_operand = operand // sp_operand is deprecated
-type sp_operand_code = operand
-type sp_operand_lemma = operand
-type sp_cmp = obool
-type sp_code = code
-type sp_codes = codes
-type sp_state = state
+type va_int = int
+type va_bool = bool
+type va_operand = operand // va_operand is deprecated
+type va_operand_code = operand
+type va_operand_lemma = operand
+type va_cmp = obool
+type va_code = code
+type va_codes = codes
+type va_state = state
 
 //-----------------------------------------------------------------------------
 // Spartan-Verification Interface
 //-----------------------------------------------------------------------------
 
-function method sp_op(o:sp_operand_lemma):sp_operand_code { o }
+function method va_op(o:va_operand_lemma):va_operand_code { o }
 
-predicate {:opaque} sp_eval(c:code, s:state, r:state)
+predicate {:opaque} va_eval(c:code, s:state, r:state)
 {
     s.ok ==> evalCode(c, s, r)
 }
 
-function sp_eval_op(s:state, o:operand): word
+function va_eval_operand_int(s:state, o:operand): word
     requires ValidState(s) && ValidAnySrcOperand(s, o)
 { OperandContents(s,o) }
 
-function sp_eval_op_addr(s:state, o:operand): word
-    requires ValidState(s)
-    requires ValidOperand(o)
-{ sp_eval_op(s,o) }
-
-predicate sp_eq_ops(s1:sp_state, s2:sp_state, o:operand)
+predicate va_eq_ops(s1:va_state, s2:va_state, o:operand)
 {
     ValidState(s1) && ValidState(s2) && (ValidOperand(o) || 
         (ValidBankedRegOperand(s1, o) && ValidBankedRegOperand(s2,o)))
-        && sp_eval_op(s1, o) == sp_eval_op(s2, o)
+        && OperandContents(s1, o) == OperandContents(s2, o)
 }
 
-function method sp_CNil():codes { CNil }
-function sp_cHead(b:codes):code requires b.sp_CCons? { b.hd }
-predicate sp_cHeadIs(b:codes, c:code) { b.sp_CCons? && b.hd == c }
-predicate sp_cTailIs(b:codes, t:codes) { b.sp_CCons? && b.tl == t }
+function method va_CNil():codes { CNil }
+function va_cHead(b:codes):code requires b.va_CCons? { b.hd }
+predicate va_cHeadIs(b:codes, c:code) { b.va_CCons? && b.hd == c }
+predicate va_cTailIs(b:codes, t:codes) { b.va_CCons? && b.tl == t }
 
-predicate sp_require(b0:codes, c1:code, s0:sp_state, sN:sp_state)
+predicate va_require(b0:codes, c1:code, s0:va_state, sN:va_state)
 {
-    sp_cHeadIs(b0, c1)
- && sp_eval(Block(b0), s0, sN)
+    va_cHeadIs(b0, c1)
+ && va_eval(Block(b0), s0, sN)
  && ValidState(s0)
 }
 
-predicate sp_ensure(b0:codes, b1:codes, s0:sp_state, s1:sp_state, sN:sp_state)
+predicate va_ensure(b0:codes, b1:codes, s0:va_state, s1:va_state, sN:va_state)
 {
-    sp_cTailIs(b0, b1)
-// && sp_eval(sp_cHead(b0), s0, s1)
- && sp_eval(sp_Block(b1), s1, sN)
+    va_cTailIs(b0, b1)
+// && va_eval(va_cHead(b0), s0, s1)
+ && va_eval(va_Block(b1), s1, sN)
  && ValidState(s1)
 }
 
-function method fromOperand(o:operand):operand { o }
-function method sp_op_const(n:word):operand { OConst(n) }
+//function method fromOperand(o:operand):operand { o }
+//function method va_op_const(n:word):operand { OConst(n) }
 
-function method sp_cmp_eq(o1:operand, o2:operand):obool { OCmp(OEq, o1, o2) }
-function method sp_cmp_ne(o1:operand, o2:operand):obool { OCmp(ONe, o1, o2) }
-function method sp_cmp_le(o1:operand, o2:operand):obool { OCmp(OLe, o1, o2) }
-function method sp_cmp_ge(o1:operand, o2:operand):obool { OCmp(OGe, o1, o2) }
-function method sp_cmp_lt(o1:operand, o2:operand):obool { OCmp(OLt, o1, o2) }
-function method sp_cmp_gt(o1:operand, o2:operand):obool { OCmp(OGt, o1, o2) }
+function method va_cmp_eq(o1:operand, o2:operand):obool { OCmp(OEq, o1, o2) }
+function method va_cmp_ne(o1:operand, o2:operand):obool { OCmp(ONe, o1, o2) }
+function method va_cmp_le(o1:operand, o2:operand):obool { OCmp(OLe, o1, o2) }
+function method va_cmp_ge(o1:operand, o2:operand):obool { OCmp(OGe, o1, o2) }
+function method va_cmp_lt(o1:operand, o2:operand):obool { OCmp(OLt, o1, o2) }
+function method va_cmp_gt(o1:operand, o2:operand):obool { OCmp(OGt, o1, o2) }
 
-function method sp_Block(block:codes):code { Block(block) }
-function method sp_IfElse(ifb:obool, ift:code, iff:code):code { IfElse(ifb, ift, iff) }
-function method sp_While(whileb:obool, whilec:code):code { While(whileb, whilec) }
+function method va_Block(block:codes):code { Block(block) }
+function method va_IfElse(ifb:obool, ift:code, iff:code):code { IfElse(ifb, ift, iff) }
+function method va_While(whileb:obool, whilec:code):code { While(whileb, whilec) }
 
-function method sp_get_block(c:code):codes requires c.Block? { c.block }
-function method sp_get_ifCond(c:code):obool requires c.IfElse? { c.ifCond }
-function method sp_get_ifTrue(c:code):code requires c.IfElse? { c.ifTrue }
-function method sp_get_ifFalse(c:code):code requires c.IfElse? { c.ifFalse }
-function method sp_get_whileCond(c:code):obool requires c.While? { c.whileCond }
-function method sp_get_whileBody(c:code):code requires c.While? { c.whileBody }
+function method va_get_block(c:code):codes requires c.Block? { c.block }
+function method va_get_ifCond(c:code):obool requires c.IfElse? { c.ifCond }
+function method va_get_ifTrue(c:code):code requires c.IfElse? { c.ifTrue }
+function method va_get_ifFalse(c:code):code requires c.IfElse? { c.ifFalse }
+function method va_get_whileCond(c:code):obool requires c.While? { c.whileCond }
+function method va_get_whileBody(c:code):code requires c.While? { c.whileBody }
 
 //-----------------------------------------------------------------------------
 // Spartan-to-Dafny connections needed for refined mode
 //-----------------------------------------------------------------------------
-function method sp_op_osp():operand { OSP }
-function method sp_op_olr():operand { OLR }
-function method sp_op_reg(r:ARMReg):operand { OReg(r) }
-function sp_get_ok(s:state):bool { s.ok }
-function sp_get_reg(r:ARMReg, s:state):word
+function method va_op_osp():operand { OSP }
+function method va_op_olr():operand { OLR }
+function method va_op_reg(r:ARMReg):operand { OReg(r) }
+function va_get_ok(s:state):bool { s.ok }
+function va_get_reg(r:ARMReg, s:state):word
     requires ValidRegState(s.regs)
 {
     reveal_ValidRegState();
     s.regs[r]
 }
 
-function sp_get_mem(s:state):memmap
+function va_get_mem(s:state):memmap
     requires ValidState(s)
-    ensures ValidAddrMemStateOpaque(sp_get_mem(s))
+    ensures ValidAddrMemStateOpaque(va_get_mem(s))
 { reveal_ValidMemState(); reveal_ValidAddrMemStateOpaque(); s.m.addresses }
 
-function sp_get_globals(s:state):globalsmap
+function va_get_globals(s:state):globalsmap
     requires ValidState(s)
-    ensures ValidGlobalStateOpaque(sp_get_globals(s))
+    ensures ValidGlobalStateOpaque(va_get_globals(s))
 { reveal_ValidMemState(); reveal_ValidGlobalStateOpaque(); s.m.globals }
 
-function sp_get_osp(s:state):word 
+function va_get_osp(s:state):word 
     requires ValidRegState(s.regs)
 {
     reveal_ValidRegState();
     s.regs[SP(mode_of_state(s))]
 }
-function sp_get_olr(s:state):word 
+function va_get_olr(s:state):word 
     requires ValidRegState(s.regs)
 {
     reveal_ValidRegState();
     s.regs[LR(mode_of_state(s))]
 }
 
-function sp_update_ok(sM:state, sK:state):state { sK.(ok := sM.ok, steps := sM.steps) }
-function sp_update_reg(r:ARMReg, sM:state, sK:state):state 
+function va_update_ok(sM:state, sK:state):state { sK.(ok := sM.ok, steps := sM.steps) }
+function va_update_reg(r:ARMReg, sM:state, sK:state):state 
     requires ValidRegState(sK.regs) && ValidRegState(sM.regs)
-    ensures ValidRegState(sp_update_reg(r, sM, sK).regs)
+    ensures ValidRegState(va_update_reg(r, sM, sK).regs)
 {
     reveal_ValidRegState();
     sK.(regs := sK.regs[r := sM.regs[r]])
 }
-function sp_update_mem(sM:state, sK:state):state
+function va_update_mem(sM:state, sK:state):state
     requires ValidMemState(sM.m) && ValidMemState(sK.m)
-    ensures ValidMemState(sp_update_mem(sM, sK).m)
-    ensures ValidAddrMemStateOpaque(sp_update_mem(sM, sK).m.addresses)
+    ensures ValidMemState(va_update_mem(sM, sK).m)
+    ensures ValidAddrMemStateOpaque(va_update_mem(sM, sK).m.addresses)
 {
     reveal_ValidMemState(); reveal_ValidAddrMemStateOpaque();
     sK.(m := sK.m.(addresses := sM.m.addresses))
 }
-function sp_update_globals(sM:state, sK:state):state
+function va_update_globals(sM:state, sK:state):state
     requires ValidMemState(sM.m) && ValidMemState(sK.m)
-    ensures ValidMemState(sp_update_mem(sM, sK).m)
-    ensures ValidGlobalStateOpaque(sp_update_mem(sM, sK).m.globals)
+    ensures ValidMemState(va_update_mem(sM, sK).m)
+    ensures ValidGlobalStateOpaque(va_update_mem(sM, sK).m.globals)
 {
     reveal_ValidMemState(); reveal_ValidGlobalStateOpaque();
     sK.(m := sK.m.(globals := sM.m.globals))
 }
-function sp_update_osp(sM:state, sK:state):state 
+function va_update_osp(sM:state, sK:state):state 
     requires ValidRegState(sK.regs) && ValidRegState(sM.regs)
-    ensures ValidRegState(sp_update_osp(sM, sK).regs)
+    ensures ValidRegState(va_update_osp(sM, sK).regs)
 { 
-    sp_update_reg(SP(mode_of_state(sM)), sM, sK)
+    va_update_reg(SP(mode_of_state(sM)), sM, sK)
 }
-function sp_update_olr(sM:state, sK:state):state 
+function va_update_olr(sM:state, sK:state):state 
     requires ValidRegState(sK.regs) && ValidRegState(sM.regs)
-    ensures ValidRegState(sp_update_olr(sM, sK).regs)
+    ensures ValidRegState(va_update_olr(sM, sK).regs)
 { 
-    sp_update_reg(LR(mode_of_state(sM)), sM, sK)
+    va_update_reg(LR(mode_of_state(sM)), sM, sK)
 }
 
-function sp_update(o:operand, sM:state, sK:state):state
+function va_update_operand(o:operand, sM:state, sK:state):state
     requires ValidRegOperand(o)
     requires ValidRegState(sK.regs) && ValidRegState(sM.regs)
 {
     match o
-        case OReg(r) => sp_update_reg(o.r, sM, sK)
-        case OLR => sp_update_reg(LR(mode_of_state(sM)), sM, sK)
-        case OSP => sp_update_reg(SP(mode_of_state(sM)), sM, sK)
+        case OReg(r) => va_update_reg(o.r, sM, sK)
+        case OLR => va_update_reg(LR(mode_of_state(sM)), sM, sK)
+        case OSP => va_update_reg(SP(mode_of_state(sM)), sM, sK)
 }
 
 function method GetProbableReg(o:operand) : ARMReg { if o.OReg? then o.r else R0 }
 
-predicate sp_is_src_word(o:operand) { ValidOperand(o) }
-predicate sp_is_dst_word(o:operand) { ValidRegOperand(o) }
+predicate va_is_src_operand_word(o:operand) { ValidOperand(o) }
+predicate va_is_dst_operand_word(o:operand) { ValidRegOperand(o) }
+
+predicate va_is_src_operand_int(o:operand) { true }
+predicate va_is_dst_operand_int(o:operand) { true }
 
 type reg = word
-predicate sp_is_src_reg(o:operand) { ValidRegOperand(o) }
+predicate va_is_src_operand_reg(o:operand) { ValidRegOperand(o) }
+predicate va_is_dst_operand_reg(o:operand) { ValidRegOperand(o) }
 
 type snd = word
-predicate sp_is_src_snd(o:operand) { ValidOperand(o) && o.OReg? }
+predicate va_is_src_operand_snd(o:operand) { ValidOperand(o) && o.OReg? }
 
-predicate sp_is_src_symbol(g:symbol) { ValidGlobal(g) }
-function sp_eval_op_symbol(s:state, g:symbol):symbol { g }
+predicate va_is_src_operand_symbol(g:symbol) { ValidGlobal(g) }
+function va_eval_operand_symbol(s:state, g:symbol):symbol { g }
 
-function sp_eval_op_word(s:state, o:operand):word
-    requires sp_is_src_word(o);
+function va_eval_operand_word(s:state, o:operand):word
+    requires va_is_src_operand_word(o);
     requires ValidState(s)
 {
     OperandContents(s,o)
 }
-function sp_eval_op_reg(s:state, o:operand):reg
-    requires sp_is_src_reg(o);
+function va_eval_operand_reg(s:state, o:operand):reg
+    requires va_is_src_operand_reg(o);
     requires ValidState(s)
 {
     OperandContents(s,o)
 }
-function sp_eval_op_snd(s:state, o:operand):snd
-    requires sp_is_src_snd(o);
+function va_eval_operand_snd(s:state, o:operand):snd
+    requires va_is_src_operand_snd(o);
     requires ValidState(s)
 {
     OperandContents(s,o)
 }
 
-predicate sp_state_eq(s0:state, s1:state)
+predicate va_state_eq(s0:state, s1:state)
 {
     s0.regs == s1.regs
  && s0.sregs == s1.sregs
@@ -289,16 +288,16 @@ predicate AllRegsInvariant(s:state, s':state)
 // Control Flow Lemmas
 //-----------------------------------------------------------------------------
 
-predicate valid_state(s:sp_state) { ValidState(s) }
+predicate valid_state(s:va_state) { ValidState(s) }
 
-lemma sp_lemma_empty(s:sp_state, r:sp_state) returns(r':sp_state)
-    requires sp_eval(Block(sp_CNil()), s, r)
+lemma va_lemma_empty(s:va_state, r:va_state) returns(r':va_state)
+    requires va_eval(Block(va_CNil()), s, r)
     ensures  s.ok ==> r.ok
     ensures  r' == s
     ensures  s.ok ==> r == s
-    ensures  forall b, s' :: sp_eval(b, r, s') ==> sp_eval(b, s, s')
+    ensures  forall b, s' :: va_eval(b, r, s') ==> va_eval(b, s, s')
 {
-    reveal_sp_eval();
+    reveal_va_eval();
     r' := s;
 }
 
@@ -342,7 +341,7 @@ lemma block_state_validity(block:codes, s:state, r:state)
     decreases block, 0;
     ensures  r.ok ==> valid_state(r);
 {
-    if block.sp_CCons? {
+    if block.va_CCons? {
         var r':state :| evalCode(block.hd, s, r') && evalBlock(block.tl, r', r);
         code_state_validity(block.hd, s, r');
         if r'.ok {
@@ -387,15 +386,15 @@ lemma code_state_validity(c:code, s:state, r:state)
     }
 }
 
-lemma sp_lemma_block(b:codes, s0:sp_state, r:sp_state) returns(r1:sp_state, c0:code, b1:codes)
-    requires b.sp_CCons?
-    requires sp_eval(Block(b), s0, r)
-    ensures  b == sp_CCons(c0, b1)
+lemma va_lemma_block(b:codes, s0:va_state, r:va_state) returns(r1:va_state, c0:code, b1:codes)
+    requires b.va_CCons?
+    requires va_eval(Block(b), s0, r)
+    ensures  b == va_CCons(c0, b1)
     ensures  ValidState(s0) && r1.ok ==> ValidState(r1);
-    ensures  sp_eval(c0, s0, r1)
-    ensures  sp_eval(Block(b1), r1, r)
+    ensures  va_eval(c0, s0, r1)
+    ensures  va_eval(Block(b1), r1, r)
 {
-    reveal_sp_eval();
+    reveal_va_eval();
     c0 := b.hd;
     b1 := b.tl;
     if s0.ok {
@@ -405,26 +404,26 @@ lemma sp_lemma_block(b:codes, s0:sp_state, r:sp_state) returns(r1:sp_state, c0:c
         if ValidState(s0) {
             code_state_validity(c0, s0, r1);
         }
-        assert sp_eval(c0, s0, r1);
+        assert va_eval(c0, s0, r1);
     } else {
         r1 := s0;
     }
 }
 
-lemma sp_lemma_ifElse(ifb:obool, ct:code, cf:code, s:sp_state, r:sp_state) returns(cond:bool, s':sp_state)
+lemma va_lemma_ifElse(ifb:obool, ct:code, cf:code, s:va_state, r:va_state) returns(cond:bool, s':va_state)
     requires ValidState(s) && ValidOperand(ifb.o1) && ValidOperand(ifb.o2)
-    requires sp_eval(IfElse(ifb, ct, cf), s, r)
-    ensures  forall c, t, t' :: sp_eval(c, t, t') == (t.ok ==> sp_eval(c, t, t'));
+    requires va_eval(IfElse(ifb, ct, cf), s, r)
+    ensures  forall c, t, t' :: va_eval(c, t, t') == (t.ok ==> va_eval(c, t, t'));
     ensures  if s.ok then
                     s'.ok
                  && ValidState(s')
                  && evalGuard(s, ifb, s')
                  && cond == evalOBool(s, ifb)
-                 && (if cond then sp_eval(ct, s', r) else sp_eval(cf, s', r))
+                 && (if cond then va_eval(ct, s', r) else va_eval(cf, s', r))
              else
                  true //!r.ok;
 {
-    reveal_sp_eval();
+    reveal_va_eval();
     if s.ok {
         assert evalIfElse(ifb, ct, cf, s, r);
         cond := evalOBool(s, ifb);
@@ -443,21 +442,21 @@ predicate evalWhileLax(b:obool, c:code, n:nat, s:state, r:state)
     s.ok ==> evalWhileOpaque(b, c, n, s, r)
 }
 
-predicate sp_whileInv(b:obool, c:code, n:int, r1:sp_state, r2:sp_state)
+predicate va_whileInv(b:obool, c:code, n:int, r1:va_state, r2:va_state)
 {
     n >= 0 && ValidState(r1) && evalWhileLax(b, c, n, r1, r2)
 }
 
-lemma sp_lemma_while(b:obool, c:code, s:sp_state, r:sp_state) returns(n:nat, r':sp_state)
+lemma va_lemma_while(b:obool, c:code, s:va_state, r:va_state) returns(n:nat, r':va_state)
     requires ValidState(s) && ValidOperand(b.o1) && ValidOperand(b.o2)
-    requires sp_eval(While(b, c), s, r)
+    requires va_eval(While(b, c), s, r)
     ensures  evalWhileLax(b, c, n, s, r)
     //ensures  r'.ok
     ensures  ValidState(r');
     ensures  r' == s
-    ensures  forall c', t, t' :: sp_eval(c', t, t') == (t.ok ==> sp_eval(c', t, t'));
+    ensures  forall c', t, t' :: va_eval(c', t, t') == (t.ok ==> va_eval(c', t, t'));
 {
-    reveal_sp_eval();
+    reveal_va_eval();
     reveal_evalWhileOpaque();
 //    unpack_eval_while(b, c, s, r);
     if s.ok {
@@ -469,26 +468,26 @@ lemma sp_lemma_while(b:obool, c:code, s:sp_state, r:sp_state) returns(n:nat, r':
     r' := s;
 }
 
-lemma sp_lemma_whileTrue(b:obool, c:code, n:sp_int, s:sp_state, r:sp_state) returns(s':sp_state, r':sp_state)
+lemma va_lemma_whileTrue(b:obool, c:code, n:va_int, s:va_state, r:va_state) returns(s':va_state, r':va_state)
     requires ValidState(s) && ValidOperand(b.o1) && ValidOperand(b.o2);
     requires n > 0
     requires evalWhileLax(b, c, n, s, r)
     //ensures  ValidState(s) && r'.ok ==> ValidState(r');
     ensures  ValidState(s) ==> ValidState(s');
     ensures  evalWhileLax(b, c, n-1, r', r)
-    ensures  sp_eval(c, s', r');
+    ensures  va_eval(c, s', r');
     ensures  ValidState(s) ==> if s.ok then evalGuard(s, b, s') else s' == s;
-    ensures  forall c', t, t' :: sp_eval(c', t, t') == (t.ok ==> sp_eval(c', t, t'));
+    ensures  forall c', t, t' :: va_eval(c', t, t') == (t.ok ==> va_eval(c', t, t'));
     ensures  if s.ok then
                     s'.ok
                  //&& evalGuard(s, b, s')
                  && evalOBool(s, b)
-                 //&& sp_eval(c, s', r')
+                 //&& va_eval(c, s', r')
                  //&& evalWhileOpaque(b, c, n - 1, r', r)
              else
                  true //!r.ok;
 {
-    reveal_sp_eval();
+    reveal_va_eval();
     reveal_evalWhileOpaque();
 
     if !s.ok {
@@ -510,10 +509,10 @@ lemma sp_lemma_whileTrue(b:obool, c:code, n:sp_int, s:sp_state, r:sp_state) retu
     }
 }
 
-lemma sp_lemma_whileFalse(b:obool, c:code, s:sp_state, r:sp_state) returns(r':sp_state)
+lemma va_lemma_whileFalse(b:obool, c:code, s:va_state, r:va_state) returns(r':va_state)
     requires ValidState(s) && ValidOperand(b.o1) && ValidOperand(b.o2);
     requires evalWhileLax(b, c, 0, s, r)
-    ensures  forall c', t, t' :: sp_eval(c', t, t') == (t.ok ==> sp_eval(c', t, t'));
+    ensures  forall c', t, t' :: va_eval(c', t, t') == (t.ok ==> va_eval(c', t, t'));
     ensures  if s.ok then
                     (if ValidState(s) then
                         (r'.ok ==> ValidState(r'))
@@ -527,7 +526,7 @@ lemma sp_lemma_whileFalse(b:obool, c:code, s:sp_state, r:sp_state) returns(r':sp
             else
                 r' == s
 {
-    reveal_sp_eval();
+    reveal_va_eval();
     reveal_evalWhileOpaque();
 
     if !s.ok {

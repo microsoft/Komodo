@@ -5,15 +5,13 @@ var{:state mem()} mem:memmap;
 var{:state globals()} globals:globalsmap;
 
 #verbatim
-function MaybeUpdateOk(s:sp_state, r:sp_state) : sp_state
+function MaybeUpdateOk(s:va_state, r:va_state) : va_state
 {
     if !(s.ok && r.ok) then s.(ok := false) else r
 }
 #endverbatim
 
-procedure operator(:=) (out operand dst:int, operand src:int) := MOV
-
-function sp_op_const(n:word):sp_operand
+procedure operator(:=) (out operand dst:word, operand src:word) := MOV;
 
 procedure {:bridge} {:refined} {:instruction Ins(ADD(dst, src1, src2))}
 ADD(out operand dst:word, operand src1:word, operand src2:word)
@@ -22,7 +20,7 @@ ADD(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == old(src1 + src2);
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -32,7 +30,7 @@ ADDWrap(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == old(src1 + src2) % 0x1_0000_0000;
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -42,7 +40,7 @@ ADDWrapShift(out operand dst:word, operand src1:word, operand src2:snd, inline s
     ensures
         dst == old(src1 + EvalShift(old(src2), shift)) % 0x1_0000_0000;
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -54,7 +52,7 @@ SUB(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == old(src1 - src2);
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -66,7 +64,7 @@ MUL(out operand dst:word, operand src1:reg, operand src2:reg)
     ensures
         dst == old(src1 * src2);
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -79,7 +77,7 @@ UDIV(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == old(src1 / src2);
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -89,7 +87,7 @@ AND(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == old(BitwiseAnd(src1, src2));
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -99,7 +97,7 @@ ORR(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == old(BitwiseOr(src1, src2));
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -109,7 +107,7 @@ EOR(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == old(BitwiseXor(src1, src2));
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -119,7 +117,7 @@ EORShift(out operand dst:word, operand src1:word, operand src2:snd, inline shift
     ensures
         dst == BitwiseXor(old(src1), EvalShift(old(src2), shift));
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -133,7 +131,7 @@ LSL(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == old(LeftShift(src1, src2));
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -147,7 +145,7 @@ LSR(out operand dst:word, operand src1:word, operand src2:word)
     ensures
         dst == old(RightShift(src1, src2));
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -157,7 +155,7 @@ REV(out operand dst:word, operand src:reg)
     ensures
         dst == old(bswap32(src));
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -167,7 +165,7 @@ MVN(out operand dst:word, operand src:word)
     ensures
         dst == old(BitwiseNot(src));
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -177,7 +175,7 @@ MOV(out operand dst:word, operand src:word)
     ensures
         dst == old(src);
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -187,7 +185,7 @@ MOVShift(out operand dst:word, operand src:snd, inline shift:Shift)
     ensures
         dst == old(EvalShift(old(src), shift));
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -205,7 +203,7 @@ LDR(out operand dst:word, operand base:word, operand ofs:word)
         this.ok ==> ValidMem(old(base + ofs))
             && dst == MemContents(this.m, old(base + ofs));
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -221,13 +219,13 @@ STR(operand rd:reg, operand base:word, operand ofs:word)
     ensures
         mem == AddrMemUpdate(old(mem), old(base + ofs), old(rd));
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
 
-procedure {:instruction Ins(MRS(dst, src))}
-MRS(operand dst:int, operand src:int)
+procedure {:frame false} {:instruction Ins(MRS(dst, src))}
+MRS(operand dst:reg, operand src:int)
     requires/ensures
         ValidState(this) && this.ok;
     requires
@@ -238,55 +236,54 @@ MRS(operand dst:int, operand src:int)
         //dst == old(src);
         evalUpdate(old(this), @dst, old(src), this);
 {
-    reveal sp_eval;
+    reveal va_eval;
 }
 
-procedure {:instruction Ins(MSR(dst, src))}
-MSR(operand dst:int, operand src:int)
+procedure {:frame false} {:instruction Ins(MSR(dst, src))}
+MSR(operand dst:int, operand src:reg)
     requires/ensures
         ValidState(this) && this.ok;
     requires
         priv_of_state(this) == PL1;
-        ValidMrsMsrOperand(this, @dst);
         ValidRegOperand(@src);
+        ValidMrsMsrOperand(this, @dst);
         @dst is OSReg && @dst.sr is cpsr ==> ValidModeChange(this, src);
         @dst is OSReg && @dst.sr is spsr ==> ValidPsrWord(src);
     ensures
         //dst == old(src);
         evalUpdate(old(this), @dst, old(src), this);
 {
-    reveal sp_eval;
+    reveal va_eval;
 }
 
-procedure {:instruction Ins(MRC(dst, src))}
-MRC(operand dst:int, operand src:int)
+procedure {:frame true} {:instruction Ins(MRC(dst, src))}
+MRC(out operand dst:reg, operand src:int)
     requires/ensures
         ValidState(this) && this.ok;
     requires
-        ValidRegOperand(@dst);
         ValidMcrMrcOperand(this, @src);
     ensures
-        //dst == old(src);
+        dst == old(src);
         evalUpdate(old(this), @dst, old(src), this);
 {
-    reveal sp_eval;
+    reveal va_eval;
 }
 
-procedure {:instruction Ins(MCR(dst, src))}
-MCR(operand dst:int, operand src:int)
+procedure {:frame false} {:instruction Ins(MCR(dst, src))}
+MCR(out operand dst:int, operand src:reg)
     requires/ensures
         ValidState(this) && this.ok;
     requires
-        ValidMcrMrcOperand(this, @dst);
         ValidRegOperand(@src);
+        ValidMcrMrcOperand(this, @dst);
     ensures
         //dst == old(src);
         evalUpdate(old(this), @dst, old(src), this);
 {
-    reveal sp_eval;
+    reveal va_eval;
 }
 
-procedure {:instruction Ins(MOVS_PCLR_TO_USERMODE_AND_CONTINUE)}
+procedure {:frame false} {:instruction Ins(MOVS_PCLR_TO_USERMODE_AND_CONTINUE)}
 MOVS_PCLR_TO_USERMODE_AND_CONTINUE()
     requires/ensures
         ValidState(this) && this.ok;
@@ -296,10 +293,10 @@ MOVS_PCLR_TO_USERMODE_AND_CONTINUE()
     ensures
         evalMOVSPCLRUC(old(this), this);
 {
-    reveal sp_eval;
+    reveal va_eval;
 }
 
-procedure {:instruction Ins(CPSID_IAF(mod))} CPSID_IAF(operand mod:int)
+procedure {:frame false} {:instruction Ins(CPSID_IAF(mod))} CPSID_IAF(operand mod:int)
     requires/ensures
         ValidState(this) && this.ok;
     requires
@@ -308,7 +305,7 @@ procedure {:instruction Ins(CPSID_IAF(mod))} CPSID_IAF(operand mod:int)
     ensures
         evalCPSID_IAF(old(this), old(mod), this);
 {
-    reveal sp_eval;
+    reveal va_eval;
 }
 
 procedure {:bridge} {:refined} {:instruction Ins(LDR_reloc(dst, g))}
@@ -318,7 +315,7 @@ LDRglobaladdr(out operand dst:word, inline g:symbol)
     ensures
         dst == AddressOfGlobal(g);
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -334,7 +331,7 @@ LDRglobal(out operand dst:word, inline g:symbol,
     ensures
         dst == GlobalContents(globals, g, old(base + ofs));
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }
@@ -351,7 +348,7 @@ STRglobal(operand rd:reg, inline g:symbol,
         ValidGlobalStateOpaque(globals);
         globals == GlobalUpdate(old(globals), g, old(base + ofs), old(rd));
 {
-    reveal sp_eval;
+    reveal va_eval;
     reveal ValidRegState;
     this := MaybeUpdateOk(old(this), this);
 }

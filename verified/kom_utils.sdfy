@@ -86,7 +86,7 @@ procedure page_monvaddr_impl(out operand virt:int, operand pagenr:int, out opera
         isUInt32(virt);
 {
     page_paddr_impl(virt, pagenr, tmp);
-    ADD(virt, virt, sp_op_const(KOM_DIRECTMAP_VBASE));
+    ADD(virt, virt, const(KOM_DIRECTMAP_VBASE));
 }
 
 procedure stack_nonvolatiles(ghost stack_bytes:int) returns (ghost stack_bytes_ret:int)

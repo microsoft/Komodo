@@ -328,8 +328,6 @@ predicate Body_00_15LoopStateInvariantBreakdown(
     )
 {
     0 <= i <= 16
- // Stack is accessible in both old and new mem
- && ValidAddrs(sp, 19)
  && ValidAddrs(sp, 19)
  && ValidMem(sp + CheapMod16(i)*4)
  && ValidMem(sp + CheapMod16(i+9)*4)
@@ -382,8 +380,6 @@ predicate Body_00_15LoopStateInvariantBreakdown(
  && (16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(current_trace.W)[j] == AddrMemContents(mem, sp + CheapMod16(j)*4)))
  && (i < 16 ==> (forall j :: 0 <= j < i ==> last(current_trace.W)[j] == AddrMemContents(mem, sp + j*4)))
  && (i < 15  ==> ValidMem(t4) && AddrMemContents(mem, t4) == input[i+1])
- && (i >= 15 ==> ValidMem(sp+CheapMod16(i+ 2)*4))
- && (i >= 15 ==> ValidMem(sp+CheapMod16(i+15)*4))
 
      // Updated input ptr
  && (if i < 16 then t4 == input_ptr + (i+1)*4         // Correctly advanced input ptr
@@ -668,7 +664,6 @@ predicate {:opaque} Body_16_XXLoopStateInvariantBreakdown(
 {
     16 <= i <= 64
  && ValidAddrs(sp, 19)
- && ValidAddrs(sp, 19)
  && ValidMem(sp + CheapMod16(i)*4)
  && ValidMem(sp + CheapMod16(i+9)*4)
  && ValidAddrMemStateOpaque(mem)
@@ -676,7 +671,6 @@ predicate {:opaque} Body_16_XXLoopStateInvariantBreakdown(
 
     // K table adjusted properly
  && SaneShaGlobal(globals)
- && (i < 64 ==> ValidGlobalAddr(K_SHA256s(), lr))
  && lr == AddressOfGlobal(K_SHA256s()) + 4*i
 
  && SeqLength(input) == 16
@@ -687,10 +681,7 @@ predicate {:opaque} Body_16_XXLoopStateInvariantBreakdown(
  && t3 == BitwiseXor(b, c)
 
     // Memory framing: We only touch the stack
- && (forall addr:word :: ValidMem(addr) && (addr < sp || addr >= sp + 19*4) ==> AddrMemContents(mem, addr) == AddrMemContents(orig_mem, addr))
- && AddrMemContents(mem, sp + 16*4) == AddrMemContents(orig_mem, sp + 16*4)
- && AddrMemContents(mem, sp + 17*4) == AddrMemContents(orig_mem, sp + 17*4)   // We preserved the input ptr on the stack
- && AddrMemContents(mem, sp + 18*4) == AddrMemContents(orig_mem, sp + 18*4)
+ && (forall addr:word :: ValidMem(addr) && (addr < sp || addr >= sp + 16*4) ==> AddrMemContents(mem, addr) == AddrMemContents(orig_mem, addr))
 
     // SHA semantics
  && SeqLength(current_trace.H) > 0

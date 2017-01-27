@@ -252,7 +252,7 @@ datatype ins =
 datatype ocmp = OEq | ONe | OLe | OGe | OLt | OGt
 datatype obool = OCmp(cmp:ocmp, o1:operand, o2:operand)
 
-datatype codes = CNil | sp_CCons(hd:code, tl:codes)
+datatype codes = CNil | va_CCons(hd:code, tl:codes)
 
 datatype code =
   Ins(ins:ins)

@@ -252,7 +252,7 @@ method printBlock(b:codes, n:int) returns(n':int)
 {
     n' := n;
     var i := b;
-    while (i.sp_CCons?)
+    while (i.va_CCons?)
         decreases i
     {
         n' := printCode(i.hd, n');

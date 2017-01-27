@@ -24,13 +24,13 @@ procedure kom_smc_stop(
     pagedb := pagedb_in;
     ghost var specResult := smc_stop_premium(pagedb, as_page);
 
-    if (as_page >= sp_op_const(KOM_SECURE_NPAGES)) {
-        err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE);
+    if (as_page >= const(KOM_SECURE_NPAGES)) {
+        err := const(KOM_ERR_INVALID_ADDRSPACE);
     } else {
         assert validPageNr(as_page);
         LDRglobaladdr(r12, PageDb());
         lemma_LeftShift3(as_page);
-        LSL(r4,as_page,sp_op_const(PAGEDB_ENTRY_SHIFT));
+        LSL(r4,as_page,const(PAGEDB_ENTRY_SHIFT));
         assert r4 == G_PAGEDB_ENTRY(as_page) + PAGEDB_ENTRY_TYPE;
         LDRglobal(r3, PageDb(), r12, r4);
 
@@ -39,9 +39,9 @@ procedure kom_smc_stop(
             reveal_pageDbEntryCorresponds();
         }
 
-        if (r3 != sp_op_const(KOM_PAGE_ADDRSPACE)) {
+        if (r3 != const(KOM_PAGE_ADDRSPACE)) {
             assert !isAddrspace(pagedb, as_page);
-            err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE);
+            err := const(KOM_ERR_INVALID_ADDRSPACE);
             assert !isAddrspace(pagedb, as_page) ==> specErr(specResult) == 
             KOM_ERR_INVALID_ADDRSPACE;
             assert err == specErr(specResult);
@@ -49,9 +49,9 @@ procedure kom_smc_stop(
 
             page_monvaddr_impl(r2,as_page,r3);
             assert r2 == page_monvaddr(as_page);
-            r3 := sp_op_const(KOM_ADDRSPACE_STOPPED);
+            r3 := const(KOM_ADDRSPACE_STOPPED);
             assert r3 == pageDbAddrspaceStateVal(StoppedState);
-            STR(r3, r2, sp_op_const(ADDRSPACE_STATE));
+            STR(r3, r2, const(ADDRSPACE_STATE));
             assert MemContents(this.m, page_monvaddr(as_page) + 
                 ADDRSPACE_STATE) == pageDbAddrspaceStateVal(StoppedState);
             forall :: pageDbCorrespondsOnly(this.m, specPageDb(specResult), 
@@ -83,7 +83,7 @@ procedure kom_smc_stop(
                 }
                 forall p :| validPageNr(p) && p != as_page :: pagedb[p] == d'[p] {}
             }
-            err := sp_op_const(KOM_ERR_SUCCESS);
+            err := const(KOM_ERR_SUCCESS);
             assert err == specErr(specResult);
             pagedb := specPageDb(specResult);
         }

@@ -1,8 +1,8 @@
 DAFNYTIMELIMIT ?= 60
-SPARTANDIRECT ?= 1
+VALEDIRECT ?= 1
 DAFNYFLAGS = /trace /errorTrace:0 /timeLimit:$(DAFNYTIMELIMIT) /ironDafny /allocated:1 \
     $(call mkdafnyflags,$(notdir $(*))) $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
-SPARTANFLAGS = -includeSuffix .sdfy .gen.dfy
+VALEFLAGS = -includeSuffix .sdfy .gen.dfy
 
 # dafny flags: file-specific flags plus /noNLarith unless the file is named nlarith.x
 mkdafnyflags = $(DAFNYFLAGS_$(1)) $(if $(filter nlarith.%,$(1)),,/noNLarith)
@@ -14,15 +14,15 @@ verified: $(dir)/main.S
 # We use .verified files as a timestamp/placeholder to indicate that
 # a given source has been verified.
 
-# Spartan-to-Dafny
-%.gen.dfy: %.sdfy $(SPARTAN)
-	$(SPARTAN) $(SPARTANFLAGS) $< -out $@
+# Vale-to-Dafny
+%.gen.dfy: %.sdfy $(VALE)
+	$(VALE) $(VALEFLAGS) -in $< -out $@
 	@which dos2unix >/dev/null && dos2unix $@ || true
 
-# Spartan direct verification, including cheesy workaround for broken error code.
-ifeq ($(SPARTANDIRECT), 1)
+# Vale direct verification, including cheesy workaround for broken error code.
+ifeq ($(VALEDIRECT), 1)
 %.verified %.log: %.sdfy %.gen.dfy
-	/bin/bash -c "$(SPARTAN) $(SPARTANFLAGS) $< -dafnyDirect \
+	/bin/bash -c "$(VALE) $(VALEFLAGS) -in $< -dafnyDirect \
 	$(DAFNYFLAGS) /compile:0 | tee $*.log; exit \$${PIPESTATUS[0]}"
 	@grep -q "^Dafny program verifier finished with [0-9]* verified, 0 errors$$" $*.log $(if $(DAFNYPROC),,&& touch $*.verified)
 	@$(RM) $*.log
@@ -44,7 +44,7 @@ endif
 $(dir)/%.img: $(dir)/%.o
 	$(OBJCOPY) $< -O binary $@
 
-# auto dependencies for Dafny/Spartan code
+# auto dependencies for Dafny/Vale code
 findsrc = $(wildcard $(1)/*.sdfy) $(filter-out %.gen.dfy,$(wildcard $(1)/*.dfy))
 DEPSRC = $(call findsrc,$(dir)) $(call findsrc,$(dir)/sha)
 $(dir)/dfydeps.d: $(dir)/mkdep.py $(DEPSRC)

@@ -35,7 +35,7 @@ procedure mkl2pte_insecure(
     // mask out X bit in mapping, so it can't construct an executable mapping
     // TODO: it would be better to elide this code from ARM_L2PTE
     lemma_nonexec_mapping(abs_mapping, mapping);
-    AND(mapping,mapping,sp_op_const(NOT_KOM_MAPPING_X()));
+    AND(mapping,mapping,const(NOT_KOM_MAPPING_X()));
     ghost var newabs_mapping := nonexec_mapping(abs_mapping);
     assert wordToMapping(mapping) == newabs_mapping;
 
@@ -101,14 +101,14 @@ procedure kom_smc_map_insecure(
     ghost var specResult := smc_mapInsecure_premium(pagedb, as_page,
             phys_page, mapping);
 
-    if (as_page >= sp_op_const(KOM_SECURE_NPAGES)) {
-        err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE);
+    if (as_page >= const(KOM_SECURE_NPAGES)) {
+        err := const(KOM_ERR_INVALID_ADDRSPACE);
         assert err == specErr(specResult);
     } else {
         assert validPageNr(as_page);
         LDRglobaladdr(r12, PageDb());
         lemma_LeftShift3(as_page);
-        LSL(r4,as_page,sp_op_const(PAGEDB_ENTRY_SHIFT));
+        LSL(r4,as_page,const(PAGEDB_ENTRY_SHIFT));
         assert r4 == G_PAGEDB_ENTRY(as_page) + PAGEDB_ENTRY_TYPE;
         LDRglobal(r0, PageDb(), r12, r4);
 
@@ -118,20 +118,20 @@ procedure kom_smc_map_insecure(
             reveal_pageDbEntryCorresponds();
         }
 
-        if (r0 != sp_op_const(KOM_PAGE_ADDRSPACE)) {
+        if (r0 != const(KOM_PAGE_ADDRSPACE)) {
             assert !isAddrspace(pagedb, as_page);
-            err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE);
+            err := const(KOM_ERR_INVALID_ADDRSPACE);
             assert err == specErr(specResult);
         } else {
             r5 := as_page;
             is_valid_mapping_target(as_page,mapping,r10,err,pagedb);
-            if( err != sp_op_const(KOM_ERR_SUCCESS) ) {
+            if( err != const(KOM_ERR_SUCCESS) ) {
                 assert err == specErr(specResult);
             } else {
                 assert as_page == old(as_page);
                 phys_page_is_insecure_ram(phys_page, r12);
                 if(r12 == 0) {
-                    err := sp_op_const(KOM_ERR_INVALID_PAGENO);
+                    err := const(KOM_ERR_INVALID_PAGENO);
                     assert err == specErr(specResult);
                 } else {
                     ghost var d' := pagedb_in;
@@ -157,7 +157,7 @@ procedure kom_smc_map_insecure(
                     assert pagedb == updateL2Pte(d', old(as_page), abs_mapping, l2pte);
                     assert pagedb == specPageDb(specResult);
                     assert pageDbCorresponds(this.m, pagedb);
-                    err := sp_op_const(KOM_ERR_SUCCESS);
+                    err := const(KOM_ERR_SUCCESS);
                     assert err == specErr(specResult);
                 }
             }

@@ -553,7 +553,5 @@ function {:opaque} bswap32_seq(input:seq<word>) : seq<word>
 
 predicate ValidAddrs(base:int, num_words:int)
 {
-    ValidMem(base)
-    && forall a:int {:trigger ValidMem(a)} :: base <= a < base + num_words * 4
-        ==> ValidMem(a)
+    ValidMemRange(base, base + num_words * WORDSIZE)
 }

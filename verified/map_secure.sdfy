@@ -55,7 +55,7 @@ procedure update_l2pte(
     lemma_ARM_L1PTE_Dual(page_paddr(l1pte_abs));
     SUB(r12,l1pte,1);
     assert r12 == page_paddr(l1pte_abs);
-    ADD(r12, r12, sp_op_const(KOM_DIRECTMAP_VBASE));
+    ADD(r12, r12, const(KOM_DIRECTMAP_VBASE));
     assert r12 == page_monvaddr(l1pte_abs);
 
     LSR(r8,mapping,12);
@@ -154,14 +154,14 @@ procedure is_valid_mapping_target(
         && @l1pte != @r7 && @l1pte != @r8 && @l1pte != @r9;
 
     page_monvaddr_impl(r7,addr,r8);
-    LDR(r8,r7,sp_op_const(ADDRSPACE_STATE));
+    LDR(r8,r7,const(ADDRSPACE_STATE));
     forall :: r8 == pageDbAddrspaceStateVal(d[addr].entry.state)
     {
         reveal_pageContentsCorresponds();
         reveal_pageDbAddrspaceCorresponds();
     }
-    if ( r8 != sp_op_const(KOM_ADDRSPACE_INIT) ){
-        err := sp_op_const(KOM_ERR_ALREADY_FINAL);
+    if ( r8 != const(KOM_ADDRSPACE_INIT) ){
+        err := const(KOM_ERR_ALREADY_FINAL);
         assert err == specResult;
     } else {
         ghost var abs_mapping := wordToMapping(mapping);
@@ -176,34 +176,34 @@ procedure is_valid_mapping_target(
             reveal_wordToMapping();
             assert r8 == l2indexFromMapping(mapping);
         }
-        if(r7 >= sp_op_const(KOM_SECURE_NPAGES)){
-            err := sp_op_const(KOM_ERR_INVALID_MAPPING);
+        if(r7 >= const(KOM_SECURE_NPAGES)){
+            err := const(KOM_ERR_INVALID_MAPPING);
             assert err == specResult;
-        } else if(r8 >= sp_op_const(KOM_SECURE_NPAGES)){
-            err := sp_op_const(KOM_ERR_INVALID_MAPPING);
+        } else if(r8 >= const(KOM_SECURE_NPAGES)){
+            err := const(KOM_ERR_INVALID_MAPPING);
             assert err == specResult;
         } else {
             //if(!perm.r) then KOM_ERR_INVALID_MAPPING
-            AND(r9,mapping,sp_op_const(KOM_MAPPING_R));
+            AND(r9,mapping,const(KOM_MAPPING_R));
             forall :: r9 == 0 <==> !abs_mapping.perm.r
             {
                 reveal_wordToMapping();
                 assert r9 != 0 <==> permFromMapping(mapping).r;
             }
             if(r9 == 0){
-                err := sp_op_const(KOM_ERR_INVALID_MAPPING);
+                err := const(KOM_ERR_INVALID_MAPPING);
                 assert err == specResult;
             } else {
-                if(r7 >= sp_op_const(NR_L1PTES)){
-                    err := sp_op_const(KOM_ERR_INVALID_MAPPING);
+                if(r7 >= const(NR_L1PTES)){
+                    err := const(KOM_ERR_INVALID_MAPPING);
                     assert err == specResult;
-                } else if (r8 >= sp_op_const(NR_L2PTES)) {
-                    err := sp_op_const(KOM_ERR_INVALID_MAPPING);
+                } else if (r8 >= const(NR_L2PTES)) {
+                    err := const(KOM_ERR_INVALID_MAPPING);
                     assert err == specResult;
                 } else {
                     LDRglobaladdr(l1pte,PageDb());
                     lemma_LeftShift3(addr);
-                    LSL(r9,addr,sp_op_const(PAGEDB_ENTRY_SHIFT));
+                    LSL(r9,addr,const(PAGEDB_ENTRY_SHIFT));
                     assert r9 == G_PAGEDB_ENTRY(addr) + PAGEDB_ENTRY_TYPE;
                     LDRglobal(r9,PageDb(),l1pte,r9);
                     forall :: validAddrspacePage(d, addr) {
@@ -212,7 +212,7 @@ procedure is_valid_mapping_target(
 
                     page_monvaddr_impl(r8,addr,l1pte);
 
-                    LDR(r9,r8,sp_op_const(ADDRSPACE_L1PT)); 
+                    LDR(r9,r8,const(ADDRSPACE_L1PT)); 
 
                     ghost var l1p := d[addr].entry.l1ptnr;
                     forall :: validL1PTPage(d,l1p)
@@ -237,9 +237,9 @@ procedure is_valid_mapping_target(
                     assert l1pte == 0 <==> d[l1p].entry.l1pt[l1index] == Nothing;
 
                     if( l1pte == 0 ) {
-                        err := sp_op_const(KOM_ERR_INVALID_MAPPING);
+                        err := const(KOM_ERR_INVALID_MAPPING);
                     } else {
-                        err := sp_op_const(KOM_ERR_SUCCESS);
+                        err := const(KOM_ERR_SUCCESS);
                     }
 
                 }
@@ -406,8 +406,8 @@ procedure ARM_L2PTE_impl(
 
     // compute nxbit
     ghost var nxbit := if abs_mapping.perm.x then 0 else BitsAsWord(ARM_L2PTE_NX_BIT);
-    AND(tmp,mapping,sp_op_const(KOM_MAPPING_X));
-    EOR(tmp,tmp,sp_op_const(KOM_MAPPING_X));
+    AND(tmp,mapping,const(KOM_MAPPING_X));
+    EOR(tmp,tmp,const(KOM_MAPPING_X));
     lemma_extract_kom_mapping_x(mapping, tmp);
     assert (tmp == 0 || tmp == KOM_MAPPING_X)
            && (tmp == 0 <==> abs_mapping.perm.x);
@@ -423,8 +423,8 @@ procedure ARM_L2PTE_impl(
 
     // compute robit
     ghost var robit := if abs_mapping.perm.w then 0 else BitsAsWord(ARM_L2PTE_RO_BIT);
-    AND(tmp,mapping,sp_op_const(KOM_MAPPING_W));
-    EOR(tmp,tmp,sp_op_const(KOM_MAPPING_W));
+    AND(tmp,mapping,const(KOM_MAPPING_W));
+    EOR(tmp,tmp,const(KOM_MAPPING_W));
     lemma_extract_kom_mapping_w(mapping, tmp);
     assert (tmp == 0 || tmp == KOM_MAPPING_W)
            && (tmp == 0 <==> abs_mapping.perm.w);
@@ -488,14 +488,14 @@ procedure kom_smc_map_secure(
     ghost var specResult := smc_mapSecure_premium(pagedb, page, as_page,
             mapping, phys_page);
 
-    if (as_page >= sp_op_const(KOM_SECURE_NPAGES)) {
-        err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE);
+    if (as_page >= const(KOM_SECURE_NPAGES)) {
+        err := const(KOM_ERR_INVALID_ADDRSPACE);
     } else {
         assert validPageNr(as_page);
         LDRglobaladdr(r12, PageDb());
         assert sp_eval_op_addr(this, @r12) == AddressOfGlobal(PageDb());
         lemma_LeftShift3(as_page);
-        LSL(r0, as_page, sp_op_const(PAGEDB_ENTRY_SHIFT));
+        LSL(r0, as_page, const(PAGEDB_ENTRY_SHIFT));
         assert r0 == G_PAGEDB_ENTRY(as_page) + PAGEDB_ENTRY_TYPE;
         LDRglobal(r0, PageDb(), r12, r0);
 
@@ -504,9 +504,9 @@ procedure kom_smc_map_secure(
             reveal_pageDbEntryCorresponds();
         }
 
-        if (r0 != sp_op_const(KOM_PAGE_ADDRSPACE)) {
+        if (r0 != const(KOM_PAGE_ADDRSPACE)) {
             assert !isAddrspace(pagedb, as_page);
-            err := sp_op_const(KOM_ERR_INVALID_ADDRSPACE);
+            err := const(KOM_ERR_INVALID_ADDRSPACE);
             assert err == specErr(specResult);
         } else {
             assert as_page == old(as_page);
@@ -514,12 +514,12 @@ procedure kom_smc_map_secure(
             is_valid_mapping_target(as_page,mapping,r10,err,pagedb);
             // NB: r10 := l1pte
             assert as_page == old(as_page);
-            if( err != sp_op_const(KOM_ERR_SUCCESS) ) {
+            if( err != const(KOM_ERR_SUCCESS) ) {
                 assert err == specErr(specResult);
             } else {
                 phys_page_is_insecure_ram_nz(phys_page, r0);
                 if(r0 == 0) {
-                    err := sp_op_const(KOM_ERR_INVALID_PAGENO);
+                    err := const(KOM_ERR_INVALID_PAGENO);
                     assert err == specErr(specResult);
                 } else {
                     ghost var entry := PageDbEntryTyped(as_page, DataPage); 
@@ -527,12 +527,12 @@ procedure kom_smc_map_secure(
                     assert validAddrspacePage(pagedb, entry.addrspace);
                     assert page == old(page);
                     pagedb := allocate_page(page,as_page,
-                        sp_op_const(KOM_PAGE_DATA),
+                        const(KOM_PAGE_DATA),
                         r12,r11,r9,err,pagedb,entry);
                     assert err == KOM_ERR_SUCCESS ==>
                         (pageDbCorrespondsExcluding(this.m, pagedb, page)
                         && pageDbEntryCorresponds(pagedb[page],extractPageDbEntry(this.m, page)));
-                    if( err != sp_op_const(KOM_ERR_SUCCESS) ){
+                    if( err != const(KOM_ERR_SUCCESS) ){
                         assert err == specErr(specResult);
                         assert pagedb == specPageDb(specResult);
                         assert pageDbCorresponds(this.m,pagedb);
@@ -566,7 +566,7 @@ procedure kom_smc_map_secure(
                             abs_mapping,l2pte);
                         assert pageDbCorresponds(this.m, pagedb);
                         //assert pagedb == updateL2Pte(d', as_page, abs_mapping, l2pte);
-                        err := sp_op_const(KOM_ERR_SUCCESS);
+                        err := const(KOM_ERR_SUCCESS);
                         assert err == specErr(specResult);
                         assert pagedb == specPageDb(specResult);
                         assert pageDbCorresponds(this.m,pagedb);

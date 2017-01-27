@@ -16,7 +16,7 @@ procedure switch_to_monitor()
         this.regs == old(this.regs);
 {
     assert ValidPsrWord(cpsr) by { reveal_ValidSRegState(); }
-    CPSID_IAF(sp_op_const(encode_mode(Monitor)));
+    CPSID_IAF(const(encode_mode(Monitor)));
     lemma_update_psr(old(cpsr), encode_mode(Monitor), true, true);
 }
 
@@ -51,14 +51,14 @@ procedure svc_handler(
     ghost var start := this;
 
     r1 := r0;
-    r0 := sp_op_const(KOM_ERR_SUCCESS);
+    r0 := const(KOM_ERR_SUCCESS);
 
     LDRglobaladdr(r2, CurDispatcherOp());
     LDRglobal(r2, CurDispatcherOp(), r2, 0);
     assert r2 == page_monvaddr(dispPg);
 
     assert r0 == 0;
-    STR(r0, r2, sp_op_const(DISPATCHER_ENTERED));
+    STR(r0, r2, const(DISPATCHER_ENTERED));
 
     ghost var dispEntry := pagedb_in[dispPg].entry.(entered := false);
     ghost var pg := extractPage(this.m, dispPg);
@@ -123,10 +123,10 @@ procedure abort_handler(
     LDRglobal(r2, CurDispatcherOp(), r2, 0);
     assert r2 == page_monvaddr(dispPg);
 
-    r0 := sp_op_const(KOM_ERR_FAULT);
+    r0 := const(KOM_ERR_FAULT);
     r1 := 0;
 
-    STR(r1, r2, sp_op_const(DISPATCHER_ENTERED));
+    STR(r1, r2, const(DISPATCHER_ENTERED));
 
     ghost var dispEntry := pagedb_in[dispPg].entry.(entered := false);
     ghost var pg := extractPage(this.m, dispPg);
