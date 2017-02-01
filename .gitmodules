@@ -1,0 +1,4 @@
+[submodule "tools/vale"]
+	path = tools/vale
+	url = https://github.com/project-everest/vale.git
+	branch = komodo

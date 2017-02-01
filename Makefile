@@ -7,8 +7,8 @@ PREFIX ?= arm-eabi-
 INSTALLDIR ?= .
 GUEST_KERNEL ?= kernel7.img
 GUEST_DISKIMG ?= raspbian.img
-VALE ?= vale.exe
-DAFNY ?= Dafny.exe
+VALE ?= tools/vale/bin/vale.exe
+DAFNY ?= tools/dafny/Dafny.exe
 #-----------------------------------------------------------------------------
 
 AS = $(PREFIX)as
