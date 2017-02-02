@@ -31,7 +31,7 @@ Building
 --------
 
 Komodo builds on a Linux-like environment, which includes Cygwin and
-WSL on Windows.
+Windows Subsystem for Linux (WSL).
 
 Required tools:
  * GNU make
@@ -39,19 +39,16 @@ Required tools:
  * An ARM EABI cross-compiler (gcc and binutils), such as [this Linaro
    toolchain](http://releases.linaro.org/components/toolchain/binaries/4.9-2016.02/arm-eabi/)
 
- * To build the verified code, you'll need binaries for the following:
-  * [Z3](https://github.com/Z3Prover/z3), version 4.4.1
+ * Dafny, Boogie and Z3, which are provided as binaries under tools/dafny
 
-  * [Boogie](https://github.com/boogie-org/boogie). The latest version
-    should work; if not, try commit ID
-    ba4f9fa1fbd923bfce1363566af08624c5c6fe38.
-
-  * [Dafny](https://github.com/Microsoft/dafny). At present, we depend
-    on an experimental Dafny built from [this fork and
-    branch](https://github.com/Chris-Hawblitzel/dafny/commits/type-constraints).
-
-  * Spartan. This tool is presently unreleased, but we expect this to
-    change very soon.
+ * Vale, which is tracked via a git submodule:
+    1. Run `git submodule init && git submodule update`
+    2. See `tools/vale/INSTALL.md` for full instructions, or, briefly:
+       1. Install `scons`, `fsharp`, `nuget` and `mono-devel` packages
+       2. `cd tools/vale`
+       3. `nuget restore ./tools/Vale/src/packages.config -PackagesDirectory tools/FsLexYacc`
+       4. Build the vale tool with `scons --DAFNYPATH=$PWD/../dafny bin/vale.exe`
+       5. (If you're on WSL) manually copy over Z3: `cp ../dafny/z3.exe bin`
 
 The supported platform is currently Raspberry Pi 2, either a real
 board, or a custom QEMU, available from [this GitHub
