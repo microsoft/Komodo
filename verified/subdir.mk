@@ -24,7 +24,7 @@ ifeq ($(VALEDIRECT), 1)
 %.verified %.log: %.sdfy %.gen.dfy
 	/bin/bash -c "$(VALE) $(VALEFLAGS) -in $< -dafnyDirect \
 	$(DAFNYFLAGS) /compile:0 | tee $*.log; exit \$${PIPESTATUS[0]}"
-	@grep -q "^Dafny program verifier finished with [0-9]* verified, 0 errors$$" $*.log $(if $(DAFNYPROC),,&& touch $*.verified)
+	@grep -q "^Dafny program verifier finished with [0-9]* verified, 0 errors[[:space:]]\?$$" $*.log $(if $(DAFNYPROC),,&& touch $*.verified)
 	@$(RM) $*.log
 else
 %.verified: %.gen.dfy
