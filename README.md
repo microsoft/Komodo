@@ -92,7 +92,7 @@ monitor, and Linux driver):
 
 To build the verified components:
 
- * At present, there's a top-level Makefile target `make verify` which
+ * At present, there's a top-level Makefile target `make verified` which
    verifies and (if verification succeeds) builds the verified
    monitor. Build system support to use the verified monitor in place
    of the unverified one is presently lacking.
