@@ -1,12 +1,12 @@
 #!/usr/bin/env powershell
 
 $server = "baumann-desk"
-$dafny = "c:\Users\baumann\src\spartan\tools\Dafny\Dafny.exe"
+$dafny = "tools/Dafny/Dafny.exe"
 $remoteboogie = "Boogie.exe"
 $args_ignore = @("/ironDafny","/compile:0")
 $args_keep = @("/trace")
 $argpats_ignore = @("/allocated")
-$argpats_keep = @("/timeLimit","/proverOpt","/proc")
+$argpats_keep = @("/timeLimit","/proverOpt","/proc","/errorTrace")
 
 $dafnyargs = @()
 $boogieargs = @()
