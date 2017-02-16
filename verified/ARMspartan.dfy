@@ -202,13 +202,12 @@ predicate va_is_src_operand_snd(o:operand, s:state) { ValidOperand(o) && o.OReg?
 
 // type addr = x | isUInt32(x) && WordAligned(x)
 predicate va_is_src_operand_addr(o:operand, s:state)
-    { va_is_src_operand_word(o, s) && ValidState(s) && WordAligned(OperandContents(s, o)) }
+    { ValidRegOperand(o) && ValidState(s) && WordAligned(OperandContents(s, o)) }
 predicate va_is_dst_operand_addr(o:operand, s:state)
-    { va_is_dst_operand_word(o, s) && ValidState(s) && WordAligned(OperandContents(s, o)) }
-function va_eval_operand_addr(s:state, o:operand):addr
-    requires va_is_src_operand_addr(o, s)
-    requires ValidState(s)
-{ va_eval_operand_word(s, o) }
+    { ValidRegOperand(o) && ValidState(s) && WordAligned(OperandContents(s, o)) }
+function va_eval_operand_addr(s:state, o:operand):word
+    requires ValidOperand(o) && ValidState(s)
+{ OperandContents(s, o) }
 
 predicate va_is_src_operand_symbol(g:symbol, s:state) { ValidGlobal(g) }
 function va_eval_operand_symbol(s:state, g:symbol):symbol { g }
