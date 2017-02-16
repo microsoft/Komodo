@@ -7,17 +7,76 @@ include "kom_utils.sdfy"
 include "allocate_page.sdfy"
 include "memset.sdfy"
 
-procedure kom_smc_init_dispatcher(
-    inout {:register OReg(R1)} disp_page:int,
-    {:register OReg(R2)} as_page:int,
-    {:register OReg(R3)} entrypoint:int,
-    out {:register OReg(R0)} err:int,
+procedure init_dispatcher_page(
+    inout operand disp_page:reg,
+    operand entrypoint:reg,
+    out operand tmp:reg,
+    out operand tmp2:reg)
+    requires/ensures
+        SaneState(this);
+    requires
+        @disp_page != @entrypoint && @disp_page != @tmp && @disp_page != @tmp2
+            && @disp_page != OSP;
+        @tmp != @entrypoint && @tmp != @tmp2 && @tmp != OSP;
+        @tmp2 != @entrypoint && @tmp2 != OSP;
+        validPageNr(disp_page);
+    reads
+        globals;
+    modifies
+        mem;
+    ensures
+        SmcProcedureInvariant(old(this),this);
+        MemPreservingExcept(old(this), this, page_monvaddr(old(disp_page)),
+                                 page_monvaddr(old(disp_page)) + PAGESIZE);
+        pageDbDispatcherCorresponds(old(disp_page),
+            Dispatcher(old(entrypoint), false, initDispCtxt()),
+            extractPage(this.m, old(disp_page)));
+{
+    page_monvaddr_impl(disp_page, disp_page, tmp);
+    tmp := 0;
+    tmp2 := const(PAGESIZE);
+    memset(disp_page, tmp, tmp2);
+    STR(entrypoint, disp_page, const(DISPATCHER_ENTRYPOINT));
+    tmp := 0x10;
+    STR(tmp, disp_page, const(DISP_CTXT_PSR));
+
+    ghost var pg := extractPage(this.m, old(disp_page));
+    reveal pageDbDispatcherCorresponds;
+    assert disp_page == page_monvaddr(old(disp_page));
+    assert pg[disp_page + DISPATCHER_ENTRYPOINT] == old(entrypoint);
+    assert pg[disp_page + DISP_CTXT_PSR] == 0x10 == encode_mode(User);
+    assert forall a:addr :: addrInPage(a, old(disp_page))
+        && a != disp_page + DISPATCHER_ENTRYPOINT
+        && a != disp_page + DISP_CTXT_PSR ==> pg[a] == 0;
+}
+
+procedure {:frame false} kom_smc_init_dispatcher(
+    inout operand disp_page:reg, // r1
+    operand as_page:reg, // r2
+    operand entrypoint:reg, // r3
+    operand pagedb_base:addr,
+    out operand err:reg,
+    out operand tmp:reg,
+    out operand tmp2:reg,
     ghost pagedb_in: PageDb) returns (ghost pagedb: PageDb)
     requires/ensures
         SaneState(this);
     requires
+        ValidRegOperand(@disp_page) && ValidRegOperand(@as_page)
+            && ValidRegOperand(@entrypoint) && ValidRegOperand(@pagedb_base)
+            && ValidRegOperand(@err) && ValidRegOperand(@tmp) && ValidRegOperand(@tmp2);
+        @disp_page != @as_page && @disp_page != @entrypoint && @disp_page != @err
+            && @disp_page != @tmp && @disp_page != @tmp2 && @disp_page != @pagedb_base
+            && @disp_page != OSP;
+        @err != @as_page && @err != @entrypoint && @err != @tmp && @err != @tmp2
+            && @err != @pagedb_base && @err != OSP;
+        @tmp != @as_page && @tmp != @entrypoint && @tmp != @tmp2 && @tmp != @pagedb_base && @tmp != OSP;
+        @tmp2 != @as_page && @tmp2 != @entrypoint && @tmp2 != @pagedb_base && @tmp2 != OSP;
+        pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
+    modifies
+        globals; mem;
     ensures
         SmcProcedureInvariant(old(this),this);
         tuple(pagedb, err)
@@ -31,18 +90,10 @@ procedure kom_smc_init_dispatcher(
     if (as_page >= const(KOM_SECURE_NPAGES)) {
         err := const(KOM_ERR_INVALID_ADDRSPACE);
     } else {
-        LDRglobaladdr(r12, PageDb());
         assert validPageNr(as_page);
-        lemma_LeftShift3(as_page);
-        LSL(r4,as_page,const(PAGEDB_ENTRY_SHIFT));
-        assert r4 == G_PAGEDB_ENTRY(as_page) + PAGEDB_ENTRY_TYPE;
-        LDRglobal(r0, PageDb(), r12, r4);
-        assert r0 == pageDbEntryTypeVal(pagedb[as_page]) by {
-            extractPageDbToAbstract(this.m, as_page);
-            reveal_pageDbEntryCorresponds();
-        }
+        load_page_type(as_page, pagedb_base, tmp, tmp, pagedb);
 
-        if (r0 != const(KOM_PAGE_ADDRSPACE)) {
+        if (tmp != const(KOM_PAGE_ADDRSPACE)) {
             err := const(KOM_ERR_INVALID_ADDRSPACE);
         } else {
             assert isAddrspace(pagedb, as_page);
@@ -50,12 +101,14 @@ procedure kom_smc_init_dispatcher(
                             Dispatcher(entrypoint, false, initDispCtxt()));
             pagedb := allocate_page(disp_page, as_page,
                                     const(KOM_PAGE_DISPATCHER),
-                                    r12, r4, r5, err, pagedb, entry);
+                                    pagedb_base, tmp, tmp2, err, pagedb, entry);
 
             if (err == const(KOM_ERR_SUCCESS)) {
                 assert err == specErr(specResult);
-                assert pagedb == specPageDb(allocatePage(pagedb_in, disp_page, as_page, Dispatcher(entrypoint, false, initDispCtxt())));
-                assert pagedb == specPageDb(specResult);
+                assert pagedb
+                    == specPageDb(allocatePage(pagedb_in, disp_page, as_page,
+                                    Dispatcher(entrypoint, false, initDispCtxt())))
+                    == specPageDb(specResult);
 
                 assert pageDbCorrespondsExcluding(this.m, pagedb, disp_page);
                 assert pageDbEntryCorresponds(pagedb[disp_page],
@@ -63,28 +116,10 @@ procedure kom_smc_init_dispatcher(
                 ghost var tmpstate := this;
 
                 // update dispatcher page
-                page_monvaddr_impl(disp_page, disp_page, r5);
-                r4 := disp_page;
-                r5 := 0;
-                r6 := const(PAGESIZE);
-                memset(r4,r5,r6);
-                STR(entrypoint, disp_page, const(DISPATCHER_ENTRYPOINT));
-                r5 := 0x10;
-                STR(r5, disp_page, const(DISP_CTXT_PSR));
+                init_dispatcher_page(disp_page, entrypoint, tmp, tmp2);
 
-                ghost var pg := extractPage(this.m, old(disp_page));
-                forall :: pageDbDispatcherCorresponds(old(disp_page), entry.entry, pg) {
-                    reveal_pageDbDispatcherCorresponds();
-                    assert disp_page == page_monvaddr(old(disp_page));
-                    assert pg[disp_page + DISPATCHER_ENTRYPOINT] == old(entrypoint);
-                    assert pg[disp_page + DISP_CTXT_PSR] == 0x10 == encode_mode(User);
-                    assert forall a:addr :: addrInPage(a, old(disp_page))
-                        && a != disp_page + DISPATCHER_ENTRYPOINT
-                        && a != disp_page + DISP_CTXT_PSR ==> pg[a] == 0;
-                }
-                forall :: pageDbCorrespondsOnly(this.m, pagedb, old(disp_page)) {
-                    reveal_pageContentsCorresponds();
-                }
+                assert pageDbCorrespondsOnly(this.m, pagedb, old(disp_page))
+                    by { reveal pageContentsCorresponds; }
                 AllButOnePagePreserving(old(disp_page), tmpstate, this);
                 assert pageDbCorresponds(this.m, pagedb);
             } else {
