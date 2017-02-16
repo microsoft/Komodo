@@ -30,7 +30,7 @@ procedure memcpy(operand dst:addr, operand src:addr, inout operand size:reg,
             RegPreservingExcept(old(this), this, set(@size, @tmp));
             WordAligned(size) && 0 <= size <= old(size);
             MemPreservingExcept(old(this), this, dst + size, dst + old(size));
-            dst == old(dst);
+            dst == old(dst) && src == old(src);
             //forall i :: (size <= i < old(size)) && WordAligned(i)
             //    ==> MemContents(this.m, dst + i) == old(MemContents(this.m, src + i));
             forall a :: dst + size <= a < old(dst + size) && WordAligned(a)
