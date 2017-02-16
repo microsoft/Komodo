@@ -3,17 +3,17 @@ include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
 include {:verbatim} "entry.i.dfy"
 
-include "ARMdecls-unrefined.sdfy"
+include "ARMdecls.sdfy"
 
 procedure switch_to_monitor()
+    modifies
+        cpsr;
     requires
         SaneConstants() && ValidState(this)  && SaneStack(this) && SaneMem(this.m);
         priv_of_state(this) == PL1 && world_of_state(this) == Secure;
         this.ok;
     ensures
         SaneState(this);
-        AllMemInvariant(old(this), this);
-        this.regs == old(this.regs);
 {
     assert ValidPsrWord(cpsr) by { reveal_ValidSRegState(); }
     CPSID_IAF(const(encode_mode(Monitor)));
@@ -21,11 +21,14 @@ procedure switch_to_monitor()
 }
 
 procedure svc_handler(
-    inout {:register OReg(R0)} retval:int,
     ghost user_state: state,
     ghost stack_bytes: int,
     ghost pagedb_in: PageDb,
     ghost dispPg: PageNr) returns (ghost pagedb: PageDb)
+    reads
+        globals; r0;
+    modifies
+        mem; r0; r1; r2; cpsr;
     requires
         SaneConstants() && ValidState(this)  && SaneStack(this) && SaneMem(this.m);
         this.ok;
@@ -94,6 +97,10 @@ procedure abort_handler(
     ghost stack_bytes: int,
     ghost pagedb_in: PageDb,
     ghost dispPg: PageNr) returns (ghost pagedb: PageDb)
+    reads
+        globals; r0;
+    modifies
+        mem; r0; r1; r2; cpsr;
     requires
         SaneConstants() && ValidState(this)  && SaneStack(this) && SaneMem(this.m);
         this.ok;

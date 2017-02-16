@@ -2,7 +2,7 @@ include {:verbatim} "Sets.dfy"
 include {:verbatim} "kom_common.i.dfy"
 include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
-include "ARMdecls-unrefined.sdfy"
+include "ARMdecls.sdfy"
 include "kom_utils.sdfy"
 
 #verbatim

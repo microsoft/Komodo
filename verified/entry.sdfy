@@ -3,7 +3,7 @@ include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
 include {:verbatim} "entry.i.dfy"
 
-include "ARMdecls-unrefined.sdfy"
+include "ARMdecls.sdfy"
 include "kom_utils.sdfy"
 
 #verbatim

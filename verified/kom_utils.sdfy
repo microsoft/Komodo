@@ -1,14 +1,13 @@
 include {:verbatim} "kom_common.i.dfy"
 include {:verbatim} "bitvectors.i.dfy"
-include "ARMdecls-unrefined.sdfy"
+include "ARMdecls.sdfy"
 
-procedure page_paddr_impl(out operand phys:int, operand pagenr:int, out operand tmp:int)
+procedure page_paddr_impl(out operand phys:reg, operand pagenr:reg, out operand tmp:reg)
+    reads
+        globals;
     requires/ensures
         SaneState(this);
     requires
-        ValidRegOperand(@phys);
-        ValidRegOperand(@pagenr);
-        ValidRegOperand(@tmp);
         // NB: @phys == @pagenr is supported
         @phys != @tmp;
         @pagenr != @tmp;
@@ -16,9 +15,7 @@ procedure page_paddr_impl(out operand phys:int, operand pagenr:int, out operand 
         @tmp != OSP;
         validPageNr(pagenr);
     ensures
-        AllMemInvariant(old(this),this);
-        RegPreservingExcept(old(this), this, set(@phys, @tmp));
-        SmcProcedureInvariant(old(this), this);
+        //SmcProcedureInvariant(old(this), this);
         phys == page_paddr(old(pagenr));
         PageAligned(phys);
 {
@@ -33,13 +30,12 @@ procedure page_paddr_impl(out operand phys:int, operand pagenr:int, out operand 
     ADD(phys, phys, tmp);
 }
 
-procedure paddr_page_impl(out operand pagenr:int, operand phys:int, out operand tmp:int)
+procedure paddr_page_impl(out operand pagenr:reg, operand phys:reg, out operand tmp:reg)
+    reads
+        globals;
     requires/ensures
         SaneState(this);
     requires
-        ValidRegOperand(@phys);
-        ValidRegOperand(@pagenr);
-        ValidRegOperand(@tmp);
         // NB: @phys == @pagenr is supported
         @phys != @tmp;
         @pagenr != @tmp;
@@ -48,9 +44,7 @@ procedure paddr_page_impl(out operand pagenr:int, operand phys:int, out operand 
         PageAligned(phys);
         SecurePhysBase() <= phys < SecurePhysBase() + KOM_SECURE_RESERVE;
     ensures
-        GlobalsInvariant(old(this),this);
-        RegPreservingExcept(old(this), this, set(@pagenr, @tmp));
-        SmcProcedureInvariant(old(this), this);
+        //SmcProcedureInvariant(old(this), this);
         pagenr == paddr_page(old(phys));
         validPageNr(pagenr);
 {
@@ -65,13 +59,12 @@ procedure paddr_page_impl(out operand pagenr:int, operand phys:int, out operand 
     assert pagenr == oldpagenr / PAGESIZE;
 }
 
-procedure page_monvaddr_impl(out operand virt:int, operand pagenr:int, out operand tmp:int)
+procedure page_monvaddr_impl(out operand virt:reg, operand pagenr:reg, out operand tmp:reg)
+    reads
+        globals;
     requires/ensures
         SaneState(this);
     requires
-        ValidRegOperand(@virt);
-        ValidRegOperand(@pagenr);
-        ValidRegOperand(@tmp);
         // NB: @pagenr == @virt is supported
         @pagenr != @tmp;
         @virt != @tmp;
@@ -79,17 +72,18 @@ procedure page_monvaddr_impl(out operand virt:int, operand pagenr:int, out opera
         @tmp != OSP;
         validPageNr(pagenr);
     ensures
-        AllMemInvariant(old(this),this);
-        RegPreservingExcept(old(this), this, set(@virt, @tmp));
-        SmcProcedureInvariant(old(this), this);
+        //SmcProcedureInvariant(old(this), this);
         virt == page_monvaddr(old(pagenr));
-        isUInt32(virt);
 {
     page_paddr_impl(virt, pagenr, tmp);
     ADD(virt, virt, const(KOM_DIRECTMAP_VBASE));
 }
 
 procedure stack_nonvolatiles(ghost stack_bytes:int) returns (ghost stack_bytes_ret:int)
+    reads
+        r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
+    modifies
+        sp; mem;
     requires/ensures
         SaneState(this);
     requires
@@ -99,7 +93,7 @@ procedure stack_nonvolatiles(ghost stack_bytes:int) returns (ghost stack_bytes_r
         sp == old(sp-40);
         
         //preserves registers
-        RegPreservingExcept(old(this), this, set(@sp));
+        //RegPreservingExcept(old(this), this, set(@sp));
 
         // pushes r4-r11, sp, lr
         MemContents(this.m, sp)    == old(r12);
@@ -113,9 +107,9 @@ procedure stack_nonvolatiles(ghost stack_bytes:int) returns (ghost stack_bytes_r
         MemContents(this.m, sp+32) == old(r4);
         MemContents(this.m, sp+36) == old(lr);
 
-        GlobalsInvariant(old(this),this);
-        BankedRegsInvariant(old(this),this);
-        SRegsInvariant(old(this),this);
+        //GlobalsInvariant(old(this),this);
+        //BankedRegsInvariant(old(this),this);
+        //SRegsInvariant(old(this),this);
         NonStackMemPreserving(old(this),this);
         ParentStackPreserving(old(this),this);
 
@@ -139,6 +133,10 @@ procedure stack_nonvolatiles(ghost stack_bytes:int) returns (ghost stack_bytes_r
 }
 
 procedure unstack_nonvolatiles(ghost stack_bytes:int) returns (ghost stack_bytes_ret:int)
+    reads
+        mem;
+    modifies
+        r4; r5; r6; r7; r8; r9; r10; r11; r12; lr; sp; 
     requires/ensures
         SaneState(this);
     requires
@@ -149,10 +147,10 @@ procedure unstack_nonvolatiles(ghost stack_bytes:int) returns (ghost stack_bytes
         sp == old(sp+40);
        
         // fcall argument regs preserved. 
-        r0 == old(r0);
-        r1 == old(r1);
-        r2 == old(r2);
-        r3 == old(r3);
+        //r0 == old(r0);
+        //r1 == old(r1);
+        //r2 == old(r2);
+        //r3 == old(r3);
 
         // pop lr, r4-r11 from stack.
         lr  == old(MemContents(this.m, sp+36));
@@ -166,9 +164,9 @@ procedure unstack_nonvolatiles(ghost stack_bytes:int) returns (ghost stack_bytes
         r11 == old(MemContents(this.m, sp+4));
         r12 == old(MemContents(this.m, sp));
 
-        AllMemInvariant(old(this),this);
-        BankedRegsInvariant(old(this),this);
-        SRegsInvariant(old(this),this);
+        //AllMemInvariant(old(this),this);
+        //BankedRegsInvariant(old(this),this);
+        //SRegsInvariant(old(this),this);
 
         stack_bytes_ret == stack_bytes + 40;
         StackBytesRemaining(this, stack_bytes_ret);
