@@ -329,8 +329,9 @@ MOVS_PCLR_TO_USERMODE_AND_CONTINUE()
     reveal va_eval;
 }
 
-procedure {:instruction Ins(CPSID_IAF(mod))} CPSID_IAF(operand mod:modeencoding)
+procedure {:instruction Ins(CPSID_IAF(mod))} CPSID_IAF(operand mod:constop)
     requires
+        ValidModeEncoding(mod);
         ValidModeChange'(this, decode_mode(mod));
     modifies
         cpsr;

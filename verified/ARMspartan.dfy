@@ -221,9 +221,8 @@ type creg = word
 predicate va_is_src_operand_creg(o:operand, s:state) { ValidMcrMrcOperand(s, o) }
 predicate va_is_dst_operand_creg(o:operand, s:state) { ValidMcrMrcOperand(s, o) }
 
-type modeencoding = word
-predicate va_is_src_operand_modeencoding(o:operand, s:state)
-{ o.OConst? && ValidModeEncoding(o.n) }
+type constop = word
+predicate va_is_src_operand_constop(o:operand, s:state) { o.OConst? }
 
 function va_eval_operand_word(s:state, o:operand):word
     requires va_is_src_operand_word(o, s);
@@ -255,8 +254,8 @@ function va_eval_operand_creg(s:state, o:operand):creg
 {
     OperandContents(s,o)
 }
-function va_eval_operand_modeencoding(s:state, o:operand):modeencoding
-    requires va_is_src_operand_modeencoding(o, s)
+function va_eval_operand_constop(s:state, o:operand):constop
+    requires va_is_src_operand_constop(o, s)
 {
     o.n
 }
