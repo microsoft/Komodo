@@ -1,4 +1,4 @@
-include "ARMspartan.dfy"
+include "ARMdef.dfy"
 include "kom_common.s.dfy"
 include "pagedb.s.dfy"
 
@@ -7,6 +7,39 @@ include "pagedb.s.dfy"
 //-----------------------------------------------------------------------------
 
 const PAGEDB_ENTRY_SHIFT:int := 3;
+
+//-----------------------------------------------------------------------------
+// Useful invariants on architectural state
+//-----------------------------------------------------------------------------
+predicate AllMemInvariant(s:state, s':state)
+    requires ValidState(s) && ValidState(s')
+{
+    s.m == s'.m
+}
+
+predicate GlobalsInvariant(s:state, s':state)
+    requires ValidState(s) && ValidState(s')
+{
+    s.m.globals == s'.m.globals
+}
+
+predicate AddrMemInvariant(s:state, s':state)
+    requires ValidState(s) && ValidState(s')
+{
+    s.m.addresses == s'.m.addresses
+}
+
+predicate SRegsInvariant(s:state, s':state)
+    requires ValidState(s) && ValidState(s')
+{
+    s.sregs == s'.sregs && s.conf == s'.conf
+}
+
+predicate AllRegsInvariant(s:state, s':state)
+    requires ValidState(s) && ValidState(s')
+{
+    s.regs == s'.regs && SRegsInvariant(s, s')
+}
 
 //-----------------------------------------------------------------------------
 // Stack/procedure invariants
