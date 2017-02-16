@@ -4,6 +4,46 @@ var{:state ok()}  ok:bool;
 var{:state mem()} mem:memmap;
 var{:state globals()} globals:globalsmap;
 
+var{:state osp()} sp:word;
+var{:state olr()} lr:word;
+var{:state reg(R0)}  r0:word;
+var{:state reg(R1)}  r1:word;
+var{:state reg(R2)}  r2:word;
+var{:state reg(R3)}  r3:word;
+var{:state reg(R4)}  r4:word;
+var{:state reg(R5)}  r5:word;
+var{:state reg(R6)}  r6:word;
+var{:state reg(R7)}  r7:word;
+var{:state reg(R8)}  r8:word;
+var{:state reg(R9)}  r9:word;
+var{:state reg(R10)} r10:word;
+var{:state reg(R11)} r11:word;
+var{:state reg(R12)} r12:word;
+
+var{:state reg(SP(User))}       sp_usr:int;
+var{:state reg(SP(FIQ))}        sp_fiq:int;
+var{:state reg(SP(IRQ))}        sp_irq:int;
+var{:state reg(SP(Supervisor))} sp_svc:int;
+var{:state reg(SP(Abort))}      sp_abt:int;
+var{:state reg(SP(Undefined))}  sp_und:int;
+var{:state reg(SP(Monitor))}    sp_mon:int;
+
+var{:state reg(LR(User))}       lr_usr:int;
+var{:state reg(LR(FIQ))}        lr_fiq:int;
+var{:state reg(LR(IRQ))}        lr_irq:int;
+var{:state reg(LR(Supervisor))} lr_svc:int;
+var{:state reg(LR(Abort))}      lr_abt:int;
+var{:state reg(LR(Undefined))}  lr_und:int;
+var{:state reg(LR(Monitor))}    lr_mon:int;
+
+var{:state sreg(spsr(FIQ))}        spsr_fiq:int;
+var{:state sreg(spsr(IRQ))}        spsr_irq:int;
+var{:state sreg(spsr(Supervisor))} spsr_svc:int;
+var{:state sreg(spsr(Abort))}      spsr_abt:int;
+var{:state sreg(spsr(Undefined))}  spsr_und:int;
+var{:state sreg(spsr(Monitor))}    spsr_mon:int;
+var{:state sreg(cpsr)}             cpsr:int;
+
 #verbatim
 function MaybeUpdateOk(s:va_state, r:va_state) : va_state
 {
@@ -224,63 +264,56 @@ STR(operand rd:reg, operand base:word, operand ofs:word)
     this := MaybeUpdateOk(old(this), this);
 }
 
-procedure {:frame false} {:instruction Ins(MRS(dst, src))}
-MRS(operand dst:reg, operand src:int)
-    requires/ensures
-        ValidState(this) && this.ok;
+procedure {:instruction Ins(MRS(dst, src))}
+MRS(out operand dst:reg, operand src:sreg)
     requires
         priv_of_state(this) == PL1;
-        ValidRegOperand(@dst);
-        ValidMrsMsrOperand(this, @src);
     ensures
-        //dst == old(src);
-        evalUpdate(old(this), @dst, old(src), this);
+        dst == old(src);
 {
     reveal va_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
 }
 
-procedure {:frame false} {:instruction Ins(MSR(dst, src))}
-MSR(operand dst:int, operand src:reg)
-    requires/ensures
-        ValidState(this) && this.ok;
+procedure {:instruction Ins(MSR(dst, src))}
+MSR(out operand dst:sreg, operand src:reg)
     requires
         priv_of_state(this) == PL1;
-        ValidRegOperand(@src);
-        ValidMrsMsrOperand(this, @dst);
         @dst is OSReg && @dst.sr is cpsr ==> ValidModeChange(this, src);
         @dst is OSReg && @dst.sr is spsr ==> ValidPsrWord(src);
     ensures
-        //dst == old(src);
-        evalUpdate(old(this), @dst, old(src), this);
+        ValidMrsMsrOperand(this, @dst);
+        dst == old(src);
 {
     reveal va_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
 }
 
-procedure {:frame true} {:instruction Ins(MRC(dst, src))}
-MRC(out operand dst:reg, operand src:int)
-    requires/ensures
-        ValidState(this) && this.ok;
-    requires
-        ValidMcrMrcOperand(this, @src);
+procedure {:instruction Ins(MRC(dst, src))}
+MRC(out operand dst:reg, operand src:creg)
     ensures
         dst == old(src);
-        evalUpdate(old(this), @dst, old(src), this);
 {
     reveal va_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
 }
 
-procedure {:frame false} {:instruction Ins(MCR(dst, src))}
-MCR(out operand dst:int, operand src:reg)
-    requires/ensures
-        ValidState(this) && this.ok;
+procedure {:instruction Ins(MCR(dst, src))}
+MCR(out operand dst:creg, operand src:reg)
     requires
-        ValidRegOperand(@src);
-        ValidMcrMrcOperand(this, @dst);
+        // don't consider writes to SCR outside monitor mode, so we can avoid
+        // reasoning about the nonsense case where we drop out of secure world
+        @dst == OSReg(scr) ==> mode_of_state(this) == Monitor;
     ensures
-        //dst == old(src);
-        evalUpdate(old(this), @dst, old(src), this);
+        ValidMcrMrcOperand(this, @dst);
+        dst == old(src);
 {
     reveal va_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
 }
 
 procedure {:frame false} {:instruction Ins(MOVS_PCLR_TO_USERMODE_AND_CONTINUE)}
@@ -296,16 +329,17 @@ MOVS_PCLR_TO_USERMODE_AND_CONTINUE()
     reveal va_eval;
 }
 
-procedure {:frame false} {:instruction Ins(CPSID_IAF(mod))} CPSID_IAF(operand mod:int)
-    requires/ensures
-        ValidState(this) && this.ok;
+procedure {:instruction Ins(CPSID_IAF(mod))} CPSID_IAF(operand mod:modeencoding)
     requires
-        @mod is OConst;
-        ValidModeEncoding(mod) && ValidModeChange'(this, decode_mode(mod));
+        ValidModeChange'(this, decode_mode(mod));
+    modifies
+        cpsr;
     ensures
         evalCPSID_IAF(old(this), old(mod), this);
 {
     reveal va_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
 }
 
 procedure {:bridge} {:refined} {:instruction Ins(LDR_reloc(dst, g))}

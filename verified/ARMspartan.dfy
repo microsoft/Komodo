@@ -8,7 +8,7 @@ type va_bool = bool
 type va_operand = operand // va_operand is deprecated
 type va_operand_code = operand
 type va_operand_lemma = operand
-type va_cmp = obool
+type va_cmp = operand
 type va_code = code
 type va_codes = codes
 type va_state = state
@@ -24,9 +24,9 @@ predicate {:opaque} va_eval(c:code, s:state, r:state)
     s.ok ==> evalCode(c, s, r)
 }
 
-function va_eval_operand_int(s:state, o:operand): word
+/* function va_eval_operand_int(s:state, o:operand): word
     requires ValidState(s) && ValidAnySrcOperand(s, o)
-{ OperandContents(s,o) }
+{ OperandContents(s,o) } */
 
 predicate va_eq_ops(s1:va_state, s2:va_state, o:operand)
 {
@@ -55,8 +55,9 @@ predicate va_ensure(b0:codes, b1:codes, s0:va_state, s1:va_state, sN:va_state)
  && ValidState(s1)
 }
 
-//function method fromOperand(o:operand):operand { o }
-//function method va_op_const(n:word):operand { OConst(n) }
+function method va_const_operand(n:word):operand { OConst(n) }
+function method va_const_cmp(n:word):va_cmp { va_const_operand(n) }
+function method va_coerce_operand_to_cmp(o:operand):operand { o }
 
 function method va_cmp_eq(o1:operand, o2:operand):obool { OCmp(OEq, o1, o2) }
 function method va_cmp_ne(o1:operand, o2:operand):obool { OCmp(ONe, o1, o2) }
@@ -79,15 +80,23 @@ function method va_get_whileBody(c:code):code requires c.While? { c.whileBody }
 //-----------------------------------------------------------------------------
 // Spartan-to-Dafny connections needed for refined mode
 //-----------------------------------------------------------------------------
-function method va_op_osp():operand { OSP }
-function method va_op_olr():operand { OLR }
-function method va_op_reg(r:ARMReg):operand { OReg(r) }
+function method va_op_operand_osp():operand { OSP }
+function method va_op_operand_olr():operand { OLR }
+function method va_op_operand_reg(r:ARMReg):operand { OReg(r) }
+function method va_op_operand_sreg(sr:SReg):operand { OSReg(sr) }
 function va_get_ok(s:state):bool { s.ok }
 function va_get_reg(r:ARMReg, s:state):word
     requires ValidRegState(s.regs)
 {
     reveal_ValidRegState();
     s.regs[r]
+}
+
+function va_get_sreg(sr:SReg, s:state):word
+    requires ValidSReg(sr) && ValidSRegState(s.sregs, s.conf)
+{
+    lemma_SRegDom(sr, s);
+    s.sregs[sr]
 }
 
 function va_get_mem(s:state):memmap
@@ -121,6 +130,23 @@ function va_update_reg(r:ARMReg, sM:state, sK:state):state
     reveal_ValidRegState();
     sK.(regs := sK.regs[r := sM.regs[r]])
 }
+
+lemma lemma_SRegDom(r:SReg, s:state)
+    requires ValidSReg(r)
+    requires ValidSRegState(s.sregs, s.conf)
+    ensures r in s.sregs
+{ reveal_ValidSRegState(); }
+
+function va_update_sreg(sr:SReg, sM:state, sK:state):state 
+    requires ValidSReg(sr)
+    requires ValidSRegState(sK.sregs, sK.conf) && ValidSRegState(sM.sregs, sM.conf)
+    ensures ValidSRegState(va_update_sreg(sr, sM, sK).sregs, va_update_sreg(sr, sM, sK).conf)
+{
+    reveal_ValidSRegState();
+    lemma_SRegDom(sr, sM);
+    var v := sM.sregs[sr];
+    sK.(sregs := sK.sregs[sr := v], conf := update_config_from_sreg(sK, sr, v))
+}
 function va_update_mem(sM:state, sK:state):state
     requires ValidMemState(sM.m) && ValidMemState(sK.m)
     ensures ValidMemState(va_update_mem(sM, sK).m)
@@ -151,50 +177,88 @@ function va_update_olr(sM:state, sK:state):state
 }
 
 function va_update_operand(o:operand, sM:state, sK:state):state
-    requires ValidRegOperand(o)
+    requires ValidRegOperand(o) || ValidMrsMsrOperand(sM,o) || ValidMcrMrcOperand(sM,o)
     requires ValidRegState(sK.regs) && ValidRegState(sM.regs)
+    requires ValidSRegState(sK.sregs, sK.conf) && ValidSRegState(sM.sregs, sM.conf)
 {
     match o
-        case OReg(r) => va_update_reg(o.r, sM, sK)
+        case OReg(r) => va_update_reg(r, sM, sK)
         case OLR => va_update_reg(LR(mode_of_state(sM)), sM, sK)
         case OSP => va_update_reg(SP(mode_of_state(sM)), sM, sK)
+        case OSReg(sr) => va_update_sreg(sr, sM, sK)
 }
 
 function method GetProbableReg(o:operand) : ARMReg { if o.OReg? then o.r else R0 }
 
-predicate va_is_src_operand_word(o:operand) { ValidOperand(o) }
-predicate va_is_dst_operand_word(o:operand) { ValidRegOperand(o) }
-
-predicate va_is_src_operand_int(o:operand) { true }
-predicate va_is_dst_operand_int(o:operand) { true }
+predicate va_is_src_operand_word(o:operand, s:state) { ValidOperand(o) }
+predicate va_is_dst_operand_word(o:operand, s:state) { ValidRegOperand(o) }
 
 type reg = word
-predicate va_is_src_operand_reg(o:operand) { ValidRegOperand(o) }
-predicate va_is_dst_operand_reg(o:operand) { ValidRegOperand(o) }
+predicate va_is_src_operand_reg(o:operand, s:state) { ValidRegOperand(o) }
+predicate va_is_dst_operand_reg(o:operand, s:state) { ValidRegOperand(o) }
 
 type snd = word
-predicate va_is_src_operand_snd(o:operand) { ValidOperand(o) && o.OReg? }
+predicate va_is_src_operand_snd(o:operand, s:state) { ValidOperand(o) && o.OReg? }
 
-predicate va_is_src_operand_symbol(g:symbol) { ValidGlobal(g) }
+// type addr = x | isUInt32(x) && WordAligned(x)
+predicate va_is_src_operand_addr(o:operand, s:state)
+    { va_is_src_operand_word(o, s) && ValidState(s) && WordAligned(OperandContents(s, o)) }
+predicate va_is_dst_operand_addr(o:operand, s:state)
+    { va_is_dst_operand_word(o, s) && ValidState(s) && WordAligned(OperandContents(s, o)) }
+function va_eval_operand_addr(s:state, o:operand):addr
+    requires va_is_src_operand_addr(o, s)
+    requires ValidState(s)
+{ va_eval_operand_word(s, o) }
+
+predicate va_is_src_operand_symbol(g:symbol, s:state) { ValidGlobal(g) }
 function va_eval_operand_symbol(s:state, g:symbol):symbol { g }
 
+type sreg = word
+predicate va_is_src_operand_sreg(o:operand, s:state) { ValidMrsMsrOperand(s, o) }
+predicate va_is_dst_operand_sreg(o:operand, s:state) { ValidMrsMsrOperand(s, o) }
+
+type creg = word
+predicate va_is_src_operand_creg(o:operand, s:state) { ValidMcrMrcOperand(s, o) }
+predicate va_is_dst_operand_creg(o:operand, s:state) { ValidMcrMrcOperand(s, o) }
+
+type modeencoding = word
+predicate va_is_src_operand_modeencoding(o:operand, s:state)
+{ o.OConst? && ValidModeEncoding(o.n) }
+
 function va_eval_operand_word(s:state, o:operand):word
-    requires va_is_src_operand_word(o);
+    requires va_is_src_operand_word(o, s);
     requires ValidState(s)
 {
     OperandContents(s,o)
 }
 function va_eval_operand_reg(s:state, o:operand):reg
-    requires va_is_src_operand_reg(o);
+    requires va_is_src_operand_reg(o, s);
     requires ValidState(s)
 {
     OperandContents(s,o)
 }
 function va_eval_operand_snd(s:state, o:operand):snd
-    requires va_is_src_operand_snd(o);
+    requires va_is_src_operand_snd(o, s);
     requires ValidState(s)
 {
     OperandContents(s,o)
+}
+function va_eval_operand_sreg(s:state, o:operand):sreg
+    requires va_is_src_operand_sreg(o, s);
+    requires ValidState(s)
+{
+    OperandContents(s,o)
+}
+function va_eval_operand_creg(s:state, o:operand):creg
+    requires va_is_src_operand_creg(o, s);
+    requires ValidState(s)
+{
+    OperandContents(s,o)
+}
+function va_eval_operand_modeencoding(s:state, o:operand):modeencoding
+    requires va_is_src_operand_modeencoding(o, s)
+{
+    o.n
 }
 
 predicate va_state_eq(s0:state, s1:state)
