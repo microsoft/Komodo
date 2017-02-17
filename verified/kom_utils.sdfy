@@ -1,5 +1,6 @@
 include {:verbatim} "kom_common.i.dfy"
 include {:verbatim} "bitvectors.i.dfy"
+include {:verbatim} "pagedb.i.dfy"
 include "ARMdecls.sdfy"
 
 procedure page_paddr_impl(out operand phys:reg, operand pagenr:reg, out operand tmp:reg)
@@ -187,4 +188,35 @@ procedure unstack_nonvolatiles(ghost stack_bytes:int) returns (ghost stack_bytes
     ADD(sp, sp, 40);
 
     stack_bytes_ret := stack_bytes + 40;
+}
+
+procedure load_page_type(
+    operand pagenr:reg,
+    operand pagedb_base:addr,
+    out operand offset:reg,
+    out operand pgtype:reg,
+    ghost pagedb:PageDb)
+    requires/ensures
+        SaneState(this);
+    requires
+        validPageNr(pagenr);
+        pagedb_base == AddressOfGlobal(PageDb());
+        @pgtype != OSP && @offset != OSP && @offset != @pagedb_base;
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+    reads
+        globals;
+    ensures
+        pgtype == pageDbEntryTypeVal(pagedb[old(pagenr)]);
+        @offset != @pgtype ==> offset == G_PAGEDB_ENTRY(old(pagenr));
+
+{
+    lemma_LeftShift3(pagenr);
+    LSL(offset, pagenr, const(PAGEDB_ENTRY_SHIFT));
+    assert offset == G_PAGEDB_ENTRY(old(pagenr)) + PAGEDB_ENTRY_TYPE;
+    LDRglobal(pgtype, PageDb(), pagedb_base, offset);
+
+    reveal pageDbEntryCorresponds;
+    PageDbCorrespondsImpliesEntryCorresponds(this.m, pagedb, old(pagenr));
+    extractPageDbToAbstractOne(this.m, old(pagenr), PAGEDB_ENTRY_TYPE);
 }
