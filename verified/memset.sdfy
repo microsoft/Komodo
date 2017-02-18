@@ -29,11 +29,11 @@ procedure memcpy(operand dst:addr, operand src:addr, inout operand size:reg,
             SmcProcedureInvariant(old(this),this);
             RegPreservingExcept(old(this), this, set(@size, @tmp));
             WordAligned(size) && 0 <= size <= old(size);
-            MemPreservingExcept(old(this), this, dst + size, dst + old(size));
             dst == old(dst) && src == old(src);
+            MemPreservingExcept(old(this), this, dst + size, dst + old(size));
             //forall i :: (size <= i < old(size)) && WordAligned(i)
             //    ==> MemContents(this.m, dst + i) == old(MemContents(this.m, src + i));
-            forall a :: dst + size <= a < old(dst + size) && WordAligned(a)
+            forall a :: dst + size <= a < dst + old(size) && WordAligned(a)
                 ==> MemContents(this.m, a) == old(MemContents(this.m, a - dst + src));
         decreases
             size;
@@ -42,6 +42,7 @@ procedure memcpy(operand dst:addr, operand src:addr, inout operand size:reg,
         SUB(size, size, 4);
         assert WordAligned(size);
         LDR(tmp, src, size);
+        assert tmp == MemContents(old(this.m), src + size);
         STR(tmp, dst, size);
         assert MemContents(this.m, dst + size) == MemContents(old(this.m), src + size);
         assert forall p :: ValidMem(p) && p != dst + size
