@@ -5,11 +5,11 @@ include "ARMdecls.sdfy"
 
 procedure fetch_l1pte(
     operand l1pt_va:addr,
-    operand l1index:int,
-    out operand tmp:int,
-    out operand res:int,
+    operand l1index:reg,
+    out operand tmp:reg,
+    out operand res:reg,
     ghost pagedb:PageDb,
-    ghost l1pg:int)
+    ghost l1pg:PageNr)
     requires/ensures
         SaneState(this);
     requires
@@ -20,15 +20,15 @@ procedure fetch_l1pte(
             && pagedb[l1pg].entry is L1PTable;
         l1pt_va == page_monvaddr(l1pg);
         0 <= l1index < NR_L1PTES;
+    reads
+        mem;
     ensures
-        AllMemInvariant(old(this),this);
         SmcProcedureInvariant(old(this),this);
-        RegPreservingExcept(old(this),this, set(@tmp, @res));
-        res == 0 <==> pagedb[l1pg].entry.l1pt[l1index] == Nothing;
-        res == mkL1Pte(pagedb[l1pg].entry.l1pt[l1index], 0);
+        res == 0 <==> pagedb[l1pg].entry.l1pt[old(l1index)] == Nothing;
+        res == mkL1Pte(pagedb[l1pg].entry.l1pt[old(l1index)], 0);
 {
-    reveal_pageDbL1PTableCorresponds();
-    reveal_pageContentsCorresponds();
+    reveal pageDbL1PTableCorresponds;
+    reveal pageContentsCorresponds;
     lemma_LeftShift4(l1index);
     LSL(tmp, l1index, 4);
     LDR(res, l1pt_va, tmp);
