@@ -160,31 +160,20 @@ procedure allocate_page_success(
 
     // remember that no other pages changed
     ghost var midway := this;
-    AllButOnePagePreserving(entry.addrspace, old(this), midway);
-    assert RegPreservingExcept(old(this), midway, set(@tmp));
+    AllButOnePagePreserving(entry.addrspace, old(this), this);
 
     // update pagedb
     tmp := typeval;
     lemma_LeftShift3(pagenr);
     LSL(tmp2,pagenr,const(PAGEDB_ENTRY_SHIFT));
-    assert tmp2 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_TYPE;
-    STRglobal(tmp, PageDb(), pagedb_base, tmp2);
-    ADD(tmp2, tmp2, const(PAGEDB_ENTRY_ADDRSPACE));
-    assert tmp2 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE;
-    STRglobal(as_va, PageDb(), pagedb_base, tmp2);
+    update_pagedb_entry(old(pagenr), pagedb[old(pagenr)], tmp2, tmp, as_va,
+                        pagedb_base);
 
-    // no pages changed across pagedb update
-    assert this.m.addresses == midway.m.addresses;
-    assert RegPreservingExcept(midway, this, set(@tmp, @tmp2));
+    assert pageDbEntryCorresponds(pagedb[old(pagenr)],
+                                  extractPageDbEntry(this.m, old(pagenr)));
 
-    forall :: pageDbEntryCorresponds(pagedb[pagenr], extractPageDbEntry(this.m, pagenr))
-    {
-        assert extractPageDbEntry(this.m, pagenr)
-            == seq(pageDbEntryTypeVal(entry), as_va);
-        reveal_pageDbEntryCorresponds();
-    }
-
-    forall :: pageDbCorrespondsOnly(this.m, pagedb, entry.addrspace) {
+    assert pageDbCorrespondsOnly(this.m, pagedb, entry.addrspace)
+    by {
         assert pageDbCorrespondsOnly(midway.m, pagedb, entry.addrspace);
         assert extractPageDbEntry(this.m, entry.addrspace)
             == extractPageDbEntry(midway.m, entry.addrspace);
@@ -192,14 +181,14 @@ procedure allocate_page_success(
             == extractPage(midway.m, entry.addrspace);
     }
 
-    forall :: pageDbCorrespondsExcluding(this.m, pagedb, pagenr)
-    {
+    assert pageDbCorrespondsExcluding(this.m, pagedb, old(pagenr))
+    by {
         assert forall i :: validPageNr(i) && i != entry.addrspace
         ==> extractPage(this.m, i) == extractPage(old(this.m), i);
     }
 }
 
-procedure {:frame false} allocate_page(
+procedure allocate_page(
     operand pagenr:reg,
     operand as_pagenr:reg,
     operand typeval:constop,
@@ -213,9 +202,6 @@ procedure {:frame false} allocate_page(
     requires/ensures
         SaneState(this);
     requires
-        ValidRegOperand(@pagenr) && ValidRegOperand(@as_pagenr);
-        ValidRegOperand(@pagedb_base) && ValidRegOperand(@tmp);
-        ValidRegOperand(@tmp2) && ValidRegOperand(@err);
         @tmp != @tmp2 && @tmp != @pagenr && @tmp != @as_pagenr && @tmp != @pagedb_base;
         @tmp2 != @err && @tmp2 != @pagenr && @tmp2 != @as_pagenr && @tmp2 != @pagedb_base;
         @err != @tmp && @err != @pagenr && @err != @as_pagenr && @err != @pagedb_base;
@@ -234,7 +220,6 @@ procedure {:frame false} allocate_page(
     ensures
         GlobalsPreservingExcept(old(this),this,set(PageDb()));
         SmcProcedureInvariant(old(this),this);
-        RegPreservingExcept(old(this),this, set(@tmp, @tmp2, @err));
         tuple(pagedb, err)
             == allocatePage(pagedb_in, old(pagenr), entry.addrspace, entry.entry);
         // we update all of the pagedb except the target page itself,
@@ -257,16 +242,11 @@ procedure {:frame false} allocate_page(
         assert validPageNr(pagenr);
         load_page_type(pagenr, pagedb_base, tmp, tmp, pagedb_in);
 
-        ghost var midway1 := this;
-        assert RegPreservingExcept(old(this), midway1, set(@tmp));
-
         if (tmp != const(KOM_PAGE_FREE)) {
             assert !pageIsFree(pagedb, pagenr);
             err := const(KOM_ERR_PAGEINUSE);
             assert err == specErr(specRes);
         } else {
-            ghost var midway2 := this;
-            assert midway2.regs == midway1.regs;
             assert pageIsFree(pagedb, pagenr);
             page_monvaddr_impl(tmp2, as_pagenr, err);
             LDR(tmp, tmp2, const(ADDRSPACE_STATE));
@@ -275,9 +255,6 @@ procedure {:frame false} allocate_page(
                 reveal pageContentsCorresponds;
                 reveal pageDbAddrspaceCorresponds;
             }
-
-            ghost var midway3 := this;
-            assert RegPreservingExcept(midway2, midway3, set(@tmp, @tmp2, @err));
 
             if (tmp != const(KOM_ADDRSPACE_INIT)) {
                 assert addrsp.state != InitState;
@@ -288,12 +265,8 @@ procedure {:frame false} allocate_page(
                 ghost var st := this;
                 pagedb := allocate_page_success(pagenr, tmp2, typeval,
                                 pagedb_base, tmp, err, pagedb_in, entry);
-                assert RegPreservingExcept(st, this, set(@tmp, @tmp2, @err));
                 err := const(KOM_ERR_SUCCESS);
             }
-
-            assert RegPreservingExcept(midway3, this, set(@tmp, @tmp2, @err));
-            assert RegPreservingExcept(midway1, this, set(@tmp, @tmp2, @err));
         }
     }
 

@@ -104,47 +104,6 @@ procedure init_addrspace_mem(
     }
 }
 
-procedure update_pagedb_entry(
-    ghost page:PageNr,
-    ghost gentry:PageDbEntry,
-    inout operand entry:reg,
-    operand typeword:reg,
-    operand as_va:reg,
-    operand pagedb_base:reg)
-    requires/ensures
-        SaneState(this);
-    requires
-        validPageNr(page);
-        wellFormedPageDbEntry(gentry);
-        gentry is PageDbEntryTyped;
-        as_va == page_monvaddr(gentry.addrspace);
-        typeword == pageDbEntryTypeVal(gentry);
-        entry == G_PAGEDB_ENTRY(page);
-        pagedb_base == AddressOfGlobal(PageDb());
-        @entry != @as_va && @entry != @pagedb_base;
-    modifies
-        globals;
-    ensures
-        SmcProcedureInvariant(old(this), this);
-        GlobalsPreservingExcept(old(this), this, set(PageDb()));
-        pageDbEntryCorresponds(gentry, extractPageDbEntry(this.m, page));
-        forall p :: validPageNr(p) && p != page
-            ==> extractPageDbEntry(old(this).m, p) == extractPageDbEntry(this.m, p);
-{
-    STRglobal(typeword, PageDb(), pagedb_base, entry);
-    assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(page)
-                      + PAGEDB_ENTRY_TYPE) == old(typeword);
-    ADD(entry, entry, const(PAGEDB_ENTRY_ADDRSPACE));
-    assert entry == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_ADDRSPACE;
-    STRglobal(as_va, PageDb(), pagedb_base, entry);
-    assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(page)
-                      + PAGEDB_ENTRY_ADDRSPACE) == old(as_va);
-
-    extractPageDbToAbstract(this.m, page);
-    assert extractPageDbEntry(this.m, page) == seq(old(typeword), old(as_va));
-    reveal pageDbEntryCorresponds;
-}
-
 procedure init_addrspace_pagedb(
     operand addrspace_page:reg, // r1
     ghost l1pt_page:PageNr,
