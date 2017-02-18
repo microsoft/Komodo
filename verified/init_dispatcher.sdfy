@@ -25,29 +25,40 @@ procedure init_dispatcher_page(
     modifies
         mem;
     ensures
-        SmcProcedureInvariant(old(this),this);
+        SmcProcedureInvariant(old(this), this);
         MemPreservingExcept(old(this), this, page_monvaddr(old(disp_page)),
                                  page_monvaddr(old(disp_page)) + PAGESIZE);
         pageDbDispatcherCorresponds(old(disp_page),
             Dispatcher(old(entrypoint), false, initDispCtxt()),
             extractPage(this.m, old(disp_page)));
 {
+    ghost var dispva := page_monvaddr(old(disp_page));
     page_monvaddr_impl(disp_page, disp_page, tmp);
     tmp := 0;
     tmp2 := const(PAGESIZE);
     memset(disp_page, tmp, tmp2);
+    assert disp_page == dispva;
+
+    assert entrypoint == old(entrypoint);
     STR(entrypoint, disp_page, const(DISPATCHER_ENTRYPOINT));
+
     tmp := 0x10;
     STR(tmp, disp_page, const(DISP_CTXT_PSR));
 
     ghost var pg := extractPage(this.m, old(disp_page));
-    reveal pageDbDispatcherCorresponds;
-    assert disp_page == page_monvaddr(old(disp_page));
-    assert pg[disp_page + DISPATCHER_ENTRYPOINT] == old(entrypoint);
-    assert pg[disp_page + DISP_CTXT_PSR] == 0x10 == encode_mode(User);
-    assert forall a:addr :: addrInPage(a, old(disp_page))
-        && a != disp_page + DISPATCHER_ENTRYPOINT
-        && a != disp_page + DISP_CTXT_PSR ==> pg[a] == 0;
+    assert pg[dispva + DISPATCHER_ENTRYPOINT] == old(entrypoint);
+    assert pg[dispva + DISP_CTXT_PSR] == 0x10 == encode_mode(User);
+
+    assert MemPreservingExcept(old(this), this, dispva, dispva + PAGESIZE);
+
+    assert pageDbDispatcherCorresponds(old(disp_page),
+            Dispatcher(old(entrypoint), false, initDispCtxt()), pg)
+    by {
+        reveal pageDbDispatcherCorresponds;
+        assert forall a:addr :: addrInPage(a, old(disp_page))
+            && a != dispva + DISPATCHER_ENTRYPOINT
+            && a != dispva + DISP_CTXT_PSR ==> pg[a] == 0;
+    }
 }
 
 procedure {:frame false} kom_smc_init_dispatcher(
