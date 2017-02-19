@@ -22,8 +22,9 @@ procedure update_l2pte(
     requires/ensures
         SaneState(this);
     requires
-        @as_page == OReg(R2) && @mapping == OReg(R3) && @l2pte == OReg(R1)
-            && @l1pte == OReg(R10) && @tmp1 == OReg(R8) && @tmp2 == OReg(R12);
+        (@as_page == OReg(R1) && @l2pte == OReg(R2))
+            || (@l2pte == OReg(R1) && @as_page == OReg(R2));
+        @mapping == OReg(R3) && @l1pte == OReg(R10) && @tmp1 == OReg(R8) && @tmp2 == OReg(R12);
         validPageDb(d) && wellFormedPageDb(d);
         abs_mapping.l1index == wordToMapping(mapping).l1index;
         abs_mapping.l2index == wordToMapping(mapping).l2index;
@@ -138,7 +139,8 @@ procedure is_valid_mapping_target(
     requires/ensures
         SaneState(this);
     requires
-        @addr == OReg(R2) && @mapping == OReg(R3) && @l1pte == OReg(R10) && @err == OReg(R0);
+        (@addr == OReg(R1) || @addr == OReg(R2)) && @mapping == OReg(R3)
+            && @l1pte == OReg(R10) && @err == OReg(R0);
         validPageDb(d);
         pageDbCorresponds(this.m, d);
         isAddrspace(d, addr);
@@ -385,7 +387,7 @@ procedure ARM_L2PTE_impl(
     requires
         //@mapping != @pte && @mapping != @tmp && @mapping != OSP;
         //@pte != @tmp && @pte != OSP && @tmp != OSP;
-        @mapping == OReg(R3) && @pte == OReg(R1) && @tmp == OReg(R0);
+        @mapping == OReg(R3) && (@pte == OReg(R1) || @pte == OReg(R2)) && @tmp == OReg(R0);
         PageAligned(pte);
         abs_mapping == wordToMapping(mapping);
     ensures

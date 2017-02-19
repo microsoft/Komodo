@@ -7,24 +7,25 @@ include "ARMdecls.sdfy"
 include "map_secure.sdfy"
 
 procedure mkl2pte_insecure(
-    inout {:register OReg(R3)} mapping:int,
-    inout {:register OReg(R6)} page:int,
+    inout operand mapping:reg,
+    inout operand page:reg,
     ghost abs_mapping:Mapping,
     ghost l2pte:L2PTE
 )
     requires/ensures
         SaneState(this);
     requires
+        @mapping == OReg(R3) && @page == OReg(R2);
         abs_mapping == wordToMapping(mapping);
         l2pte is InsecureMapping;
         (l2pte.insecurePage == page
             && abs_mapping.perm.w == l2pte.insecureWrite);
         validInsecurePageNr(page);
+    modifies
+        r0;
     ensures
         page == mkL2Pte(l2pte);
         nonexec_mapping(abs_mapping) == wordToMapping(mapping);
-        RegPreservingExcept(old(this),this,set(@r3,@r4,@r6));
-        AllMemInvariant(old(this),this);
         SmcProcedureInvariant(old(this), this);        
 {
     lemma_LeftShift12(page);
@@ -40,36 +41,36 @@ procedure mkl2pte_insecure(
     assert wordToMapping(mapping) == newabs_mapping;
 
     assert mkL2Pte(l2pte) == ARM_L2PTE(page, l2pte.insecureWrite, false);
-    ARM_L2PTE_impl(mapping,page,r4,newabs_mapping);
+    ARM_L2PTE_impl(mapping, page, r0, newabs_mapping);
 }
 
-procedure phys_page_is_insecure_ram(operand phys_page:int, out operand ret:int)
+procedure phys_page_is_insecure_ram(
+    operand phys_page:reg,
+    out operand ret:reg)
     requires/ensures
         SaneState(this);
     requires
-        ValidRegOperand(@phys_page);
-        ValidRegOperand(@ret);
         @phys_page != @ret;
-        @ret != @sp;
+        @ret != OSP;
+    reads
+        globals;
     ensures 
-        ret == 0 <==> !physPageIsInsecureRam(phys_page);
-        RegPreservingExcept(old(this), this, set(@ret));
-        AllMemInvariant(old(this),this);
         SmcProcedureInvariant(old(this), this);
-        ret != 0 ==> validInsecurePageNr(phys_page);
+        ret == 0 <==> !physPageIsInsecureRam(old(phys_page));
+        ret != 0 ==> validInsecurePageNr(old(phys_page));
 {
     LDRglobaladdr(ret, SecurePhysBaseOp());
     LDRglobal(ret, SecurePhysBaseOp(), ret, 0);
     lemma_RightShift12(ret);
-    LSR(ret,ret,12);
+    LSR(ret, ret, 12);
     assert ret == SecurePhysBase() / PAGESIZE;
 
-    if(phys_page >= ret)
-    {
+    if (phys_page >= ret) {
         assert !physPageIsInsecureRam(phys_page);
         ret := 0;
     } else {
-        forall :: validInsecurePageNr(phys_page) {
+        assert validInsecurePageNr(phys_page)
+        by {
             assert SecurePhysBase() < KOM_PHYSMEM_LIMIT;
             assert SecurePhysBase() / PAGESIZE <
                 KOM_PHYSMEM_LIMIT / PAGESIZE;
@@ -79,19 +80,27 @@ procedure phys_page_is_insecure_ram(operand phys_page:int, out operand ret:int)
 }
 
 procedure kom_smc_map_insecure(
-    {:register OReg(R1)} as_page:int,
-    {:register OReg(R2)} phys_page:int,
-    inout {:register OReg(R3)} mapping:int,
-    out {:register OReg(R0)} err:int,
+    operand as_page:reg,
+    inout operand phys_page:reg,
+    inout operand mapping:reg,
+    operand pagedb_base:reg,
+    out operand err:reg,
     ghost pagedb_in: PageDb)
     returns (ghost pagedb: PageDb)
     requires/ensures
         SaneState(this);
     requires
+        @as_page == OReg(R1) && @phys_page == OReg(R2) && @mapping == OReg(R3)
+            && @err == OReg(R0);
+        @pagedb_base == OReg(R12);
+        pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
+    reads
+        globals;
+    modifies
+        mem; r0; r6; r7; r8; r9; r10; r12;
     ensures
-        GlobalsInvariant(old(this), this);
         SmcProcedureInvariant(old(this), this);
         tuple(pagedb,err) == smc_mapInsecure_premium(pagedb_in, old(as_page),
                                                 old(phys_page), old(mapping));
@@ -106,31 +115,20 @@ procedure kom_smc_map_insecure(
         assert err == specErr(specResult);
     } else {
         assert validPageNr(as_page);
-        LDRglobaladdr(r12, PageDb());
-        lemma_LeftShift3(as_page);
-        LSL(r4,as_page,const(PAGEDB_ENTRY_SHIFT));
-        assert r4 == G_PAGEDB_ENTRY(as_page) + PAGEDB_ENTRY_TYPE;
-        LDRglobal(r0, PageDb(), r12, r4);
+        load_page_type(as_page, pagedb_base, err, err, pagedb);
 
-        forall :: r0 == pageDbEntryTypeVal(pagedb[as_page]) {
-            assert r0 == GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(as_page) + PAGEDB_ENTRY_TYPE);
-            extractPageDbToAbstract(this.m, as_page);
-            reveal_pageDbEntryCorresponds();
-        }
-
-        if (r0 != const(KOM_PAGE_ADDRSPACE)) {
+        if (err != const(KOM_PAGE_ADDRSPACE)) {
             assert !isAddrspace(pagedb, as_page);
             err := const(KOM_ERR_INVALID_ADDRSPACE);
             assert err == specErr(specResult);
         } else {
-            r5 := as_page;
-            is_valid_mapping_target(as_page,mapping,r10,err,pagedb);
+            is_valid_mapping_target(as_page, mapping, r10, err, pagedb);
             if( err != const(KOM_ERR_SUCCESS) ) {
                 assert err == specErr(specResult);
             } else {
                 assert as_page == old(as_page);
-                phys_page_is_insecure_ram(phys_page, r12);
-                if(r12 == 0) {
+                phys_page_is_insecure_ram(phys_page, err);
+                if (err == 0) {
                     err := const(KOM_ERR_INVALID_PAGENO);
                     assert err == specErr(specResult);
                 } else {
@@ -138,7 +136,6 @@ procedure kom_smc_map_insecure(
                     ghost var entry := PageDbEntryTyped(as_page, DataPage); 
                     assert entry.addrspace == as_page;
                     assert validAddrspacePage(pagedb, entry.addrspace);
-                    LDRglobaladdr(r12, PageDb());
 
                     assert validInsecurePageNr(phys_page);
                     ghost var abs_mapping := wordToMapping(mapping);
@@ -147,13 +144,11 @@ procedure kom_smc_map_insecure(
 
                     assert validL2PTE(d', as_page, l2pte);
                     forall :: wellFormedPageDb(d') { reveal_validPageDb(); }
-                    r6 := phys_page;
-                    mkl2pte_insecure(mapping, r6, abs_mapping, l2pte);
+                    mkl2pte_insecure(mapping, phys_page, abs_mapping, l2pte);
                     assert r10 == mkL1Pte(d'[d'[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
                     assert r10 == mkL1Pte(pagedb[pagedb[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
-                    // TODO: fix register allocation in update_l2pte to avoid this moves
-                    r2 := as_page;
-                    pagedb := update_l2pte(r2,mapping,r6,r10,d',abs_mapping,l2pte);
+                    pagedb := update_l2pte(as_page, mapping, phys_page, r10, r8,
+                                          r12, d', abs_mapping, l2pte);
                     assert pagedb == updateL2Pte(d', old(as_page), abs_mapping, l2pte);
                     assert pagedb == specPageDb(specResult);
                     assert pageDbCorresponds(this.m, pagedb);
