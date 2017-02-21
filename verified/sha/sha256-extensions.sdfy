@@ -10,7 +10,7 @@ include{:verbatim} "sha256.i.dfy"
 //include verbatim "sha256-refined-invariants.i.dfy"
 include{:verbatim} "bit-vector-lemmas.i.dfy"
 
-include "../ARMdecls-refined.sdfy"
+include "../ARMdecls.sdfy"
 
 
 procedure {:refined} load_32_bit_const(

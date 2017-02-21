@@ -6,7 +6,6 @@ include "../words_and_bytes.s.dfy"
 include "../kom_common.s.dfy"
 include "../sha/sha256.i.dfy"
 include "../sha/bit-vector-lemmas.i.dfy"
-include "../ARMdecls-refined.gen.dfy"
 
 function{:opaque} OpaqueMod(x:int, y:int):int requires y > 0 { x % y }
 
