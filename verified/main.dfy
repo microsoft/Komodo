@@ -12,7 +12,7 @@ method printSMCHandlerReturn()
     printInsFixed("MOVS", "pc, lr");
 }
 
-method printAll()
+method printAll(smc_handler:va_code, svc_handler:va_code, abt_handler:va_code)
 {
     var n := 0;
     var monitor_vectbl := emptyVecTbl().(svc_smc := Just("smc"));
@@ -31,13 +31,13 @@ method printAll()
     nl();
     print(".section .text"); nl();
 
-    n := printFunction("abort", sp_code_abort_handler(), n);
+    n := printFunction("abort", abt_handler, n);
     printExceptionHandlerReturn(); nl();
 
-    n := printFunction("svc", sp_code_svc_handler(), n);
+    n := printFunction("svc", svc_handler, n);
     printExceptionHandlerReturn(); nl();
 
-    n := printFunction("smc", sp_code_smc_handler(), n);
+    n := printFunction("smc", smc_handler, n);
     printSMCHandlerReturn(); nl();
 
     printBss(KomGlobalDecls());
@@ -59,9 +59,10 @@ predicate InitialState(s:state)
 
 method Main()
 {
-    var smc_handler := sp_code_smc_handler();
-    var svc_handler := sp_code_svc_handler();
-    var abt_handler := sp_code_abort_handler();
+    var smc_handler := va_code_smc_handler(OReg(R0), OReg(R1), OReg(R2),
+                                        OReg(R3), OReg(R4), OReg(R0), OReg(R1));
+    var svc_handler := va_code_svc_handler();
+    var abt_handler := va_code_abort_handler();
 
     // prove that the final state for an SMC call is valid
     forall s1:state, p1:PageDb, s2:state
@@ -76,13 +77,15 @@ method Main()
     {
         var stack_bytes := KOM_STACK_SIZE - WORDSIZE;
         assert StackBytesRemaining(s1, stack_bytes);
-        reveal_sp_eval();
-        var block := sp_CCons(smc_handler, sp_CNil());
-        assert sp_eval(Block(block), s1, s2) by { assert evalBlock(block, s1, s2); }
-        var _, _, p2' := sp_lemma_smc_handler(block, s1, s2, stack_bytes, p1);
+        reveal_va_eval();
+        var block := va_CCons(smc_handler, va_CNil());
+        assert va_eval(Block(block), s1, s2) by { assert evalBlock(block, s1, s2); }
+        var _, _, p2' := va_lemma_smc_handler(block, s1, s2,
+            OReg(R0), OReg(R1), OReg(R2), OReg(R3), OReg(R4), OReg(R0),
+            OReg(R1), stack_bytes, p1);
         assert smchandler(s1, p1, s2, p2');
         assert validPageDb(p2') && pageDbCorresponds(s2.m, p2');
     }
     
-    printAll();
+    printAll(smc_handler, svc_handler, abt_handler);
 }
