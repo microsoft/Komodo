@@ -18,20 +18,23 @@ include "remove.sdfy"
 // Top-level SMC handler
 //=============================================================================
 
-procedure smc_handler(
-    inout {:register OReg(R0)} callno:int,
-    inout {:register OReg(R1)} arg1:int,
-    inout {:register OReg(R2)} arg2:int,
-    inout {:register OReg(R3)} arg3:int,
-    inout {:register OReg(R4)} arg4:int,
-    out {:register OReg(R0)} err:int,
-    out {:register OReg(R1)} retval:int,
+procedure {:frame false} smc_handler(
+    operand callno:reg,
+    operand arg1:reg,
+    operand arg2:reg,
+    operand arg3:reg,
+    operand arg4:reg,
+    out operand err:reg,
+    out operand retval:reg,
     ghost stack_bytes: int,
     ghost pagedb_in: PageDb) returns (ghost pagedb: PageDb)
     requires/ensures
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
     requires
+        @callno == OReg(R0) && @arg1 == OReg(R1) && @arg2 == OReg(R2)
+            && @arg3 == OReg(R3) && @arg4 == OReg(R4);
+        @err == OReg(R0) && @retval == OReg(R1);
         stack_bytes >= 120;
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
@@ -47,7 +50,9 @@ procedure smc_handler(
     stack_bytes_local := stack_nonvolatiles(stack_bytes);
     lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb_in);
 
-    reveal_ValidRegState();
+    LDRglobaladdr(r12, PageDb());
+
+    //reveal_ValidRegState();
     assert callno == old(callno) && arg1 == old(arg1) && arg2 == old(arg2)
         && arg3 == old(arg3) && arg4 == old(arg4);
 
@@ -59,12 +64,11 @@ procedure smc_handler(
     } else if (callno == const(KOM_SMC_RESUME)) {
         r5 := 1;
     }
-    assert r5 == 1 || r5 == 0;
-    assert entry <==> r5 == 1;
+    assert (r5 == 1 || r5 == 0) && (entry <==> r5 == 1);
 
     if (r5 == 1) {
         ghost var s0 := this;
-        pagedb := kom_smc_enterresume(callno, arg1, arg2, arg3, arg4, err, retval,
+        pagedb := kom_smc_enterresume(callno, arg1, arg2, arg3, arg4, r12, err, retval,
                                       pagedb_in, stack_bytes_local);
         lemma_ValidEntryPre(old(this), s0, pagedb_in, this, pagedb,
                             old(arg1), old(arg2), old(arg3), old(arg4));
@@ -84,42 +88,42 @@ procedure smc_handler(
         err := const(KOM_ERR_SUCCESS);
         assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == const(KOM_SMC_INIT_ADDRSPACE)) {
-        pagedb := kom_smc_init_addrspace(arg1, arg2, err, pagedb_in);
+        pagedb := kom_smc_init_addrspace(arg1, arg2, r12, err, pagedb_in);
         retval := 0;
         reveal_smc_initAddrspace_premium();
         assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == const(KOM_SMC_INIT_DISPATCHER)) {
-        pagedb := kom_smc_init_dispatcher(arg1, arg2, arg3, err, pagedb_in);
+        pagedb := kom_smc_init_dispatcher(arg1, arg2, arg3, r12, err, r4, r5, pagedb_in);
         retval := 0;
         reveal_smc_initDispatcher_premium();
         assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == const(KOM_SMC_INIT_L2PTABLE)) {
-        pagedb := kom_smc_init_l2ptable(arg1, arg2, arg3, err, pagedb_in);
+        pagedb := kom_smc_init_l2ptable(arg1, arg2, arg3, r12, err, pagedb_in);
         retval := 0;
         reveal_smc_initL2PTable_premium();
         assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == const(KOM_SMC_MAP_SECURE)) {
-        pagedb := kom_smc_map_secure(arg1, arg2, arg3, arg4, err, pagedb_in);
+        pagedb := kom_smc_map_secure(arg1, arg2, arg3, arg4, r12, err, pagedb_in);
         retval := 0;
         reveal_smc_mapSecure_premium();
         assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == const(KOM_SMC_MAP_INSECURE)) {
-        pagedb := kom_smc_map_insecure(arg1, arg2, arg3, err, pagedb_in);
+        pagedb := kom_smc_map_insecure(arg1, arg2, arg3, r12, err, pagedb_in);
         retval := 0;
         reveal_smc_mapInsecure_premium();
         assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == const(KOM_SMC_REMOVE)) {
-        pagedb := kom_smc_remove(arg1, err, pagedb_in);
+        pagedb := kom_smc_remove(arg1, r12, err, pagedb_in);
         retval := 0;
         reveal_smc_remove_premium();
         assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == const(KOM_SMC_FINALISE)) {
-        pagedb := kom_smc_finalise(arg1, err, pagedb_in);
+        pagedb := kom_smc_finalise(arg1, r12, err, pagedb_in);
         retval := 0;
         reveal_smc_finalise_premium();
         assert smchandler(old(this), pagedb_in, this, pagedb);
     } else if (callno == const(KOM_SMC_STOP)) {
-        pagedb := kom_smc_stop(arg1, err, pagedb_in);
+        pagedb := kom_smc_stop(arg1, r12, err, pagedb_in);
         retval := 0;
         reveal_smc_stop_premium();
         assert smchandler(old(this), pagedb_in, this, pagedb);
@@ -154,7 +158,7 @@ procedure smc_handler(
     ghost if (entry) {
         assert validExceptionTransition(SysState(prePopThis, pagedb),
                                         SysState(this, pagedb), old(arg1))
-            by { reveal_validExceptionTransition(); }
+            by { reveal validExceptionTransition; }
         lemma_ValidEntryPost(old(this), pagedb_in, prePopThis, pagedb, this,
                              old(arg1), old(arg2), old(arg3), old(arg4));
     }

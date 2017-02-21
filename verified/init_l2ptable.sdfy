@@ -280,8 +280,8 @@ procedure kom_smc_init_l2ptable(
     operand pagenr:reg,
     operand as_page:reg,
     operand l1index:reg,
-    out operand err:reg,
     operand pagedb_base:reg,
+    out operand err:reg,
     ghost pagedb_in: PageDb) returns (ghost pagedb: PageDb)
     requires/ensures
         SaneState(this);

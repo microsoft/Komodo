@@ -265,8 +265,8 @@ lemma lemma_mask3IsMod4(x:word)
 procedure kom_smc_init_addrspace(
     operand addrspace_page:reg,
     operand l1pt_page:reg,
-    out operand err:reg,
     operand pagedb_base:reg,
+    out operand err:reg,
     ghost pagedb_in: PageDb) returns (ghost pagedb: PageDb)
     requires/ensures
         SaneState(this);
