@@ -2,6 +2,7 @@ include {:verbatim} "kom_common.i.dfy"
 include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
 include {:verbatim} "entry.i.dfy"
+include {:verbatim} "entrybits.i.dfy"
 
 include "ARMdecls.sdfy"
 include "kom_utils.sdfy"
@@ -91,26 +92,29 @@ lemma lemma_stackunstack_banked_regs(s1:state, m1:memstate, s2:state, m2:memstat
             { reveal_banked_regs_stackframe(); }
     }
 }
+
+predicate SpsrsInvariant(s:state, r:state)
+    requires ValidState(s) && ValidState(r)
+{
+    reveal_ValidSRegState();
+    forall m | m != User :: s.sregs[spsr(m)] == r.sregs[spsr(m)]
+}
 #endverbatim
 
 procedure MRS_STR(
-    operand reg:int,
-    operand base:int,
-    operand ofs:int,
-    operand tmp:int)
+    operand reg:sreg,
+    operand base:word,
+    operand ofs:word,
+    out operand tmp:reg)
     requires/ensures
         SaneState(this);
     requires
-        ValidMrsMsrOperand(this, @reg);
-        ValidOperand(@base);
-        ValidOperand(@ofs);
         ValidMem(base + ofs);
-        ValidRegOperand(@tmp);
-        @tmp != @sp && @tmp != @base && @tmp != @ofs;
+        @tmp != OSP && @tmp != @base && @tmp != @ofs;
+    modifies
+        mem;
     ensures
-        RegPreservingExcept(old(this),this,set(@tmp));
-        sp == old(sp);
-        GlobalsInvariant(old(this),this);
+        //sp == old(sp);
         MemPreservingExcept(old(this), this, old(base+ofs), old(base+ofs+4));
         MemContents(this.m, old(base+ofs)) == old(reg);
 {
@@ -118,22 +122,25 @@ procedure MRS_STR(
     STR(tmp, base, ofs);
 }
 
-procedure stack_banked_regs(operand tmp:int, ghost stack_bytes_in:int)
+procedure stack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
           returns (ghost stack_bytes:int)
     requires/ensures
         SaneState(this);
     requires
-        ValidRegOperand(@tmp);
-        @tmp != @sp;
+        @tmp != OSP;
         stack_bytes_in >= banked_regs_framesize();
         StackBytesRemaining(this, stack_bytes_in);
+    reads
+        spsr_fiq; spsr_irq; spsr_svc; spsr_abt; spsr_und; spsr_mon;
+        sp_usr; sp_fiq; sp_irq; sp_svc; sp_abt; sp_und;
+        lr_usr; lr_fiq; lr_irq; lr_svc; lr_abt; lr_und;
+    modifies
+        mem; sp;
     ensures
         sp == old(sp)-banked_regs_framesize();
         stack_bytes == stack_bytes_in-banked_regs_framesize();
         StackBytesRemaining(this,stack_bytes);
         banked_regs_stackframe(old(this), this.m, sp);
-        RegPreservingExcept(old(this),this,set(@tmp,@sp));
-        GlobalsInvariant(old(this),this);
         NonStackMemPreserving(old(this),this);
         ParentStackPreserving(old(this),this);
 {
@@ -156,7 +163,7 @@ procedure stack_banked_regs(operand tmp:int, ghost stack_bytes_in:int)
         forall i:int :| 12 <= i <= 17 :: ValidPsrWord(MemContents(this.m, sp + i * 4))
             { reveal_ValidSRegState(); }
     }
-    assert RegPreservingExcept(start,this,set(@tmp));
+    //assert RegPreservingExcept(start,this,set(@tmp));
     assert MemPreservingExcept(old(this), this, sp + 12*4, sp + 18*4);
 
     MRS_STR(sp_usr, sp, const(0*4), tmp);
@@ -173,7 +180,7 @@ procedure stack_banked_regs(operand tmp:int, ghost stack_bytes_in:int)
     MRS_STR(lr_abt, sp, const(10*4), tmp);
     MRS_STR(lr_und, sp, const(11*4), tmp);
 
-    assert RegPreservingExcept(midway, this, set(@tmp));
+    //assert RegPreservingExcept(midway, this, set(@tmp));
     assert MemPreservingExcept(midway, this, sp, sp + 12*4);
     assert wellformed_banked_regs_stackframe(this.m, sp)
         by { reveal_wellformed_banked_regs_stackframe(); }
@@ -182,27 +189,23 @@ procedure stack_banked_regs(operand tmp:int, ghost stack_bytes_in:int)
 }
 
 procedure LDR_MSR_banked(
-    operand reg:int,
-    operand base:int,
-    operand ofs:int,
-    operand tmp:int)
+    out operand reg:sreg,
+    operand base:word,
+    operand ofs:word,
+    out operand tmp:reg)
     requires/ensures
         SaneState(this);
     requires
-        ValidBankedRegOperand(this, @reg) && @reg is OReg;
-        @reg != @sp_mon && @reg != @sp;
-        ValidOperand(@base);
-        ValidOperand(@ofs);
+        ValidBankedRegOperand(this, @reg) && @reg is OReg && @reg != OReg(SP(Monitor));
         ValidMem(base + ofs);
-        ValidRegOperand(@tmp);
-        @tmp != @sp && @tmp != @base && @tmp != @ofs;
+        @tmp != OSP && @tmp != @base && @tmp != @ofs;
+    reads
+        mem;
     ensures
-        CoreRegPreservingExcept(old(this), this, set(@tmp));
+        //CoreRegPreservingExcept(old(this), this, set(@tmp));
         forall r:ARMReg :: ((r is SP && r.spm != Monitor) || (r is LR && r.lrm != Monitor)) && r != @reg.r ==> this.regs[r] == old(this).regs[r];
-        sp == old(sp);
+        //sp == old(sp);
         SRegsInvariant(old(this), this);
-        GlobalsInvariant(old(this),this);
-        AllMemInvariant(old(this), this);
         reg == MemContents(old(this.m), old(base+ofs));
 {
     LDR(tmp, base, ofs);
@@ -210,53 +213,55 @@ procedure LDR_MSR_banked(
 }
 
 procedure LDR_MSR_spsr(
-    operand reg:int,
-    operand base:int,
-    operand ofs:int,
-    operand tmp:int)
+    out operand reg:sreg,
+    operand base:word,
+    operand ofs:word,
+    out operand tmp:reg)
     requires/ensures
         SaneState(this);
     requires
-        ValidOperand(@base);
-        ValidOperand(@ofs);
         ValidMem(base + ofs);
-        ValidMrsMsrOperand(this, @reg);
+        //ValidMrsMsrOperand(this, @reg);
         @reg is OSReg && @reg.sr is spsr && ValidPsrWord(MemContents(this.m, base + ofs));
-        ValidRegOperand(@tmp);
-        @tmp != @sp && @tmp != @base && @tmp != @ofs;
+        @tmp != OSP && @tmp != @base && @tmp != @ofs;
+    reads
+        mem;
     ensures
-        sp == old(sp);
-        CoreRegPreservingExcept(old(this),this,set(@tmp));
+        //sp == old(sp);
+        //CoreRegPreservingExcept(old(this),this,set(@tmp));
         BankedRegsInvariant(old(this),this);
         forall sr :: this.sregs?[sr] && old(this).sregs?[sr] && sr != @reg.sr
             ==> this.sregs[sr] == old(this).sregs[sr];
-        GlobalsInvariant(old(this),this);
-        AllMemInvariant(old(this), this);
         reg == MemContents(old(this.m), old(base+ofs));
 {
     LDR(tmp, base, ofs);
     MSR(reg, tmp);
 }
 
-procedure unstack_banked_regs(operand tmp:int, ghost stack_bytes_in:int)
+procedure unstack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
           returns (ghost stack_bytes:int)
     requires/ensures
         SaneState(this);
     requires
-        ValidRegOperand(@tmp);
-        @tmp != @sp;
+        @tmp == OReg(R2); //@tmp != OSP;
+        
         isUInt32(sp + banked_regs_framesize());
         sp + banked_regs_framesize() <= StackBase();
         StackBytesRemaining(this, stack_bytes_in);
         wellformed_banked_regs_stackframe(this.m, sp);
+    reads
+        mem;
+    modifies
+        sp;
+        spsr_fiq; spsr_irq; spsr_svc; spsr_abt; spsr_und; spsr_mon;
+        sp_usr; sp_fiq; sp_irq; sp_svc; sp_abt; sp_und;
+        lr_usr; lr_fiq; lr_irq; lr_svc; lr_abt; lr_und;
     ensures
         sp == old(sp)+banked_regs_framesize();
         stack_bytes == stack_bytes_in + banked_regs_framesize();
         StackBytesRemaining(this, stack_bytes);
         banked_regs_stackframe(this, old(this.m), old(sp));
-        CoreRegPreservingExcept(old(this), this, set(@tmp,@sp));
-        AllMemInvariant(old(this),this);
-
+        //CoreRegPreservingExcept(old(this), this, set(@tmp,@sp));
 {
     reveal_banked_regs_stackframe();
     reveal_wellformed_banked_regs_stackframe();
@@ -288,19 +293,24 @@ procedure unstack_banked_regs(operand tmp:int, ghost stack_bytes_in:int)
 }
 
 procedure smc_enter_err(
-    {:register OReg(R0)} callno:int,
-    {:register OReg(R1)} pagenr:int,
-    out {:register OReg(R0)} err:int,
+    operand callno:reg,
+    operand pagenr:reg,
+    operand pagedb_base:reg,
+    out operand err:reg,
     ghost pagedb:PageDb)
     requires/ensures
         SaneState(this);
     requires
+        @callno == @err == OReg(R0) && @pagenr == OReg(R1);
+        @pagedb_base == OReg(R12) && pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME;
+    reads
+        globals; mem;
+    modifies
+        r8; r9; r10; r11;
     ensures
-        AllMemInvariant(old(this),this);
-        RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
         SmcProcedureInvariant(old(this), this);
         err == smc_enter_err(pagedb, old(pagenr), old(callno) == KOM_SMC_RESUME);
 {
@@ -309,22 +319,7 @@ procedure smc_enter_err(
         err := const(KOM_ERR_INVALID_PAGENO);
     } else {
         assert validPageNr(pagenr);
-        LDRglobaladdr(r12, PageDb());
-        lemma_LeftShift3(pagenr);
-        LSL(r10, pagenr, const(PAGEDB_ENTRY_SHIFT));
-        assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_TYPE;
-        WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_TYPE, r10);
-        LDRglobal(r9, PageDb(), r12, r10);
-        assert r9 == GlobalWord(this.m, PageDb(), r10);
-        assert pageDbEntryCorresponds(pagedb[pagenr], extractPageDbEntry(this.m, pagenr))
-            by { reveal_validPageDb(); }
-        assert r9 == pageDbEntryTypeVal(pagedb[pagenr]) by {
-            reveal_pageDbEntryCorresponds();
-            extractPageDbToAbstractOne(this.m, pagenr, PAGEDB_ENTRY_TYPE);
-            assert GlobalWord(this.m, PageDb(), r10) == 
-                pageDbEntryTypeVal(pagedb[pagenr]);
-        }
-        assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
+        load_page_type(pagenr, pagedb_base, r10, r9, pagedb);
         if( r9 != const(KOM_PAGE_DISPATCHER) ) {
             assert !(pagedb[pagenr] is PageDbEntryTyped && pagedb[pagenr].entry is Dispatcher);
             err := const(KOM_ERR_INVALID_PAGENO);
@@ -335,7 +330,7 @@ procedure smc_enter_err(
             assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE;
             WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE, r10);
            
-            LDRglobal(r8, PageDb(), r12, r10);
+            LDRglobal(r8, PageDb(), pagedb_base, r10);
             ghost var addrspace := pagedb[pagenr].addrspace;
             assert validPageNr(addrspace) by { reveal_validPageDb(); }
             assert r8 == page_monvaddr(addrspace) && WordAligned(r8) by {
@@ -366,8 +361,6 @@ procedure smc_enter_err(
                 reveal_pageDbAddrspaceCorresponds();
             }
 
-            // this particular RegPreserving assert saved 30s.
-            assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
             if( r8 != const(KOM_ADDRSPACE_FINAL) ) {
                 err := const(KOM_ERR_NOT_FINAL);
             } else {
@@ -384,7 +377,6 @@ procedure smc_enter_err(
                 LDR(r9,r9,const(DISPATCHER_ENTERED));
                 
                 assert r9 == 1 <==> pagedb[pagenr].entry.entered;
-                assert RegPreservingExcept(old(this),this,set(@r12,@r11,@r10,@r9,@r8,@r0));
 
                 assert callno == old(callno);
                 if (callno == const(KOM_SMC_RESUME)) {
@@ -407,119 +399,31 @@ procedure smc_enter_err(
     }
 }
 
-#verbatim
-lemma lemma_scr_entry(pre: word, post: word)
-    requires post == BitwiseOr(BitwiseAnd(pre, 0xfffffffe), 6)
-    ensures decode_scr(post) == SCR(Secure, true, true)
-{
-    assert WordAsBits(1) == 1 && WordAsBits(2) == 2 && WordAsBits(4) == 4
-           && WordAsBits(6) == 6 && WordAsBits(0xfffffffe) == 0xfffffffe
-        by { reveal_WordAsBits(); }
-    lemma_WordBitEquiv(1,1);
-
-    calc {
-        post;
-        BitwiseOr(BitwiseAnd(pre, 0xfffffffe), 6);
-        { lemma_BitsAndWordConversions(); }
-        BitsAsWord(BitOr(BitAnd(WordAsBits(pre), 0xfffffffe), 6));
-    }
-
-    calc {
-        BitwiseAnd(post, 1);
-        { lemma_BitsAndWordConversions(); }
-        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffffe), 6), 1));
-        { reveal_BitAnd(); reveal_BitOr(); }
-        BitsAsWord(0);
-    }
-
-    var x := BitAnd(WordAsBits(pre), 0xfffffffe);
-
-    calc {
-        BitwiseAnd(post, 2);
-        { lemma_BitsAndWordConversions(); }
-        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffffe), 6), 2));
-        BitsAsWord(BitAnd(BitOr(x, 6), 2));
-        { lemma_BitOrAndRelation(x, 6, 2); }
-        BitsAsWord(BitOr(BitAnd(x, 2), BitAnd(6, 2)));
-        { reveal_BitAnd(); }
-        BitsAsWord(BitOr(BitAnd(x, 2), 2));
-        != { reveal_BitOr(); }
-        BitsAsWord(0);
-    }
-
-    calc {
-        BitwiseAnd(post, 4);
-        { lemma_BitsAndWordConversions(); }
-        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffffe), 6), 4));
-        BitsAsWord(BitAnd(BitOr(x, 6), 4));
-        { lemma_BitOrAndRelation(x, 6, 4); }
-        BitsAsWord(BitOr(BitAnd(x, 4), BitAnd(6, 4)));
-        { reveal_BitAnd(); }
-        BitsAsWord(BitOr(BitAnd(x, 4), 4));
-        != { reveal_BitOr(); }
-        BitsAsWord(0);
-    }
-}
-
-lemma lemma_scr_exit(pre: word, post: word)
-    requires post == BitwiseOr(BitwiseAnd(pre, 0xfffffff9), 1)
-    ensures decode_scr(post) == SCR(NotSecure, false, false)
-{
-    assert WordAsBits(1) == 1 && WordAsBits(2) == 2 && WordAsBits(4) == 4
-           && WordAsBits(0xfffffff9) == 0xfffffff9
-        by { reveal_WordAsBits(); }
-    lemma_WordBitEquiv(1,1);
-
-    calc {
-        post;
-        BitwiseOr(BitwiseAnd(pre, 0xfffffff9), 1);
-        { lemma_BitsAndWordConversions(); }
-        BitsAsWord(BitOr(BitAnd(WordAsBits(pre), 0xfffffff9), 1));
-    }
-
-    calc {
-        BitwiseAnd(post, 1);
-        { lemma_BitsAndWordConversions(); }
-        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffff9), 1), 1));
-        { reveal_BitAnd(); reveal_BitOr(); }
-        BitsAsWord(1);
-    }
-
-    calc {
-        BitwiseAnd(post, 2);
-        { lemma_BitsAndWordConversions(); }
-        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffff9), 1), 2));
-        { reveal_BitAnd(); reveal_BitOr(); }
-        BitsAsWord(0);
-    }
-
-    calc {
-        BitwiseAnd(post, 4);
-        { lemma_BitsAndWordConversions(); }
-        BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffff9), 1), 4));
-        { reveal_BitAnd(); reveal_BitOr(); }
-        BitsAsWord(0);
-    }
-}
-#endverbatim
+var {:state sreg(scr)} scr:word;
+var {:state sreg(ttbr0)} ttbr0:word;
 
 procedure switch_addrspace(
-    {:register OReg(R1)} pagenr:int,
+    operand pagenr:reg,
+    operand pagedb_base:reg,
     ghost isresume:bool,
     ghost pagedb:PageDb)
     requires/ensures
         SaneState(this);
     requires
+        @pagenr == OReg(R1);
+        @pagedb_base == OReg(R12) && pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validPageNr(pagenr);
         validDispatcherPage(pagedb, pagenr);
         !hasStoppedAddrspace(pagedb, pagenr);
+    reads
+        globals; mem;
+    modifies
+        scr; ttbr0; r10; r11;
     ensures
-        AllMemInvariant(old(this),this);
-        CoreRegPreservingExcept(old(this), this, set(@r10,@r11,@r12));
         BankedRegsInvariant(old(this),this);
-        this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, pagenr));
+        this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, old(pagenr)));
         this.conf.scr.ns == Secure && this.conf.scr.irq && this.conf.scr.fiq;
 {
     //-------------------------------------------------------------------------
@@ -527,7 +431,7 @@ procedure switch_addrspace(
     //-------------------------------------------------------------------------
 
     // read SCR
-    MRC(r10, OSReg(scr));
+    MRC(r10, scr);
     ghost var old_scr := r10;
 
     // clear NS bit
@@ -538,7 +442,7 @@ procedure switch_addrspace(
 
     // write SCR
     lemma_scr_entry(old_scr, r10);
-    MCR(OSReg(scr), r10);
+    MCR(scr, r10);
     assert this.conf.scr.ns == Secure;
 
     //-------------------------------------------------------------------------
@@ -555,8 +459,7 @@ procedure switch_addrspace(
     assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE;
     WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE, r10);
 
-    LDRglobaladdr(r12, PageDb());
-    LDRglobal(r11, PageDb(), r12, r10);
+    LDRglobal(r11, PageDb(), pagedb_base, r10);
     assert r11 == page_monvaddr(addrspace) by {
         reveal_pageDbEntryCorresponds();
         assert validAddrspacePage(pagedb, addrspace);
@@ -577,24 +480,24 @@ procedure switch_addrspace(
 
     assert r10 == page_paddr(l1p);
     assert PageAligned(r10);
-    MCR(OSReg(ttbr0), r10);
+    MCR(ttbr0, r10);
     assert this.conf.ttbr0.ptbase == page_paddr(l1p);
 }
 
-procedure leave_secure_world(operand tmp:int)
+procedure leave_secure_world(out operand tmp:reg)
     requires/ensures
         SaneState(this);
     requires
-        ValidRegOperand(@tmp) && @tmp != @sp;
+        @tmp != OSP;
+    modifies
+        scr;
     ensures
-        AllMemInvariant(old(this),this);
-        CoreRegPreservingExcept(old(this), this, set(@tmp));
-        BankedRegsInvariant(old(this),this);
-        SpsrsInvariant(old(this), this);
+        //BankedRegsInvariant(old(this),this);
+        //SpsrsInvariant(old(this), this);
         this.conf.scr.ns == NotSecure && !this.conf.scr.irq && !this.conf.scr.fiq;
 {
     // read SCR
-    MRC(tmp, OSReg(scr));
+    MRC(tmp, scr);
     ghost var old_scr := tmp;
 
     // clear IRQ and FIQ bits
@@ -605,17 +508,10 @@ procedure leave_secure_world(operand tmp:int)
 
     // write SCR
     lemma_scr_exit(old_scr, tmp);
-    MCR(OSReg(scr), tmp);
+    MCR(scr, tmp);
 }
 
 #verbatim
-predicate SpsrsInvariant(s:state, r:state)
-    requires ValidState(s) && ValidState(r)
-{
-    reveal_ValidSRegState();
-    forall m | m != User :: s.sregs[spsr(m)] == r.sregs[spsr(m)]
-}
-
 predicate EnterResumeSmcProcedureInvariant(s:state, r:state)
     requires SaneState(s) && SaneState(r)
 {
@@ -628,26 +524,32 @@ predicate EnterResumeSmcProcedureInvariant(s:state, r:state)
 #endverbatim
 
 procedure pre_entry_enter(
-    {:register OReg(R1)} pagenr:int,
-    {:register OReg(R2)} arg1:int,
-    {:register OReg(R3)} arg2:int,
-    {:register OReg(R4)} arg3:int,
+    operand pagenr:reg,
+    operand arg1:reg,
+    operand arg2:reg,
+    operand arg3:reg,
+    operand pagedb_base:reg,
     ghost pagedb:PageDb)
     requires/ensures
         SaneState(this);
     requires
+        @pagenr == OReg(R1) && @arg1 == OReg(R2) && @arg2 == OReg(R3) && @arg3 == OReg(R4);
+        @pagedb_base == OReg(R12) && pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         smc_enter_err(pagedb, pagenr, false) == KOM_ERR_SUCCESS;
+    reads
+        mem;
+    modifies
+        globals; scr; ttbr0; spsr_mon; r0; r1; r2; r10; r11; r12; lr;
     ensures
-        AddrMemInvariant(old(this),this);
-        GlobalsPreservingExcept(old(this),this, set(CurDispatcherOp()));
+        GlobalsPreservingExcept(old(this), this, set(CurDispatcherOp()));
         pageDbCorresponds(this.m, pagedb);
-        StackPreserving(old(this),this);
-        BankedRegsInvariant(old(this),this);
-        preEntryEnter(old(this), this, pagedb, pagenr, arg1, arg2, arg3);
+        StackPreserving(old(this), this);
+        //BankedRegsInvariant(old(this), this);
+        preEntryEnter(old(this), this, pagedb, old(pagenr), old(arg1), old(arg2), old(arg3));
         spsr_of_state(this).m == User;
-        sp == old(sp);
+        //sp == old(sp);
 {
     assert validPageNr(pagenr);
     assert validDispatcherPage(pagedb, pagenr);
@@ -657,7 +559,7 @@ procedure pre_entry_enter(
     //-------------------------------------------------------------------------
     //  Switch addrspace
     //-------------------------------------------------------------------------
-    switch_addrspace(pagenr, false, pagedb);
+    switch_addrspace(pagenr, pagedb_base, false, pagedb);
     assert pagenr == old(pagenr);
 
     //-------------------------------------------------------------------------
@@ -717,10 +619,13 @@ procedure pre_entry_resume_context(ghost dispPg:PageNr, ghost pagedb:PageDb)
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validDispatcherPage(pagedb, dispPg);
+    reads
+        mem;
+    modifies
+        r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr_usr; sp_usr; lr;
     ensures
-        AllMemInvariant(old(this),this);
-        SRegsInvariant(old(this),this);
-        sp == old(sp);
+        //SRegsInvariant(old(this),this);
+        //sp == old(sp);
         let disp := pagedb[dispPg].entry in
         r0 == disp.ctxt.regs[R0] && r1 == disp.ctxt.regs[R1] &&
         r2 == disp.ctxt.regs[R2] && r3 == disp.ctxt.regs[R3] &&
@@ -775,22 +680,29 @@ procedure pre_entry_resume_context(ghost dispPg:PageNr, ghost pagedb:PageDb)
 }
 
 procedure pre_entry_resume(
-    {:register OReg(R1)} pagenr:int,
+    operand pagenr:reg,
+    operand pagedb_base:reg,
     ghost pagedb:PageDb)
     requires/ensures
         SaneState(this);
     requires
+        @pagenr == OReg(R1);
+        @pagedb_base == OReg(R12) && pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         smc_enter_err(pagedb, pagenr, true) == KOM_ERR_SUCCESS;
+    reads
+        mem;
+    modifies
+        globals; scr; ttbr0; spsr_mon;
+        r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr_usr; sp_usr; lr;
     ensures
-        AddrMemInvariant(old(this),this);
         GlobalsPreservingExcept(old(this),this, set(CurDispatcherOp()));
         pageDbCorresponds(this.m, pagedb);
-        StackPreserving(old(this),this);
-        preEntryResume(old(this), this, pagedb, pagenr);
+        StackPreserving(old(this), this);
+        preEntryResume(old(this), this, pagedb, old(pagenr));
         spsr_of_state(this).m == User;
-        sp == old(sp);
+        //sp == old(sp);
 {
     ghost var dispPg := pagenr;
     assert validPageNr(dispPg);
@@ -800,7 +712,7 @@ procedure pre_entry_resume(
     //-------------------------------------------------------------------------
     //  Switch addrspace
     //-------------------------------------------------------------------------
-    switch_addrspace(pagenr, true, pagedb);
+    switch_addrspace(pagenr, pagedb_base, true, pagedb);
     assert pagenr == old(pagenr);
 
     //-------------------------------------------------------------------------
@@ -828,7 +740,7 @@ procedure pre_entry_resume(
     }
 
     assert decode_mode'(psr_mask_mode(pagedb[dispPg].entry.ctxt.cpsr)) == Just(User);
-    MSR(OSReg(spsr(Monitor)),r0);
+    MSR(spsr_mon, r0);
     assert this.sregs[spsr(Monitor)] == pagedb[dispPg].entry.ctxt.cpsr;
     assert spsr_of_state(this).m == User;
 
@@ -865,14 +777,15 @@ lemma lemma_ValidEntryPost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp
 }
 #endverbatim
 
-procedure smc_enterresume_success(
-    {:register OReg(R1)} pagenr:int,
-    {:register OReg(R2)} arg1:int,
-    {:register OReg(R3)} arg2:int,
-    {:register OReg(R4)} arg3:int,
-    {:register OReg(R5)} callno:int,
-    out {:register OReg(R0)} err:int,
-    out {:register OReg(R1)} val:int,
+procedure {:frame false} smc_enterresume_success(
+    operand pagenr:reg,
+    operand arg1:reg,
+    operand arg2:reg,
+    operand arg3:reg,
+    operand callno:reg,
+    operand pagedb_base:reg,
+    out operand err:reg,
+    out operand val:reg,
     ghost pagedb_in: PageDb,
     ghost stack_bytes: int)
     returns (ghost pagedb: PageDb)
@@ -880,17 +793,27 @@ procedure smc_enterresume_success(
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
     requires
+        @pagenr == OReg(R1) && @arg1 == OReg(R2) && @arg2 == OReg(R3) && @arg3 == OReg(R4);
+        @callno == OReg(R5) && @err == OReg(R0) && @val == OReg(R1);
+        @pagedb_base == OReg(R12) && pagedb_base == AddressOfGlobal(PageDb());
         stack_bytes >= banked_regs_framesize();
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         AUCIdef();
         callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME;
         smc_enter_err(pagedb_in, pagenr, callno == KOM_SMC_RESUME) == KOM_ERR_SUCCESS;
+    modifies // XXX: all saved and restored; not in fact "modified" on return!
+        spsr_fiq; spsr_irq; spsr_svc; spsr_abt; spsr_und; spsr_mon;
+        sp_usr; sp_fiq; sp_irq; sp_svc; sp_abt; sp_und;
+        lr_usr; lr_fiq; lr_irq; lr_svc; lr_abt; lr_und; sp;
+    modifies
+        mem; globals; scr; ttbr0; spsr_mon;
+        r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr_usr; sp_usr; lr;
     ensures
         EnterResumeSmcProcedureInvariant(old(this), this);
         if old(callno) == KOM_SMC_ENTER then
             validEnter(SysState(old(this), pagedb_in), SysState(this, pagedb),
-                       old(pagenr),old(arg1),old(arg2),old(arg3))
+                       old(pagenr), old(arg1), old(arg2), old(arg3))
         else
             validResume(SysState(old(this), pagedb_in), SysState(this, pagedb),
                         old(pagenr));
@@ -910,11 +833,12 @@ procedure smc_enterresume_success(
     ghost var s0 := this;
 
     if (callno == const(KOM_SMC_ENTER)) {
-        pre_entry_enter(pagenr,arg1,arg2,arg3,pagedb);
-        assert preEntryEnter(old(this),this,pagedb,dispPg,old(arg1),old(arg2),old(arg3));
+        pre_entry_enter(pagenr, arg1, arg2, arg3, pagedb_base, pagedb);
+        assert preEntryEnter(old(this), this, pagedb, dispPg, old(arg1),
+                             old(arg2), old(arg3));
     } else {
-        pre_entry_resume(pagenr,pagedb);
-        assert preEntryResume(old(this),this,pagedb,dispPg);
+        pre_entry_resume(pagenr, pagedb_base, pagedb);
+        assert preEntryResume(old(this), this, pagedb, dispPg);
     }
 
     ghost var s1 := this;
@@ -951,14 +875,15 @@ procedure smc_enterresume_success(
                          dispPg, old(arg1), old(arg2), old(arg3));
 }
 
-procedure kom_smc_enterresume(
-    {:register OReg(R0)} callno:int,
-    {:register OReg(R1)} disppg:int,
-    {:register OReg(R2)} arg1:int,
-    {:register OReg(R3)} arg2:int,
-    {:register OReg(R4)} arg3:int,
-    inout {:register OReg(R0)} err:int,
-    inout {:register OReg(R1)} val:int,
+procedure {:frame false} kom_smc_enterresume(
+    operand callno:reg,
+    operand disppg:reg,
+    operand arg1:reg,
+    operand arg2:reg,
+    operand arg3:reg,
+    operand pagedb_base:reg,
+    out operand err:reg,
+    out operand val:reg,
     ghost pagedb_in:PageDb,
     ghost stack_bytes: int)
     returns (ghost pagedb:PageDb)
@@ -966,12 +891,23 @@ procedure kom_smc_enterresume(
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
     requires
+        @callno == OReg(R0) && @disppg == OReg(R1);
+        @arg1 == OReg(R2) && @arg2 == OReg(R3) && @arg3 == OReg(R4);
+        @err == OReg(R0) && @val == OReg(R1);
+        @pagedb_base == OReg(R12) && pagedb_base == AddressOfGlobal(PageDb());
         stack_bytes >= banked_regs_framesize();
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         AUCIdef();
         this.conf.scr.ns == NotSecure; // FIXME: cleanup
         callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME;
+    modifies // XXX: all saved and restored; not in fact "modified" on return!
+        spsr_fiq; spsr_irq; spsr_svc; spsr_abt; spsr_und; spsr_mon;
+        sp_usr; sp_fiq; sp_irq; sp_svc; sp_abt; sp_und;
+        lr_usr; lr_fiq; lr_irq; lr_svc; lr_abt; lr_und; sp;
+    modifies
+        mem; globals; scr; ttbr0; spsr_mon;
+        r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr_usr; sp_usr; lr;
     ensures
         EnterResumeSmcProcedureInvariant(old(this), this);
         if old(callno) == KOM_SMC_ENTER then
@@ -983,14 +919,14 @@ procedure kom_smc_enterresume(
         pageDbCorresponds(this.m, pagedb);
 {
     r5 := callno;
-    smc_enter_err(callno,disppg,err,pagedb_in);
-    if(err != const(KOM_ERR_SUCCESS) ) {
+    smc_enter_err(callno, disppg, pagedb_base, err, pagedb_in);
+    if (err != const(KOM_ERR_SUCCESS) ) {
         pagedb := pagedb_in;
         val := 0;
     } else {
         ghost var s0 := this;
-        pagedb := smc_enterresume_success(disppg, arg1, arg2, arg3, r5, err, val,
-                                          pagedb_in, stack_bytes);
+        pagedb := smc_enterresume_success(disppg, arg1, arg2, arg3, r5, pagedb_base,
+                                          err, val, pagedb_in, stack_bytes);
         lemma_ValidEntryPre(old(this), s0, pagedb_in, this, pagedb, old(disppg),
                             old(arg1), old(arg2), old(arg3));
     }
