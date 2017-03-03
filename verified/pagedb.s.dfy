@@ -64,12 +64,13 @@ predicate physPageIsSecure(physPage: int)
     SecurePhysBase() <= paddr < SecurePhysBase() + KOM_SECURE_RESERVE
 }
 
+
 datatype PageDbEntryTyped
     = Addrspace(l1ptnr: PageNr, refcount: nat, state: AddrspaceState)
     | Dispatcher(entrypoint:word, entered:bool, ctxt:DispatcherContext)
     | L1PTable(l1pt: seq<Maybe<PageNr>>)
     | L2PTable(l2pt: seq<L2PTE>)
-    | DataPage
+    | DataPage(contents: seq<word>)
 
 datatype AddrspaceState = InitState | FinalState | StoppedState
 
@@ -103,6 +104,7 @@ predicate wellFormedPageDbEntryTyped(e: PageDbEntryTyped)
     (e.L1PTable? ==> |e.l1pt| == NR_L1PTES)
     && (e.L2PTable? ==> |e.l2pt| == NR_L2PTES)
     && (e.Dispatcher? ==> wellformedDispatcherContext(e.ctxt))
+    && (e.DataPage? ==> |e.contents| == PAGESIZE)
 }
 
 predicate {:opaque} validPageDb(d: PageDb)
@@ -173,7 +175,9 @@ predicate validPageDbEntryTyped(d: PageDb, n: PageNr)
        || (entry.L2PTable? && validL2PTable(d, n))
        || (entry.Dispatcher? && (entry.entered ==>
             validDispatcherContext(entry.ctxt)))
-       || (entry.DataPage?) )
+       // AFAIK the only requirements we need to specify about data pages are 
+       // covered by wellFormedPageDbTyped
+       || (entry.DataPage?))
 }
 
 predicate isAddrspace(d: PageDb, n: int)
