@@ -41,14 +41,16 @@ function {:opaque} smc_remove_premium(pageDbIn: PageDb, page: word)
 }
 
 function {:opaque} smc_mapSecure_premium(pageDbIn: PageDb, page: word,
-    addrspacePage: word, mapping: word, physPage: word) : (PageDb, word) // PageDbOut, KOM_ERR
+    addrspacePage: word, mapping: word, physPage: word, contents: seq<word>) : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
-    ensures  validPageDb(smc_mapSecure_premium(pageDbIn, page, addrspacePage, mapping, physPage).0)
-    ensures  smc_mapSecure_premium(pageDbIn, page, addrspacePage, mapping, physPage) ==
-        smc_mapSecure(pageDbIn, page, addrspacePage, mapping, physPage);
+    ensures  validPageDb(smc_mapSecure_premium(pageDbIn, page, addrspacePage, 
+        mapping, physPage, contents).0)
+    ensures  smc_mapSecure_premium(pageDbIn, page, addrspacePage, mapping, physPage, contents) ==
+        smc_mapSecure(pageDbIn, page, addrspacePage, mapping, physPage,  contents);
 {
-    mapSecurePreservesPageDBValidity(pageDbIn, page, addrspacePage, mapping, physPage);
-    smc_mapSecure(pageDbIn, page, addrspacePage, mapping, physPage)
+    mapSecurePreservesPageDBValidity(pageDbIn, page, addrspacePage, mapping, 
+        physPage, contents);
+    smc_mapSecure(pageDbIn, page, addrspacePage, mapping, physPage, contents)
 }
 
 function {:opaque} smc_mapInsecure_premium(pageDbIn: PageDb, addrspacePage: word,
@@ -266,7 +268,7 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: word)
 }
 
 lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: word,
-    addrspacePage: word, map_word: word, physPage: word)
+    addrspacePage: word, map_word: word, physPage: word, contents: seq<word>)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_mapSecure(pageDbIn, page, addrspacePage,
         map_word, physPage).0)
