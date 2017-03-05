@@ -256,9 +256,8 @@ function smc_remove(pageDbIn: PageDb, page: word)
 }
 
 function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,
-    mapping: word, physPage: word, contents: seq<word>) : (PageDb, word) // PageDbOut, KOM_ERR
+    mapping: word, physPage: word) : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
-    requires |contents| == PAGESIZE
 {
     reveal_validPageDb();
     if(!isAddrspace(pageDbIn, addrspacePage)) then
@@ -274,7 +273,7 @@ function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,
                 (pageDbIn, KOM_ERR_INVALID_PAGENO)
             else
                 var ap_ret := allocatePage(pageDbIn, page,
-                    addrspacePage, DataPage(contents));
+                    addrspacePage, DataPage);
                 var pageDbA := ap_ret.0;
                 var errA := ap_ret.1;
                 if(errA != KOM_ERR_SUCCESS) then (pageDbIn, errA)
@@ -331,22 +330,6 @@ function smc_stop(pageDbIn: PageDb, addrspacePage: word)
         (d', KOM_ERR_SUCCESS)
 }
 
-
-function contentsOfPage(s: state, physPage: word) : seq<word>
-    requires ValidState(s)
-    ensures |contentsOfPage(s, physPage)| == PAGESIZE
-{
-    reveal_ValidMemState();
-    assume |contentsOfPage(s, physPage)| == PAGESIZE;
-    var mem := s.m.addresses;
-    assume physPage in mem;
-    // TODO not sure if there is a way to prove physPage in mem yet. Wrap the 
-    // result in a monad which is nothing if physpage !in mem?
-    var base := page_monvaddr(physPage);
-    var addrmap := (imap a: addr | base <= a < base + PAGESIZE :: mem[a]);
-    IMapSeqToSeq([], addrmap)
-}
-
 //=============================================================================
 // Behavioral Specification of SMC Handler
 //=============================================================================
@@ -369,8 +352,7 @@ predicate smchandler(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb)
     else if callno == KOM_SMC_INIT_L2PTABLE then
         (pageDbOut, err) == smc_initL2PTable(pageDbIn, arg1, arg2, arg3) && val == 0
     else if callno == KOM_SMC_MAP_SECURE then
-        (pageDbOut, err) == smc_mapSecure(pageDbIn, arg1, arg2, arg3, arg4, 
-            contentsOfPage(s, arg4)) && val == 0
+        (pageDbOut, err) == smc_mapSecure(pageDbIn, arg1, arg2, arg3, arg4) && val == 0
     else if callno == KOM_SMC_MAP_INSECURE then
         (pageDbOut, err) == smc_mapInsecure(pageDbIn, arg1, arg2, arg3) && val == 0
     else if callno == KOM_SMC_REMOVE then
