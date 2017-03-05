@@ -162,8 +162,9 @@ predicate {:opaque} pageDbDataCorresponds(p: PageNr, e: PageDbEntryTyped, page:m
     requires wellFormedPageDbEntryTyped(e)
 {
     var base := page_monvaddr(p);
-    forall i : addr | 0 <= i < PAGESIZE ::
-        page[base + i] == e.contents[i]
+    forall i | 0 <= i < PAGESIZE / WORDSIZE ::
+        (assert base + i*4 in page;
+        e.contents[i] == page[base + i*4])
 }
 
 predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:memmap)

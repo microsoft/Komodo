@@ -258,7 +258,7 @@ function smc_remove(pageDbIn: PageDb, page: word)
 function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,
     mapping: word, physPage: word, contents: seq<word>) : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
-    requires |contents| == PAGESIZE
+    requires |contents| == PAGESIZE / WORDSIZE
 {
     reveal_validPageDb();
     if(!isAddrspace(pageDbIn, addrspacePage)) then
@@ -331,20 +331,40 @@ function smc_stop(pageDbIn: PageDb, addrspacePage: word)
         (d', KOM_ERR_SUCCESS)
 }
 
+// Addr specialized version of range function in Seq.dfy that increments by 
+// WORDSIZE
+function addrSeq(l: addr, r: addr) : seq<addr>
+    requires isUInt32(l) && WordAligned(l) &&
+        isUInt32(r) && WordAligned(r)
+    requires l <= r
+    ensures |addrSeq(l, r)| == (r-l) / WORDSIZE
+    ensures forall i : addr | 0 <= i < r-l :: SeqOfNumbersInRightExclusiveRange(l, r)[i] == l + i
+    decreases r-l
+{
+    assert l+WORDSIZE > l;
+    assert r - (l+WORDSIZE) < r - l;
+    if l == r then [] else [l] + addrSeq(l+WORDSIZE,r)
+}
 
 function contentsOfPage(s: state, physPage: word) : seq<word>
     requires ValidState(s)
-    ensures |contentsOfPage(s, physPage)| == PAGESIZE
+    ensures |contentsOfPage(s, physPage)| == PAGESIZE / WORDSIZE
 {
     reveal_ValidMemState();
-    assume |contentsOfPage(s, physPage)| == PAGESIZE;
     var mem := s.m.addresses;
-    assume physPage in mem;
-    // TODO not sure if there is a way to prove physPage in mem yet. Wrap the 
-    // result in a monad which is nothing if physpage !in mem?
-    var base := page_monvaddr(physPage);
-    var addrmap := (imap a: addr | base <= a < base + PAGESIZE :: mem[a]);
-    IMapSeqToSeq([], addrmap)
+    // TODO require this and make a monad-wrapped version
+    assume physPageIsInsecureRam(physPage);
+    var base := physPage * PAGESIZE + KOM_DIRECTMAP_VBASE;
+    assert |addrSeq(base,base+PAGESIZE)| == PAGESIZE / WORDSIZE;
+    // Note: lambdas can't have refinement types so I can't write 
+    // a | a in mem => mem[a]. We have the same problem if we pass
+    // a => MemContents(s.m, a) as the lambda.
+    // Using a IMapSeqToSeq doesn't work since only the word-aligned
+    // part of the domain of addrSeq(...) is defined.
+    // I think this is okay, but I'm not sure how we 
+    // can make sure that it's okay.
+    MapSeqToSeq(addrSeq(base,base+PAGESIZE), 
+        a => if a in mem then mem[a] else 0)
 }
 
 //=============================================================================

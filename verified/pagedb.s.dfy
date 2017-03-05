@@ -104,7 +104,7 @@ predicate wellFormedPageDbEntryTyped(e: PageDbEntryTyped)
     (e.L1PTable? ==> |e.l1pt| == NR_L1PTES)
     && (e.L2PTable? ==> |e.l2pt| == NR_L2PTES)
     && (e.Dispatcher? ==> wellformedDispatcherContext(e.ctxt))
-    && (e.DataPage? ==> |e.contents| == PAGESIZE)
+    && (e.DataPage? ==> |e.contents| == PAGESIZE / WORDSIZE)
 }
 
 predicate {:opaque} validPageDb(d: PageDb)
