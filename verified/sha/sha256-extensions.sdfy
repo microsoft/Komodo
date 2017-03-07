@@ -99,7 +99,7 @@ requires
      // Anti-aliasing
      && (ctx + 32 < sp - 116 || ctx > sp)                              // ctx != sp
     ;
-reads globals
+reads globals;
 modifies mem;
 ensures
     // Framing
