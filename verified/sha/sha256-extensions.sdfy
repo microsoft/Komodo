@@ -7,8 +7,9 @@
 
 include{:verbatim} "sha256.i.dfy"
 //include verbatim "sha256-refined-helpers.i.dfy"
-//include verbatim "sha256-refined-invariants.i.dfy"
+include{:verbatim} "sha256-refined-invariants.i.dfy"
 include{:verbatim} "bit-vector-lemmas.i.dfy"
+include "sha256-refined.sdfy"
 
 include "../ARMdecls.sdfy"
 
@@ -40,7 +41,7 @@ ensures
                 ==> AddrMemContents(old(mem), addr) == AddrMemContents(mem, addr);
     IsCompleteSHA256Trace(trace_out);
     SHA256TraceIsCorrect(trace_out);
-    forall i :: 0 <= i < 8 ==> trace_out.H[i] == AddrMemContents(mem, r0 + 4*i);
+    forall i :: 0 <= i < 8 ==> trace_out.H[0][i] == AddrMemContents(mem, r0 + 4*i);
 {
     load_32_bit_const(1779033703, r1);
     STR(r1, r0, 0);
@@ -71,8 +72,8 @@ procedure {:refined} sha256_finalize(
     )
 requires/ensures
     ValidAddrMemStateOpaque(mem);
-reads r0; r1; globals;
-modifies mem; sp; r2;
+reads globals;
+modifies mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
 requires 
     // 
     // sha256_block_data_order's requires:
@@ -110,7 +111,7 @@ ensures
                 ==> AddrMemContents(old(mem), addr) == AddrMemContents(mem, addr);
     // Need more framing copied from block_data_order
 
-    forall i :: 0 <= i < 8 ==> trace_out.H[i] == AddrMemContents(mem, r0 + 4*i);
+    forall i :: 0 <= i < 8 ==> last(trace_out.H)[i] == AddrMemContents(mem, r0 + 4*i);
 
 //    SHA(input) == seq(AddrMemContents(mem, old(r0) + 0*4),
 //                      AddrMemContents(mem, old(r0) + 1*4),
