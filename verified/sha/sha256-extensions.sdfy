@@ -61,6 +61,23 @@ ensures
     STR(r1, r0, 28);
 
     reveal InitialH_SHA256;
+
+    ghost var initial_Hs := seq(1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225);
+    assert initial_Hs[0] == InitialH_SHA256(0);
+    assert initial_Hs[1] == InitialH_SHA256(1);
+    assert initial_Hs[2] == InitialH_SHA256(2);
+    assert initial_Hs[3] == InitialH_SHA256(3);
+    assert initial_Hs[4] == InitialH_SHA256(4);
+    assert initial_Hs[5] == InitialH_SHA256(5);
+    assert initial_Hs[6] == InitialH_SHA256(6);
+    assert initial_Hs[7] == InitialH_SHA256(7);
+
+    trace_out := SHA256Trace_c(seq(), // Empty M
+                               seq(initial_Hs), // Initial Hs
+                               seq(), // Empty Ws
+                               seq()  // Empty atohs
+                              );
+
 }
 
 // TODO: Update to satisfy all of sha256_block_order's pre/post-conditions
