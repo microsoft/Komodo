@@ -17,7 +17,6 @@ procedure {:refined} load_32_bit_const(
     inline c:word,
     out operand dst:word
     ) 
-modifies mem;
 ensures 
     dst == c;
 {
