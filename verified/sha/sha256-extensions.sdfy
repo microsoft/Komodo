@@ -20,12 +20,16 @@ procedure {:refined} load_32_bit_const(
 ensures 
     dst == c;
 {
-    MOV(dst, const(c / 0x1_0000_0000));
-    ADDWrapShift(dst, const(c % 0x1_0000_0000), dst, LSLShift(16));
-    lemma_32bit_const_load(c);
+    MOV(dst, c);
+
+    // TODO: The above won't assemble correctly with large constants!
+    //       Need to do something like this:
+//    MOV(dst, const(c / 0x1_0000_0000));
+//    ADDWrapShift(dst, const(c % 0x1_0000_0000), dst, LSLShift(16));
+//    lemma_32bit_const_load(c);
 }
 
-procedure {:refined} sha256_init() returns (ghost trace_out:SHA256_trace)
+procedure {:refined} sha256_init() returns (ghost trace_out:SHA256Trace)
 requires/ensures
     ValidAddrMemStateOpaque(mem);
     ValidAddrs(r0, 8);
@@ -60,14 +64,14 @@ ensures
 
 // TODO: Update to satisfy all of sha256_block_order's pre/post-conditions
 procedure {:refined} sha256_finalize(
-        ghost trace_in:SHA256_trace,
+        ghost trace_in:SHA256Trace,
         ghost input:seq(word)
     ) returns (
-        ghost trace_out:SHA256_trace
+        ghost trace_out:SHA256Trace
     )
 requires/ensures
     ValidAddrMemStateOpaque(mem);
-reads r0; r1; sp; globals;
+reads r0; r1; globals;
 modifies mem; sp; r2;
 requires 
     // 
