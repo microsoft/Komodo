@@ -17,11 +17,12 @@ procedure {:refined} load_32_bit_const(
     inline c:word,
     out operand dst:word
     ) 
+modifies mem;
 ensures 
     dst == c;
 {
-    STR(c / 0x1_0000_0000, dst, 0);
-    ADDWrapShift(dst, c % 0x1_0000_0000, dst, LSLShift(16));
+    MOV(dst, const(c / 0x1_0000_0000));
+    ADDWrapShift(dst, const(c % 0x1_0000_0000), dst, LSLShift(16));
     lemma_32bit_const_load(c);
 }
 
@@ -67,7 +68,8 @@ procedure {:refined} sha256_finalize(
     )
 requires/ensures
     ValidAddrMemStateOpaque(mem);
-reads r0; r1; sp;
+reads r0; r1; sp; globals;
+modifies mem; sp; r2;
 requires 
     // 
     // sha256_block_data_order's requires:
@@ -99,8 +101,6 @@ requires
      // Anti-aliasing
      && (ctx + 32 < sp - 116 || ctx > sp)                              // ctx != sp
     ;
-reads globals;
-modifies mem;
 ensures
     // Framing
     forall addr :: ValidMem(addr) && (addr < r0 || addr >= r0 + 8*4)
@@ -118,7 +118,7 @@ ensures
 //                      AddrMemContents(mem, old(r0) + 6*4),
 //                      AddrMemContents(mem, old(r0) + 7*4))
 {
-    SUB(esp, esp, 64);      // Make room for the final 256-bit input buffer
+    SUB(sp, sp, 64);      // Make room for the final 256-bit input buffer
 
     STR(0x80, sp, 0);
 
