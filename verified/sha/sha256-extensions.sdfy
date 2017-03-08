@@ -14,20 +14,43 @@ include "sha256-refined.sdfy"
 include "../ARMdecls.sdfy"
 
 
+#verbatim
+lemma lemma_load_32_bit_const(c:word)
+    ensures c == (c / 0x1000000 * 0x1000000)
+               + (c / 0x10000 % 0x100 * 0x10000)
+               + (c / 0x100 % 0x100 * 0x100)
+               + (c % 0x100);
+{
+    ghost var top := c / 0x10000 * 0x10000;
+    ghost var c0:word := c / 0x1000000 % 0x100 * 0x1000000;
+    assert c0 == c / 0x1000000 * 0x1000000;
+    ghost var c1:word := c / 0x10000 % 0x100 * 0x10000;
+    assert top == c0 + c1;
+
+    ghost var bottom := c % 0x10000;
+    ghost var c2:word := c / 0x100 % 0x100 * 0x100;
+    ghost var c3:word := c % 0x100;
+    calc {
+         bottom;
+         c3 + c2;
+    }
+    assert c == top + bottom;
+}
+#endverbatim
+
 procedure {:refined} load_32_bit_const(
-    inline c:word,
-    out operand dst:word
+    out operand dst:word,
+    inline c:word
     ) 
 ensures 
     dst == c;
 {
-    MOV(dst, c);
-
-    // TODO: The above won't assemble correctly with large constants!
-    //       Need to do something like this:
-//    MOV(dst, const(c / 0x1_0000_0000));
-//    ADDWrapShift(dst, const(c % 0x1_0000_0000), dst, LSLShift(16));
-//    lemma_32bit_const_load(c);
+    // TODO: add MOVW/MOVT instructions, and reduce this to two steps
+    lemma_load_32_bit_const(c);
+    MOV(dst, const(c / 0x1000000 * 0x1000000));
+    ADD(dst, dst, const(c / 0x10000 % 0x100 * 0x10000));
+    ADD(dst, dst, const(c / 0x100 % 0x100 * 0x100));
+    ADD(dst, dst, const(c % 0x100));
 }
 
 procedure {:refined} sha256_init() returns (ghost trace_out:SHA256Trace)
@@ -43,21 +66,21 @@ ensures
     SHA256TraceIsCorrect(trace_out);
     forall i :: 0 <= i < 8 ==> trace_out.H[0][i] == AddrMemContents(mem, r0 + 4*i);
 {
-    load_32_bit_const(1779033703, r1);
+    load_32_bit_const(r1, 1779033703);
     STR(r1, r0, 0);
-    load_32_bit_const(3144134277, r1);
+    load_32_bit_const(r1, 3144134277);
     STR(r1, r0, 4);
-    load_32_bit_const(1013904242, r1);
+    load_32_bit_const(r1, 1013904242);
     STR(r1, r0, 8);
-    load_32_bit_const(2773480762, r1);
+    load_32_bit_const(r1, 2773480762);
     STR(r1, r0, 12);
-    load_32_bit_const(1359893119, r1);
+    load_32_bit_const(r1, 1359893119);
     STR(r1, r0, 16);
-    load_32_bit_const(2600822924, r1);
+    load_32_bit_const(r1, 2600822924);
     STR(r1, r0, 20);
-    load_32_bit_const(528734635, r1);
+    load_32_bit_const(r1, 528734635);
     STR(r1, r0, 24);
-    load_32_bit_const(1541459225, r1);
+    load_32_bit_const(r1, 1541459225);
     STR(r1, r0, 28);
 
     reveal InitialH_SHA256;
