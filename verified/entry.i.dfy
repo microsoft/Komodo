@@ -224,6 +224,7 @@ lemma userspaceExecutionPreservesPageDb(d:PageDb,s:state,s':state, l1:PageNr)
 
                onlyDataPagesAreWritable(p, a, d, s, s', l1);
                assert BitwiseMaskHigh(a, 12) !in pages;
+               assert ValidMem(a);
                nonWritablePagesAreSafeFromHavoc(a, s, s'); 
             }
         //assert extractPage(s.m, p) == extractPage(s'.m, p);
