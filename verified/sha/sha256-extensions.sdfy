@@ -56,15 +56,17 @@ ensures
 procedure {:refined} sha256_init() returns (ghost trace_out:SHA256Trace)
 requires/ensures
     ValidAddrMemStateOpaque(mem);
-    ValidAddrs(r0, 8);
+requires
+    ValidMemRange(r0, r0 + SHA_CTXSIZE * WORDSIZE);
+requires {:refined false}
+    mode_of_state(this) == Monitor;
 reads r0; 
 modifies mem; r1;
 ensures
-    forall addr :: ValidMem(addr) && (addr < r0 || addr >= r0 + 8*4)
-                ==> AddrMemContents(old(mem), addr) == AddrMemContents(mem, addr);
+    AddrMemPreservingExcept(old(mem), mem, old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE);
     IsCompleteSHA256Trace(trace_out);
     SHA256TraceIsCorrect(trace_out);
-    forall i :: 0 <= i < 8 ==> trace_out.H[0][i] == AddrMemContents(mem, r0 + 4*i);
+    forall i :: 0 <= i < SHA_CTXSIZE ==> trace_out.H[0][i] == AddrMemContents(mem, old(r0) + i*WORDSIZE);
 {
     load_32_bit_const(r1, 1779033703);
     STR(r1, r0, 0);
@@ -112,36 +114,34 @@ requires
     SHA256TraceIsCorrect(trace_in);
 
     // Stack is accessible
-    sp >= 116 + 64;                  // Add some stack for storing the last block
-    ValidAddrs(sp-(116+64), 29 + 16);
+    sp >= ((29 + 16) * WORDSIZE);   // Add some stack for storing the last block
+    ValidMemRange(sp - ((29 + 16) * WORDSIZE), sp);
 
     // K table is valid
     SaneShaGlobal(globals);
     lr == AddressOfGlobal(K_SHA256s());
-    ValidGlobalAddr(K_SHA256s(), lr);
 
     let ctx := r0 in
      // Old H values are laid out in memory pointed at by ctx
-        ValidAddrs(ctx, 8)
-     && last(trace_in.H)[0] == AddrMemContents(mem, ctx + 0*4)
-     && last(trace_in.H)[1] == AddrMemContents(mem, ctx + 1*4)
-     && last(trace_in.H)[2] == AddrMemContents(mem, ctx + 2*4)
-     && last(trace_in.H)[3] == AddrMemContents(mem, ctx + 3*4)
-     && last(trace_in.H)[4] == AddrMemContents(mem, ctx + 4*4)
-     && last(trace_in.H)[5] == AddrMemContents(mem, ctx + 5*4)
-     && last(trace_in.H)[6] == AddrMemContents(mem, ctx + 6*4)
-     && last(trace_in.H)[7] == AddrMemContents(mem, ctx + 7*4)
+        ValidMemRange(ctx, ctx + 8*WORDSIZE)
+     && last(trace_in.H)[0] == AddrMemContents(mem, ctx + 0*WORDSIZE)
+     && last(trace_in.H)[1] == AddrMemContents(mem, ctx + 1*WORDSIZE)
+     && last(trace_in.H)[2] == AddrMemContents(mem, ctx + 2*WORDSIZE)
+     && last(trace_in.H)[3] == AddrMemContents(mem, ctx + 3*WORDSIZE)
+     && last(trace_in.H)[4] == AddrMemContents(mem, ctx + 4*WORDSIZE)
+     && last(trace_in.H)[5] == AddrMemContents(mem, ctx + 5*WORDSIZE)
+     && last(trace_in.H)[6] == AddrMemContents(mem, ctx + 6*WORDSIZE)
+     && last(trace_in.H)[7] == AddrMemContents(mem, ctx + 7*WORDSIZE)
 
      // Anti-aliasing
      && (ctx + 32 < sp - 116 || ctx > sp)                              // ctx != sp
     ;
 ensures
     // Framing
-    forall addr :: ValidMem(addr) && (addr < r0 || addr >= r0 + 8*4)
-                ==> AddrMemContents(old(mem), addr) == AddrMemContents(mem, addr);
+    AddrMemPreservingExcept(old(mem), mem, old(r0), old(r0) + 8 * WORDSIZE);
     // Need more framing copied from block_data_order
 
-    forall i :: 0 <= i < 8 ==> last(trace_out.H)[i] == AddrMemContents(mem, r0 + 4*i);
+    forall i :: 0 <= i < 8 ==> last(trace_out.H)[i] == AddrMemContents(mem, old(r0) + i*WORDSIZE);
 
 //    SHA(input) == seq(AddrMemContents(mem, old(r0) + 0*4),
 //                      AddrMemContents(mem, old(r0) + 1*4),
@@ -185,4 +185,3 @@ ensures
 
     // Probably need to call lemma_SHA256FinalHelper1 here
 }
-

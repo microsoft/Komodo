@@ -6,7 +6,7 @@ include "../words_and_bytes.s.dfy"
 include "../ARMdef.dfy"
 
 function method{:axiom} BitwiseAdd32(x:word, y:word):word
-    ensures BitwiseAdd32(x, y) == (((x as int) + (y as int)) % 0x100000000) as word;
+    ensures BitwiseAdd32(x, y) == TruncateWord((x as int) + (y as int));
 
 //-///////////////////////////////////////////////////
 //- Ch, Maj, BSIG0, BSIG1, SSIG0, SSIG1

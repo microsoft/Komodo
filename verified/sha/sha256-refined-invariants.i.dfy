@@ -4,14 +4,37 @@ include "../kom_common.s.dfy"
 include "../sha/sha256.i.dfy"
 include "../sha/bit-vector-lemmas.i.dfy"
 
-predicate SaneShaGlobal(gm: globalsmap)
+const K_SHA256_WORDS:int := 64;
+const K_SHA256_BYTES:int := K_SHA256_WORDS * WORDSIZE;
+
+predicate {:opaque} SaneShaGlobal(gm: globalsmap)
 {
  ValidGlobalStateOpaque(gm)
  && ValidGlobal(K_SHA256s())
- && SizeOfGlobal(K_SHA256s()) == 4*64
- && isUInt32(AddressOfGlobal(K_SHA256s()) + 4*64) // We won't wrap around while accessing K_SHA256s
- && forall j :: 0 <= j < 64 ==> GlobalContents(gm, K_SHA256s(), AddressOfGlobal(K_SHA256s()) + j*4) == K_SHA256(j)
+ && SizeOfGlobal(K_SHA256s()) == K_SHA256_BYTES
+ && isUInt32(AddressOfGlobal(K_SHA256s()) + K_SHA256_BYTES) // We won't wrap around while accessing K_SHA256s
+ && forall j :: 0 <= j < K_SHA256_WORDS ==> GlobalContents(gm, K_SHA256s(), AddressOfGlobal(K_SHA256s()) + j * WORDSIZE) == K_SHA256(j)
 }
+
+predicate AddrMemPreservingExcept(sm:memmap, rm:memmap, base:int, limit:int)
+    requires ValidAddrMemStateOpaque(sm) && ValidAddrMemStateOpaque(rm);
+    requires limit >= base;
+{
+    forall a:addr :: ValidMem(a) && !(base <= a < limit)
+        ==> AddrMemContents(sm, a) == AddrMemContents(rm, a)
+}
+
+predicate AddrMemPreservingExcept2(sm:memmap, rm:memmap, base1:int, limit1:int, base2:int, limit2:int)
+    requires ValidAddrMemStateOpaque(sm) && ValidAddrMemStateOpaque(rm);
+    requires limit1 >= base1 && limit2 >= base2;
+{
+    forall a:addr :: ValidMem(a) && !(base1 <= a < limit1) && !(base2 <= a < limit2)
+        ==> AddrMemContents(sm, a) == AddrMemContents(rm, a)
+}
+
+const SHA_BLOCKSIZE:int := 16; // 16 words per block
+const SHA_CTXSIZE:int := 8; // 8 words
+const SHA_STACKSIZE:int := 19; // 19 words on the stack
 
 predicate BlockInvariant(
             trace:SHA256Trace, input:seq<word>, globals:globalsmap,
@@ -23,23 +46,26 @@ predicate BlockInvariant(
     ValidAddrMemStateOpaque(old_mem)
  && ValidAddrMemStateOpaque(mem)
  // Stack is accessible
- && ValidAddrs(sp, 19)
+ && ValidMemRange(sp, sp + SHA_STACKSIZE * WORDSIZE)
 
  // Pointer into our in-memory H[8] is valid
- && ctx_ptr == AddrMemContents(mem, sp + 16 * 4)
- && (ctx_ptr + 32 < sp || ctx_ptr > sp + 19 * 4)
- && ValidAddrs(ctx_ptr, 8)
+ && ctx_ptr == AddrMemContents(mem, sp + SHA_BLOCKSIZE * WORDSIZE)
+ && (ctx_ptr + SHA_CTXSIZE * WORDSIZE < sp || ctx_ptr > sp + SHA_STACKSIZE * WORDSIZE)
+ && ValidMemRange(ctx_ptr, ctx_ptr + SHA_CTXSIZE * WORDSIZE)
 
  // Input properties
  && block <= num_blocks
- && SeqLength(input) == num_blocks*16
- && r1 == input_ptr + block * 16 * 4
- && input_ptr + num_blocks * 16 * 4 == AddrMemContents(mem, sp + 18*4) == r12
- && input_ptr + num_blocks * 16 * 4 < 0x1_0000_0000
- && (input_ptr + num_blocks * 16 * 4 < sp || sp + 19 * 4 <= input_ptr)  // Doesn't alias sp
- && (input_ptr + num_blocks * 16 * 4 < ctx_ptr || ctx_ptr + 32 <= input_ptr)  // Doesn't alias input_ptr
- && ValidAddrs(input_ptr, num_blocks * 16)
- && (forall j {:trigger ValidMem(input_ptr + j * 4)} :: 0 <= j < num_blocks * 16 ==> AddrMemContents(mem, input_ptr + j * 4) == input[j])
+ && SeqLength(input) == num_blocks * SHA_BLOCKSIZE
+ && r1 == input_ptr + block * SHA_BLOCKSIZE * WORDSIZE
+ && isUInt32(input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
+ && input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE == AddrMemContents(mem, sp + 18*WORDSIZE) == r12
+ && (input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE < sp || sp + SHA_STACKSIZE * WORDSIZE <= input_ptr)  // Doesn't alias sp
+ && (input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE < ctx_ptr || ctx_ptr + SHA_CTXSIZE * WORDSIZE <= input_ptr)  // Doesn't alias input_ptr
+ && ValidMemRange(input_ptr, input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
+// && (forall j {:trigger ValidMem(input_ptr + j * WORDSIZE)} :: 0 <= j < num_blocks * SHA_BLOCKSIZE
+//    ==> AddrMemContents(mem, input_ptr + j * WORDSIZE) == input[j])
+ && (forall j:int :: 0 <= j < num_blocks * SHA_BLOCKSIZE
+    ==> AddrMemContents(mem, input_ptr + j * WORDSIZE) == input[j])
 
  // Trace properties
  && IsCompleteSHA256Trace(trace)
@@ -50,21 +76,19 @@ predicate BlockInvariant(
 
  // Globals properties
  && SaneShaGlobal(globals)
- && ValidGlobalAddr(K_SHA256s(), lr) 
  && lr == AddressOfGlobal(K_SHA256s()) 
 
  // Hs match memory and our registers
- && last(trace.H)[0] == AddrMemContents(mem, ctx_ptr + 0 * 4) == a 
- && last(trace.H)[1] == AddrMemContents(mem, ctx_ptr + 1 * 4) == b 
- && last(trace.H)[2] == AddrMemContents(mem, ctx_ptr + 2 * 4) == c 
- && last(trace.H)[3] == AddrMemContents(mem, ctx_ptr + 3 * 4) == d 
- && last(trace.H)[4] == AddrMemContents(mem, ctx_ptr + 4 * 4) == e 
- && last(trace.H)[5] == AddrMemContents(mem, ctx_ptr + 5 * 4) == f 
- && last(trace.H)[6] == AddrMemContents(mem, ctx_ptr + 6 * 4) == g 
- && last(trace.H)[7] == AddrMemContents(mem, ctx_ptr + 7 * 4) == h 
+ && last(trace.H)[0] == AddrMemContents(mem, ctx_ptr + 0 * WORDSIZE) == a 
+ && last(trace.H)[1] == AddrMemContents(mem, ctx_ptr + 1 * WORDSIZE) == b 
+ && last(trace.H)[2] == AddrMemContents(mem, ctx_ptr + 2 * WORDSIZE) == c 
+ && last(trace.H)[3] == AddrMemContents(mem, ctx_ptr + 3 * WORDSIZE) == d 
+ && last(trace.H)[4] == AddrMemContents(mem, ctx_ptr + 4 * WORDSIZE) == e 
+ && last(trace.H)[5] == AddrMemContents(mem, ctx_ptr + 5 * WORDSIZE) == f 
+ && last(trace.H)[6] == AddrMemContents(mem, ctx_ptr + 6 * WORDSIZE) == g 
+ && last(trace.H)[7] == AddrMemContents(mem, ctx_ptr + 7 * WORDSIZE) == h 
 
- // Memory framing:  We only touch the stack and 8 bytes pointed to by ctx_ptr
- && (forall addr:word :: ValidMem(addr) && (addr < sp || addr >= sp + 19 * 4) 
-                                         && (addr < ctx_ptr || addr >= ctx_ptr + 8 * 4) 
-                     ==> AddrMemContents(old_mem, addr) == AddrMemContents(mem, addr))
+ // Memory framing:  We only touch the stack and 8 words pointed to by ctx_ptr
+ && AddrMemPreservingExcept2(old_mem, mem, sp, sp + SHA_STACKSIZE * WORDSIZE, ctx_ptr,
+                            ctx_ptr + SHA_CTXSIZE * WORDSIZE)
 }
