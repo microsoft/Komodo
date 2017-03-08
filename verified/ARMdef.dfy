@@ -16,6 +16,9 @@ function  BytesToWords(b:int): int
     requires WordAligned(b)
 { b / WORDSIZE }
 
+function {:opaque} TruncateWord(x:int): word
+{ x % UINT32_LIM }
+
 type addr = x | isUInt32(x) && WordAligned(x)
 type shift_amount = s | 0 <= s < 32 // Some shifts allow s=32, but we'll be conservative for simplicity
 
@@ -939,7 +942,7 @@ predicate evalIns(ins:ins, s:state, r:state)
     if !s.ok || !ValidInstruction(s, ins) then !r.ok
     else match ins
         case ADD(dst, src1, src2) => evalUpdate(s, dst,
-            ((OperandContents(s, src1) + OperandContents(s, src2)) % 0x1_0000_0000),
+            TruncateWord(OperandContents(s, src1) + OperandContents(s, src2)),
             r)
         case SUB(dst, src1, src2) => evalUpdate(s, dst,
             ((OperandContents(s, src1) - OperandContents(s, src2))),

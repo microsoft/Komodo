@@ -62,13 +62,14 @@ ADD(out operand dst:word, operand src1:word, operand src2:word)
 {
     reveal va_eval;
     reveal ValidRegState;
+    reveal TruncateWord;
     this := MaybeUpdateOk(old(this), this);
 }
 
 procedure {:bridge} {:refined} {:instruction Ins(ADD(dst, src1, src2))}
 ADDWrap(out operand dst:word, operand src1:word, operand src2:word)
     ensures
-        dst == old(src1 + src2) % 0x1_0000_0000;
+        dst == TruncateWord(old(src1 + src2));
 {
     reveal va_eval;
     reveal ValidRegState;
@@ -78,7 +79,7 @@ ADDWrap(out operand dst:word, operand src1:word, operand src2:word)
 procedure {:bridge} {:refined} {:instruction Ins(ADD(dst, src1, OShift(GetProbableReg(src2), shift)))}
 ADDWrapShift(out operand dst:word, operand src1:word, operand src2:snd, inline shift:Shift)
     ensures
-        dst == old(src1 + EvalShift(old(src2), shift)) % 0x1_0000_0000;
+        dst == TruncateWord(old(src1 + EvalShift(old(src2), shift)));
 {
     reveal va_eval;
     reveal ValidRegState;
