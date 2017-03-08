@@ -99,9 +99,7 @@ ensures
 procedure {:refined} sha256_finalize(
         ghost trace_in:SHA256Trace,
         ghost input:seq(word)
-    ) returns (
-        ghost trace_out:SHA256Trace
-    )
+    ) 
 requires/ensures
     ValidAddrMemStateOpaque(mem);
 reads globals;
@@ -122,6 +120,8 @@ requires
     lr == AddressOfGlobal(K_SHA256s());
 
     let ctx := r0 in
+    let num_blocks := r2 in // Number of 64-byte blocks to process
+
      // Old H values are laid out in memory pointed at by ctx
         ValidMemRange(ctx, ctx + 8*WORDSIZE)
      && last(trace_in.H)[0] == AddrMemContents(mem, ctx + 0*WORDSIZE)
@@ -132,6 +132,12 @@ requires
      && last(trace_in.H)[5] == AddrMemContents(mem, ctx + 5*WORDSIZE)
      && last(trace_in.H)[6] == AddrMemContents(mem, ctx + 6*WORDSIZE)
      && last(trace_in.H)[7] == AddrMemContents(mem, ctx + 7*WORDSIZE)
+     
+     // Ghost input matches SHA trace
+     && SeqLength(input) == num_blocks*16
+     && SeqLength(trace_in.M) == num_blocks
+     && (forall i :: 0 <= i < num_blocks
+             ==> trace_in.M[i] == bswap32_seq(SeqSlice(input, i*16, (i+1)*16))) 
 
      // Anti-aliasing
      && (ctx + 32 < sp - 116 || ctx > sp)                              // ctx != sp
@@ -140,8 +146,31 @@ ensures
     // Framing
     AddrMemPreservingExcept(old(mem), mem, old(r0), old(r0) + 8 * WORDSIZE);
     // Need more framing copied from block_data_order
+    
+    // SHA results
+    let hash := seq(AddrMemContents(mem, old(r0) + 0*4),
+                    AddrMemContents(mem, old(r0) + 1*4),
+                    AddrMemContents(mem, old(r0) + 2*4),
+                    AddrMemContents(mem, old(r0) + 3*4),
+                    AddrMemContents(mem, old(r0) + 4*4),
+                    AddrMemContents(mem, old(r0) + 5*4),
+                    AddrMemContents(mem, old(r0) + 6*4),
+                    AddrMemContents(mem, old(r0) + 7*4)) in
+    true; //IsSHA256(words2bytes(bswap32_seq(input)), hash);
 
-    forall i :: 0 <= i < 8 ==> last(trace_out.H)[i] == AddrMemContents(mem, old(r0) + i*WORDSIZE);
+//    IsCompleteSHA256Trace(trace_out);
+//    SHA256TraceIsCorrect(trace_out);
+//    SeqLength(trace_out.M) == SeqLength(trace_in.M) + old(r2);
+//    (forall i :: 0 <= i < old(r2) 
+//      ==> trace_out.M[SeqLength(trace_in.M) + i] == bswap32_seq(SeqSlice(input, i*16, (i+1)*16))) ;
+//    last(trace_out.H)[0] == AddrMemContents(mem, old(r0) + 0*4);
+//    last(trace_out.H)[1] == AddrMemContents(mem, old(r0) + 1*4);
+//    last(trace_out.H)[2] == AddrMemContents(mem, old(r0) + 2*4);
+//    last(trace_out.H)[3] == AddrMemContents(mem, old(r0) + 3*4);
+//    last(trace_out.H)[4] == AddrMemContents(mem, old(r0) + 4*4);
+//    last(trace_out.H)[5] == AddrMemContents(mem, old(r0) + 5*4);
+//    last(trace_out.H)[6] == AddrMemContents(mem, old(r0) + 6*4);
+//    last(trace_out.H)[7] == AddrMemContents(mem, old(r0) + 7*4);
 
 //    SHA(input) == seq(AddrMemContents(mem, old(r0) + 0*4),
 //                      AddrMemContents(mem, old(r0) + 1*4),
