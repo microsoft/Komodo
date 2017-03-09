@@ -15,7 +15,7 @@ verified: $(dir)/main.S
 # a given source has been verified.
 
 # Vale-to-Dafny
-%.gen.dfy: %.sdfy $(VALE)
+%.gen.dfy: %.sdfy
 	$(VALE) $(VALEFLAGS) -in $< -out $@
 	@which dos2unix >/dev/null && dos2unix $@ || true
 
@@ -37,7 +37,7 @@ endif
 %.exe: %.dfy %.verified
 	$(DAFNY) $(DAFNYFLAGS) /noVerify /compile:2 /out:$@ $<
 
-%.S: %.exe
+$(dir)/main.S: $(dir)/main.exe
 	$< > $@
 
 # temp target to produce a bootable image
