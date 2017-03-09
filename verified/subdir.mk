@@ -7,6 +7,8 @@ VALEFLAGS = -includeSuffix .sdfy .gen.dfy
 # dafny flags: file-specific flags plus /noNLarith unless the file is named nlarith.x
 mkdafnyflags = $(DAFNYFLAGS_$(1)) $(if $(filter nlarith.%,$(1)),,/noNLarith)
 
+DOS2UNIX := $(if $(shell which dos2unix 2>/dev/null),dos2unix)
+
 # top-level target
 .PHONY: verified
 verified: $(dir)/main.S
@@ -17,7 +19,7 @@ verified: $(dir)/main.S
 # Vale-to-Dafny
 %.gen.dfy: %.sdfy
 	$(VALE) $(VALEFLAGS) -in $< -out $@
-	@which dos2unix >/dev/null && dos2unix $@ || true
+	$(if $(DOS2UNIX),$(DOS2UNIX) $@)
 
 # Vale direct verification, including cheesy workaround for broken error code.
 ifeq ($(VALEDIRECT), 1)
@@ -38,11 +40,7 @@ endif
 	$(DAFNY) $(DAFNYFLAGS) /noVerify /compile:2 /out:$@ $<
 
 $(dir)/main.S: $(dir)/main.exe
-	$< > $@
-
-# temp target to produce a bootable image
-$(dir)/%.img: $(dir)/%.o
-	$(OBJCOPY) $< -O binary $@
+	$(MONO) $< > $@
 
 # auto dependencies for Dafny/Vale code
 findsrc = $(wildcard $(1)/*.sdfy) $(filter-out %.gen.dfy,$(wildcard $(1)/*.dfy))

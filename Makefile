@@ -1,14 +1,24 @@
+# use mono for exes, unless the platform supports native win32 execution
+ifeq ($(or $(filter %-cygwin,$(MAKE_HOST)),\
+	    $(and $(filter x86_64-pc-linux-gnu,$(MAKE_HOST)),\
+		    $(wildcard /proc/sys/fs/binfmt_misc/WSLInterop))),)
+MONO = mono
+else
+MONO =
+endif
+
 #-----------------------------------------------------------------------------
 # Configuration options
 # config.mk can override any of the config variables below
 #-----------------------------------------------------------------------------
 -include config.mk
+
 PREFIX ?= arm-eabi-
 INSTALLDIR ?= .
 GUEST_KERNEL ?= kernel7.img
 GUEST_DISKIMG ?= raspbian.img
-VALE ?= tools/vale/bin/vale.exe
-DAFNY ?= tools/dafny/Dafny.exe
+VALE ?= $(MONO) tools/vale/bin/vale.exe
+DAFNY ?= $(MONO) tools/dafny/Dafny.exe
 #-----------------------------------------------------------------------------
 
 AS = $(PREFIX)as
@@ -44,14 +54,6 @@ gdb: piloader/piloader.elf monitor/monitor.elf
 		-ex 'add-symbol-file piloader/piloader.elf 0x400' \
 		-ex 'add-symbol-file monitor/monitor.elf 0x40000000'
 
-#-----------------------------------------------------------------------------
-# For running assembled tests of ARMspartan
-#-----------------------------------------------------------------------------
-run_%.img: verified/%.img
-	$(QEMU) $(QEMU_ARGS) -bios $< -S
-
-gdb-test:
-	$(PREFIX)gdb -ex 'target remote :1234'
 #-----------------------------------------------------------------------------
 
 dir := pdclib
