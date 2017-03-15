@@ -272,7 +272,7 @@ function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,
             var abs_mapping := wordToMapping(mapping);
             // Check physPage (which is optionally used to populate
             // the initial contents of the secure page) for validity
-            if (!physPageIsInsecureRam(physPage) || !(physPage == 0)) then
+            if (!physPageIsInsecureRam(physPage) && !(physPage == 0)) then
                 (pageDbIn, KOM_ERR_INVALID_PAGENO)
             else
                 var contents_ := (if(physPage == 0) then
