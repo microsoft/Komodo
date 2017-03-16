@@ -3,7 +3,7 @@ include "ARMdef.dfy"
 const KOM_MAGIC:int := 0x4b6d646f;
 
 //-----------------------------------------------------------------------------
-// SMC Call Numbers
+// SMC/SVC Call Numbers
 //-----------------------------------------------------------------------------
 const KOM_SMC_QUERY:int             := 1;
 const KOM_SMC_GETPHYSPAGES:int      := 2;
@@ -17,6 +17,10 @@ const KOM_SMC_FINALISE:int          := 21;
 const KOM_SMC_ENTER:int             := 22;
 const KOM_SMC_RESUME:int            := 23;
 const KOM_SMC_STOP:int              := 29;
+
+const KOM_SVC_EXIT:int              := 0;
+const KOM_SVC_ATTEST:int            := 1;
+const KOM_SVC_VERIFY:int            := 2;
 
 //-----------------------------------------------------------------------------
 // Errors

@@ -46,35 +46,44 @@ function securePageFromPhysAddr(phys:int): PageNr
     (phys - SecurePhysBase()) / PAGESIZE
 }
 
+predicate {:opaque} validEnclaveExecution(s1:state, d1:PageDb,
+    s:state, d:PageDb, dispPg:PageNr, steps:nat)
+    requires ValidState(s1) && validPageDb(d1) && validDispatcherPage(d1, dispPg)
+    decreases steps
+{
+    reveal_ValidRegState();
+    reveal_validExceptionTransition();
+    var retToEnclave := (steps > 0);
+    exists s2, s4, s5 ::
+        entryTransition(s1, s2)
+        && userspaceExecutionAndException(s2, s4)
+        && isReturningSvc(s4) == retToEnclave
+        && (if retToEnclave then
+            var lr := OperandContents(s4, OLR);
+            var retRegs := svcHandled(s4, d1, dispPg);
+            validExceptionTransition(SysState(s4, d1), SysState(s5, d1), dispPg)
+            && preEntryReturn(s5, lr, retRegs)
+            && validEnclaveExecution(s5, d1, s, d, dispPg, steps - 1)
+        else
+            validExceptionTransition(SysState(s4, d1), SysState(s, d), dispPg)
+            && (s.regs[R0], s.regs[R1], d) == exceptionHandled(s4, d1, dispPg))
+}
+
 predicate {:opaque} validEnter(s:SysState,s':SysState,
     dispPg:word,a1:word,a2:word,a3:word)
     requires validSysState(s)
     requires smc_enter_err(s.d, dispPg, false) == KOM_ERR_SUCCESS
 {
-    reveal_ValidRegState();
-    reveal_validExceptionTransition();
-    exists s1, s2, s3, ex, s4 ::
-        preEntryEnter(s.hw, s1, s.d, dispPg, a1, a2, a3)
-        && entryTransition(s1, s2)
-        && userspaceExecutionAndException(s2, s3, ex, s4)
-        && validExceptionTransition(SysState(s4, s.d), s', dispPg)
-        && (s'.hw.regs[R0], s'.hw.regs[R1], s'.d) == exceptionHandled(s4, s.d, dispPg)
+    exists s1, steps:nat :: preEntryEnter(s.hw, s1, s.d, dispPg, a1, a2, a3)
+        && validEnclaveExecution(s1, s.d, s'.hw, s'.d, dispPg, steps)
 }
 
 predicate {:opaque} validResume(s:SysState,s':SysState,dispPg:word)
     requires validSysState(s)
     requires smc_enter_err(s.d, dispPg, true) == KOM_ERR_SUCCESS
 {
-     
-    reveal_ValidRegState();
-    reveal_validExceptionTransition();
-    exists s1, s2, s3, ex, s4 ::
-        preEntryResume(s.hw, s1, s.d, dispPg)
-        && entryTransition(s1, s2)
-        && userspaceExecutionAndException(s2, s3, ex, s4)
-        && validExceptionTransition(SysState(s4, s.d), s', dispPg)
-        && (s'.hw.regs[R0], s'.hw.regs[R1], s'.d) ==
-            exceptionHandled(s4, s.d, dispPg)
+    exists s1, steps:nat :: preEntryResume(s.hw, s1, s.d, dispPg)
+        && validEnclaveExecution(s1, s.d, s'.hw, s'.d, dispPg, steps)
 }
 
 predicate smc_enter(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb,
@@ -175,6 +184,25 @@ predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
     // TODO (more generally than just entry!): we didn't scribble on any user memory
 }
 
+predicate preEntryReturn(s:state,lr:word,regs:SvcReturnRegs)
+    requires ValidState(s)
+{
+    reveal_ValidRegState();
+    mode_of_state(s) == Monitor
+    && OperandContents(s, OLR) == lr
+    && (reveal_ValidSRegState();
+        s.sregs[spsr(mode_of_state(s))] == 0x10 /* XXX: Usermode PSR */)
+    && s.regs[R0] == regs.0
+    && s.regs[R1] == regs.1
+    && s.regs[R2] == regs.2
+    && s.regs[R3] == regs.3
+    && s.regs[R4] == regs.4
+    && s.regs[R5] == regs.5
+    && s.regs[R6] == regs.6
+    && s.regs[R7] == regs.7
+    && s.regs[R8] == regs.8
+}
+
 predicate entryTransition(s:state, s':state)
     requires ValidState(s)
     ensures entryTransition(s, s') ==> ValidState(s')
@@ -183,10 +211,11 @@ predicate entryTransition(s:state, s':state)
     evalEnterUserspace(s, s') && s'.steps == s.steps + 1
 }
 
-predicate userspaceExecutionAndException(s:state, s':state, ex:exception, r:state)
+predicate userspaceExecutionAndException(s:state, r:state)
     requires ValidState(s) && mode_of_state(s) == User
-    ensures userspaceExecutionAndException(s, s', ex, r) ==> mode_of_state(r) != User
+    ensures userspaceExecutionAndException(s, r) ==> mode_of_state(r) != User
 {
+    exists s', ex ::
     evalUserspaceExecution(s, s')
     && evalExceptionTaken(s', ex, r)
     && mode_of_state(r) != User // known, but we need a lemma to prove it
@@ -197,24 +226,46 @@ predicate userspaceExecutionAndException(s:state, s':state, ex:exception, r:stat
 //-----------------------------------------------------------------------------
 // Exception Handler Spec
 //-----------------------------------------------------------------------------
-function exceptionHandled(s:state, d:PageDb, dispPg:PageNr) : (word, word, PageDb)
+predicate isReturningSvc(s:state)
+    requires ValidState(s) && mode_of_state(s) != User
+{
+    reveal_ValidRegState();
+    s.conf.ex.ExSVC? && s.regs[R0] != KOM_SVC_EXIT
+}
+
+// SVCs return up to 9 registers
+type SvcReturnRegs = (word, word, word, word, word, word, word, word, word)
+
+function svcHandled(s:state, d:PageDb, dispPg:PageNr): SvcReturnRegs
     requires validPageDb(d) && validDispatcherPage(d, dispPg)
     requires ValidState(s) && mode_of_state(s) != User
-    ensures var (r0,r1,d') := exceptionHandled(s, d, dispPg);
+    requires isReturningSvc(s)
+{
+    // TODO
+    var dummy:word := 0;
+    (KOM_ERR_INVALID, dummy, dummy, dummy, dummy, dummy, dummy, dummy, dummy)
+}
+
+function exceptionHandled(s:state, d:PageDb, dispPg:PageNr): (word, word, PageDb)
+    requires validPageDb(d) && validDispatcherPage(d, dispPg)
+    requires ValidState(s) && mode_of_state(s) != User
+    requires !isReturningSvc(s)
+    ensures var (r0, r1, d') := exceptionHandled(s, d, dispPg);
         wellFormedPageDb(d')
 {
     reveal_validPageDb();
-    reveal_ValidSRegState();
     reveal_ValidRegState();
     if s.conf.ex.ExSVC? || s.conf.ex.ExAbt? || s.conf.ex.ExUnd? then (
+        // voluntary exit / fault
         var p := dispPg;
         var d' := d[ p := d[p].(entry := d[p].entry.(entered := false))];
         if s.conf.ex.ExSVC? then
-            (KOM_ERR_SUCCESS, s.regs[R0], d')
+            (KOM_ERR_SUCCESS, s.regs[R1], d')
         else
             (KOM_ERR_FAULT, 0, d')
     ) else (
         assert s.conf.ex.ExIRQ? || s.conf.ex.ExFIQ?;
+        reveal_ValidSRegState();
         var p := dispPg;
         var pc := OperandContents(s, OLR);
         var psr := s.sregs[spsr(mode_of_state(s))];

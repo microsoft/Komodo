@@ -361,7 +361,7 @@ lemma lemma_validEnter(s0:state, s1:state, r:state, sd:PageDb,
 
     assert entryTransition(s1, s2);
     lemma_evalExceptionTaken_NonUser(s3, ex, s4);
-    assert userspaceExecutionAndException(s2, s3, ex, s4)
+    assert userspaceExecutionAndException(s2, s4)
         by { reveal_evalUserspaceExecution(); }
 
     enterUserspacePreservesStuff(sd, s1,  s2);
@@ -407,7 +407,7 @@ lemma lemma_validResume(s0:state, s1:state, r:state, sd:PageDb, dp:word)
 
     assert entryTransition(s1, s2);
     lemma_evalExceptionTaken_NonUser(s3, ex, s4);
-    assert userspaceExecutionAndException(s2, s3, ex, s4)
+    assert userspaceExecutionAndException(s2, s4)
         by { reveal_evalUserspaceExecution(); }
 
     enterUserspacePreservesStuff(sd, s1,  s2);
@@ -477,10 +477,10 @@ lemma lemma_validEnterPost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp
     reveal_validEnter();
     reveal_ValidRegState();
 
-    var s1, s2, s3, ex, s4 :|
+    var s1, s2, s4 :|
         preEntryEnter(s, s1, sd, dp, a1, a2, a3)
         && entryTransition(s1, s2)
-        && userspaceExecutionAndException(s2, s3, ex, s4)
+        && userspaceExecutionAndException(s2, s4)
         && validExceptionTransition(SysState(s4, sd), SysState(r1, rd), dp)
         && (r1.regs[R0], r1.regs[R1], rd) == exceptionHandled(s4, sd, dp);
 
@@ -501,10 +501,10 @@ lemma lemma_validResumePost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, d
     reveal_validResume();
     reveal_ValidRegState();
 
-    var s1, s2, s3, ex, s4 :|
+    var s1, s2, s4 :|
         preEntryResume(s, s1, sd, dp)
         && entryTransition(s1, s2)
-        && userspaceExecutionAndException(s2, s3, ex, s4)
+        && userspaceExecutionAndException(s2, s4)
         && validExceptionTransition(SysState(s4, sd), SysState(r1, rd), dp)
         && (r1.regs[R0], r1.regs[R1], rd) == exceptionHandled(s4, sd, dp);
 
