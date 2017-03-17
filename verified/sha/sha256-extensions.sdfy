@@ -181,35 +181,73 @@ ensures
 //                      AddrMemContents(mem, old(r0) + 6*4),
 //                      AddrMemContents(mem, old(r0) + 7*4))
 {
+    ghost var length := r1;
     SUB(sp, sp, 64);      // Make room for the final 256-bit input buffer
 
-    STR(0x80, sp, 0);
+    //STR(0x80, sp, 0);
+    STR(0x80, sp, const(0*WORDSIZE));
 
     // Fill sp buffer with 0s
-    STR(0, sp,  4); 
-    STR(0, sp,  8);
-    STR(0, sp, 16);
-    STR(0, sp, 20);
-    STR(0, sp, 24);
-    STR(0, sp, 28);
-    STR(0, sp, 32);
-    STR(0, sp, 36);
-    STR(0, sp, 40);
-    STR(0, sp, 44);
-    STR(0, sp, 48);
-    STR(0, sp, 52);
-    STR(0, sp, 56);
+    STR(0, sp,  const(1*WORDSIZE)); 
+    STR(0, sp,  const(2*WORDSIZE)); 
+    STR(0, sp,  const(3*WORDSIZE)); 
+    STR(0, sp,  const(4*WORDSIZE)); 
+    STR(0, sp,  const(5*WORDSIZE)); 
+    STR(0, sp,  const(6*WORDSIZE)); 
+    STR(0, sp,  const(7*WORDSIZE)); 
+    STR(0, sp,  const(8*WORDSIZE)); 
+    STR(0, sp,  const(9*WORDSIZE)); 
+    STR(0, sp,  const(10*WORDSIZE)); 
+    STR(0, sp,  const(11*WORDSIZE)); 
+    STR(0, sp,  const(12*WORDSIZE)); 
+    STR(0, sp,  const(13*WORDSIZE)); 
+    STR(0, sp,  const(14*WORDSIZE)); 
+//    STR(0, sp,  4); 
+//    STR(0, sp,  8);
+//    STR(0, sp, 16);
+//    STR(0, sp, 20);
+//    STR(0, sp, 24);
+//    STR(0, sp, 28);
+//    STR(0, sp, 32);
+//    STR(0, sp, 36);
+//    STR(0, sp, 40);
+//    STR(0, sp, 44);
+//    STR(0, sp, 48);
+//    STR(0, sp, 52);
+//    STR(0, sp, 56);
 
     // Store the length
-    STR(r1, sp, 60);
+    //STR(r1, sp, 60);
+    STR(r1, sp, const(15*WORDSIZE));
+
+    assert AddrMemContents(mem, sp + 15*WORDSIZE) == length;
 
     // Parameters to sha256_block_data_order
     // r0 is already set to ctx
-    MOV(sp, r1);    // input_ptr
-    MOV(1, r2);     // num_blocks
+    MOV(r1, sp);    // input_ptr
+    MOV(r2, 1);     // num_blocks
 
     // Compute one last compression
-    ghost var last_block := seq(0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, r1);
+    ghost var last_block := seq(0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, length);
+
+    assert AddrMemContents(mem, r1 + 0*WORDSIZE ) == last_block[0];
+    assert AddrMemContents(mem, r1 + 1*WORDSIZE ) == last_block[1];
+    assert AddrMemContents(mem, r1 + 2*WORDSIZE ) == last_block[2];
+    assert AddrMemContents(mem, r1 + 3*WORDSIZE ) == last_block[3];
+    assert AddrMemContents(mem, r1 + 4*WORDSIZE ) == last_block[4];
+    assert AddrMemContents(mem, r1 + 5*WORDSIZE ) == last_block[5];
+    assert AddrMemContents(mem, r1 + 6*WORDSIZE ) == last_block[6];
+    assert AddrMemContents(mem, r1 + 7*WORDSIZE ) == last_block[7];
+    assert AddrMemContents(mem, r1 + 8*WORDSIZE ) == last_block[8];
+    assert AddrMemContents(mem, r1 + 9*WORDSIZE ) == last_block[9];
+    assert AddrMemContents(mem, r1 + 10*WORDSIZE ) == last_block[10];
+    assert AddrMemContents(mem, r1 + 11*WORDSIZE ) == last_block[11];
+    assert AddrMemContents(mem, r1 + 12*WORDSIZE ) == last_block[12];
+    assert AddrMemContents(mem, r1 + 13*WORDSIZE ) == last_block[13];
+    assert AddrMemContents(mem, r1 + 14*WORDSIZE ) == last_block[14];
+    assert AddrMemContents(mem, r1 + 15*WORDSIZE ) == last_block[15];
+
+
     sha256_block_data_order(trace_in, last_block);
 
     // Probably need to call lemma_SHA256FinalHelper1 here
