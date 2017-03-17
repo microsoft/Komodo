@@ -71,9 +71,9 @@ lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
         if l1e.Just? {
             var l2p := l1e.v;
             assert validL1PTE(d, l2p);
-            assert absl1pte.Just?;
             calc {
                 ExtractAbsL1PTable(s, l1base)[k];
+                { assert absl1pte.Just?; }
                 Just(ExtractAbsL2PTable(s, absl1pte.v + KOM_DIRECTMAP_VBASE));
                 {
                     assert absl1pte.v + KOM_DIRECTMAP_VBASE
@@ -81,9 +81,11 @@ lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
                     reveal_l2tablesmatch_opaque();
                 }
                 Just(mkAbsL2PTable(d[l2p].entry, j));
+                { reveal_mkAbsPTable(); }
                 mkAbsPTable(d, l1p)[k];
             }
         } else {
+            reveal_mkAbsPTable();
             assert mkAbsL1PTE(l1e, j) == Nothing;
             assert mkAbsPTable(d, l1p)[k] == Nothing;
         }
@@ -252,7 +254,7 @@ function mkAbsPTable'(d:PageDb, l1e:Maybe<PageNr>): seq<Maybe<AbsL2PTable>>
          Just(mkAbsL2PTable(e, 2)), Just(mkAbsL2PTable(e, 3))]
 }
 
-function mkAbsPTable(d:PageDb, l1:PageNr): AbsPTable
+function {:opaque} mkAbsPTable(d:PageDb, l1:PageNr): AbsPTable
     requires PhysBase() == KOM_DIRECTMAP_VBASE
     requires validPageDb(d)
     requires nonStoppedL1(d, l1)
@@ -286,6 +288,7 @@ lemma lemma_WritablePages(d:PageDb, l1p:PageNr, pagebase:addr)
         && abspt[i].Just? && abspt[i].v[j].Just? && abspt[i].v[j].v.write
         && pagebase == abspt[i].v[j].v.phys + PhysBase();
     var p := monvaddr_page(pagebase);
+    reveal_mkAbsPTable();
     assert p == (abspt[i].v[j].v.phys - SecurePhysBase()) / PAGESIZE;
     var n := i / 4;
     assert l1pt[n].Just?;
