@@ -1,6 +1,5 @@
 include "kom_common.s.dfy"
 include "pagedb.s.dfy"
-include "entry.s.dfy"
 
 // I spent a lot of time trying to use the things in Seq.dfy, but because of 
 // the requirements pertaining to addresses (e.g., they have to be in 
@@ -11,7 +10,7 @@ include "entry.s.dfy"
 // Proving termination for this thing seems very finicky
 // so this stuff is in its own file.
 
-function addrRangeSeq(l: addr, r: addr) : seq<addr>
+function {:opaque} addrRangeSeq(l: addr, r: addr) : seq<addr>
     requires isUInt32(l) && WordAligned(l) &&
         isUInt32(r) && WordAligned(r)
     requires l <= r
@@ -27,6 +26,7 @@ function addrRangeSeq(l: addr, r: addr) : seq<addr>
     if l == r then [] else [l] + addrRangeSeq(l+WORDSIZE,r)
 }
 
+// FIXME: make this true via kom_common.s, not as an axiom!
 predicate {:axiom} insecurePagesAreValid(physPage: word, base: addr)
     requires physPageIsInsecureRam(physPage)
     requires base == physPage * PAGESIZE + KOM_DIRECTMAP_VBASE
@@ -40,11 +40,20 @@ function addrsInPhysPage(physPage: word, base: addr) : seq<addr>
         a in TheValidAddresses()
 {
     // Not sure why I have to assume an axiom and can't assert it.
+    // FIXME
     assume insecurePagesAreValid(physPage, base);
     addrRangeSeq(base,base+PAGESIZE)
 }
 
-function addrSeqToContents(s:seq<addr>, mem:memmap) : seq<word>
+function addrsInPage(page: PageNr, base: addr) : seq<addr>
+    requires base == page_monvaddr(page)
+    requires SaneConstants()
+    ensures forall a : addr | a in addrsInPage(page, base) :: a in TheValidAddresses()
+{
+    addrRangeSeq(base, base+PAGESIZE)
+}
+
+function {:opaque} addrSeqToContents(s:seq<addr>, mem:memmap) : seq<word>
     requires ValidAddrMemState(mem)
     requires forall a : addr | a in s :: a in TheValidAddresses()
     ensures |addrSeqToContents(s,mem)| == |s|

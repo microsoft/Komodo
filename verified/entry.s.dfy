@@ -1,6 +1,6 @@
 include "ARMdef.dfy"
 include "pagedb.s.dfy"
-include "abstate.s.dfy"
+include "addrseq.dfy"
 
 predicate nonStoppedL1(d:PageDb, l1:PageNr)
 {
@@ -46,69 +46,109 @@ function securePageFromPhysAddr(phys:int): PageNr
     (phys - SecurePhysBase()) / PAGESIZE
 }
 
+function contentsOfPage(s: state, p: PageNr) : seq<word>
+    requires ValidState(s) && SaneConstants()
+    ensures |contentsOfPage(s, p)| == PAGESIZE / WORDSIZE
+{
+    reveal_ValidMemState();
+    var mem := s.m.addresses;
+    var base := page_monvaddr(p);
+    assert |addrRangeSeq(base,base+PAGESIZE)| == PAGESIZE / WORDSIZE;
+    addrSeqToContents(addrsInPage(p, base), mem)
+}
+
+function updateUserPageFromState(s:state, d:PageDb, p:PageNr): PageDbEntry
+    requires ValidState(s) && validPageDb(d) && SaneConstants()
+    requires d[p].PageDbEntryTyped? && d[p].entry.DataPage?
+{
+    d[p].(entry := d[p].entry.(contents := contentsOfPage(s, p)))
+}
+
+function updateUserPagesFromState'(s:state, d:PageDb, dispPg:PageNr): PageDb
+    requires ValidState(s) && validPageDb(d) && SaneConstants()
+    requires validDispatcherPage(d, dispPg) && !hasStoppedAddrspace(d, dispPg)
+{
+    var l1p := l1pOfDispatcher(d, dispPg);
+    imap p:PageNr :: if pageSWrInAddrspace(d, l1p, p)
+        then updateUserPageFromState(s, d, p) else d[p]
+}
+
+lemma lemma_updateUserPagesFromState_validPageDb(s:state, d:PageDb, dispPg:PageNr)
+    requires ValidState(s) && validPageDb(d) && SaneConstants()
+    requires validDispatcherPage(d, dispPg) && !hasStoppedAddrspace(d, dispPg)
+    ensures validPageDb(updateUserPagesFromState'(s, d, dispPg))
+{
+    var d' := updateUserPagesFromState'(s, d, dispPg);
+    reveal_validPageDb();
+    forall (p:PageNr)
+        ensures validPageDbEntry(d', p)
+    {
+        assert addrspaceRefs(d', p) == addrspaceRefs(d, p);
+        assert validPageDbEntry(d, p) && validPageDbEntry(d', p);
+    }
+    assert pageDbEntriesValid(d');
+}
+
+function updateUserPagesFromState(s:state, d:PageDb, dispPg:PageNr): PageDb
+    requires ValidState(s) && validPageDb(d) && SaneConstants()
+    requires validDispatcherPage(d, dispPg) && !hasStoppedAddrspace(d, dispPg)
+    ensures validPageDb(updateUserPagesFromState(s, d, dispPg))
+{
+    lemma_updateUserPagesFromState_validPageDb(s, d, dispPg);
+    updateUserPagesFromState'(s, d, dispPg)
+}
+
 predicate {:opaque} validEnclaveExecution(s1:state, d1:PageDb,
     s:state, d:PageDb, dispPg:PageNr, steps:nat)
-    requires ValidState(s1) && validPageDb(d1) && validDispatcherPage(d1, dispPg)
+    requires ValidState(s1) && validPageDb(d1) && SaneConstants()
+    requires validDispatcherPage(d1, dispPg) && !hasStoppedAddrspace(d1, dispPg)
     decreases steps
 {
     reveal_ValidRegState();
     reveal_validExceptionTransition();
     var retToEnclave := (steps > 0);
-    exists s2, s4, s5 ::
+    exists s2, s4, s5, d4 ::
         entryTransition(s1, s2)
         && userspaceExecutionAndException(s2, s4)
+        && d4 == updateUserPagesFromState(s4, d1, dispPg)
         && isReturningSvc(s4) == retToEnclave
         && (if retToEnclave then
             var lr := OperandContents(s4, OLR);
-            var retRegs := svcHandled(s4, d1, dispPg);
-            validExceptionTransition(SysState(s4, d1), SysState(s5, d1), dispPg)
+            var retRegs := svcHandled(s4, d4, dispPg);
+            validExceptionTransition(s4, d1, s5, d1, dispPg)
             && preEntryReturn(s5, lr, retRegs)
             && validEnclaveExecution(s5, d1, s, d, dispPg, steps - 1)
         else
-            validExceptionTransition(SysState(s4, d1), SysState(s, d), dispPg)
+            validExceptionTransition(s4, d1, s, d, dispPg)
             && (s.regs[R0], s.regs[R1], d) == exceptionHandled(s4, d1, dispPg))
 }
 
-predicate {:opaque} validEnter(s:SysState,s':SysState,
-    dispPg:word,a1:word,a2:word,a3:word)
-    requires validSysState(s)
-    requires smc_enter_err(s.d, dispPg, false) == KOM_ERR_SUCCESS
-{
-    exists s1, steps:nat :: preEntryEnter(s.hw, s1, s.d, dispPg, a1, a2, a3)
-        && validEnclaveExecution(s1, s.d, s'.hw, s'.d, dispPg, steps)
-}
-
-predicate {:opaque} validResume(s:SysState,s':SysState,dispPg:word)
-    requires validSysState(s)
-    requires smc_enter_err(s.d, dispPg, true) == KOM_ERR_SUCCESS
-{
-    exists s1, steps:nat :: preEntryResume(s.hw, s1, s.d, dispPg)
-        && validEnclaveExecution(s1, s.d, s'.hw, s'.d, dispPg, steps)
-}
-
 predicate smc_enter(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb,
-                    dispPage: word, arg1: word, arg2: word, arg3: word)
+                    dispPg: word, arg1: word, arg2: word, arg3: word)
     requires ValidState(s) && validPageDb(pageDbIn) && ValidState(s')
+    requires SaneConstants()
 {
     reveal_ValidRegState();
-    var err := smc_enter_err(pageDbIn, dispPage, false);
+    var err := smc_enter_err(pageDbIn, dispPg, false);
     if err != KOM_ERR_SUCCESS then
         pageDbOut == pageDbIn && s'.regs[R0] == err && s'.regs[R1] == 0
     else
-        validEnter(SysState(s, pageDbIn), SysState(s', pageDbOut), dispPage,
-                   arg1, arg2, arg3)
+        exists s1, steps:nat :: preEntryEnter(s, s1, pageDbIn, dispPg, arg1, arg2, arg3)
+            && validEnclaveExecution(s1, pageDbIn, s', pageDbOut, dispPg, steps)
 }
 
 predicate smc_resume(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb,
-                     dispPage: word)
+                     dispPg: word)
     requires ValidState(s) && validPageDb(pageDbIn) && ValidState(s')
+    requires SaneConstants()
 {
     reveal_ValidRegState();
-    var err := smc_enter_err(pageDbIn, dispPage, true);
+    var err := smc_enter_err(pageDbIn, dispPg, true);
     if err != KOM_ERR_SUCCESS then
         pageDbOut == pageDbIn && s'.regs[R0] == err && s'.regs[R1] == 0
     else
-        validResume(SysState(s, pageDbIn), SysState(s', pageDbOut), dispPage)
+        exists s1, steps:nat :: preEntryResume(s, s1, pageDbIn, dispPg)
+            && validEnclaveExecution(s1, pageDbIn, s', pageDbOut, dispPg, steps)
 }
 
 predicate preEntryEnter(s:state,s':state,d:PageDb,
@@ -139,7 +179,6 @@ predicate preEntryEnter(s:state,s':state,d:PageDb,
     OperandContents(s', OLR) == d[dispPage].entry.entrypoint &&
     (reveal_ValidSRegState();
     s'.sregs[spsr(mode_of_state(s'))] == 0x10 /* XXX: Usermode PSR */)
-    // TODO (more generally than just entry!): we didn't scribble on any user memory
 }
 
 predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
@@ -180,8 +219,6 @@ predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
 
     (reveal_ValidSRegState();
     s'.sregs[spsr(Monitor)] == disp.ctxt.cpsr)
-
-    // TODO (more generally than just entry!): we didn't scribble on any user memory
 }
 
 predicate preEntryReturn(s:state,lr:word,regs:SvcReturnRegs)
@@ -249,7 +286,7 @@ function svcHandled(s:state, d:PageDb, dispPg:PageNr): SvcReturnRegs
 function exceptionHandled(s:state, d:PageDb, dispPg:PageNr): (word, word, PageDb)
     requires validPageDb(d) && validDispatcherPage(d, dispPg)
     requires ValidState(s) && mode_of_state(s) != User
-    requires !isReturningSvc(s)
+    //requires !isReturningSvc(s)
     ensures var (r0, r1, d') := exceptionHandled(s, d, dispPg);
         wellFormedPageDb(d')
 {
@@ -276,16 +313,17 @@ function exceptionHandled(s:state, d:PageDb, dispPg:PageNr): (word, word, PageDb
     )
 }
 
-predicate {:opaque} validExceptionTransition(s:SysState, s':SysState, dispPg: word)
-    ensures validExceptionTransition(s,s',dispPg) ==>
-        validSysState(s) && validSysState(s')
+predicate {:opaque} validExceptionTransition(s:state, d:PageDb, s':state,
+                                             d':PageDb, dispPg: word)
+    ensures validExceptionTransition(s,d,s',d',dispPg) ==>
+        ValidState(s) && ValidState(s') && validPageDb(d) && validPageDb(d')
 {
-    validSysState(s) && validSysState(s')
-    && mode_of_state(s'.hw) == Monitor
-    && (s.d == s'.d || (
-        validPageNr(dispPg) && validDispatcherPage(s.d, dispPg)
-        && equivalentExceptPage(s.d, s'.d, dispPg)
-        && nonStoppedDispatcher(s'.d, dispPg)))
+    ValidState(s) && ValidState(s') && validPageDb(d) && validPageDb(d')
+    && mode_of_state(s') == Monitor
+    && (d == d' || (
+        validPageNr(dispPg) && validDispatcherPage(d, dispPg)
+        && equivalentExceptPage(d, d', dispPg)
+        && nonStoppedDispatcher(d', dispPg)))
     // TODO: we didn't scribble on user memory
 }
 

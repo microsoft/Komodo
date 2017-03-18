@@ -259,7 +259,7 @@ function smc_remove(pageDbIn: PageDb, page: word)
 function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,
     mapping: word, physPage: word, contents: Maybe<seq<word>>) : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
-    requires physPageIsInsecureRam(physPage) ==> contents.Just?
+    requires physPage != 0 && physPageIsInsecureRam(physPage) ==> contents.Just?
     requires contents.Just? ==> |fromJust(contents)| == PAGESIZE / WORDSIZE
 {
     reveal_validPageDb();
@@ -272,7 +272,7 @@ function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,
             var abs_mapping := wordToMapping(mapping);
             // Check physPage (which is optionally used to populate
             // the initial contents of the secure page) for validity
-            if (!physPageIsInsecureRam(physPage) && !(physPage == 0)) then
+            if (physPage != 0 && !physPageIsInsecureRam(physPage)) then
                 (pageDbIn, KOM_ERR_INVALID_PAGENO)
             else
                 var contents_ := (if(physPage == 0) then
@@ -336,10 +336,10 @@ function smc_stop(pageDbIn: PageDb, addrspacePage: word)
         (d', KOM_ERR_SUCCESS)
 }
 
-function contentsOfPage_(s: state, physPage: word) : seq<word>
+function contentsOfPhysPage(s: state, physPage: word) : seq<word>
     requires ValidState(s)
     requires physPageIsInsecureRam(physPage)
-    ensures |contentsOfPage_(s, physPage)| == PAGESIZE / WORDSIZE
+    ensures |contentsOfPhysPage(s, physPage)| == PAGESIZE / WORDSIZE
 {
     reveal_ValidMemState();
     var mem := s.m.addresses;
@@ -348,22 +348,11 @@ function contentsOfPage_(s: state, physPage: word) : seq<word>
     addrSeqToContents(addrsInPhysPage(physPage, base), mem)
 }
 
-function contentsOfPage(s: state, physPage: word) : Maybe<seq<word>>
-    requires ValidState(s)
-    ensures physPageIsInsecureRam(physPage) ==> contentsOfPage(s,physPage).Just?
-    ensures physPageIsInsecureRam(physPage) ==> 
-        |fromJust(contentsOfPage(s, physPage))| == PAGESIZE / WORDSIZE
-{
-    if(physPageIsInsecureRam(physPage)) then
-        Just(contentsOfPage_(s, physPage))
-    else Nothing
-}
-
 //=============================================================================
 // Behavioral Specification of SMC Handler
 //=============================================================================
 predicate smchandler(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb)
-    requires ValidState(s) && validPageDb(pageDbIn)
+    requires ValidState(s) && validPageDb(pageDbIn) && SaneConstants()
 {
     ValidState(s') && (reveal_ValidRegState();
     var callno, arg1, arg2, arg3, arg4
@@ -381,8 +370,9 @@ predicate smchandler(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb)
     else if callno == KOM_SMC_INIT_L2PTABLE then
         (pageDbOut, err) == smc_initL2PTable(pageDbIn, arg1, arg2, arg3) && val == 0
     else if callno == KOM_SMC_MAP_SECURE then
-        (pageDbOut, err) == smc_mapSecure(pageDbIn, arg1, arg2, arg3, arg4, 
-            contentsOfPage(s, arg4)) && val == 0
+        var pg := if arg4 == 0 || !physPageIsInsecureRam(arg4)
+            then Nothing else Just(contentsOfPhysPage(s, arg4));
+        (pageDbOut, err) == smc_mapSecure(pageDbIn, arg1, arg2, arg3, arg4, pg) && val == 0
     else if callno == KOM_SMC_MAP_INSECURE then
         (pageDbOut, err) == smc_mapInsecure(pageDbIn, arg1, arg2, arg3) && val == 0
     else if callno == KOM_SMC_REMOVE then
