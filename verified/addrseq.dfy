@@ -30,14 +30,12 @@ function {:opaque} addrRangeSeq(l: addr, r: addr) : seq<addr>
 predicate {:axiom} insecurePagesAreValid(physPage: word, base: addr)
     requires physPageIsInsecureRam(physPage)
     requires base == physPage * PAGESIZE + KOM_DIRECTMAP_VBASE
-    ensures forall a : addr | base <= a <= base + PAGESIZE ::
-        a in TheValidAddresses()
+    ensures forall a : addr | base <= a < base + PAGESIZE :: ValidMem(a)
 
 function addrsInPhysPage(physPage: word, base: addr) : seq<addr>
     requires physPageIsInsecureRam(physPage)
     requires base == physPage * PAGESIZE + KOM_DIRECTMAP_VBASE
-    ensures forall a : addr | a in addrsInPhysPage(physPage, base) ::
-        a in TheValidAddresses()
+    ensures forall a : addr | a in addrsInPhysPage(physPage, base) :: ValidMem(a)
 {
     // Not sure why I have to assume an axiom and can't assert it.
     // FIXME
@@ -48,16 +46,17 @@ function addrsInPhysPage(physPage: word, base: addr) : seq<addr>
 function addrsInPage(page: PageNr, base: addr) : seq<addr>
     requires base == page_monvaddr(page)
     requires SaneConstants()
-    ensures forall a : addr | a in addrsInPage(page, base) :: a in TheValidAddresses()
+    ensures forall a : addr | a in addrsInPage(page, base) :: ValidMem(a)
 {
     addrRangeSeq(base, base+PAGESIZE)
 }
 
-function {:opaque} addrSeqToContents(s:seq<addr>, mem:memmap) : seq<word>
-    requires ValidAddrMemState(mem)
-    requires forall a : addr | a in s :: a in TheValidAddresses()
-    ensures |addrSeqToContents(s,mem)| == |s|
+function {:opaque} addrSeqToContents(s:seq<addr>, ms:memstate) : seq<word>
+    requires ValidMemState(ms)
+    requires forall a : addr | a in s :: ValidMem(a)
+    ensures |addrSeqToContents(s, ms)| == |s|
+    ensures forall i | 0 <= i < |s| :: addrSeqToContents(s, ms)[i] == MemContents(ms, s[i])
 {
    if |s| == 0 then []
-   else [mem[s[0]]] + addrSeqToContents(s[1..], mem)
+   else [MemContents(ms, s[0])] + addrSeqToContents(s[1..], ms)
 }

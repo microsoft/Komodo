@@ -14,7 +14,7 @@ predicate nonStoppedDispatcher(d:PageDb, p:PageNr)
 }
 
 function l1pOfDispatcher(d:PageDb, p:PageNr) : PageNr
-    requires validDispatcherPage(d, p) && !hasStoppedAddrspace(d, p)
+    requires nonStoppedDispatcher(d, p)
     ensures  nonStoppedL1(d,l1pOfDispatcher(d,p))
 {
     reveal_validPageDb();
@@ -50,11 +50,9 @@ function contentsOfPage(s: state, p: PageNr) : seq<word>
     requires ValidState(s) && SaneConstants()
     ensures |contentsOfPage(s, p)| == PAGESIZE / WORDSIZE
 {
-    reveal_ValidMemState();
-    var mem := s.m.addresses;
     var base := page_monvaddr(p);
     assert |addrRangeSeq(base,base+PAGESIZE)| == PAGESIZE / WORDSIZE;
-    addrSeqToContents(addrsInPage(p, base), mem)
+    addrSeqToContents(addrsInPage(p, base), s.m)
 }
 
 function updateUserPageFromState(s:state, d:PageDb, p:PageNr): PageDbEntry
@@ -66,7 +64,7 @@ function updateUserPageFromState(s:state, d:PageDb, p:PageNr): PageDbEntry
 
 function updateUserPagesFromState'(s:state, d:PageDb, dispPg:PageNr): PageDb
     requires ValidState(s) && validPageDb(d) && SaneConstants()
-    requires validDispatcherPage(d, dispPg) && !hasStoppedAddrspace(d, dispPg)
+    requires nonStoppedDispatcher(d, dispPg)
 {
     var l1p := l1pOfDispatcher(d, dispPg);
     imap p:PageNr :: if pageSWrInAddrspace(d, l1p, p)
@@ -75,7 +73,7 @@ function updateUserPagesFromState'(s:state, d:PageDb, dispPg:PageNr): PageDb
 
 lemma lemma_updateUserPagesFromState_validPageDb(s:state, d:PageDb, dispPg:PageNr)
     requires ValidState(s) && validPageDb(d) && SaneConstants()
-    requires validDispatcherPage(d, dispPg) && !hasStoppedAddrspace(d, dispPg)
+    requires nonStoppedDispatcher(d, dispPg)
     ensures validPageDb(updateUserPagesFromState'(s, d, dispPg))
 {
     var d' := updateUserPagesFromState'(s, d, dispPg);
@@ -89,9 +87,9 @@ lemma lemma_updateUserPagesFromState_validPageDb(s:state, d:PageDb, dispPg:PageN
     assert pageDbEntriesValid(d');
 }
 
-function updateUserPagesFromState(s:state, d:PageDb, dispPg:PageNr): PageDb
+function {:opaque} updateUserPagesFromState(s:state, d:PageDb, dispPg:PageNr): PageDb
     requires ValidState(s) && validPageDb(d) && SaneConstants()
-    requires validDispatcherPage(d, dispPg) && !hasStoppedAddrspace(d, dispPg)
+    requires nonStoppedDispatcher(d, dispPg)
     ensures validPageDb(updateUserPagesFromState(s, d, dispPg))
 {
     lemma_updateUserPagesFromState_validPageDb(s, d, dispPg);
@@ -101,26 +99,28 @@ function updateUserPagesFromState(s:state, d:PageDb, dispPg:PageNr): PageDb
 predicate {:opaque} validEnclaveExecution(s1:state, d1:PageDb,
     s:state, d:PageDb, dispPg:PageNr, steps:nat)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
-    requires validDispatcherPage(d1, dispPg) && !hasStoppedAddrspace(d1, dispPg)
+    requires nonStoppedDispatcher(d1, dispPg)
     decreases steps
 {
     reveal_ValidRegState();
     reveal_validExceptionTransition();
+    reveal_updateUserPagesFromState();
     var retToEnclave := (steps > 0);
-    exists s2, s4, s5, d4 ::
+    exists s2, s4, d4, s5, d5 ::
         entryTransition(s1, s2)
         && userspaceExecutionAndException(s2, s4)
         && d4 == updateUserPagesFromState(s4, d1, dispPg)
+        && validExceptionTransition(s4, d4, s5, d5, dispPg)
         && isReturningSvc(s4) == retToEnclave
         && (if retToEnclave then
             var lr := OperandContents(s4, OLR);
             var retRegs := svcHandled(s4, d4, dispPg);
-            validExceptionTransition(s4, d1, s5, d1, dispPg)
+            d4 == d5
             && preEntryReturn(s5, lr, retRegs)
-            && validEnclaveExecution(s5, d1, s, d, dispPg, steps - 1)
+            && validEnclaveExecution(s5, d5, s, d, dispPg, steps - 1)
         else
-            validExceptionTransition(s4, d1, s, d, dispPg)
-            && (s.regs[R0], s.regs[R1], d) == exceptionHandled(s4, d1, dispPg))
+            s5 == s && d5 == d
+            && (s.regs[R0], s.regs[R1], d) == exceptionHandled(s4, d4, dispPg))
 }
 
 predicate smc_enter(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb,
@@ -338,8 +338,7 @@ predicate WSMemInvariantExceptAddrspaceAtPage(hw:state, hw':state,
 
 // Is the page secure, writeable, and in the L1PT
 predicate pageSWrInAddrspace(d:PageDb, l1p:PageNr, p:PageNr)
-    requires validPageNr(p) && validL1PTPage(d, l1p)
-    requires (validPageDbImpliesWellFormed(d); !hasStoppedAddrspace(d, l1p))
+    requires validPageNr(p) && nonStoppedL1(d, l1p)
 {
     reveal_validPageDb();
     !hasStoppedAddrspace(d, l1p) && 
