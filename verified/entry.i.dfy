@@ -4,27 +4,25 @@ include "psrbits.i.dfy"
 
 // what do we know between the start and end of the exception handler
 // (after evalExceptionTaken, until the continuation)?
-predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr, steps:nat)
+predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr)
     requires ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
     requires validPageDb(sd) && pageDbCorresponds(s.m, sd)
     requires nonStoppedDispatcher(sd, dp)
-    requires steps > 0 <==> isReturningSvc(s)
 {
     reveal_ValidRegState();
-    var d' := updateUserPagesFromState(s, sd, dp);
-    assert nonStoppedDispatcher(d', dp) by { reveal_updateUserPagesFromState(); }
-    var rd := if steps == 0 then exceptionHandled(s, d', dp).2 else d';
-    validExceptionTransition(s, d', r, rd, dp)
+    var retToEnclave := isReturningSvc(s);
+    var rd := if retToEnclave then sd else exceptionHandled(s, sd, dp).2;
+    validExceptionTransition(s, sd, r, rd, dp)
     && SaneState(r)
     && StackPreserving(s, r)
     && (forall a:addr | ValidMem(a) && !(StackLimit() <= a < StackBase()) &&
         !addrInPage(a, dp) :: MemContents(s.m, a) == MemContents(r.m, a))
     && GlobalsInvariant(s, r)
     && pageDbCorresponds(r.m, rd)
-    && (if steps == 0 then (r.regs[R0], r.regs[R1], rd) == exceptionHandled(s, d', dp)
-    else var lr := OperandContents(s, OLR);
-    var retRegs := svcHandled(s, d', dp);
-            preEntryReturn(r, lr, retRegs))
+    && (r.regs[R12] == 0 <==> retToEnclave)
+    && (if retToEnclave
+       then preEntryReturn(r, OperandContents(s, OLR), svcHandled(s, sd, dp))
+       else (r.regs[R0], r.regs[R1], rd) == exceptionHandled(s, sd, dp))
 }
 
 predicate {:opaque} AUCIdef()
@@ -36,21 +34,18 @@ predicate {:opaque} AUCIdef()
             && validPageDb(sd) && pageDbCorresponds(s.m, sd)
             && nonStoppedDispatcher(sd, dp)
         :: ApplicationUsermodeContinuationInvariant(s, r)
-        ==> exists steps:nat :: (steps > 0 <==> isReturningSvc(s))
-            && KomExceptionHandlerInvariant(s, sd, r, dp, steps)
+        ==> KomExceptionHandlerInvariant(s, sd, r, dp)
 }
 
-lemma lemma_AUCIdef(s:state, r:state, d:PageDb, dp:PageNr) returns (steps:nat)
+lemma lemma_AUCIdef(s:state, r:state, d:PageDb, dp:PageNr)
     requires SaneConstants() && AUCIdef()
     requires ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
         && validPageDb(d) && pageDbCorresponds(s.m, d)
         && nonStoppedDispatcher(d, dp)
     requires ApplicationUsermodeContinuationInvariant(s, r)
-    ensures steps > 0 <==> isReturningSvc(s)
-    ensures KomExceptionHandlerInvariant(s, d, r, dp, steps)
+    ensures KomExceptionHandlerInvariant(s, d, r, dp)
 {
     reveal_AUCIdef();
-    steps :| steps > 0 <==> isReturningSvc(s);
 }
 
 lemma exceptionHandledValidPageDb(us:state, ex:exception, s:state, d:PageDb, dispPg:PageNr)
@@ -248,7 +243,6 @@ lemma userspaceExecutionUpdatesPageDb(d:PageDb, s:state, s':state, dispPg:PageNr
         reveal_pageDbEntryCorresponds();
         lemma_updateUserPagesFromState(s', d, d', dispPg, p);
     }
-    assert {:split_here} true;
 
     forall ( p | validPageNr(p) )
         ensures pageContentsCorresponds(p, d'[p], extractPage(s'.m, p));
@@ -363,7 +357,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, r:state, d:PageDb, dp:PageNr)
     var d' := updateUserPagesFromState(s3, d, dp);
     assert nonStoppedDispatcher(d', dp) by { reveal_updateUserPagesFromState(); }
     exceptionTakenPreservesStuff(d', s3, ex, s4);
-    var steps := lemma_AUCIdef(s4, r, d', dp);
+    lemma_AUCIdef(s4, r, d', dp);
 
     calc {
         OperandContents(s, OSP);
@@ -383,23 +377,18 @@ lemma lemma_evalMOVSPCLRUC(s:state, r:state, d:PageDb, dp:PageNr)
     }
 }
 
-lemma lemma_validEnclaveExecution(s1:state, sd:PageDb, r:state, dispPg:PageNr)
-    returns (exs:state, rd:PageDb, steps:nat)
+lemma lemma_validEnclaveExecutionStep(s1:state, sd:PageDb, r:state, dispPg:PageNr)
+    returns (exs:state, rd:PageDb, retToEnclave:bool)
     requires SaneState(s1)
     requires validPageDb(sd) && pageDbCorresponds(s1.m, sd)
     requires nonStoppedDispatcher(sd, dispPg)
+    requires s1.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(sd, dispPg))
     requires evalMOVSPCLRUC(s1, r)
     requires AUCIdef()
     ensures ValidState(exs) && mode_of_state(exs) != User
-    ensures (reveal_ValidRegState();
-        (r.regs[R0], r.regs[R1], rd) == exceptionHandled(exs, sd, dispPg))
     ensures validPageDb(rd) && SaneMem(r.m) && pageDbCorresponds(r.m, rd)
-    ensures validEnclaveExecution(s1, sd, r, rd, dispPg, steps)
+    ensures validEnclaveExecutionStep(s1, sd, r, rd, dispPg, retToEnclave)
 {
-    assume false;
-    assert nonStoppedDispatcher(sd, dispPg);
-    var l1p := l1pOfDispatcher(sd, dispPg);
-
     reveal_evalMOVSPCLRUC();
     var s2, s3, ex, s4 :| 
         evalEnterUserspace(s1, s2)
@@ -408,25 +397,30 @@ lemma lemma_validEnclaveExecution(s1:state, sd:PageDb, r:state, dispPg:PageNr)
         && ApplicationUsermodeContinuationInvariant(s4, r);
 
     assert entryTransition(s1, s2);
-    lemma_evalExceptionTaken_NonUser(s3, ex, s4);
-    assert userspaceExecutionAndException(s2, s4)
-        by { reveal_evalUserspaceExecution(); }
-
     enterUserspacePreservesStuff(sd, s1,  s2);
+    lemma_evalExceptionTaken_NonUser(s3, ex, s4);
+    assert userspaceExecutionAndException(s2, s3, s4)
+        by { reveal_evalUserspaceExecution(); }
     userspaceExecutionPreservesPrivState(s2, s3);
     userspaceExecutionUpdatesPageDb(sd, s2, s3, dispPg);
-    exceptionTakenPreservesStuff(sd, s3, ex, s4);
-    steps := lemma_AUCIdef(s4, r, sd, dispPg);
 
     exs := s4;
-    rd := exceptionHandled(exs, sd, dispPg).2;
-    exceptionHandledValidPageDb(s3, ex, s4, sd, dispPg);
+    var d4 := updateUserPagesFromState(s3, sd, dispPg);
 
-    assert validExceptionTransition(s4, sd, r, rd, dispPg);
-    assert (reveal_ValidRegState();
-        (r.regs[R0], r.regs[R1], rd) == exceptionHandled(exs, sd, dispPg));
+    assert nonStoppedDispatcher(d4, dispPg)
+        by { reveal_updateUserPagesFromState(); }
+    exceptionTakenPreservesStuff(d4, s3, ex, s4);
+    lemma_AUCIdef(s4, r, d4, dispPg);
+    retToEnclave := isReturningSvc(s4);
 
-    reveal_validEnclaveExecution();
+    if retToEnclave {
+        rd := d4;
+    } else {
+        rd := exceptionHandled(s4, d4, dispPg).2;
+        exceptionHandledValidPageDb(s3, ex, s4, d4, dispPg);
+    }
+
+    reveal_validEnclaveExecutionStep();
 }
 /*
 lemma lemma_validEnter(s0:state, s1:state, r:state, sd:PageDb,

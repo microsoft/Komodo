@@ -96,31 +96,44 @@ function {:opaque} updateUserPagesFromState(s:state, d:PageDb, dispPg:PageNr): P
     updateUserPagesFromState'(s, d, dispPg)
 }
 
-predicate {:opaque} validEnclaveExecution(s1:state, d1:PageDb,
-    s:state, d:PageDb, dispPg:PageNr, steps:nat)
+predicate {:opaque} validEnclaveExecutionStep(s1:state, d1:PageDb,
+    rs:state, rd:PageDb, dispPg:PageNr, retToEnclave:bool)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
     requires nonStoppedDispatcher(d1, dispPg)
-    decreases steps
 {
     reveal_ValidRegState();
     reveal_validExceptionTransition();
     reveal_updateUserPagesFromState();
-    var retToEnclave := (steps > 0);
-    exists s2, s4, d4, s5, d5 ::
+    exists s2, s3, s4, d4 ::
         entryTransition(s1, s2)
-        && userspaceExecutionAndException(s2, s4)
-        && d4 == updateUserPagesFromState(s4, d1, dispPg)
-        && validExceptionTransition(s4, d4, s5, d5, dispPg)
+        && userspaceExecutionAndException(s2, s3, s4)
+        && d4 == updateUserPagesFromState(s3, d1, dispPg)
+        && validExceptionTransition(s4, d4, rs, rd, dispPg)
         && isReturningSvc(s4) == retToEnclave
         && (if retToEnclave then
             var lr := OperandContents(s4, OLR);
             var retRegs := svcHandled(s4, d4, dispPg);
-            d4 == d5
-            && preEntryReturn(s5, lr, retRegs)
-            && validEnclaveExecution(s5, d5, s, d, dispPg, steps - 1)
-        else
-            s5 == s && d5 == d
-            && (s.regs[R0], s.regs[R1], d) == exceptionHandled(s4, d4, dispPg))
+            d4 == rd && preEntryReturn(rs, lr, retRegs)
+          else
+            (rs.regs[R0], rs.regs[R1], rd) == exceptionHandled(s4, d4, dispPg))
+}
+
+predicate {:opaque} validEnclaveExecution(s1:state, d1:PageDb,
+    rs:state, rd:PageDb, dispPg:PageNr, steps:nat)
+    requires ValidState(s1) && validPageDb(d1) && SaneConstants()
+    requires nonStoppedDispatcher(d1, dispPg)
+    decreases steps
+{
+    reveal_validEnclaveExecutionStep();
+    reveal_validExceptionTransition();
+    reveal_updateUserPagesFromState();
+    var retToEnclave := (steps > 0);
+    exists s5, d5 ::
+        validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
+        && (if retToEnclave then
+            validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1)
+          else
+            rs == s5 && rd == d5)
 }
 
 predicate smc_enter(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb,
@@ -248,11 +261,11 @@ predicate entryTransition(s:state, s':state)
     evalEnterUserspace(s, s') && s'.steps == s.steps + 1
 }
 
-predicate userspaceExecutionAndException(s:state, r:state)
+predicate userspaceExecutionAndException(s:state, s':state, r:state)
     requires ValidState(s) && mode_of_state(s) == User
-    ensures userspaceExecutionAndException(s, r) ==> mode_of_state(r) != User
+    ensures userspaceExecutionAndException(s, s', r) ==> mode_of_state(r) != User
 {
-    exists s', ex ::
+    exists ex ::
     evalUserspaceExecution(s, s')
     && evalExceptionTaken(s', ex, r)
     && mode_of_state(r) != User // known, but we need a lemma to prove it
