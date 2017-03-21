@@ -377,7 +377,7 @@ ensures
    
     // Prove we updated the Ws correctly
     lemma_WsIncrement(old(mem), mem, trace_in, trace_out, sp, i, sp + 17*WORDSIZE, sp + input_slot);
-    assert { :split_here} true;
+    assert {:split_here}{:refined} true;
     assert ValidMem(sp + 16*WORDSIZE); // OBSERVE
     assert ValidMem(sp + 18*WORDSIZE); // OBSERVE
     assert AddrMemContents(mem, sp + 18*WORDSIZE) == AddrMemContents(old(mem), sp + 18*WORDSIZE);
@@ -717,6 +717,7 @@ ensures
                             t0, t1, t2, t3, t4, 
                             a, b, c, d, e, f, g, h);
     assert a == mid_a;
+    assert {:split_here}{:refined} true;
 }
 
 #verbatim
@@ -1391,30 +1392,20 @@ ensures
 
     // Save some of the initial state away.  We'll need it later.
     STR(r0, sp, const(16*WORDSIZE));
-    assert ValidMem(sp + 18*WORDSIZE);      // OBSERVE
     STR(r2, sp, const(18*WORDSIZE));
     // Move end_ptr into r12 to satisfy the BlockInvariant. 
     // Note: OpenSSL appears to avoid this by assuming num_blocks > 0
     MOV(r12, r2);  
 
-    // Lots of OBSERVE
-    assert ValidMem(r0 + 0*4);
-    assert ValidMem(r0 + 1*4);
-    assert ValidMem(r0 + 2*4);
-    assert ValidMem(r0 + 3*4);
-    assert ValidMem(r0 + 4*4);
-    assert ValidMem(r0 + 5*4);
-    assert ValidMem(r0 + 6*4);
-    assert ValidMem(r0 + 7*4);
     // Load a - h values into registers
     LDR(r4, r0, 0);
-    LDR(r5, r0, 4);
-    LDR(r6, r0, 8);
-    LDR(r7, r0, 12);
-    LDR(r8, r0, 16);
-    LDR(r9, r0, 20);
-    LDR(r10, r0, 24);
-    LDR(r11, r0, 28);
+    LDR(r5, r0, const(WORDSIZE));
+    LDR(r6, r0, const(2*WORDSIZE));
+    LDR(r7, r0, const(3*WORDSIZE));
+    LDR(r8, r0, const(4*WORDSIZE));
+    LDR(r9, r0, const(5*WORDSIZE));
+    LDR(r10, r0, const(6*WORDSIZE));
+    LDR(r11, r0, const(7*WORDSIZE));
 
     // forall j :| 0 <= j < 19 :: ValidMem(sp + j*4)
     // {
@@ -1448,6 +1439,7 @@ ensures
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, num_blocks);
     assert IsCompleteSHA256Trace(trace_out);
+    assert {:split_here}{:refined} true;
 }
 
 procedure {:refined} scrub_stack()
