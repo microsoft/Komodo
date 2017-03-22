@@ -65,6 +65,8 @@ function method va_cmp_le(o1:operand, o2:operand):obool { OCmp(OLe, o1, o2) }
 function method va_cmp_ge(o1:operand, o2:operand):obool { OCmp(OGe, o1, o2) }
 function method va_cmp_lt(o1:operand, o2:operand):obool { OCmp(OLt, o1, o2) }
 function method va_cmp_gt(o1:operand, o2:operand):obool { OCmp(OGt, o1, o2) }
+function method va_cmp_tst_eq(o1:operand, o2:operand):obool { OCmp(OTstEq, o1, o2) }
+function method va_cmp_tst_ne(o1:operand, o2:operand):obool { OCmp(OTstNe, o1, o2) }
 
 function method va_Block(block:codes):code { Block(block) }
 function method va_IfElse(ifb:obool, ift:code, iff:code):code { IfElse(ifb, ift, iff) }
