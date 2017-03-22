@@ -191,7 +191,7 @@ predicate preEntryEnter(s:state,s':state,d:PageDb,
     s'.regs[R0] == a1 && s'.regs[R1] == a2 && s'.regs[R2] == a3 &&
     OperandContents(s', OLR) == d[dispPage].entry.entrypoint &&
     (reveal_ValidSRegState();
-    s'.sregs[spsr(mode_of_state(s'))] == 0x10 /* XXX: Usermode PSR */)
+    s'.sregs[spsr(mode_of_state(s'))] == encode_mode(User))
 }
 
 predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
@@ -241,7 +241,7 @@ predicate preEntryReturn(s:state,lr:word,regs:SvcReturnRegs)
     mode_of_state(s) == Monitor
     && OperandContents(s, OLR) == lr
     && (reveal_ValidSRegState();
-        s.sregs[spsr(mode_of_state(s))] == 0x10 /* XXX: Usermode PSR */)
+        s.sregs[spsr(mode_of_state(s))] == encode_mode(User))
     && s.regs[R0] == regs.0
     && s.regs[R1] == regs.1
     && s.regs[R2] == regs.2
