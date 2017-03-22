@@ -86,6 +86,8 @@ function method va_op_operand_osp():operand { OSP }
 function method va_op_operand_olr():operand { OLR }
 function method va_op_operand_reg(r:ARMReg):operand { OReg(r) }
 function method va_op_cmp_reg(r:ARMReg):operand { OReg(r) }
+function method va_op_cmp_osp():operand { OSP }
+function method va_op_cmp_olr():operand { OLR }
 function method va_op_operand_sreg(sr:SReg):operand { OSReg(sr) }
 function va_get_ok(s:state):bool { s.ok }
 function va_get_reg(r:ARMReg, s:state):word

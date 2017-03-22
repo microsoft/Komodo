@@ -8,14 +8,14 @@ include "ARMdecls.sdfy"
 include "kom_utils.sdfy"
 
 #verbatim
-function method banked_regs_framesize(): int { 18*4 }
+function method banked_regs_framesize(): int { 18*WORDSIZE } // TODO: const
 
 predicate {:opaque} wellformed_banked_regs_stackframe(m:memstate, a:addr)
     requires ValidMemState(m)
 {
     ValidMemRange(a, a + banked_regs_framesize())
     && forall i:int | 12 <= i <= 17 ::
-        ValidPsrWord(MemContents(m, a + i * 4))
+        ValidPsrWord(MemContents(m, a + i * WORDSIZE))
 }
 
 lemma lemma_wellformed_banked_regs_stackframe_preserved(m1:memstate, m2:memstate, a:addr)
@@ -27,9 +27,9 @@ lemma lemma_wellformed_banked_regs_stackframe_preserved(m1:memstate, m2:memstate
 {
     reveal_wellformed_banked_regs_stackframe();
     forall i:int | 12 <= i <= 17
-        ensures ValidPsrWord(MemContents(m2, a + i * 4));
+        ensures ValidPsrWord(MemContents(m2, a + i * WORDSIZE));
     {
-        assert MemContents(m1, a + i * 4) == MemContents(m2, a + i * 4);
+        assert MemContents(m1, a + i * WORDSIZE) == MemContents(m2, a + i * WORDSIZE);
     }
 }
 
@@ -42,26 +42,26 @@ predicate {:opaque} banked_regs_stackframe(s:state, m:memstate, a:addr)
     reveal_wellformed_banked_regs_stackframe();
 
     wellformed_banked_regs_stackframe(m, a)
-    && MemContents(m, a+(0*4))  == s.regs[SP(User)]
-    && MemContents(m, a+(1*4))  == s.regs[SP(FIQ)]
-    && MemContents(m, a+(2*4))  == s.regs[SP(IRQ)]
-    && MemContents(m, a+(3*4))  == s.regs[SP(Supervisor)]
-    && MemContents(m, a+(4*4))  == s.regs[SP(Abort)]
-    && MemContents(m, a+(5*4))  == s.regs[SP(Undefined)]
+    && MemContents(m, a+(0*WORDSIZE))  == s.regs[SP(User)]
+    && MemContents(m, a+(1*WORDSIZE))  == s.regs[SP(FIQ)]
+    && MemContents(m, a+(2*WORDSIZE))  == s.regs[SP(IRQ)]
+    && MemContents(m, a+(3*WORDSIZE))  == s.regs[SP(Supervisor)]
+    && MemContents(m, a+(4*WORDSIZE))  == s.regs[SP(Abort)]
+    && MemContents(m, a+(5*WORDSIZE))  == s.regs[SP(Undefined)]
 
-    && MemContents(m, a+(6*4))  == s.regs[LR(User)]
-    && MemContents(m, a+(7*4))  == s.regs[LR(FIQ)]
-    && MemContents(m, a+(8*4))  == s.regs[LR(IRQ)]
-    && MemContents(m, a+(9*4))  == s.regs[LR(Supervisor)]
-    && MemContents(m, a+(10*4)) == s.regs[LR(Abort)]
-    && MemContents(m, a+(11*4)) == s.regs[LR(Undefined)]
+    && MemContents(m, a+(6*WORDSIZE))  == s.regs[LR(User)]
+    && MemContents(m, a+(7*WORDSIZE))  == s.regs[LR(FIQ)]
+    && MemContents(m, a+(8*WORDSIZE))  == s.regs[LR(IRQ)]
+    && MemContents(m, a+(9*WORDSIZE))  == s.regs[LR(Supervisor)]
+    && MemContents(m, a+(10*WORDSIZE)) == s.regs[LR(Abort)]
+    && MemContents(m, a+(11*WORDSIZE)) == s.regs[LR(Undefined)]
 
-    && MemContents(m, a+(12*4)) == s.sregs[spsr(FIQ)]
-    && MemContents(m, a+(13*4)) == s.sregs[spsr(IRQ)]
-    && MemContents(m, a+(14*4)) == s.sregs[spsr(Supervisor)]
-    && MemContents(m, a+(15*4)) == s.sregs[spsr(Abort)]
-    && MemContents(m, a+(16*4)) == s.sregs[spsr(Undefined)]
-    && MemContents(m, a+(17*4)) == s.sregs[spsr(Monitor)]
+    && MemContents(m, a+(12*WORDSIZE)) == s.sregs[spsr(FIQ)]
+    && MemContents(m, a+(13*WORDSIZE)) == s.sregs[spsr(IRQ)]
+    && MemContents(m, a+(14*WORDSIZE)) == s.sregs[spsr(Supervisor)]
+    && MemContents(m, a+(15*WORDSIZE)) == s.sregs[spsr(Abort)]
+    && MemContents(m, a+(16*WORDSIZE)) == s.sregs[spsr(Undefined)]
+    && MemContents(m, a+(17*WORDSIZE)) == s.sregs[spsr(Monitor)]
 }
 
 lemma lemma_stackunstack_banked_regs(s1:state, m1:memstate, s2:state, m2:memstate, a:addr)
@@ -115,7 +115,7 @@ procedure MRS_STR(
         mem;
     ensures
         //sp == old(sp);
-        MemPreservingExcept(old(this), this, old(base+ofs), old(base+ofs+4));
+        MemPreservingExcept(old(this), this, old(base+ofs), old(base+ofs+WORDSIZE));
         MemContents(this.m, old(base+ofs)) == old(reg);
 {
     MRS(tmp, reg);
@@ -149,39 +149,39 @@ procedure stack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
 
     ghost var start := this;
 
-    MRS_STR(spsr_fiq, sp, const(12*4), tmp);
-    MRS_STR(spsr_irq, sp, const(13*4), tmp);
-    MRS_STR(spsr_svc, sp, const(14*4), tmp);
-    MRS_STR(spsr_abt, sp, const(15*4), tmp);
-    MRS_STR(spsr_und, sp, const(16*4), tmp);
-    MRS_STR(spsr_mon, sp, const(17*4), tmp);
+    MRS_STR(spsr_fiq, sp, const(12*WORDSIZE), tmp);
+    MRS_STR(spsr_irq, sp, const(13*WORDSIZE), tmp);
+    MRS_STR(spsr_svc, sp, const(14*WORDSIZE), tmp);
+    MRS_STR(spsr_abt, sp, const(15*WORDSIZE), tmp);
+    MRS_STR(spsr_und, sp, const(16*WORDSIZE), tmp);
+    MRS_STR(spsr_mon, sp, const(17*WORDSIZE), tmp);
 
     ghost var midway := this;
 
     assert wellformed_banked_regs_stackframe(this.m, sp) by {
         reveal_wellformed_banked_regs_stackframe();
-        forall i:int :| 12 <= i <= 17 :: ValidPsrWord(MemContents(this.m, sp + i * 4))
+        forall i:int :| 12 <= i <= 17 :: ValidPsrWord(MemContents(this.m, sp + i * WORDSIZE))
             { reveal_ValidSRegState(); }
     }
     //assert RegPreservingExcept(start,this,set(@tmp));
-    assert MemPreservingExcept(old(this), this, sp + 12*4, sp + 18*4);
+    assert MemPreservingExcept(old(this), this, sp + 12*WORDSIZE, sp + 18*WORDSIZE);
 
-    MRS_STR(sp_usr, sp, const(0*4), tmp);
-    MRS_STR(sp_fiq, sp, const(1*4), tmp);
-    MRS_STR(sp_irq, sp, const(2*4), tmp);
-    MRS_STR(sp_svc, sp, const(3*4), tmp);
-    MRS_STR(sp_abt, sp, const(4*4), tmp);
-    MRS_STR(sp_und, sp, const(5*4), tmp);
+    MRS_STR(sp_usr, sp, const(0*WORDSIZE), tmp);
+    MRS_STR(sp_fiq, sp, const(1*WORDSIZE), tmp);
+    MRS_STR(sp_irq, sp, const(2*WORDSIZE), tmp);
+    MRS_STR(sp_svc, sp, const(3*WORDSIZE), tmp);
+    MRS_STR(sp_abt, sp, const(4*WORDSIZE), tmp);
+    MRS_STR(sp_und, sp, const(5*WORDSIZE), tmp);
 
-    MRS_STR(lr_usr, sp, const(6*4), tmp);
-    MRS_STR(lr_fiq, sp, const(7*4), tmp);
-    MRS_STR(lr_irq, sp, const(8*4), tmp);
-    MRS_STR(lr_svc, sp, const(9*4), tmp);
-    MRS_STR(lr_abt, sp, const(10*4), tmp);
-    MRS_STR(lr_und, sp, const(11*4), tmp);
+    MRS_STR(lr_usr, sp, const(6*WORDSIZE), tmp);
+    MRS_STR(lr_fiq, sp, const(7*WORDSIZE), tmp);
+    MRS_STR(lr_irq, sp, const(8*WORDSIZE), tmp);
+    MRS_STR(lr_svc, sp, const(9*WORDSIZE), tmp);
+    MRS_STR(lr_abt, sp, const(10*WORDSIZE), tmp);
+    MRS_STR(lr_und, sp, const(11*WORDSIZE), tmp);
 
     //assert RegPreservingExcept(midway, this, set(@tmp));
-    assert MemPreservingExcept(midway, this, sp, sp + 12*4);
+    assert MemPreservingExcept(midway, this, sp, sp + 12*WORDSIZE);
     assert wellformed_banked_regs_stackframe(this.m, sp)
         by { reveal_wellformed_banked_regs_stackframe(); }
     assert banked_regs_stackframe(old(this), this.m, sp)
@@ -267,26 +267,26 @@ procedure unstack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
     reveal_wellformed_banked_regs_stackframe();
     reveal ValidSRegState;
 
-    LDR_MSR_banked(sp_usr, sp, const(0*4), tmp);
-    LDR_MSR_banked(sp_fiq, sp, const(1*4), tmp);
-    LDR_MSR_banked(sp_irq, sp, const(2*4), tmp);
-    LDR_MSR_banked(sp_svc, sp, const(3*4), tmp);
-    LDR_MSR_banked(sp_abt, sp, const(4*4), tmp);
-    LDR_MSR_banked(sp_und, sp, const(5*4), tmp);
+    LDR_MSR_banked(sp_usr, sp, const(0*WORDSIZE), tmp);
+    LDR_MSR_banked(sp_fiq, sp, const(1*WORDSIZE), tmp);
+    LDR_MSR_banked(sp_irq, sp, const(2*WORDSIZE), tmp);
+    LDR_MSR_banked(sp_svc, sp, const(3*WORDSIZE), tmp);
+    LDR_MSR_banked(sp_abt, sp, const(4*WORDSIZE), tmp);
+    LDR_MSR_banked(sp_und, sp, const(5*WORDSIZE), tmp);
 
-    LDR_MSR_banked(lr_usr, sp, const(6*4), tmp);
-    LDR_MSR_banked(lr_fiq, sp, const(7*4), tmp);
-    LDR_MSR_banked(lr_irq, sp, const(8*4), tmp);
-    LDR_MSR_banked(lr_svc, sp, const(9*4), tmp);
-    LDR_MSR_banked(lr_abt, sp, const(10*4), tmp);
-    LDR_MSR_banked(lr_und, sp, const(11*4), tmp);
+    LDR_MSR_banked(lr_usr, sp, const(6*WORDSIZE), tmp);
+    LDR_MSR_banked(lr_fiq, sp, const(7*WORDSIZE), tmp);
+    LDR_MSR_banked(lr_irq, sp, const(8*WORDSIZE), tmp);
+    LDR_MSR_banked(lr_svc, sp, const(9*WORDSIZE), tmp);
+    LDR_MSR_banked(lr_abt, sp, const(10*WORDSIZE), tmp);
+    LDR_MSR_banked(lr_und, sp, const(11*WORDSIZE), tmp);
 
-    LDR_MSR_spsr(spsr_fiq, sp, const(12*4), tmp);
-    LDR_MSR_spsr(spsr_irq, sp, const(13*4), tmp);
-    LDR_MSR_spsr(spsr_svc, sp, const(14*4), tmp);
-    LDR_MSR_spsr(spsr_abt, sp, const(15*4), tmp);
-    LDR_MSR_spsr(spsr_und, sp, const(16*4), tmp);
-    LDR_MSR_spsr(spsr_mon, sp, const(17*4), tmp);
+    LDR_MSR_spsr(spsr_fiq, sp, const(12*WORDSIZE), tmp);
+    LDR_MSR_spsr(spsr_irq, sp, const(13*WORDSIZE), tmp);
+    LDR_MSR_spsr(spsr_svc, sp, const(14*WORDSIZE), tmp);
+    LDR_MSR_spsr(spsr_abt, sp, const(15*WORDSIZE), tmp);
+    LDR_MSR_spsr(spsr_und, sp, const(16*WORDSIZE), tmp);
+    LDR_MSR_spsr(spsr_mon, sp, const(17*WORDSIZE), tmp);
 
     ADD(sp, sp, const(banked_regs_framesize()));
     stack_bytes := stack_bytes_in + banked_regs_framesize();
@@ -754,7 +754,8 @@ procedure pre_entry_resume(
 lemma lemma_ValidEntryPost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp:word,
                            a1:word, a2:word, a3:word)
     requires ValidState(s) && ValidState(r1) && ValidState(r2) && validPageDb(sd)
-    requires validExceptionTransition(SysState(r1, rd), SysState(r2, rd), dp)
+    requires SaneConstants()
+    requires validExceptionTransition(r1, rd, r2, rd, dp)
     requires OperandContents(r1, OReg(R0)) == OperandContents(r2, OReg(R0))
     requires OperandContents(r1, OReg(R1)) == OperandContents(r2, OReg(R1))
     ensures smc_enter(s, sd, r1, rd, dp, a1, a2, a3)
@@ -812,18 +813,17 @@ procedure {:frame false} smc_enterresume_success(
     ensures
         EnterResumeSmcProcedureInvariant(old(this), this);
         if old(callno) == KOM_SMC_ENTER then
-            validEnter(SysState(old(this), pagedb_in), SysState(this, pagedb),
-                       old(pagenr), old(arg1), old(arg2), old(arg3))
+            smc_enter(old(this), pagedb_in, this, pagedb,
+                      old(pagenr), old(arg1), old(arg2), old(arg3))
         else
-            validResume(SysState(old(this), pagedb_in), SysState(this, pagedb),
-                        old(pagenr));
+            smc_resume(old(this), pagedb_in, this, pagedb,
+                       old(pagenr));
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
     pagedb := pagedb_in;
     ghost var dispPg := old(pagenr);
     ghost var isEnter := old(callno) == KOM_SMC_ENTER;
-    ghost var exs;
     assert nonStoppedDispatcher(pagedb, dispPg);
 
     ghost var stack_bytes_local;
@@ -842,16 +842,61 @@ procedure {:frame false} smc_enterresume_success(
     }
 
     ghost var s1 := this;
+    ghost var s1_sp := sp;
+    ghost var steps:nat;
+    ghost var loop := this;
 
-    MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
-    lemma_evalMOVSPCLRUC(s1, this, pagedb_in, dispPg);
+    while (tst_eq(sp, 1)) // test bottom bit of SP for this kludge
+        invariant
+            SaneState(loop);
+            SaneStateAfterException(this);
+            GlobalsInvariant(s1, this);
+            validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
+            nonStoppedDispatcher(pagedb, dispPg);
+            this.conf.ttbr0 == s1.conf.ttbr0;
+            spsr_of_state(this).m == User;
+            sp == s1_sp || sp == BitwiseOr(s1_sp, 1);
+            //validEnclaveExecution(s1, pagedb_in, this, pagedb, dispPg, steps);
+        decreases steps;
+    {
+        // SP & 1 == 0 => go to usermode
+        assert sp == s1_sp by {
+            assert BitwiseAnd(sp, 1) == 0;
+            assert BitsAsWord(1) == 1 by { reveal_BitsAsWord(); }
+            lemma_BitsAndWordConversions();
+            reveal BitAnd;
+            reveal BitOr;
+        }
+        loop := this;
+        MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
+        lemma_evalMOVSPCLRUC(loop, this, pagedb, dispPg);
+        ghost var exs;
+        ghost var retToEnclave;
+        exs, pagedb, retToEnclave
+            := lemma_validEnclaveExecutionStep(loop, pagedb, this, dispPg);
+        ghost if (retToEnclave) {
+            assert steps > 0;
+            steps := steps - 1;
+        }
+    }
 
+    lemma_evalMOVSPCLRUC(loop, this, pagedb_in, dispPg);
+
+    // clear lower bit of SP, which was set to exit the loop
+    assert BitwiseAnd(sp, 1) != 0;
+    assert sp == BitwiseOr(s1_sp, 1);
+    lemma_BitOrOneIsLikePlus(s1_sp);
+    SUB(sp, sp, 1);
+    assert sp == s1_sp;
+
+/*
     ghost if (isEnter) {
         exs, pagedb := lemma_validEnter(s0, s1, this, pagedb_in, dispPg,
                                         old(arg1), old(arg2), old(arg3));
     } else {
         exs, pagedb := lemma_validResume(s0, s1, this, pagedb_in, dispPg);
     }
+*/
 
     ghost var s6 := this;
     ghost var s6_sp := sp;
@@ -869,7 +914,7 @@ procedure {:frame false} smc_enterresume_success(
     lemma_ValidEntryPre(old(this), s0, pagedb_in, s6, pagedb, dispPg,
                             old(arg1), old(arg2), old(arg3));
 
-    assert validExceptionTransition(SysState(s6, pagedb), SysState(this, pagedb), dispPg)
+    assert validExceptionTransition(s6, pagedb, this, pagedb, dispPg)
         by { reveal_validExceptionTransition(); }
     lemma_ValidEntryPost(old(this), pagedb_in, s6, pagedb, this,
                          dispPg, old(arg1), old(arg2), old(arg3));
@@ -927,7 +972,5 @@ procedure {:frame false} kom_smc_enterresume(
         ghost var s0 := this;
         pagedb := smc_enterresume_success(disppg, arg1, arg2, arg3, r5, pagedb_base,
                                           err, val, pagedb_in, stack_bytes);
-        lemma_ValidEntryPre(old(this), s0, pagedb_in, this, pagedb, old(disppg),
-                            old(arg1), old(arg2), old(arg3));
     }
 }
