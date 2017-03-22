@@ -337,15 +337,14 @@ function smc_stop(pageDbIn: PageDb, addrspacePage: word)
 }
 
 function contentsOfPhysPage(s: state, physPage: word) : seq<word>
-    requires ValidState(s)
+    requires ValidState(s) && SaneConstants()
     requires physPageIsInsecureRam(physPage)
     ensures |contentsOfPhysPage(s, physPage)| == PAGESIZE / WORDSIZE
 {
     reveal_ValidMemState();
-    var mem := s.m.addresses;
     var base := physPage * PAGESIZE + KOM_DIRECTMAP_VBASE;
     assert |addrRangeSeq(base,base+PAGESIZE)| == PAGESIZE / WORDSIZE;
-    addrSeqToContents(addrsInPhysPage(physPage, base), mem)
+    addrSeqToContents(addrsInPhysPage(physPage, base), s.m)
 }
 
 //=============================================================================

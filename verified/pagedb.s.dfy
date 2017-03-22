@@ -55,7 +55,7 @@ predicate addrInPage(m:addr, p:PageNr)
 
 predicate physPageIsInsecureRam(physPage: int)
 {
-    physPage * PAGESIZE < SecurePhysBase()
+    0 <= physPage * PAGESIZE < MonitorPhysBase()
 }
 
 predicate physPageIsSecure(physPage: int)

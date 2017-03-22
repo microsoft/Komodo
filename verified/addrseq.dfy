@@ -26,21 +26,13 @@ function {:opaque} addrRangeSeq(l: addr, r: addr) : seq<addr>
     if l == r then [] else [l] + addrRangeSeq(l+WORDSIZE,r)
 }
 
-// FIXME: make this true via kom_common.s, not as an axiom!
-predicate {:axiom} insecurePagesAreValid(physPage: word, base: addr)
-    requires physPageIsInsecureRam(physPage)
-    requires base == physPage * PAGESIZE + KOM_DIRECTMAP_VBASE
-    ensures forall a : addr | base <= a < base + PAGESIZE :: ValidMem(a)
-
 function addrsInPhysPage(physPage: word, base: addr) : seq<addr>
     requires physPageIsInsecureRam(physPage)
     requires base == physPage * PAGESIZE + KOM_DIRECTMAP_VBASE
+    requires SaneConstants()
     ensures forall a : addr | a in addrsInPhysPage(physPage, base) :: ValidMem(a)
 {
-    // Not sure why I have to assume an axiom and can't assert it.
-    // FIXME
-    assume insecurePagesAreValid(physPage, base);
-    addrRangeSeq(base,base+PAGESIZE)
+    addrRangeSeq(base, base+PAGESIZE)
 }
 
 function addrsInPage(page: PageNr, base: addr) : seq<addr>

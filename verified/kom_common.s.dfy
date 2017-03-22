@@ -81,23 +81,57 @@ const KOM_MAPPING_X:int := 4;
 // Globals
 //-----------------------------------------------------------------------------
 
-const PAGEDB_ENTRY_SIZE:int := 8;
+const PAGEDB_ENTRY_SIZE:int := 2 * WORDSIZE;
 const G_PAGEDB_SIZE:int := KOM_SECURE_NPAGES * PAGEDB_ENTRY_SIZE;
 
 function method {:opaque} PageDb(): symbol { "g_pagedb" }
+function method {:opaque} MonitorPhysBaseOp(): symbol {"g_monitor_physbase" }
 function method {:opaque} SecurePhysBaseOp(): symbol {"g_secure_physbase" }
 function method {:opaque} CurDispatcherOp(): symbol { "g_cur_dispatcher" }
 function method {:opaque} K_SHA256s(): symbol { "g_k_sha256" }
 
-// the phys base is unknown, but never changes
+// XXX: workaround so dafny sees that these are distinct, despite the opaques
+predicate DistinctGlobals()
+{
+    PageDb() != MonitorPhysBaseOp()
+    && PageDb() != SecurePhysBaseOp()
+    && PageDb() != CurDispatcherOp()
+    && PageDb() != K_SHA256s()
+    && MonitorPhysBaseOp() != SecurePhysBaseOp()
+    && MonitorPhysBaseOp() != CurDispatcherOp()
+    && MonitorPhysBaseOp() != K_SHA256s()
+    && SecurePhysBaseOp() != CurDispatcherOp()
+    && SecurePhysBaseOp() != K_SHA256s()
+    && CurDispatcherOp() != K_SHA256s()
+}
+
+lemma lemma_DistinctGlobals()
+    ensures DistinctGlobals()
+{
+    reveal_PageDb();
+    reveal_MonitorPhysBaseOp();
+    reveal_SecurePhysBaseOp();
+    reveal_CurDispatcherOp();
+    reveal_K_SHA256s();
+}
+
+// the phys bases are unknown, but never change
+
+// monitor phys base: phys base of monitor's own allocation
+function method {:axiom} MonitorPhysBase(): addr
+    ensures 0 < MonitorPhysBase() <= SecurePhysBase()
+    ensures PageAligned(MonitorPhysBase())
+
+// secure phys base: phys addr of alloc'able secure pages
 function method {:axiom} SecurePhysBase(): addr
-    ensures 0 < SecurePhysBase() <= KOM_PHYSMEM_LIMIT - KOM_SECURE_RESERVE;
-    ensures PageAligned(SecurePhysBase());
+    ensures 0 < SecurePhysBase() <= KOM_PHYSMEM_LIMIT - KOM_SECURE_RESERVE
+    ensures PageAligned(SecurePhysBase())
 
 function method KomGlobalDecls(): globaldecls
     ensures ValidGlobalDecls(KomGlobalDecls());
 {
-    map[SecurePhysBaseOp() := WORDSIZE,
+    map[MonitorPhysBaseOp() := WORDSIZE,
+        SecurePhysBaseOp() := WORDSIZE,
         CurDispatcherOp() := WORDSIZE,
         PageDb() := G_PAGEDB_SIZE,
         K_SHA256s() := 256
@@ -123,31 +157,25 @@ predicate SaneMem(s:memstate)
 {
     SaneConstants() && ValidMemState(s)
     // globals are as we expect
+    && GlobalFullContents(s, MonitorPhysBaseOp()) == [MonitorPhysBase()]
     && GlobalFullContents(s, SecurePhysBaseOp()) == [SecurePhysBase()]
 }
 
 predicate SaneConstants()
+    ensures DistinctGlobals()
 {
+    lemma_DistinctGlobals();
     PhysBase() == KOM_DIRECTMAP_VBASE
-    && TheValidAddresses() == (
-        // our secure phys mapping must be valid
-        (set m:addr | KOM_DIRECTMAP_VBASE + SecurePhysBase() <= m
-               < KOM_DIRECTMAP_VBASE + SecurePhysBase() + KOM_SECURE_RESERVE)
-        // the stack must be mapped
-        + (set m:addr | StackLimit() <= m < StackBase()))
-    // TODO: our insecure phys mapping must be valid
-    //ValidMemRange(KOM_DIRECTMAP_VBASE(),
-    //    (KOM_DIRECTMAP_VBASE() + MonitorPhysBaseValue()))
-
+    // stack
+    && ValidMemRange(StackLimit(), StackBase())
+    // insecure phys mapping
+    && ValidMemRange(KOM_DIRECTMAP_VBASE,
+                    KOM_DIRECTMAP_VBASE + MonitorPhysBase())
+    // secure phys mapping
+    && ValidMemRange(KOM_DIRECTMAP_VBASE + SecurePhysBase(),
+                    KOM_DIRECTMAP_VBASE + SecurePhysBase() + KOM_SECURE_RESERVE)
     // globals are as we expect
     && KomGlobalDecls() == TheGlobalDecls()
-    // XXX: workaround so dafny sees that these are distinct
-    && SecurePhysBaseOp() != PageDb()
-    && SecurePhysBaseOp() != CurDispatcherOp()
-    && SecurePhysBaseOp() != K_SHA256s()
-    && CurDispatcherOp() != PageDb()
-    && CurDispatcherOp() != K_SHA256s()
-    && PageDb() != K_SHA256s()
 }
 
 predicate SaneState(s:state)
