@@ -667,7 +667,7 @@ ensures
      && t1 == (if i + 1 <= 64 then AddrMemContents(mem, sp + CheapMod16(i + 2)*WORDSIZE) else t1) 
 
      // Remaining Ws are laid out in memory
-     && (i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out.W)[j] == AddrMemContents(mem, sp + CheapMod16(j)*WORDSIZE)))
+     && (i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> ValidMem(sp + CheapMod16(j)*WORDSIZE) && last(trace_out.W)[j] == AddrMemContents(mem, sp + CheapMod16(j)*WORDSIZE)))
 
      // The atohs almost match the outgoing variables
      //&& (let old_a := (if i == 0 || i >= 16 then old(a) else old(BitwiseAdd32(a, t2))) in

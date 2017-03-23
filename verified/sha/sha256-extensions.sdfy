@@ -145,6 +145,7 @@ requires
     ;
 ensures
     // Framing
+    ValidAddrMemStateOpaque(old(mem)); 
     AddrMemPreservingExcept(old(mem), mem, old(r0), old(r0) + 8 * WORDSIZE);
     // Need more framing copied from block_data_order
     
