@@ -124,7 +124,7 @@ requires
     let num_blocks := r2 in // Number of 64-byte blocks to process
 
      // Old H values are laid out in memory pointed at by ctx
-        ValidMemRange(ctx, ctx + 8*WORDSIZE)
+        ValidMemRange(ctx, ctx + SHA_CTXSIZE*WORDSIZE)
      && last(trace_in.H)[0] == AddrMemContents(mem, ctx + 0*WORDSIZE)
      && last(trace_in.H)[1] == AddrMemContents(mem, ctx + 1*WORDSIZE)
      && last(trace_in.H)[2] == AddrMemContents(mem, ctx + 2*WORDSIZE)
@@ -141,12 +141,18 @@ requires
              ==> trace_in.M[i] == bswap32_seq(SeqSlice(input, i*16, (i+1)*16))) 
 
      // Anti-aliasing
-     && (ctx + 32 < sp - 116 || ctx > sp)                              // ctx != sp
+     && (ctx + SHA_CTXSIZE*WORDSIZE < sp - ((29 + 16) * WORDSIZE) || ctx > sp)                              // ctx != sp
     ;
 ensures
     // Framing
     ValidAddrMemStateOpaque(old(mem)); 
-    AddrMemPreservingExcept(old(mem), mem, old(r0), old(r0) + 8 * WORDSIZE);
+    ValidAddrMemStateOpaque(mem); 
+
+    // Memory framing:  We only touch the stack and 8 words pointed to by ctx_ptr
+    AddrMemPreservingExcept2(old(mem), mem, 
+                             sp - ((29 + 16) * WORDSIZE), sp, 
+                             old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE);
+
     // Need more framing copied from block_data_order
     
     // SHA results
@@ -250,7 +256,12 @@ ensures
     assert AddrMemContents(mem, r1 + 15*WORDSIZE ) == last_block[15];
 
 
+    assert ValidAddrMemStateOpaque(mem); 
     sha256_block_data_order(trace_in, last_block);
+    assert ValidAddrMemStateOpaque(mem); 
 
     // Probably need to call lemma_SHA256FinalHelper1 here
+    
+    // Restore the stack pointer
+    ADD(sp, sp, 64);
 }

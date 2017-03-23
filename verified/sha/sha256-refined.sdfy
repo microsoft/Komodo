@@ -1527,7 +1527,7 @@ requires
 
      // Anti-aliasing
      && (ctx + SHA_CTXSIZE*WORDSIZE < input_ptr || ctx > input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE)    // input_ptr != ctx
-     && (ctx + SHA_CTXSIZE*WORDSIZE < sp - 116 || ctx > sp)                              // ctx != sp
+     && (ctx + SHA_CTXSIZE*WORDSIZE < sp - 116 || ctx >= sp)                              // ctx != sp
      && (input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE < sp - 116 || input_ptr >= sp);   // input_ptr != sp
 
 reads
