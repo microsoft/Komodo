@@ -93,6 +93,7 @@ ensures
                                seq(), // Empty Ws
                                seq()  // Empty atohs
                               );
+    assert {:split_here}{:refined} true;    // Split right before we try to prove the preconditions for the abstract lemma
 }
 
 // TODO: Update to satisfy all of sha256_block_order's pre/post-conditions
