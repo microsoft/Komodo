@@ -751,6 +751,100 @@ procedure pre_entry_resume(
 }
 
 #verbatim
+lemma lemma_sp_bit_helper(x:word, y:word)
+    requires x % 2 == 0
+    requires y == x || y == BitwiseOr(x, 1)
+    requires BitwiseAnd(y, 1) != 0
+    ensures y - 1 == x
+{
+    assert BitsAsWord(1) == 1 && BitsAsWord(2) == 2 by { reveal_BitsAsWord(); }
+    lemma_BitsAndWordConversions();
+
+    assert BitwiseAnd(y, 1) == 1 by { reveal_BitAnd(); }
+    assert BitMod(WordAsBits(x), 2) == 0 by { lemma_BitModEquiv(x, 2); }
+    assert y != x by { reveal_BitAnd(); reveal_BitMod(); }
+    lemma_BitOrOneIsLikePlus(x);
+}
+#endverbatim
+
+procedure {:frame false} enclaveexecution_loop(
+        ghost pagedb_in: PageDb,
+        ghost dispPg: PageNr)
+    returns (ghost pagedb:PageDb, ghost steps:nat)
+    requires/ensures
+        SaneState(this);
+    requires
+        validPageDb(pagedb_in);
+        pageDbCorresponds(this.m, pagedb_in);
+        AUCIdef();
+        nonStoppedDispatcher(pagedb_in, dispPg);
+        spsr_of_state(this).m == User;
+        this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb_in, dispPg));
+    modifies
+        sp;
+    ensures
+        GlobalsInvariant(old(this), this);
+        StackPreserving(old(this), this);
+        validEnclaveExecution(old(this), pagedb_in, this, pagedb, dispPg, steps);
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+{
+    ghost var loop := this;
+    steps := 0;
+    pagedb := pagedb_in;
+
+    assert validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg)
+        by { reveal validExceptionTransition; }
+
+    while (tst_eq(sp, 1)) // test bottom bit of SP for this kludge
+        invariant
+            SaneState(loop);
+            SaneStateAfterException(this);
+            ParentStackPreserving(old(this), this);
+            GlobalsInvariant(old(this), this);
+            validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
+            nonStoppedDispatcher(pagedb, dispPg);
+            this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, dispPg));
+            spsr_of_state(this).m == User;
+            sp == old(sp) || sp == BitwiseOr(old(sp), 1);
+        decreases *;
+    {
+        // SP & 1 == 0 => go to usermode
+        assert sp == old(sp) by {
+            assert BitwiseAnd(sp, 1) == 0;
+            assert BitsAsWord(1) == 1 by { reveal BitsAsWord; }
+            lemma_BitsAndWordConversions();
+            reveal BitAnd;
+            reveal BitOr;
+        }
+        loop := this;
+        ghost var loop_pagedb := pagedb;
+        MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
+        lemma_evalMOVSPCLRUC(loop, this, pagedb, dispPg);
+        ghost var exs;
+        ghost var retToEnclave;
+        exs, pagedb, retToEnclave
+            := lemma_validEnclaveExecutionStep(loop, loop_pagedb, this, dispPg);
+        lemma_validEnclaveExecutionStep_PageDb(loop, loop_pagedb, this, pagedb,
+                                               dispPg, retToEnclave);
+        assert l1pOfDispatcher(pagedb, dispPg) == l1pOfDispatcher(loop_pagedb, dispPg)
+            by { reveal validEnclaveExecutionStep;
+                 reveal updateUserPagesFromState; reveal validExceptionTransition; }
+        ghost if (retToEnclave) {
+            steps := steps + 1;
+        }
+    }
+
+    // clear lower bit of SP, which was set to exit the loop
+    lemma_sp_bit_helper(old(sp), sp);
+    SUB(sp, sp, 1);
+    assert sp == old(sp);
+
+    // TODO!
+    assume validEnclaveExecution(old(this), pagedb_in, this, pagedb, dispPg, steps);
+}
+
+#verbatim
 lemma lemma_ValidEntryPost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp:word,
                            a1:word, a2:word, a3:word)
     requires ValidState(s) && ValidState(r1) && ValidState(r2) && validPageDb(sd)
@@ -842,61 +936,9 @@ procedure {:frame false} smc_enterresume_success(
     }
 
     ghost var s1 := this;
-    ghost var s1_sp := sp;
+
     ghost var steps:nat;
-    ghost var loop := this;
-
-    while (tst_eq(sp, 1)) // test bottom bit of SP for this kludge
-        invariant
-            SaneState(loop);
-            SaneStateAfterException(this);
-            GlobalsInvariant(s1, this);
-            validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
-            nonStoppedDispatcher(pagedb, dispPg);
-            this.conf.ttbr0 == s1.conf.ttbr0;
-            spsr_of_state(this).m == User;
-            sp == s1_sp || sp == BitwiseOr(s1_sp, 1);
-            //validEnclaveExecution(s1, pagedb_in, this, pagedb, dispPg, steps);
-        decreases steps;
-    {
-        // SP & 1 == 0 => go to usermode
-        assert sp == s1_sp by {
-            assert BitwiseAnd(sp, 1) == 0;
-            assert BitsAsWord(1) == 1 by { reveal_BitsAsWord(); }
-            lemma_BitsAndWordConversions();
-            reveal BitAnd;
-            reveal BitOr;
-        }
-        loop := this;
-        MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
-        lemma_evalMOVSPCLRUC(loop, this, pagedb, dispPg);
-        ghost var exs;
-        ghost var retToEnclave;
-        exs, pagedb, retToEnclave
-            := lemma_validEnclaveExecutionStep(loop, pagedb, this, dispPg);
-        ghost if (retToEnclave) {
-            assert steps > 0;
-            steps := steps - 1;
-        }
-    }
-
-    lemma_evalMOVSPCLRUC(loop, this, pagedb_in, dispPg);
-
-    // clear lower bit of SP, which was set to exit the loop
-    assert BitwiseAnd(sp, 1) != 0;
-    assert sp == BitwiseOr(s1_sp, 1);
-    lemma_BitOrOneIsLikePlus(s1_sp);
-    SUB(sp, sp, 1);
-    assert sp == s1_sp;
-
-/*
-    ghost if (isEnter) {
-        exs, pagedb := lemma_validEnter(s0, s1, this, pagedb_in, dispPg,
-                                        old(arg1), old(arg2), old(arg3));
-    } else {
-        exs, pagedb := lemma_validResume(s0, s1, this, pagedb_in, dispPg);
-    }
-*/
+    pagedb, steps := enclaveexecution_loop(pagedb, dispPg);
 
     ghost var s6 := this;
     ghost var s6_sp := sp;

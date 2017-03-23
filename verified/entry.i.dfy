@@ -28,6 +28,7 @@ predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr)
     && SaneStackPointer(ssp)
     && ParentStackPreserving(s, r)
     && s.conf.ttbr0 == r.conf.ttbr0 && s.conf.scr == r.conf.scr
+    && spsr_of_state(r) == spsr_of_state(s) // tricky to implement
     && (forall a:addr | ValidMem(a) && !(StackLimit() <= a < StackBase()) &&
         !addrInPage(a, dp) :: MemContents(s.m, a) == MemContents(r.m, a))
     && GlobalsInvariant(s, r)
@@ -351,6 +352,8 @@ lemma lemma_evalMOVSPCLRUC(s:state, r:state, d:PageDb, dp:PageNr)
         || OperandContents(r, OSP) == BitwiseOr(OperandContents(s, OSP), 1)
     ensures ParentStackPreserving(s, r)
     ensures GlobalsInvariant(s, r)
+    ensures s.conf.ttbr0 == r.conf.ttbr0;
+    ensures spsr_of_state(r).m == User;
 {
     // XXX: prove some obvious things about OSP early
     // before the reveal, to stop Z3 getting lost
@@ -391,6 +394,25 @@ lemma lemma_evalMOVSPCLRUC(s:state, r:state, d:PageDb, dp:PageNr)
         userspaceExecutionPreservesStack(d, s2, s3, l1pOfDispatcher(d, dp));
         assert AllMemInvariant(s3, s4);
         assert ParentStackPreserving(s4, r);
+    }
+
+    calc {
+        s.conf.ttbr0;
+        s2.conf.ttbr0;
+        { reveal_evalUserspaceExecution(); }
+        s3.conf.ttbr0;
+        s4.conf.ttbr0;
+        r.conf.ttbr0;
+    }
+
+    assert spsr_of_state(r).m == User by {
+        assert mode_of_state(s3) == User;
+        lemma_evalExceptionTaken_Mode(s3, ex, s4);
+        calc {
+            s3.conf.cpsr;
+            spsr_of_state(s4);
+            spsr_of_state(r);
+        }
     }
 }
 
@@ -547,6 +569,7 @@ lemma lemma_ValidEntryPre(s0:state, s1:state, sd:PageDb, r:state, rd:PageDb, dp:
 lemma lemma_evalExceptionTaken_Mode(s:state, e:exception, r:state)
     requires ValidState(s) && evalExceptionTaken(s, e, r)
     ensures mode_of_state(r) == mode_of_exception(s.conf, e)
+    ensures spsr_of_state(r) == s.conf.cpsr
 {
     var newmode := mode_of_exception(s.conf, e);
     assert newmode != User;
