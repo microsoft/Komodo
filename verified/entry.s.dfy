@@ -96,7 +96,8 @@ function {:opaque} updateUserPagesFromState(s:state, d:PageDb, dispPg:PageNr): P
     updateUserPagesFromState'(s, d, dispPg)
 }
 
-predicate {:opaque} validEnclaveExecutionStep(s1:state, d1:PageDb,
+predicate validEnclaveExecutionStep'(s1:state, d1:PageDb,
+    s2:state, s3:state, s4:state, d4:PageDb,
     rs:state, rd:PageDb, dispPg:PageNr, retToEnclave:bool)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
     requires nonStoppedDispatcher(d1, dispPg)
@@ -104,8 +105,7 @@ predicate {:opaque} validEnclaveExecutionStep(s1:state, d1:PageDb,
     reveal_ValidRegState();
     reveal_validExceptionTransition();
     reveal_updateUserPagesFromState();
-    exists s2, s3, s4, d4 ::
-        entryTransition(s1, s2)
+    entryTransition(s1, s2)
         && userspaceExecutionAndException(s2, s3, s4)
         && d4 == updateUserPagesFromState(s3, d1, dispPg)
         && validExceptionTransition(s4, d4, rs, rd, dispPg)
@@ -118,6 +118,16 @@ predicate {:opaque} validEnclaveExecutionStep(s1:state, d1:PageDb,
             (rs.regs[R0], rs.regs[R1], rd) == exceptionHandled(s4, d4, dispPg))
 }
 
+predicate {:opaque} validEnclaveExecutionStep(s1:state, d1:PageDb,
+    rs:state, rd:PageDb, dispPg:PageNr, retToEnclave:bool)
+    requires ValidState(s1) && validPageDb(d1) && SaneConstants()
+    requires nonStoppedDispatcher(d1, dispPg)
+{
+    exists s2, s3, s4, d4
+        :: validEnclaveExecutionStep'(s1, d1, s2, s3, s4, d4, rs, rd, dispPg,
+                                     retToEnclave)
+}
+
 predicate {:opaque} validEnclaveExecution(s1:state, d1:PageDb,
     rs:state, rd:PageDb, dispPg:PageNr, steps:nat)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
@@ -125,10 +135,9 @@ predicate {:opaque} validEnclaveExecution(s1:state, d1:PageDb,
     decreases steps
 {
     reveal_validEnclaveExecutionStep();
-    reveal_validExceptionTransition();
     reveal_updateUserPagesFromState();
     var retToEnclave := (steps > 0);
-    exists s5, d5 ::
+    exists s5, d5 {:trigger validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)} ::
         validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
         && (if retToEnclave then
             validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1)
@@ -252,15 +261,19 @@ predicate preEntryReturn(s:state,lr:word,regs:SvcReturnRegs)
     && s.regs[R8] == regs.8
 }
 
-predicate entryTransition(s:state, s':state)
-    requires ValidState(s)
-    ensures entryTransition(s, s') ==> ValidState(s')
+predicate equivStates(s1:state, s2:state)
 {
-    // we've entered userland and done nothing else
-    evalEnterUserspace(s, s')
-    // FIXME: doesn't work if we need a branch / loop between setup and entry
-    // && s'.steps == s.steps + 1
-    && s.steps < s'.steps <= s.steps + 2
+    s1 == s2 ||
+        (s1.regs == s2.regs && s1.m == s2.m && s1.sregs == s2.sregs
+        && s1.conf == s2.conf && s1.ok == s2.ok)
+}
+
+predicate entryTransition(s:state, r:state)
+    requires ValidState(s)
+    ensures entryTransition(s, r) ==> ValidState(r)
+{
+    // we've entered userland, and didn't change anything before doing so
+    exists s' :: equivStates(s, s') && evalEnterUserspace(s', r) && r.steps == s'.steps + 1
 }
 
 predicate userspaceExecutionAndException(s:state, s':state, r:state)

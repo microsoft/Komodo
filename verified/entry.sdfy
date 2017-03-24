@@ -751,17 +751,6 @@ procedure pre_entry_resume(
 }
 
 #verbatim
-lemma lemma_sp_alignment(x:word)
-    requires x % 2 == 0
-    ensures x != BitwiseOr(x, 1)
-{
-    assert BitsAsWord(1) == 1 && BitsAsWord(2) == 2 by { reveal_BitsAsWord(); }
-    lemma_BitsAndWordConversions();
-
-    assert BitMod(WordAsBits(x), 2) == 0 by { lemma_BitModEquiv(x, 2); }
-    assert x != BitwiseOr(x, 1) by { reveal_BitOr(); reveal_BitMod(); }
-}
-
 lemma lemma_sp_bit_helper(x:word, y:word)
     requires x % 2 == 0
     requires y == x || y == BitwiseOr(x, 1)
@@ -824,12 +813,9 @@ procedure {:frame false} enclaveexecution_loop(
             states[0] == tuple(old(this), pagedb_in);
             if retToEnclave then states[steps] == tuple(loop1, pagedb)
                 else validEnclaveExecution(old(this), pagedb_in, loop1, pagedb, dispPg, steps);
-            loop1.ok; loop1.steps <= this.steps;
-            loop1.regs == this.regs && loop1.m == this.m;
-            loop1.sregs == this.sregs && loop1.conf == this.conf;
+            equivStates(loop1, this);
         decreases *;
     {
-        ghost var exs;
         ghost var loop_pagedb := pagedb;
         loop0 := this;
 
@@ -846,22 +832,20 @@ procedure {:frame false} enclaveexecution_loop(
         MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
 
         lemma_evalMOVSPCLRUC(loop0, this, pagedb, dispPg);
-        exs, pagedb, retToEnclave
+        pagedb, retToEnclave
             := lemma_validEnclaveExecutionStep(loop0, loop_pagedb, this, dispPg);
         lemma_validEnclaveExecutionStep_PageDb(loop0, loop_pagedb, this, pagedb,
                                                dispPg, retToEnclave);
-        //assert validEnclaveExecutionStep(loop0, loop_pagedb, this, pagedb, dispPg, retToEnclave);
 
         lemma_validEnclaveExecutionStepPrePost(loop1, loop0, loop_pagedb, this, pagedb, this, dispPg, retToEnclave);
-        //assert validEnclaveExecutionStep(loop1, loop_pagedb, this, pagedb, dispPg, retToEnclave);
 
         ghost if (retToEnclave) {
             ghost var states' := states;
             lemma_partialEnclaveExecution_append(states, this, pagedb, dispPg, steps);
             states := states + seq(tuple(this, pagedb));
             steps := steps + 1;
-            assert states[0] == states'[0] == tuple(old(this), pagedb_in);
-            assert states[steps] == tuple(this, pagedb);
+            //assert states[0] == states'[0] == tuple(old(this), pagedb_in);
+            //assert states[steps] == tuple(this, pagedb);
         } else {
             lemma_partialEnclaveExecution_done(states, this, pagedb, dispPg, steps);
             assert validEnclaveExecution(old(this), pagedb_in, this, pagedb, dispPg, steps);
