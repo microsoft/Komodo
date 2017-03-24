@@ -667,12 +667,14 @@ lemma lemma_singlestep_execution(s1:state, d1:PageDb,
     var retToEnclave := false;
     var steps := 0;
     var s5, d5 := rs, rd;
-    assert validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
-        && (if retToEnclave then
-            validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1)
-          else
-            rs == s5 && rd == d5);
-    assume validEnclaveExecution(s1, d1, rs, rd, dispPg, steps); // WTF Dafny?
+    assert (
+        var retToEnclave := (steps > 0);
+        exists s5, d5 {:trigger validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)} ::
+            validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
+            && (if retToEnclave then
+                validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1)
+              else
+                rs == s5 && rd == d5));
 }
 
 predicate partialEnclaveExecution(l:seq<(state, PageDb)>, dispPg:PageNr, steps:nat)
