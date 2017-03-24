@@ -259,10 +259,12 @@ ensures
 
 
     assert ValidAddrMemStateOpaque(mem); 
-    sha256_block_data_order(trace_in, last_block);
+    ghost var trace_out;
+    trace_out := sha256_block_data_order(trace_in, last_block);
     assert ValidAddrMemStateOpaque(mem); 
 
-    // Probably need to call lemma_SHA256FinalHelper1 here
+    lemma_SHA256FinalHelper1(trace_out, last(trace_out.H), WordSeqToBytes(ConcatenateSeqs(trace_out.M)),
+                             WordSeqToBytes(last_block), WordSeqToBytes(ConcatenateSeqs(trace_in.M)));
     
     // Restore the stack pointer
     ADD(sp, sp, 64);

@@ -525,28 +525,22 @@ lemma lemma_SHA256FinalHelper1(
     H:seq<word>,
     processed_bytes:seq<byte>,
     unprocessed_bytes:seq<byte>,
-    message:seq<byte>,
-    old_processed_bytes:seq<byte>,
-    old_num_unprocessed_bytes:word,
-    old_num_total_bytes:uint64,
-    message_bits:uint64
+    message:seq<byte>
     )
     requires |H| == 8;
     requires |processed_bytes| % 64 == 0;
     requires |unprocessed_bytes| == 64;
-		requires |message| % 64 == 0;
+	requires |message| % 64 == 0;
     requires IsCompleteSHA256Trace(z);
     requires SHA256TraceIsCorrect(z);
     requires WordSeqToBytes(ConcatenateSeqs(z.M)) == processed_bytes;
     requires H == last(z.H);
-    requires processed_bytes == old_processed_bytes + unprocessed_bytes;
+    requires processed_bytes == message + unprocessed_bytes;
     requires unprocessed_bytes[0] == 0x80;
     requires unprocessed_bytes[1..56] == RepeatByte(0, 55);
-    requires unprocessed_bytes[56..64] == Uint64ToBytes(message_bits);
-    requires message == old_processed_bytes;
-    requires old_num_total_bytes == |old_processed_bytes|;
-    requires |message| == old_num_total_bytes <= MaxBytesForSHA();
-    requires message_bits == old_num_total_bytes * 8;
+	requires |message| <= MaxBytesForSHA();
+    requires unprocessed_bytes[56..64] == Uint64ToBytes(|message|*8);
+    
     ensures  WordSeqToBytes(ConcatenateSeqs(z.M)) == 
              message + [0x80] + RepeatByte(0, (119 - (|message| % 64)) % 64) + Uint64ToBytes((|message| as uint64) * 8);
 {
@@ -560,8 +554,7 @@ lemma lemma_SHA256FinalHelper1(
     calc {
         WordSeqToBytes(ConcatenateSeqs(z.M));
         processed_bytes;
-        old_processed_bytes + unprocessed_bytes;
-            //{ lemma_ArrayOffsetConcatenation(unprocessed_bytes, 0, old_num_unprocessed_bytes, 64); }
+        message + unprocessed_bytes;
             { lemma_ArrayOffsetConcatenation(unprocessed_bytes, 0, 1, 64); }
         message + ([0x80] + unprocessed_bytes[1..64]);
             { lemma_SeqConcatenationIsAssociative(message, [0x80], unprocessed_bytes[1..64]); }
@@ -570,11 +563,27 @@ lemma lemma_SHA256FinalHelper1(
         message + [0x80] + (RepeatByte(0, 55) + unprocessed_bytes[56..64]);
             { lemma_SeqConcatenationIsAssociative(message + [0x80], RepeatByte(0, 55), unprocessed_bytes[56..64]); }
         message + [0x80] + RepeatByte(0, 55) + unprocessed_bytes[56..64];
-        message + [0x80] + RepeatByte(0, 55) + Uint64ToBytes(old_num_total_bytes * 8);
-        message + [0x80] + RepeatByte(0, (119 - (|message| % 64)) % 64) + Uint64ToBytes(old_num_total_bytes * 8);
+        message + [0x80] + RepeatByte(0, 55) + Uint64ToBytes(|message| * 8);
+        message + [0x80] + RepeatByte(0, (119 - (|message| % 64)) % 64) + Uint64ToBytes(|message| * 8);
         message + [0x80] + RepeatByte(0, (119 - (|message| % 64)) % 64) + Uint64ToBytes((|message| as uint64) * 8);
     }
 }
+
+lemma lemma_SHA256FinalHelper1Wrapper(
+    trace_in:SHA256Trace,
+    trace_out:SHA256Trace,
+    unprocessed_bytes:seq<byte>
+    )
+    requires |unprocessed_bytes| == 64;
+    requires IsCompleteSHA256Trace(trace_in);
+    requires SHA256TraceIsCorrect(trace_out);
+    requires unprocessed_bytes[0] == 0x80;
+    requires unprocessed_bytes[1..56] == RepeatByte(0, 55);
+    requires unprocessed_bytes[56..64] == Uint64ToBytes(|WordSeqToBytes(ConcatenateSeqs(trace_in.M))|*8);
+    requires WordSeqToBytes(ConcatenateSeqs(trace_out.M)) == WordSeqToBytes(ConcatenateSeqs(trace_in.M)) + unprocessed_bytes;
+    ensures  IsCompleteSHA256Trace(trace_out);
+    ensures  SHA256TraceIsCorrect(trace_out);
+    ensures  IsSHA256(WordSeqToBytes(ConcatenateSeqs(trace_in.M)), last(trace_out.H));
 
 
 ghost method ComputeWs(input:seq<word>) returns (W:seq<word>)
