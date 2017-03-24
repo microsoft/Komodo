@@ -193,23 +193,25 @@ ensures
     SUB(sp, sp, 64);      // Make room for the final 256-bit input buffer
 
     //STR(0x80, sp, 0);
-    STR(0x80, sp, const(0*WORDSIZE));
+    MOV(r3, 0x80);
+    STR(r3, sp, const(0*WORDSIZE));
 
     // Fill sp buffer with 0s
-    STR(0, sp,  const(1*WORDSIZE)); 
-    STR(0, sp,  const(2*WORDSIZE)); 
-    STR(0, sp,  const(3*WORDSIZE)); 
-    STR(0, sp,  const(4*WORDSIZE)); 
-    STR(0, sp,  const(5*WORDSIZE)); 
-    STR(0, sp,  const(6*WORDSIZE)); 
-    STR(0, sp,  const(7*WORDSIZE)); 
-    STR(0, sp,  const(8*WORDSIZE)); 
-    STR(0, sp,  const(9*WORDSIZE)); 
-    STR(0, sp,  const(10*WORDSIZE)); 
-    STR(0, sp,  const(11*WORDSIZE)); 
-    STR(0, sp,  const(12*WORDSIZE)); 
-    STR(0, sp,  const(13*WORDSIZE)); 
-    STR(0, sp,  const(14*WORDSIZE)); 
+    MOV(r3, 0);
+    STR(r3, sp,  const(1*WORDSIZE)); 
+    STR(r3, sp,  const(2*WORDSIZE)); 
+    STR(r3, sp,  const(3*WORDSIZE)); 
+    STR(r3, sp,  const(4*WORDSIZE)); 
+    STR(r3, sp,  const(5*WORDSIZE)); 
+    STR(r3, sp,  const(6*WORDSIZE)); 
+    STR(r3, sp,  const(7*WORDSIZE)); 
+    STR(r3, sp,  const(8*WORDSIZE)); 
+    STR(r3, sp,  const(9*WORDSIZE)); 
+    STR(r3, sp,  const(10*WORDSIZE)); 
+    STR(r3, sp,  const(11*WORDSIZE)); 
+    STR(r3, sp,  const(12*WORDSIZE)); 
+    STR(r3, sp,  const(13*WORDSIZE)); 
+    STR(r3, sp,  const(14*WORDSIZE)); 
 //    STR(0, sp,  4); 
 //    STR(0, sp,  8);
 //    STR(0, sp, 16);
@@ -238,22 +240,22 @@ ensures
     // Compute one last compression
     ghost var last_block := seq(0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, length);
 
-    assert AddrMemContents(mem, r1 + 0*WORDSIZE ) == last_block[0];
-    assert AddrMemContents(mem, r1 + 1*WORDSIZE ) == last_block[1];
-    assert AddrMemContents(mem, r1 + 2*WORDSIZE ) == last_block[2];
-    assert AddrMemContents(mem, r1 + 3*WORDSIZE ) == last_block[3];
-    assert AddrMemContents(mem, r1 + 4*WORDSIZE ) == last_block[4];
-    assert AddrMemContents(mem, r1 + 5*WORDSIZE ) == last_block[5];
-    assert AddrMemContents(mem, r1 + 6*WORDSIZE ) == last_block[6];
-    assert AddrMemContents(mem, r1 + 7*WORDSIZE ) == last_block[7];
-    assert AddrMemContents(mem, r1 + 8*WORDSIZE ) == last_block[8];
-    assert AddrMemContents(mem, r1 + 9*WORDSIZE ) == last_block[9];
-    assert AddrMemContents(mem, r1 + 10*WORDSIZE ) == last_block[10];
-    assert AddrMemContents(mem, r1 + 11*WORDSIZE ) == last_block[11];
-    assert AddrMemContents(mem, r1 + 12*WORDSIZE ) == last_block[12];
-    assert AddrMemContents(mem, r1 + 13*WORDSIZE ) == last_block[13];
-    assert AddrMemContents(mem, r1 + 14*WORDSIZE ) == last_block[14];
-    assert AddrMemContents(mem, r1 + 15*WORDSIZE ) == last_block[15];
+//    assert AddrMemContents(mem, r1 + 0*WORDSIZE ) == last_block[0];
+//    assert AddrMemContents(mem, r1 + 1*WORDSIZE ) == last_block[1];
+//    assert AddrMemContents(mem, r1 + 2*WORDSIZE ) == last_block[2];
+//    assert AddrMemContents(mem, r1 + 3*WORDSIZE ) == last_block[3];
+//    assert AddrMemContents(mem, r1 + 4*WORDSIZE ) == last_block[4];
+//    assert AddrMemContents(mem, r1 + 5*WORDSIZE ) == last_block[5];
+//    assert AddrMemContents(mem, r1 + 6*WORDSIZE ) == last_block[6];
+//    assert AddrMemContents(mem, r1 + 7*WORDSIZE ) == last_block[7];
+//    assert AddrMemContents(mem, r1 + 8*WORDSIZE ) == last_block[8];
+//    assert AddrMemContents(mem, r1 + 9*WORDSIZE ) == last_block[9];
+//    assert AddrMemContents(mem, r1 + 10*WORDSIZE ) == last_block[10];
+//    assert AddrMemContents(mem, r1 + 11*WORDSIZE ) == last_block[11];
+//    assert AddrMemContents(mem, r1 + 12*WORDSIZE ) == last_block[12];
+//    assert AddrMemContents(mem, r1 + 13*WORDSIZE ) == last_block[13];
+//    assert AddrMemContents(mem, r1 + 14*WORDSIZE ) == last_block[14];
+//    assert AddrMemContents(mem, r1 + 15*WORDSIZE ) == last_block[15];
 
 
     assert ValidAddrMemStateOpaque(mem); 
