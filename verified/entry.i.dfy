@@ -427,6 +427,7 @@ lemma lemma_validEnclaveExecutionStep(s1:state, sd:PageDb, r:state, dispPg:PageN
     ensures ValidState(exs) && mode_of_state(exs) != User
     ensures validPageDb(rd) && SaneMem(r.m) && pageDbCorresponds(r.m, rd)
     ensures validEnclaveExecutionStep(s1, sd, r, rd, dispPg, retToEnclave)
+    ensures retToEnclave <==> OperandContents(s1, OSP) == OperandContents(r, OSP)
 {
     reveal_evalMOVSPCLRUC();
     var s2, s3, ex, s4 :| 
@@ -599,7 +600,12 @@ lemma lemma_validEnclaveExecutionStep_PageDb(s1:state, d1:PageDb, r1:state,
     requires nonStoppedDispatcher(d1, dispPg)
     requires validEnclaveExecutionStep(s1, d1, r1, rd, dispPg, retToEnclave)
     ensures validPageDb(rd) && nonStoppedDispatcher(rd, dispPg)
-{ reveal_validEnclaveExecutionStep(); reveal_updateUserPagesFromState(); }
+    ensures l1pOfDispatcher(d1, dispPg) == l1pOfDispatcher(rd, dispPg)
+{
+    reveal_validEnclaveExecutionStep();
+    reveal_updateUserPagesFromState();
+    reveal_validExceptionTransition();
+}
 
 lemma lemma_validEnclaveExecutionStepPost(s1:state, d1:PageDb, r1:state,
                             rd:PageDb, r2:state, dispPg:PageNr)
@@ -626,6 +632,22 @@ lemma lemma_validEnclaveExecutionStepPost(s1:state, d1:PageDb, r1:state,
     assert validExceptionTransition(s4, d4, r2, rd, dispPg)
         by { reveal_validExceptionTransition(); }
     assert (r2.regs[R0], r2.regs[R1], rd) == exceptionHandled(s4, d4, dispPg);
+}
+
+lemma lemma_validEnclaveExecutionStepPrePost(s0:state, s1:state, d1:PageDb, r1:state,
+                            rd:PageDb, r2:state, dispPg:PageNr, retToEnclave:bool)
+    requires ValidState(s1) && validPageDb(d1) && SaneConstants()
+    requires nonStoppedDispatcher(d1, dispPg)
+    requires validEnclaveExecutionStep(s1, d1, r1, rd, dispPg, retToEnclave)
+    requires s0.regs == s1.regs && s0.sregs == s1.sregs && s0.m == s1.m && s0.conf == s1.conf
+        && s0.ok && s1.ok && ValidState(s0)
+    requires s0.steps <= s1.steps <= s0.steps + 1
+    requires r1.regs == r2.regs && r1.sregs == r2.sregs && r1.m == r2.m && r1.conf == r2.conf
+    ensures validEnclaveExecutionStep(s0, d1, r2, rd, dispPg, retToEnclave)
+{
+    reveal_validEnclaveExecutionStep();
+    reveal_validExceptionTransition();
+    assume false; // TODO!
 }
 
 lemma lemma_validEnclaveExecutionPost(s1:state, d1:PageDb, r1:state, rd:PageDb,
@@ -693,3 +715,67 @@ lemma lemma_validResumePost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, d
 }
 
 function exPageDb(t: (int, int, PageDb)): PageDb { t.2 }
+
+lemma {:induction true} lemma_singlestep_execution(s1:state, d1:PageDb,
+    rs:state, rd:PageDb, dispPg:PageNr)
+    requires ValidState(s1) && validPageDb(d1) && SaneConstants()
+    requires nonStoppedDispatcher(d1, dispPg)
+    requires validEnclaveExecutionStep(s1, d1, rs, rd, dispPg, false)
+    ensures validEnclaveExecution(s1, d1, rs, rd, dispPg, 0)
+{
+    reveal_validEnclaveExecution();
+    reveal_validEnclaveExecutionStep();
+    reveal_ValidRegState();
+    reveal_validExceptionTransition();
+    reveal_updateUserPagesFromState();
+    var retToEnclave := false;
+    var steps := 0;
+    var s5, d5 := rs, rd;
+    assert validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
+        && (if retToEnclave then
+            validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1)
+          else
+            rs == s5 && rd == d5);
+    assume validEnclaveExecution(s1, d1, rs, rd, dispPg, steps); // WTF Dafny?
+}
+
+predicate partialEnclaveExecution(l:seq<(state, PageDb)>, dispPg:PageNr, steps:nat)
+    requires SaneConstants()
+{
+    |l| == steps + 1
+    && (forall i | 0 <= i <= steps :: ValidState(l[i].0) && validPageDb(l[i].1)
+                && nonStoppedDispatcher(l[i].1, dispPg))
+    && (forall i {:trigger l[i]} | 0 < i <= steps ::
+            validEnclaveExecutionStep(l[i-1].0, l[i-1].1, l[i].0, l[i].1, dispPg, true))
+}
+
+lemma lemma_partialEnclaveExecution_append(l:seq<(state, PageDb)>, s:state, d:PageDb, dispPg:PageNr, steps:nat)
+    requires SaneConstants()
+    requires ValidState(s) && validPageDb(d) && nonStoppedDispatcher(d, dispPg)
+    requires partialEnclaveExecution(l, dispPg, steps)
+    requires validEnclaveExecutionStep(l[steps].0, l[steps].1, s, d, dispPg, true)
+    ensures partialEnclaveExecution(l + [(s, d)], dispPg, steps + 1)
+{
+    var l' := l + [(s, d)];
+    var steps' := steps + 1;
+    assert forall i | 0 <= i <= steps :: l[i] == l'[i]; // for triggers
+    assert validEnclaveExecutionStep(l[steps].0, l[steps].1, s, d, dispPg, true);
+    assert validEnclaveExecutionStep(l'[steps'-1].0, l'[steps'-1].1, l'[steps'].0, l'[steps'].1, dispPg, true);
+}
+
+lemma lemma_partialEnclaveExecution_done(l:seq<(state, PageDb)>, rs:state, rd:PageDb, dispPg:PageNr, steps:nat)
+    requires SaneConstants()
+    requires partialEnclaveExecution(l, dispPg, steps)
+    requires validEnclaveExecutionStep(l[steps].0, l[steps].1, rs, rd, dispPg, false)
+    ensures validEnclaveExecution(l[0].0, l[0].1, rs, rd, dispPg, steps)
+    decreases steps
+{
+    if steps == 0 {
+        lemma_singlestep_execution(l[0].0, l[0].1, rs, rd, dispPg);
+    } else {
+        var l' := l[1..];
+        //assert forall i | 0 < i <= steps :: l[i] == l'[i-1]; // for triggers
+        lemma_partialEnclaveExecution_done(l', rs, rd, dispPg, steps - 1);
+        reveal_validEnclaveExecution();
+    }
+}

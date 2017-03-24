@@ -751,6 +751,17 @@ procedure pre_entry_resume(
 }
 
 #verbatim
+lemma lemma_sp_alignment(x:word)
+    requires x % 2 == 0
+    ensures x != BitwiseOr(x, 1)
+{
+    assert BitsAsWord(1) == 1 && BitsAsWord(2) == 2 by { reveal_BitsAsWord(); }
+    lemma_BitsAndWordConversions();
+
+    assert BitMod(WordAsBits(x), 2) == 0 by { lemma_BitModEquiv(x, 2); }
+    assert x != BitwiseOr(x, 1) by { reveal_BitOr(); reveal_BitMod(); }
+}
+
 lemma lemma_sp_bit_helper(x:word, y:word)
     requires x % 2 == 0
     requires y == x || y == BitwiseOr(x, 1)
@@ -789,16 +800,18 @@ procedure {:frame false} enclaveexecution_loop(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
-    ghost var loop := this;
+    ghost var loop0 := this;
+    ghost var loop1 := this;
+    ghost var retToEnclave := true;
     steps := 0;
     pagedb := pagedb_in;
+    ghost var states := seq(tuple(this, pagedb));
 
-    assert validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg)
-        by { reveal validExceptionTransition; }
+    lemma_sp_alignment(old(sp));
 
     while (tst_eq(sp, 1)) // test bottom bit of SP for this kludge
         invariant
-            SaneState(loop);
+            SaneState(loop0);
             SaneStateAfterException(this);
             ParentStackPreserving(old(this), this);
             GlobalsInvariant(old(this), this);
@@ -806,9 +819,20 @@ procedure {:frame false} enclaveexecution_loop(
             nonStoppedDispatcher(pagedb, dispPg);
             this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, dispPg));
             spsr_of_state(this).m == User;
-            sp == old(sp) || sp == BitwiseOr(old(sp), 1);
+            if retToEnclave then sp == old(sp) else sp == BitwiseOr(old(sp), 1);
+            partialEnclaveExecution(states, dispPg, steps);
+            states[0] == tuple(old(this), pagedb_in);
+            if retToEnclave then states[steps] == tuple(loop1, pagedb)
+                else validEnclaveExecution(old(this), pagedb_in, loop1, pagedb, dispPg, steps);
+            loop1.ok; loop1.steps <= this.steps;
+            loop1.regs == this.regs && loop1.m == this.m;
+            loop1.sregs == this.sregs && loop1.conf == this.conf;
         decreases *;
     {
+        ghost var exs;
+        ghost var loop_pagedb := pagedb;
+        loop0 := this;
+
         // SP & 1 == 0 => go to usermode
         assert sp == old(sp) by {
             assert BitwiseAnd(sp, 1) == 0;
@@ -817,31 +841,44 @@ procedure {:frame false} enclaveexecution_loop(
             reveal BitAnd;
             reveal BitOr;
         }
-        loop := this;
-        ghost var loop_pagedb := pagedb;
+        assert retToEnclave;
+
         MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
-        lemma_evalMOVSPCLRUC(loop, this, pagedb, dispPg);
-        ghost var exs;
-        ghost var retToEnclave;
+
+        lemma_evalMOVSPCLRUC(loop0, this, pagedb, dispPg);
         exs, pagedb, retToEnclave
-            := lemma_validEnclaveExecutionStep(loop, loop_pagedb, this, dispPg);
-        lemma_validEnclaveExecutionStep_PageDb(loop, loop_pagedb, this, pagedb,
+            := lemma_validEnclaveExecutionStep(loop0, loop_pagedb, this, dispPg);
+        lemma_validEnclaveExecutionStep_PageDb(loop0, loop_pagedb, this, pagedb,
                                                dispPg, retToEnclave);
-        assert l1pOfDispatcher(pagedb, dispPg) == l1pOfDispatcher(loop_pagedb, dispPg)
-            by { reveal validEnclaveExecutionStep;
-                 reveal updateUserPagesFromState; reveal validExceptionTransition; }
+        //assert validEnclaveExecutionStep(loop0, loop_pagedb, this, pagedb, dispPg, retToEnclave);
+
+        lemma_validEnclaveExecutionStepPrePost(loop1, loop0, loop_pagedb, this, pagedb, this, dispPg, retToEnclave);
+        //assert validEnclaveExecutionStep(loop1, loop_pagedb, this, pagedb, dispPg, retToEnclave);
+
         ghost if (retToEnclave) {
+            ghost var states' := states;
+            lemma_partialEnclaveExecution_append(states, this, pagedb, dispPg, steps);
+            states := states + seq(tuple(this, pagedb));
             steps := steps + 1;
+            assert states[0] == states'[0] == tuple(old(this), pagedb_in);
+            assert states[steps] == tuple(this, pagedb);
+        } else {
+            lemma_partialEnclaveExecution_done(states, this, pagedb, dispPg, steps);
+            assert validEnclaveExecution(old(this), pagedb_in, this, pagedb, dispPg, steps);
         }
+        loop1 := this;
     }
 
     // clear lower bit of SP, which was set to exit the loop
     lemma_sp_bit_helper(old(sp), sp);
+    assert !retToEnclave;
     SUB(sp, sp, 1);
     assert sp == old(sp);
 
-    // TODO!
-    assume validEnclaveExecution(old(this), pagedb_in, this, pagedb, dispPg, steps);
+    assert validExceptionTransition(loop1, pagedb, this, pagedb, dispPg)
+        by { reveal validExceptionTransition; }
+    lemma_validEnclaveExecutionPost(old(this), pagedb_in, loop1, pagedb, this,
+                                    dispPg, steps);
 }
 
 #verbatim

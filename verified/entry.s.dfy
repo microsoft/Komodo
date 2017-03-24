@@ -173,8 +173,7 @@ predicate preEntryEnter(s:state,s':state,d:PageDb,
         PageAligned(s'.conf.ttbr0.ptbase) &&
         SecurePhysBase() <= s'.conf.ttbr0.ptbase < SecurePhysBase() +
             KOM_SECURE_NPAGES * PAGESIZE
-    ensures preEntryEnter(s,s',d,dispPage,a1,a2,a3) ==>
-        nonStoppedL1(d, securePageFromPhysAddr(s'.conf.ttbr0.ptbase));
+        && nonStoppedL1(d, securePageFromPhysAddr(s'.conf.ttbr0.ptbase))
 {
     reveal_validPageDb();
     reveal_ValidRegState();
@@ -258,7 +257,10 @@ predicate entryTransition(s:state, s':state)
     ensures entryTransition(s, s') ==> ValidState(s')
 {
     // we've entered userland and done nothing else
-    evalEnterUserspace(s, s') && s'.steps == s.steps + 1
+    evalEnterUserspace(s, s')
+    // FIXME: doesn't work if we need a branch / loop between setup and entry
+    // && s'.steps == s.steps + 1
+    && s.steps < s'.steps <= s.steps + 2
 }
 
 predicate userspaceExecutionAndException(s:state, s':state, r:state)
