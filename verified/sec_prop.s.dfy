@@ -25,14 +25,8 @@ predicate pgInAddrSpc(d: PageDb, n: PageNr, a: PageNr)
     d[n].PageDbEntryTyped? && d[n].addrspace == a
 }
 
-predicate pgInEnc(d: PageDb, n: PageNr, enc: PageNr)
-    requires validPageDb(d) && valDispPage(d, enc)
-{
-    d[n].PageDbEntryTyped? && (d[n].addrspace == d[enc].addrspace)
-}
-
 //-----------------------------------------------------------------------------
-// Protect confidentiality of an Enclave from other Enclaves 
+//  Enclave-Enclave Confidentiality
 //-----------------------------------------------------------------------------
 // A malicious enclave can observe:
 // 1. Pages it owns.
