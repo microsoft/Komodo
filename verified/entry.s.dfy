@@ -90,7 +90,8 @@ lemma lemma_updateUserPagesFromState_validPageDb(s:state, d:PageDb, dispPg:PageN
 function {:opaque} updateUserPagesFromState(s:state, d:PageDb, dispPg:PageNr): PageDb
     requires ValidState(s) && validPageDb(d) && SaneConstants()
     requires nonStoppedDispatcher(d, dispPg)
-    ensures validPageDb(updateUserPagesFromState(s, d, dispPg))
+    ensures var d' := updateUserPagesFromState(s, d, dispPg);
+        validPageDb(d') && nonStoppedDispatcher(d', dispPg)
 {
     lemma_updateUserPagesFromState_validPageDb(s, d, dispPg);
     updateUserPagesFromState'(s, d, dispPg)

@@ -28,12 +28,10 @@ predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr)
     && SaneStackPointer(ssp)
     && ParentStackPreserving(s, r)
     && s.conf.ttbr0 == r.conf.ttbr0 && s.conf.scr == r.conf.scr
-    && spsr_of_state(r) == spsr_of_state(s) // tricky to implement
     && (forall a:addr | ValidMem(a) && !(StackLimit() <= a < StackBase()) &&
         !addrInPage(a, dp) :: MemContents(s.m, a) == MemContents(r.m, a))
     && GlobalsInvariant(s, r)
     && pageDbCorresponds(r.m, rd)
-    && (r.regs[R12] == 0 <==> retToEnclave)
     && (if retToEnclave
        then rsp == ssp
         && preEntryReturn(r, OperandContents(s, OLR), svcHandled(s, sd, dp))
@@ -352,7 +350,8 @@ lemma lemma_sp_alignment(x:word)
     assert x != BitwiseOr(x, 1) by { reveal_BitOr(); reveal_BitMod(); }
 }
 
-lemma lemma_evalMOVSPCLRUC(s:state, r:state, d:PageDb, dp:PageNr)
+lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
+        returns (s2:state, s3:state, ex:exception, s4:state, d4:PageDb)
     requires SaneState(s)
     requires validPageDb(d) && pageDbCorresponds(s.m, d) && nonStoppedDispatcher(d, dp)
     requires s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(d, dp))
@@ -364,8 +363,13 @@ lemma lemma_evalMOVSPCLRUC(s:state, r:state, d:PageDb, dp:PageNr)
     ensures OperandContents(s, OSP) != BitwiseOr(OperandContents(s, OSP), 1)
     ensures ParentStackPreserving(s, r)
     ensures GlobalsInvariant(s, r)
-    ensures s.conf.ttbr0 == r.conf.ttbr0;
-    ensures spsr_of_state(r).m == User;
+    ensures evalEnterUserspace(s, s2)
+        && evalUserspaceExecution(s2, s3)
+        && evalExceptionTaken(s3, ex, s4)
+    ensures mode_of_state(s4) != User && SaneMem(s4.m)
+    ensures d4 == updateUserPagesFromState(s3, d, dp) && pageDbCorresponds(s4.m, d4)
+    ensures KomExceptionHandlerInvariant(s4, d4, r, dp)
+    ensures s.conf.ttbr0 == r.conf.ttbr0
 {
     // XXX: prove some obvious things about OSP early
     // before the reveal, to stop Z3 getting lost
@@ -376,7 +380,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, r:state, d:PageDb, dp:PageNr)
     assert ValidMemRange(StackLimit(), StackBase());
 
     reveal_evalMOVSPCLRUC();
-    var s2, s3, ex, s4 :| 
+    s2, s3, ex, s4 :| 
         evalEnterUserspace(s, s2)
         && evalUserspaceExecution(s2, s3)
         && evalExceptionTaken(s3, ex, s4)
@@ -385,10 +389,9 @@ lemma lemma_evalMOVSPCLRUC(s:state, r:state, d:PageDb, dp:PageNr)
     enterUserspacePreservesStuff(d, s, s2);
     userspaceExecutionPreservesPrivState(s2, s3);
     userspaceExecutionUpdatesPageDb(d, s2, s3, dp);
-    var d' := updateUserPagesFromState(s3, d, dp);
-    assert nonStoppedDispatcher(d', dp) by { reveal_updateUserPagesFromState(); }
-    exceptionTakenPreservesStuff(d', s3, ex, s4);
-    lemma_AUCIdef(s4, r, d', dp);
+    d4 := updateUserPagesFromState(s3, d, dp);
+    exceptionTakenPreservesStuff(d4, s3, ex, s4);
+    lemma_AUCIdef(s4, r, d4, dp);
 
     calc {
         OperandContents(s, OSP);
@@ -418,7 +421,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, r:state, d:PageDb, dp:PageNr)
         s4.conf.ttbr0;
         r.conf.ttbr0;
     }
-
+/*
     assert spsr_of_state(r).m == User by {
         assert mode_of_state(s3) == User;
         lemma_evalExceptionTaken_Mode(s3, ex, s4);
@@ -428,58 +431,57 @@ lemma lemma_evalMOVSPCLRUC(s:state, r:state, d:PageDb, dp:PageNr)
             spsr_of_state(r);
         }
     }
+*/
 }
 
-// TODO: clean up overlap between lemma_evalMOVSPCLRUC and this lemma!
-lemma lemma_validEnclaveExecutionStep(s1:state, sd:PageDb, r:state, dispPg:PageNr)
+lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     returns (rd:PageDb, retToEnclave:bool)
-    requires SaneState(s1)
-    requires validPageDb(sd) && pageDbCorresponds(s1.m, sd)
+    requires SaneState(s)
+    requires validPageDb(sd) && pageDbCorresponds(s.m, sd)
     requires nonStoppedDispatcher(sd, dispPg)
-    requires s1.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(sd, dispPg))
-    requires evalMOVSPCLRUC(s1, r)
+    requires s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(sd, dispPg))
+    requires evalMOVSPCLRUC(s, r)
     requires AUCIdef()
+    ensures SaneStateAfterException(r)
+    ensures ParentStackPreserving(s, r)
+    ensures GlobalsInvariant(s, r)
+    ensures OperandContents(s, OSP) != BitwiseOr(OperandContents(s, OSP), 1)
+            && if retToEnclave
+            then OperandContents(r, OSP) == OperandContents(s, OSP)
+            else OperandContents(r, OSP) == BitwiseOr(OperandContents(s, OSP), 1)
+    ensures s.conf.ttbr0 == r.conf.ttbr0
     ensures validPageDb(rd) && SaneMem(r.m) && pageDbCorresponds(r.m, rd)
-    ensures validEnclaveExecutionStep(s1, sd, r, rd, dispPg, retToEnclave)
-    ensures retToEnclave <==> (OperandContents(s1, OSP) == OperandContents(r, OSP))
+    ensures validEnclaveExecutionStep(s, sd, r, rd, dispPg, retToEnclave)
+    ensures retToEnclave ==> spsr_of_state(r).m == User
 {
-    lemma_evalMOVSPCLRUC(s1, r, sd, dispPg);
-    reveal_evalMOVSPCLRUC();
-    var s2, s3, ex, s4 :| 
-        evalEnterUserspace(s1, s2)
-        && evalUserspaceExecution(s2, s3)
-        && evalExceptionTaken(s3, ex, s4)
-        && ApplicationUsermodeContinuationInvariant(s4, r);
+    var s2, s3, ex, s4, d4 := lemma_evalMOVSPCLRUC_inner(s, r, sd, dispPg);
 
-    assert entryTransition(s1, s2);
-    enterUserspacePreservesStuff(sd, s1, s2);
-    lemma_evalExceptionTaken_NonUser(s3, ex, s4);
+    assert entryTransition(s, s2);
+    enterUserspacePreservesStuff(sd, s, s2);
     assert userspaceExecutionAndException(s2, s3, s4)
         by { reveal_evalUserspaceExecution(); }
     userspaceExecutionPreservesPrivState(s2, s3);
     userspaceExecutionUpdatesPageDb(sd, s2, s3, dispPg);
 
-    var ssp, rsp := OperandContents(s1, OSP), OperandContents(r, OSP);
+    var ssp, rsp := OperandContents(s, OSP), OperandContents(r, OSP);
     assert rsp == r.regs[SP(Monitor)];
-    calc {
-        OperandContents(s1, OSP);
-        s1.regs[SP(Monitor)];
-        s2.regs[SP(Monitor)];
-        s3.regs[SP(Monitor)];
-        s4.regs[SP(Monitor)];
-    }
 
-    var d4 := updateUserPagesFromState(s3, sd, dispPg);
-
-    assert nonStoppedDispatcher(d4, dispPg)
-        by { reveal_updateUserPagesFromState(); }
-    exceptionTakenPreservesStuff(d4, s3, ex, s4);
-    lemma_AUCIdef(s4, r, d4, dispPg);
     retToEnclave := isReturningSvc(s4);
 
     if retToEnclave {
         assert ssp == rsp;
         rd := d4;
+        assert spsr_of_state(r).m == User by {
+            assert preEntryReturn(r, OperandContents(s4, OLR), svcHandled(s4, d4, dispPg));
+            assert (reveal_ValidSRegState();
+                        r.sregs[spsr(mode_of_state(r))] == encode_mode(User));
+            assert decode_mode(psr_mask_mode(encode_mode(User))) == User by {
+                assert WordAsBits(0x10) == 0x10 && WordAsBits(0x1f) == 0x1f
+                    by { reveal_WordAsBits(); }
+                lemma_BitsAndWordConversions();
+                reveal_BitAnd();
+            }
+        }
     } else {
         assert rsp == BitwiseOr(ssp, 1);
         assert ssp != rsp;
@@ -487,9 +489,9 @@ lemma lemma_validEnclaveExecutionStep(s1:state, sd:PageDb, r:state, dispPg:PageN
         exceptionHandledValidPageDb(s3, ex, s4, d4, dispPg);
     }
 
-    assert validEnclaveExecutionStep(s1, sd, r, rd, dispPg, retToEnclave) by {
+    assert validEnclaveExecutionStep(s, sd, r, rd, dispPg, retToEnclave) by {
         reveal_validEnclaveExecutionStep();
-        assert validEnclaveExecutionStep'(s1, sd, s2, s3, s4, d4, r, rd,
+        assert validEnclaveExecutionStep'(s, sd, s2, s3, s4, d4, r, rd,
                                           dispPg, retToEnclave);
     }
 }

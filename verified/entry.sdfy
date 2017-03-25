@@ -807,7 +807,7 @@ procedure {:frame false} enclaveexecution_loop(
             validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
             nonStoppedDispatcher(pagedb, dispPg);
             this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, dispPg));
-            spsr_of_state(this).m == User;
+            retToEnclave ==> spsr_of_state(this).m == User;
             if retToEnclave then sp == old(sp) else sp == BitwiseOr(old(sp), 1);
             partialEnclaveExecution(states, dispPg, steps);
             states[0] == tuple(old(this), pagedb_in);
@@ -831,9 +831,7 @@ procedure {:frame false} enclaveexecution_loop(
 
         MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
 
-        lemma_evalMOVSPCLRUC(loop0, this, pagedb, dispPg);
-        pagedb, retToEnclave
-            := lemma_validEnclaveExecutionStep(loop0, loop_pagedb, this, dispPg);
+        pagedb, retToEnclave := lemma_evalMOVSPCLRUC(loop0, loop_pagedb, this, dispPg);
         lemma_validEnclaveExecutionStep_PageDb(loop0, loop_pagedb, this, pagedb,
                                                dispPg, retToEnclave);
 
