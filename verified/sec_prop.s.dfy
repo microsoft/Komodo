@@ -39,11 +39,11 @@ predicate pgInAddrSpc(d: PageDb, n: PageNr, a: PageNr)
 // an attacker that controls an enclave "atkr". 
 predicate enc_enc_conf_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
     requires validPageDb(d1) && validPageDb(d2)
-    requires valDispPage(d1, atkr)
 {
-    var atkr_asp := d1[atkr].addrspace;
+    //var atkr_asp := d1[atkr].addrspace;
     // The disp page is the same in both states
-    valDispPage(d2, atkr) &&
+    (valDispPage(d1, atkr) && valDispPage(d2, atkr)) ==>
+    (var atkr_asp := d1[atkr].addrspace;
     d1[atkr].addrspace == d2[atkr].addrspace &&
     // The addrspace is an addrspace page in both states
     valAddrPage(d1, atkr_asp) && valAddrPage(d2, atkr_asp) &&
@@ -55,7 +55,7 @@ predicate enc_enc_conf_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
     // the contents of the pages that belong to the enclave are the same in 
     // both states.
     (forall n : PageNr | pgInAddrSpc(d1, n, atkr_asp) ::
-        d1[n].entry == d2[n].entry)
+        d1[n].entry == d2[n].entry))
 }
 
 // Low-equivalence relation that relates two concrete states that appear 
@@ -71,11 +71,10 @@ predicate enc_enc_conf_eq(s1:state, s2:state, d1:PageDb, d2:PageDb,
     requires SaneState(s1) && SaneState(s2)
     requires validPageDb(d1) && validPageDb(d2)
     requires pageDbCorresponds(s1.m, d1) && pageDbCorresponds(s2.m, d2)
-    requires valDispPage(d1, atkr)
-    requires valAddrPage(d1, d1[atkr].addrspace)
-    requires enc_enc_conf_eqpdb(d1, d2, atkr)
 {
-    var atkr_asp := d1[atkr].addrspace;
+    valDispPage(d1, atkr) && valDispPage(d2, atkr) &&
+    valAddrPage(d1, d1[atkr].addrspace) && valAddrPage(d2, d2[atkr].addrspace) &&
+    (var atkr_asp := d1[atkr].addrspace;
     var l1p := d1[atkr_asp].entry.l1ptnr; // same in both d1, d2 because of eqdb
     regs_usr_equiv(s1, s2) &&
     configs_usr_equiv(s1, s2) &&
@@ -88,7 +87,7 @@ predicate enc_enc_conf_eq(s1:state, s2:state, d1:PageDb, d2:PageDb,
         // The contents of those addresses is the same
         (forall a | a in TheValidAddresses() && a in atkr_pgs ::
             s1.m.addresses[a] == s2.m.addresses[a]))
-
+    )
 }
 
 predicate regs_usr_equiv(s1:state, s2:state)

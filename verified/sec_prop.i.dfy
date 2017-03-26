@@ -50,9 +50,7 @@ lemma enc_enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         (callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME) && dispPage == atkr 
             ==> enc_enc_conf_eq(s1, s2, d1, d2, atkr))
     // then (s1', d1') =_{atkr} (s2', d2')
-    // (maybe the following line should really be valDisp(_,atkr) ==> d1 =_L d2)
-    ensures valDispPage(d1', atkr) && valDispPage(d2', atkr) &&
-        enc_enc_conf_eqpdb(d1', d2', atkr)  
+    ensures enc_enc_conf_eqpdb(d1', d2', atkr)  
     ensures (var callno := s1.regs[R0]; var dispPage := s1.regs[R1];
         (callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME) && dispPage == atkr 
             ==> enc_enc_conf_eq(s1', s2', d1', d2', atkr))
@@ -62,12 +60,6 @@ lemma enc_enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         := s1.regs[R0], s1.regs[R1], s1.regs[R2], s1.regs[R3], s1.regs[R4];
     var e1', e2' := s1'.regs[R0], s2'.regs[R0];
 
-    if(callno == KOM_SMC_QUERY){
-        assume false;
-    }
-    if(callno == KOM_SMC_GETPHYSPAGES){
-        assume false;
-    }
     if(callno == KOM_SMC_INIT_ADDRSPACE){
        initAddrspace_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, atkr);
     }
@@ -96,8 +88,6 @@ lemma enc_enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
        resume_enc_enc_conf_ni(s1, d1, s1', d1', s2, d2, s2', d2', arg1, atkr);
     }
     if(callno == KOM_SMC_STOP){
-       assume false;
-       // This guy's not happy about a precond.
        stop_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
     }
 }
@@ -111,8 +101,7 @@ lemma enter_enc_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
     requires smc_enter(s2, d2, s2', d2', dispPage, arg1, arg2, arg3)
     requires enc_enc_conf_eqpdb(d1, d2, atkr)
     requires dispPage == atkr ==> enc_enc_conf_eq(s1, s2, d1, d2, atkr)
-    ensures  valDispPage(d1', atkr) && valDispPage(d2', atkr) &&
-        enc_enc_conf_eqpdb(d1', d2', atkr)
+    ensures  enc_enc_conf_eqpdb(d1', d2', atkr)
     ensures  dispPage == atkr ==> enc_enc_conf_eq(s1', s2', d1', d2', atkr)
 {
     // TODO proveme
@@ -128,8 +117,7 @@ lemma resume_enc_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
     requires smc_resume(s2, d2, s2', d2', dispPage)
     requires enc_enc_conf_eqpdb(d1, d2, atkr)
     requires dispPage == atkr ==> enc_enc_conf_eq(s1, s2, d1, d2, atkr)
-    ensures  valDispPage(d1', atkr) && valDispPage(d2', atkr) &&
-        enc_enc_conf_eqpdb(d1', d2', atkr)
+    ensures  enc_enc_conf_eqpdb(d1', d2', atkr)
     ensures  dispPage == atkr ==> enc_enc_conf_eq(s1', s2', d1', d2', atkr)
 {
     // TODO proveme
