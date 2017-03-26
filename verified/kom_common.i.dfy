@@ -120,6 +120,15 @@ predicate SmcProcedureInvariant(s:state, r:state)
         && StackPreserving(s,r)
         && BankedRegsInvariant(s, r)
         && SRegsInvariant(s,r)
+        // TODO: && InsecureMemInvariant(s,r)
+}
+
+predicate InsecureMemInvariant(s:state, r:state)
+    requires ValidState(s) && ValidState(r);
+{
+    forall m:addr :: ValidMem(m)
+        && KOM_DIRECTMAP_VBASE <= m < KOM_DIRECTMAP_VBASE + MonitorPhysBase()
+        ==> MemContents(s.m, m) == MemContents(r.m, m)
 }
 
 predicate MemPreservingExcept(s:state, r:state, base:int, limit:int)
