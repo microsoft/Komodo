@@ -40,22 +40,16 @@ predicate pgInAddrSpc(d: PageDb, n: PageNr, a: PageNr)
 predicate enc_enc_conf_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
     requires validPageDb(d1) && validPageDb(d2)
 {
-    //var atkr_asp := d1[atkr].addrspace;
-    // The disp page is the same in both states
-    (valDispPage(d1, atkr) && valDispPage(d2, atkr)) ==>
-    (var atkr_asp := d1[atkr].addrspace;
-    d1[atkr].addrspace == d2[atkr].addrspace &&
-    // The addrspace is an addrspace page in both states
-    valAddrPage(d1, atkr_asp) && valAddrPage(d2, atkr_asp) &&
-    // The set of pages that belong to the enclave is the same in both 
-    // states.
-    (forall n : PageNr :: pgInAddrSpc(d1, n, atkr_asp) <==>
-        pgInAddrSpc(d2, n, atkr_asp)) &&
-    // This together with two concrete states that refine d1, d2 ensure that 
-    // the contents of the pages that belong to the enclave are the same in 
-    // both states.
-    (forall n : PageNr | pgInAddrSpc(d1, n, atkr_asp) ::
-        d1[n].entry == d2[n].entry))
+     valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
+     // The set of pages that belong to the enclave is the same in both 
+     // states.
+     (forall n : PageNr :: pgInAddrSpc(d1, n, atkr) <==>
+         pgInAddrSpc(d2, n, atkr)) &&
+     // This together with two concrete states that refine d1, d2 ensure that 
+     // the contents of the pages that belong to the enclave are the same in 
+     // both states.
+     (forall n : PageNr | pgInAddrSpc(d1, n, atkr) ::
+         d1[n].entry == d2[n].entry)
 }
 
 // Low-equivalence relation that relates two concrete states that appear 
@@ -72,10 +66,9 @@ predicate enc_enc_conf_eq(s1:state, s2:state, d1:PageDb, d2:PageDb,
     requires validPageDb(d1) && validPageDb(d2)
     requires pageDbCorresponds(s1.m, d1) && pageDbCorresponds(s2.m, d2)
 {
-    valDispPage(d1, atkr) && valDispPage(d2, atkr) &&
-    valAddrPage(d1, d1[atkr].addrspace) && valAddrPage(d2, d2[atkr].addrspace) &&
-    (var atkr_asp := d1[atkr].addrspace;
-    var l1p := d1[atkr_asp].entry.l1ptnr; // same in both d1, d2 because of eqdb
+    valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
+    // valAddrPage(d1, d1[atkr].addrspace) && valAddrPage(d2, d2[atkr].addrspace) &&
+    (var l1p := d1[atkr].entry.l1ptnr; // same in both d1, d2 because of eqdb
     regs_usr_equiv(s1, s2) &&
     configs_usr_equiv(s1, s2) &&
     nonStoppedL1(d1, l1p) <==> nonStoppedL1(d2, l1p) &&
@@ -140,6 +133,8 @@ function PagesInTable(pt:AbsPTable): set<addr>
 //-----------------------------------------------------------------------------
 // These relate states if the parts that the attacker cannot modify are the 
 // same in both.
+//
+// TODO lots of fixing similar to the fixes for the conf spec.
 predicate enc_enc_integ_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
     requires validPageDb(d1) && validPageDb(d2)
     requires valDispPage(d1, atkr)

@@ -13,14 +13,14 @@ predicate ni_reqs(s1: state, d1: PageDb, s1': state, d1': PageDb,
     SaneState(s2) && validPageDb(d2) && SaneState(s2') && validPageDb(d2') &&
     pageDbCorresponds(s1.m, d1) && pageDbCorresponds(s1'.m, d1') &&
     pageDbCorresponds(s2.m, d2) && pageDbCorresponds(s2'.m, d2') &&
-    valDispPage(d1, atkr) && valDispPage(d2, atkr)
+    valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
 }
 
 predicate ni_reqs_(d1: PageDb, d1': PageDb, d2: PageDb, d2': PageDb, atkr: PageNr)
 {
     validPageDb(d1) && validPageDb(d1') &&
     validPageDb(d2) && validPageDb(d2') &&
-    valDispPage(d1, atkr) && valDispPage(d2, atkr)
+    valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
 }
 
 predicate same_call_args(s1:state, s2: state)
@@ -50,7 +50,9 @@ lemma enc_enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         (callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME) && dispPage == atkr 
             ==> enc_enc_conf_eq(s1, s2, d1, d2, atkr))
     // then (s1', d1') =_{atkr} (s2', d2')
-    ensures enc_enc_conf_eqpdb(d1', d2', atkr)  
+    ensures !(var callno := s1.regs[R0]; var asp := s1.regs[R1];
+        callno == KOM_SMC_STOP && asp == atkr) ==>
+        enc_enc_conf_eqpdb(d1', d2', atkr)  
     ensures (var callno := s1.regs[R0]; var dispPage := s1.regs[R1];
         (callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME) && dispPage == atkr 
             ==> enc_enc_conf_eq(s1', s2', d1', d2', atkr))
@@ -89,6 +91,7 @@ lemma enc_enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     }
     if(callno == KOM_SMC_STOP){
        stop_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
+       assume false; // XXX this deosn't even make the proof go through...
     }
 }
 
@@ -141,29 +144,29 @@ lemma initAddrspace_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
             d2[atkr].addrspace == addrspacePage))
         ==> e1' == e2'
 {
-    var atkr_asp := d1[atkr].addrspace;
-    if( atkr_asp == addrspacePage ) {
+    //var atkr_asp := d1[atkr].addrspace;
+    if( atkr == addrspacePage ) {
         assert enc_enc_conf_eqpdb(d1', d2', atkr);
         assert e1' == e2';
     } else {
-        assert enc_enc_conf_eqpdb(d1', d2', atkr) by {
-            assert forall n : PageNr :: pgInAddrSpc(d1', n, atkr_asp) <==>
-                pgInAddrSpc(d2', n, atkr_asp) by {
-                    if(e1' == KOM_ERR_SUCCESS) {
-                        assert !pgInAddrSpc(d1', addrspacePage, atkr_asp);
-                        assert !pgInAddrSpc(d1', l1PTPage, atkr_asp);
-                        assert !pgInAddrSpc(d2', addrspacePage, atkr_asp);
-                        assert !pgInAddrSpc(d2', l1PTPage, atkr_asp);
-                        forall( n | validPageNr(n) && n != addrspacePage &&
-                            n != l1PTPage && !pgInAddrSpc(d1, n, atkr_asp))
-                            ensures !pgInAddrSpc(d1', n, atkr_asp) { }
-                        forall( n | validPageNr(n) && n != addrspacePage &&
-                            n != l1PTPage && !pgInAddrSpc(d2, n, atkr_asp))   
-                            ensures !pgInAddrSpc(d2', n, atkr_asp) { }
-                        assert forall n : PageNr :: pgInAddrSpc(d1', n, atkr_asp) <==>
-                            pgInAddrSpc(d2', n, atkr_asp);
-                    }
-                }
+        forall(n : PageNr)
+            ensures pgInAddrSpc(d1', n, atkr) <==>
+                pgInAddrSpc(d2', n, atkr)
+        {
+            if(e1' == KOM_ERR_SUCCESS) {
+                assert !pgInAddrSpc(d1', addrspacePage, atkr);
+                assert !pgInAddrSpc(d1', l1PTPage, atkr);
+                assert !pgInAddrSpc(d2', addrspacePage, atkr);
+                assert !pgInAddrSpc(d2', l1PTPage, atkr);
+                forall( n | validPageNr(n) && n != addrspacePage &&
+                    n != l1PTPage && !pgInAddrSpc(d1, n, atkr))
+                    ensures !pgInAddrSpc(d1', n, atkr) { }
+                forall( n | validPageNr(n) && n != addrspacePage &&
+                    n != l1PTPage && !pgInAddrSpc(d2, n, atkr))   
+                    ensures !pgInAddrSpc(d2', n, atkr) { }
+                assert forall n : PageNr :: pgInAddrSpc(d1', n, atkr) <==>
+                    pgInAddrSpc(d2', n, atkr);
+            }
         }
     }
 }
@@ -179,7 +182,96 @@ lemma initDispatcher_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     ensures enc_enc_conf_eqpdb(d1', d2', atkr) 
 {
     // PROVEME
-    assume false;
+    if( atkr == addrspacePage ) {
+        assert valAddrPage(d1', atkr);
+        assert valAddrPage(d2', atkr);
+        assert valAddrPage(d1', atkr) <==> valAddrPage(d2', atkr);
+       
+        // XXX page might be free in d1 but not d2
+        // What if we weaken the security property by imposing that input 
+        // states are only =_{in,atkr} if the set of free pages is the same, but 
+        // not requiring the same for output states to be =_{out,atkr}
+        assume (e1' == KOM_ERR_PAGEINUSE) <==> (e2' == KOM_ERR_PAGEINUSE);
+        
+        forall(n : PageNr)
+            ensures pgInAddrSpc(d1', n, atkr) <==> pgInAddrSpc(d2', n, atkr)
+         {
+            if(e1' == KOM_ERR_SUCCESS){
+                assert e2' == KOM_ERR_SUCCESS;
+                forall(n: PageNr | n != page && n != atkr)
+                    ensures pgInAddrSpc(d1, n, atkr) <==>
+                        pgInAddrSpc(d1', n, atkr) {}
+            }
+         }
+         forall( n : PageNr | pgInAddrSpc(d1', n, atkr)) 
+             ensures d1'[n].entry == d2'[n].entry { 
+             if(e1' == KOM_ERR_SUCCESS){
+                assert d1'[atkr].entry == d2'[atkr].entry;
+                assert d1'[page].entry == d2'[page].entry;
+                if(n != atkr && n != page) {
+                    assert d1'[n].entry == d1[n].entry;
+                }
+             }
+        }
+    } else {
+        assume false;
+        assert valAddrPage(d1', atkr) <==> valAddrPage(d2', atkr);
+        // forall(n: PageNr | n != addrspacePage && n != page)
+        //     ensures pgInAddrSpc(d1, n, atkr) <==>
+        //         pgInAddrSpc(d1', n, atkr) {}
+        // forall(n: PageNr | n != addrspacePage && n != page)
+        //     ensures pgInAddrSpc(d2, n, atkr) <==>
+        //         pgInAddrSpc(d2', n, atkr) {}
+        // assert !pgInAddrSpc(d1, addrspacePage, atkr);
+        // assert !pgInAddrSpc(d2, addrspacePage, atkr);
+        // assert !pgInAddrSpc(d1', addrspacePage, atkr);
+        // assert !pgInAddrSpc(d2', addrspacePage, atkr);
+        // assert !pgInAddrSpc(d1', addrspacePage, atkr);
+        // assert !pgInAddrSpc(d2', addrspacePage, atkr);
+        // assume false;
+        if(valAddrPage(d1', atkr) && valAddrPage(d2', atkr)){
+            assert (forall n : PageNr :: d1'[n].PageDbEntryTyped? <==>
+                d2'[n].PageDbEntryTyped?) by {
+
+                
+            }
+
+            assert (forall n : PageNr :: pgInAddrSpc(d1', n, atkr) <==>
+                pgInAddrSpc(d2', n, atkr)) by {
+            }
+                    
+            // assert (forall n : PageNr | pgInAddrSpc(d1', n, atkr) ::
+            //      d1'[n].entry == d2'[n].entry) by {
+            // }
+
+            // forall(n : PageNr)
+            //    ensures pgInAddrSpc(d1', n, atkr) <==> pgInAddrSpc(d2', n, atkr)
+            // {
+            //     assume false;
+            //     if(e1' == KOM_ERR_SUCCESS){
+            //         assume false;
+            //         // forall(n: PageNr | n != page && n != atkr)
+            //         //     ensures pgInAddrSpc(d1, n, atkr) <==>
+            //         //         pgInAddrSpc(d1', n, atkr) {}
+            //     }
+            // }
+        }
+        //assert valAddrPage(d1', atkr) <==> valAddrPage(d2', atkr) by {
+        //   assume false;
+        //   if(e1' == KOM_ERR_SUCCESS) {
+        //       assume false;
+        //   }
+        //}
+        /*
+        forall( n : PageNr | pgInAddrSpc(d1', n, atkr))
+            ensures d1'[n].entry == d2'[n].entry
+        {
+            if(e1' == KOM_ERR_SUCCESS){
+                assume false;
+            }
+        }
+        */
+    }
 }
 
 lemma initL2PTable_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
@@ -260,7 +352,7 @@ lemma stop_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     requires smc_stop(d1, addrspacePage) == (d1', e1')
     requires smc_stop(d2, addrspacePage) == (d2', e2')
     requires enc_enc_conf_eqpdb(d1, d2, atkr)
-    ensures  enc_enc_conf_eqpdb(d1', d2', atkr) 
+    ensures  addrspacePage != atkr ==> enc_enc_conf_eqpdb(d1', d2', atkr) 
 {
     // PROVEME
     assume false;
