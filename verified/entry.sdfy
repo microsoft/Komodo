@@ -8,12 +8,12 @@ include "ARMdecls.sdfy"
 include "kom_utils.sdfy"
 
 #verbatim
-function method banked_regs_framesize(): int { 18*WORDSIZE } // TODO: const
+const BANKED_FRAMESIZE:int := 18*WORDSIZE;
 
 predicate {:opaque} wellformed_banked_regs_stackframe(m:memstate, a:addr)
     requires ValidMemState(m)
 {
-    ValidMemRange(a, a + banked_regs_framesize())
+    ValidMemRange(a, a + BANKED_FRAMESIZE)
     && forall i:int | 12 <= i <= 17 ::
         ValidPsrWord(MemContents(m, a + i * WORDSIZE))
 }
@@ -21,7 +21,7 @@ predicate {:opaque} wellformed_banked_regs_stackframe(m:memstate, a:addr)
 lemma lemma_wellformed_banked_regs_stackframe_preserved(m1:memstate, m2:memstate, a:addr)
     requires ValidMemState(m1) && ValidMemState(m2)
     requires wellformed_banked_regs_stackframe(m1, a)
-    requires forall p:addr :: ValidMem(p) && (a <= p < a + banked_regs_framesize())
+    requires forall p:addr :: ValidMem(p) && (a <= p < a + BANKED_FRAMESIZE)
         ==> MemContents(m1, p) == MemContents(m2, p)
     ensures wellformed_banked_regs_stackframe(m2, a)
 {
@@ -67,7 +67,7 @@ predicate {:opaque} banked_regs_stackframe(s:state, m:memstate, a:addr)
 lemma lemma_stackunstack_banked_regs(s1:state, m1:memstate, s2:state, m2:memstate, a:addr)
     requires SaneState(s1) && ValidMemState(m1) && SaneState(s2) && ValidMemState(m2)
     requires banked_regs_stackframe(s1, m1, a) && banked_regs_stackframe(s2, m2, a)
-    requires forall p:addr :: ValidMem(p) && (a <= p < a + banked_regs_framesize())
+    requires forall p:addr :: ValidMem(p) && (a <= p < a + BANKED_FRAMESIZE)
         ==> MemContents(m1, p) == MemContents(m2, p)
     ensures BankedRegsInvariant(s1, s2) && SpsrsInvariant(s1, s2)
 {
@@ -128,7 +128,7 @@ procedure stack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
         SaneState(this);
     requires
         @tmp != OSP;
-        stack_bytes_in >= banked_regs_framesize();
+        stack_bytes_in >= BANKED_FRAMESIZE;
         StackBytesRemaining(this, stack_bytes_in);
     reads
         spsr_fiq; spsr_irq; spsr_svc; spsr_abt; spsr_und; spsr_mon;
@@ -137,15 +137,15 @@ procedure stack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
     modifies
         mem; sp;
     ensures
-        sp == old(sp)-banked_regs_framesize();
-        stack_bytes == stack_bytes_in-banked_regs_framesize();
+        sp == old(sp)-BANKED_FRAMESIZE;
+        stack_bytes == stack_bytes_in-BANKED_FRAMESIZE;
         StackBytesRemaining(this,stack_bytes);
         banked_regs_stackframe(old(this), this.m, sp);
         NonStackMemPreserving(old(this),this);
         ParentStackPreserving(old(this),this);
 {
-    SUB(sp, sp, const(banked_regs_framesize()));
-    stack_bytes := stack_bytes_in - banked_regs_framesize();
+    SUB(sp, sp, const(BANKED_FRAMESIZE));
+    stack_bytes := stack_bytes_in - BANKED_FRAMESIZE;
 
     ghost var start := this;
 
@@ -245,8 +245,8 @@ procedure unstack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
     requires
         @tmp == OReg(R2); //@tmp != OSP;
         
-        isUInt32(sp + banked_regs_framesize());
-        sp + banked_regs_framesize() <= StackBase();
+        isUInt32(sp + BANKED_FRAMESIZE);
+        sp + BANKED_FRAMESIZE <= StackBase();
         StackBytesRemaining(this, stack_bytes_in);
         wellformed_banked_regs_stackframe(this.m, sp);
     reads
@@ -257,8 +257,8 @@ procedure unstack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
         sp_usr; sp_fiq; sp_irq; sp_svc; sp_abt; sp_und;
         lr_usr; lr_fiq; lr_irq; lr_svc; lr_abt; lr_und;
     ensures
-        sp == old(sp)+banked_regs_framesize();
-        stack_bytes == stack_bytes_in + banked_regs_framesize();
+        sp == old(sp)+BANKED_FRAMESIZE;
+        stack_bytes == stack_bytes_in + BANKED_FRAMESIZE;
         StackBytesRemaining(this, stack_bytes);
         banked_regs_stackframe(this, old(this.m), old(sp));
         //CoreRegPreservingExcept(old(this), this, set(@tmp,@sp));
@@ -288,8 +288,8 @@ procedure unstack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
     LDR_MSR_spsr(spsr_und, sp, const(16*WORDSIZE), tmp);
     LDR_MSR_spsr(spsr_mon, sp, const(17*WORDSIZE), tmp);
 
-    ADD(sp, sp, const(banked_regs_framesize()));
-    stack_bytes := stack_bytes_in + banked_regs_framesize();
+    ADD(sp, sp, const(BANKED_FRAMESIZE));
+    stack_bytes := stack_bytes_in + BANKED_FRAMESIZE;
 }
 
 procedure smc_enter_err(
@@ -910,7 +910,7 @@ procedure {:frame false} smc_enterresume_success(
         @pagenr == OReg(R1) && @arg1 == OReg(R2) && @arg2 == OReg(R3) && @arg3 == OReg(R4);
         @callno == OReg(R5) && @err == OReg(R0) && @val == OReg(R1);
         @pagedb_base == OReg(R12) && pagedb_base == AddressOfGlobal(PageDb());
-        stack_bytes >= banked_regs_framesize();
+        stack_bytes >= BANKED_FRAMESIZE;
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         AUCIdef();
@@ -1001,7 +1001,7 @@ procedure {:frame false} kom_smc_enterresume(
         @arg1 == OReg(R2) && @arg2 == OReg(R3) && @arg3 == OReg(R4);
         @err == OReg(R0) && @val == OReg(R1);
         @pagedb_base == OReg(R12) && pagedb_base == AddressOfGlobal(PageDb());
-        stack_bytes >= banked_regs_framesize();
+        stack_bytes >= BANKED_FRAMESIZE;
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         AUCIdef();
