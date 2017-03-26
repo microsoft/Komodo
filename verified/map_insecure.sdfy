@@ -59,11 +59,11 @@ procedure phys_page_is_insecure_ram(
         ret == 0 <==> !physPageIsInsecureRam(old(phys_page));
         ret != 0 ==> validInsecurePageNr(old(phys_page));
 {
-    LDRglobaladdr(ret, SecurePhysBaseOp());
-    LDRglobal(ret, SecurePhysBaseOp(), ret, 0);
+    LDRglobaladdr(ret, MonitorPhysBaseOp());
+    LDRglobal(ret, MonitorPhysBaseOp(), ret, 0);
     lemma_RightShift12(ret);
     LSR(ret, ret, 12);
-    assert ret == SecurePhysBase() / PAGESIZE;
+    assert ret == MonitorPhysBase() / PAGESIZE;
 
     if (phys_page >= ret) {
         assert !physPageIsInsecureRam(phys_page);
@@ -71,8 +71,8 @@ procedure phys_page_is_insecure_ram(
     } else {
         assert validInsecurePageNr(phys_page)
         by {
-            assert SecurePhysBase() < KOM_PHYSMEM_LIMIT;
-            assert SecurePhysBase() / PAGESIZE <
+            assert MonitorPhysBase() < KOM_PHYSMEM_LIMIT;
+            assert MonitorPhysBase() / PAGESIZE <
                 KOM_PHYSMEM_LIMIT / PAGESIZE;
         }
         ret := 1;
@@ -133,10 +133,6 @@ procedure kom_smc_map_insecure(
                     assert err == specErr(specResult);
                 } else {
                     ghost var d' := pagedb_in;
-                    ghost var entry := PageDbEntryTyped(as_page, DataPage); 
-                    assert entry.addrspace == as_page;
-                    assert validAddrspacePage(pagedb, entry.addrspace);
-
                     assert validInsecurePageNr(phys_page);
                     ghost var abs_mapping := wordToMapping(mapping);
                     ghost var l2pte := InsecureMapping(phys_page, 
