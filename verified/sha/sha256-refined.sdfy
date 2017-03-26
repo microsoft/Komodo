@@ -377,7 +377,7 @@ ensures
    
     // Prove we updated the Ws correctly
     lemma_WsIncrement(old(mem), mem, trace_in, trace_out, sp, i, sp + 17*WORDSIZE, sp + input_slot);
-    assert { :split_here} true;
+    assert {:split_here}{:refined} true;
     assert ValidMem(sp + 16*WORDSIZE); // OBSERVE
     assert ValidMem(sp + 18*WORDSIZE); // OBSERVE
     assert AddrMemContents(mem, sp + 18*WORDSIZE) == AddrMemContents(old(mem), sp + 18*WORDSIZE);
@@ -667,7 +667,7 @@ ensures
      && t1 == (if i + 1 <= 64 then AddrMemContents(mem, sp + CheapMod16(i + 2)*WORDSIZE) else t1) 
 
      // Remaining Ws are laid out in memory
-     && (i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out.W)[j] == AddrMemContents(mem, sp + CheapMod16(j)*WORDSIZE)))
+     && (i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> ValidMem(sp + CheapMod16(j)*WORDSIZE) && last(trace_out.W)[j] == AddrMemContents(mem, sp + CheapMod16(j)*WORDSIZE)))
 
      // The atohs almost match the outgoing variables
      //&& (let old_a := (if i == 0 || i >= 16 then old(a) else old(BitwiseAdd32(a, t2))) in
@@ -717,6 +717,7 @@ ensures
                             t0, t1, t2, t3, t4, 
                             a, b, c, d, e, f, g, h);
     assert a == mid_a;
+    assert {:split_here}{:refined} true;
 }
 
 #verbatim
@@ -1391,30 +1392,20 @@ ensures
 
     // Save some of the initial state away.  We'll need it later.
     STR(r0, sp, const(16*WORDSIZE));
-    assert ValidMem(sp + 18*WORDSIZE);      // OBSERVE
     STR(r2, sp, const(18*WORDSIZE));
     // Move end_ptr into r12 to satisfy the BlockInvariant. 
     // Note: OpenSSL appears to avoid this by assuming num_blocks > 0
     MOV(r12, r2);  
 
-    // Lots of OBSERVE
-    assert ValidMem(r0 + 0*4);
-    assert ValidMem(r0 + 1*4);
-    assert ValidMem(r0 + 2*4);
-    assert ValidMem(r0 + 3*4);
-    assert ValidMem(r0 + 4*4);
-    assert ValidMem(r0 + 5*4);
-    assert ValidMem(r0 + 6*4);
-    assert ValidMem(r0 + 7*4);
     // Load a - h values into registers
     LDR(r4, r0, 0);
-    LDR(r5, r0, 4);
-    LDR(r6, r0, 8);
-    LDR(r7, r0, 12);
-    LDR(r8, r0, 16);
-    LDR(r9, r0, 20);
-    LDR(r10, r0, 24);
-    LDR(r11, r0, 28);
+    LDR(r5, r0, const(WORDSIZE));
+    LDR(r6, r0, const(2*WORDSIZE));
+    LDR(r7, r0, const(3*WORDSIZE));
+    LDR(r8, r0, const(4*WORDSIZE));
+    LDR(r9, r0, const(5*WORDSIZE));
+    LDR(r10, r0, const(6*WORDSIZE));
+    LDR(r11, r0, const(7*WORDSIZE));
 
     // forall j :| 0 <= j < 19 :: ValidMem(sp + j*4)
     // {
@@ -1448,6 +1439,7 @@ ensures
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, num_blocks);
     assert IsCompleteSHA256Trace(trace_out);
+    assert {:split_here}{:refined} true;
 }
 
 procedure {:refined} scrub_stack()
@@ -1496,6 +1488,8 @@ ensures
 procedure {:refined} {:timeLimitMultiplier 3} sha256_block_data_order(
     ghost trace_in:SHA256Trace,
     ghost input:seq(word)
+    ) returns (
+    ghost trace_out:SHA256Trace
     )
 requires/ensures
     ValidAddrMemStateOpaque(mem);
@@ -1535,7 +1529,7 @@ requires
 
      // Anti-aliasing
      && (ctx + SHA_CTXSIZE*WORDSIZE < input_ptr || ctx > input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE)    // input_ptr != ctx
-     && (ctx + SHA_CTXSIZE*WORDSIZE < sp - 116 || ctx > sp)                              // ctx != sp
+     && (ctx + SHA_CTXSIZE*WORDSIZE < sp - 116 || ctx >= sp)                              // ctx != sp
      && (input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE < sp - 116 || input_ptr >= sp);   // input_ptr != sp
 
 reads
@@ -1560,21 +1554,19 @@ ensures
                             old(r0) + SHA_CTXSIZE * WORDSIZE);
 
     // SHA results
-    exists trace_out ::
-           IsCompleteSHA256Trace(trace_out)
-        && SHA256TraceIsCorrect(trace_out)
-        && SeqLength(trace_out.M) == SeqLength(trace_in.M) + old(r2)
-        && (forall i :: 0 <= i < old(r2) 
-             ==> trace_out.M[SeqLength(trace_in.M) + i] == bswap32_seq(SeqSlice(input, i*SHA_BLOCKSIZE, (i+1)*SHA_BLOCKSIZE)))
-        && last(trace_out.H)[0] == AddrMemContents(mem, old(r0) + 0*WORDSIZE)
-        && last(trace_out.H)[1] == AddrMemContents(mem, old(r0) + 1*WORDSIZE)
-        && last(trace_out.H)[2] == AddrMemContents(mem, old(r0) + 2*WORDSIZE)
-        && last(trace_out.H)[3] == AddrMemContents(mem, old(r0) + 3*WORDSIZE)
-        && last(trace_out.H)[4] == AddrMemContents(mem, old(r0) + 4*WORDSIZE)
-        && last(trace_out.H)[5] == AddrMemContents(mem, old(r0) + 5*WORDSIZE)
-        && last(trace_out.H)[6] == AddrMemContents(mem, old(r0) + 6*WORDSIZE)
-        && last(trace_out.H)[7] == AddrMemContents(mem, old(r0) + 7*WORDSIZE)
-        ;
+    IsCompleteSHA256Trace(trace_out);
+    SHA256TraceIsCorrect(trace_out);
+    SeqLength(trace_out.M) == SeqLength(trace_in.M) + old(r2);
+    (forall i :: 0 <= i < old(r2) 
+      ==> trace_out.M[SeqLength(trace_in.M) + i] == bswap32_seq(SeqSlice(input, i*SHA_BLOCKSIZE, (i+1)*SHA_BLOCKSIZE)));
+    last(trace_out.H)[0] == AddrMemContents(mem, old(r0) + 0*WORDSIZE);
+    last(trace_out.H)[1] == AddrMemContents(mem, old(r0) + 1*WORDSIZE);
+    last(trace_out.H)[2] == AddrMemContents(mem, old(r0) + 2*WORDSIZE);
+    last(trace_out.H)[3] == AddrMemContents(mem, old(r0) + 3*WORDSIZE);
+    last(trace_out.H)[4] == AddrMemContents(mem, old(r0) + 4*WORDSIZE);
+    last(trace_out.H)[5] == AddrMemContents(mem, old(r0) + 5*WORDSIZE);
+    last(trace_out.H)[6] == AddrMemContents(mem, old(r0) + 6*WORDSIZE);
+    last(trace_out.H)[7] == AddrMemContents(mem, old(r0) + 7*WORDSIZE);
 {
     // We need 10 slots to save/restore registers, and then the inner routine needs 19 slots for scratch space
     SUB(sp, sp, 116);
