@@ -576,7 +576,7 @@ lemma lemma_SHA256FinalHelper1Wrapper(
     )
     requires |unprocessed_bytes| == 64;
     requires IsCompleteSHA256Trace(trace_in);
-    requires SHA256TraceIsCorrect(trace_out);
+    requires SHA256TraceIsCorrect(trace_in);
     requires unprocessed_bytes[0] == 0x80;
     requires unprocessed_bytes[1..56] == RepeatByte(0, 55);
     requires unprocessed_bytes[56..64] == Uint64ToBytes(|WordSeqToBytes(ConcatenateSeqs(trace_in.M))|*8);
