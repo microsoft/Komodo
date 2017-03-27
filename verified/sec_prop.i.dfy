@@ -230,63 +230,39 @@ lemma initDispatcher_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
              }
         }
     } else {
-        assume false;
-        assert valAddrPage(d1', atkr) <==> valAddrPage(d2', atkr);
-        // forall(n: PageNr | n != addrspacePage && n != page)
-        //     ensures pgInAddrSpc(d1, n, atkr) <==>
-        //         pgInAddrSpc(d1', n, atkr) {}
-        // forall(n: PageNr | n != addrspacePage && n != page)
-        //     ensures pgInAddrSpc(d2, n, atkr) <==>
-        //         pgInAddrSpc(d2', n, atkr) {}
-        // assert !pgInAddrSpc(d1, addrspacePage, atkr);
-        // assert !pgInAddrSpc(d2, addrspacePage, atkr);
-        // assert !pgInAddrSpc(d1', addrspacePage, atkr);
-        // assert !pgInAddrSpc(d2', addrspacePage, atkr);
-        // assert !pgInAddrSpc(d1', addrspacePage, atkr);
-        // assert !pgInAddrSpc(d2', addrspacePage, atkr);
-        // assume false;
-        if(valAddrPage(d1', atkr) && valAddrPage(d2', atkr)){
-            assert (forall n : PageNr :: d1'[n].PageDbEntryTyped? <==>
-                d2'[n].PageDbEntryTyped?) by {
+        assert valAddrPage(d1, atkr);
+        assert valAddrPage(d2, atkr);
 
-                
-            }
-
-            assert (forall n : PageNr :: pgInAddrSpc(d1', n, atkr) <==>
-                pgInAddrSpc(d2', n, atkr)) by {
-            }
-                    
-            // assert (forall n : PageNr | pgInAddrSpc(d1', n, atkr) ::
-            //      d1'[n].entry == d2'[n].entry) by {
-            // }
-
-            // forall(n : PageNr)
-            //    ensures pgInAddrSpc(d1', n, atkr) <==> pgInAddrSpc(d2', n, atkr)
-            // {
-            //     assume false;
-            //     if(e1' == KOM_ERR_SUCCESS){
-            //         assume false;
-            //         // forall(n: PageNr | n != page && n != atkr)
-            //         //     ensures pgInAddrSpc(d1, n, atkr) <==>
-            //         //         pgInAddrSpc(d1', n, atkr) {}
-            //     }
-            // }
-        }
-        //assert valAddrPage(d1', atkr) <==> valAddrPage(d2', atkr) by {
-        //   assume false;
-        //   if(e1' == KOM_ERR_SUCCESS) {
-        //       assume false;
-        //   }
-        //}
-        /*
-        forall( n : PageNr | pgInAddrSpc(d1', n, atkr))
-            ensures d1'[n].entry == d2'[n].entry
+        forall(n: PageNr)
+            ensures pgInAddrSpc(d1', n, atkr) <==>
+                pgInAddrSpc(d2', n, atkr)
         {
-            if(e1' == KOM_ERR_SUCCESS){
-                assume false;
+            assert pgInAddrSpc(d1, n, atkr) <==> pgInAddrSpc(d1', n, atkr);
+            assert pgInAddrSpc(d2, n, atkr) <==> pgInAddrSpc(d2', n, atkr);
+            if(n == addrspacePage){
+                assert valAddrPage(d1, n) ==> d1[n].addrspace == n;
+                assert valAddrPage(d2, n) ==> d2[n].addrspace == n;
+            }
+            if(validPageNr(addrspacePage) && n == page){
+                var a := addrspacePage; 
+                if(valAddrPage(d1, a)){
+                    var as1 := d1[a].entry.state;
+                    assert (d1[n].PageDbEntryTyped? && as1 == InitState) ==>
+                       !pgInAddrSpc(d1, n, atkr);
+                }
+                if(valAddrPage(d2, a)){
+                    var as2 := d2[a].entry.state;
+                    assert (d2[n].PageDbEntryTyped? && as2 == InitState) ==>
+                       !pgInAddrSpc(d2, n, atkr);
+                }
             }
         }
-        */
+
+        forall( n : PageNr | pgInAddrSpc(d1', n, atkr)) 
+             ensures d1'[n].entry == d2'[n].entry
+        {
+            assume false;
+        }
     }
 }
 
