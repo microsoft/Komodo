@@ -18,6 +18,124 @@ include "remove.sdfy"
 // Top-level SMC handler
 //=============================================================================
 
+procedure {:frame false} smc_handler_inner(
+    operand callno:reg,
+    operand arg1:reg,
+    operand arg2:reg,
+    operand arg3:reg,
+    operand arg4:reg,
+    operand pagedb_base:addr,
+    out operand err:reg,
+    out operand retval:reg,
+    ghost stack_bytes: int,
+    ghost pagedb_in: PageDb) returns (ghost pagedb: PageDb)
+    requires/ensures
+        SaneState(this);
+        StackBytesRemaining(this, stack_bytes);
+    requires
+        @callno == OReg(R0) && @arg1 == OReg(R1) && @arg2 == OReg(R2)
+            && @arg3 == OReg(R3) && @arg4 == OReg(R4);
+        @err == OReg(R0) && @retval == OReg(R1);
+        @pagedb_base == OReg(R12) && pagedb_base == AddressOfGlobal(PageDb());
+        stack_bytes >= 80;
+        validPageDb(pagedb_in);
+        pageDbCorresponds(this.m, pagedb_in);
+        AUCIdef(); // FIXME
+        this.conf.scr.ns == NotSecure; // FIXME: cleanup
+    ensures
+        StackPreserving(old(this), this);
+        BankedRegsInvariant(old(this), this);
+        SpsrsInvariant(old(this), this);
+        mode_of_state(this) == mode_of_state(old(this));
+        this.conf.scr.ns == old(this).conf.scr.ns;
+        smchandler(old(this), pagedb_in, this, pagedb);
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+{
+    // is this an enter/resume call?
+    ghost var entry := callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME;
+    r5 := 0;
+    if (callno == const(KOM_SMC_ENTER)) {
+        r5 := 1;
+    } else if (callno == const(KOM_SMC_RESUME)) {
+        r5 := 1;
+    }
+    assert if entry then r5 == 1 else r5 == 0;
+
+    if (r5 == 1) {
+        ghost var s0 := this;
+        pagedb := kom_smc_enterresume(callno, arg1, arg2, arg3, arg4, r12, err, retval,
+                                      pagedb_in, stack_bytes);
+        lemma_ValidEntryPre(old(this), s0, pagedb_in, this, pagedb,
+                            old(arg1), old(arg2), old(arg3), old(arg4));
+        assert smchandler(old(this), pagedb_in, this, pagedb);
+    } else if (callno == const(KOM_SMC_QUERY)) {
+        pagedb := pagedb_in;
+        retval := 0;
+        err := 0x4b000000;
+        ADD(err, err, 0x6d0000);
+        ADD(err, err, 0x6400);
+        ADD(err, err, 0x6f);
+        assert err == KOM_MAGIC; // 0x4b6d646f
+        assert smchandler(old(this), pagedb_in, this, pagedb);
+    } else if (callno == const(KOM_SMC_GETPHYSPAGES)) {
+        pagedb := pagedb_in;
+        retval := const(KOM_SECURE_NPAGES);
+        err := const(KOM_ERR_SUCCESS);
+        assert smchandler(old(this), pagedb_in, this, pagedb);
+    } else if (callno == const(KOM_SMC_INIT_ADDRSPACE)) {
+        pagedb := kom_smc_init_addrspace(arg1, arg2, r12, err, pagedb_in);
+        retval := 0;
+        assert smchandler(old(this), pagedb_in, this, pagedb)
+            by { reveal_smc_initAddrspace_premium(); }
+    } else if (callno == const(KOM_SMC_INIT_DISPATCHER)) {
+        pagedb := kom_smc_init_dispatcher(arg1, arg2, arg3, r12, err, r4, r5, pagedb_in);
+        retval := 0;
+        assert smchandler(old(this), pagedb_in, this, pagedb)
+            by { reveal_smc_initDispatcher_premium(); }
+    } else if (callno == const(KOM_SMC_INIT_L2PTABLE)) {
+        pagedb := kom_smc_init_l2ptable(arg1, arg2, arg3, r12, err, pagedb_in);
+        retval := 0;
+        assert smchandler(old(this), pagedb_in, this, pagedb)
+            by { reveal_smc_initL2PTable_premium(); }
+    } else if (callno == const(KOM_SMC_MAP_SECURE)) {
+        ghost if (!(arg4 == 0 || !physPageIsInsecureRam(arg4))) {
+            assert contentsOfPhysPage(old(this), arg4) == contentsOfPhysPage(this, arg4)
+                by { assert InsecureMemInvariant(old(this), this); }
+        }
+        pagedb := kom_smc_map_secure(arg1, arg2, arg3, arg4, r12, err, pagedb_in);
+        retval := 0;
+        assert smchandler(old(this), pagedb_in, this, pagedb)
+            by { reveal_smc_mapSecure_premium(); }
+    } else if (callno == const(KOM_SMC_MAP_INSECURE)) {
+        pagedb := kom_smc_map_insecure(arg1, arg2, arg3, r12, err, pagedb_in);
+        retval := 0;
+        assert smchandler(old(this), pagedb_in, this, pagedb)
+            by { reveal_smc_mapInsecure_premium(); }
+    } else if (callno == const(KOM_SMC_REMOVE)) {
+        pagedb := kom_smc_remove(arg1, r12, err, pagedb_in);
+        retval := 0;
+        assert smchandler(old(this), pagedb_in, this, pagedb)
+            by { reveal_smc_remove_premium(); }
+    } else if (callno == const(KOM_SMC_FINALISE)) {
+        pagedb := kom_smc_finalise(arg1, r12, err, pagedb_in);
+        retval := 0;
+        assert smchandler(old(this), pagedb_in, this, pagedb)
+            by { reveal_smc_finalise_premium(); }
+    } else if (callno == const(KOM_SMC_STOP)) {
+        pagedb := kom_smc_stop(arg1, r12, err, pagedb_in);
+        retval := 0;
+        assert smchandler(old(this), pagedb_in, this, pagedb)
+            by { reveal_smc_stop_premium(); }
+    } else {
+        pagedb := pagedb_in;
+        err := const(KOM_ERR_INVALID);
+        retval := 0;
+        assert smchandler(old(this), pagedb_in, this, pagedb);
+    }
+}
+
+
 procedure {:frame false} smc_handler(
     operand callno:reg,
     operand arg1:reg,
@@ -52,86 +170,19 @@ procedure {:frame false} smc_handler(
 
     LDRglobaladdr(r12, PageDb());
 
-    //reveal_ValidRegState();
-    assert callno == old(callno) && arg1 == old(arg1) && arg2 == old(arg2)
-        && arg3 == old(arg3) && arg4 == old(arg4);
-
-    // is this an enter/resume call?
-    ghost var entry := callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME;
-    r5 := 0;
-    if (callno == const(KOM_SMC_ENTER)) {
-        r5 := 1;
-    } else if (callno == const(KOM_SMC_RESUME)) {
-        r5 := 1;
+    ghost if (callno == KOM_SMC_MAP_SECURE
+              && !(arg4 == 0 || !physPageIsInsecureRam(arg4))) {
+        assert contentsOfPhysPage(old(this), arg4) == contentsOfPhysPage(this, arg4)
+            by { assert InsecureMemInvariant(old(this), this); }
     }
-    assert (r5 == 1 || r5 == 0) && (entry <==> r5 == 1);
 
-    if (r5 == 1) {
-        ghost var s0 := this;
-        pagedb := kom_smc_enterresume(callno, arg1, arg2, arg3, arg4, r12, err, retval,
-                                      pagedb_in, stack_bytes_local);
-        lemma_ValidEntryPre(old(this), s0, pagedb_in, this, pagedb,
+    ghost var s0 := this;
+    pagedb := smc_handler_inner(callno, arg1, arg2, arg3, arg4, r12, err, retval,
+                                stack_bytes_local, pagedb_in);
+
+    ghost if (old(callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME)) {
+            lemma_ValidEntryPre(old(this), s0, pagedb_in, this, pagedb,
                             old(arg1), old(arg2), old(arg3), old(arg4));
-        assert smchandler(old(this), pagedb_in, this, pagedb);
-    } else if (callno == const(KOM_SMC_QUERY)) {
-        pagedb := pagedb_in;
-        retval := 0;
-        err := 0x4b000000;
-        ADD(err, err, 0x6d0000);
-        ADD(err, err, 0x6400);
-        ADD(err, err, 0x6f);
-        assert err == KOM_MAGIC; // 0x4b6d646f
-        assert smchandler(old(this), pagedb_in, this, pagedb);
-    } else if (callno == const(KOM_SMC_GETPHYSPAGES)) {
-        pagedb := pagedb_in;
-        retval := const(KOM_SECURE_NPAGES);
-        err := const(KOM_ERR_SUCCESS);
-        assert smchandler(old(this), pagedb_in, this, pagedb);
-    } else if (callno == const(KOM_SMC_INIT_ADDRSPACE)) {
-        pagedb := kom_smc_init_addrspace(arg1, arg2, r12, err, pagedb_in);
-        retval := 0;
-        reveal_smc_initAddrspace_premium();
-        assert smchandler(old(this), pagedb_in, this, pagedb);
-    } else if (callno == const(KOM_SMC_INIT_DISPATCHER)) {
-        pagedb := kom_smc_init_dispatcher(arg1, arg2, arg3, r12, err, r4, r5, pagedb_in);
-        retval := 0;
-        reveal_smc_initDispatcher_premium();
-        assert smchandler(old(this), pagedb_in, this, pagedb);
-    } else if (callno == const(KOM_SMC_INIT_L2PTABLE)) {
-        pagedb := kom_smc_init_l2ptable(arg1, arg2, arg3, r12, err, pagedb_in);
-        retval := 0;
-        reveal_smc_initL2PTable_premium();
-        assert smchandler(old(this), pagedb_in, this, pagedb);
-    } else if (callno == const(KOM_SMC_MAP_SECURE)) {
-        pagedb := kom_smc_map_secure(arg1, arg2, arg3, arg4, r12, err, pagedb_in);
-        retval := 0;
-        reveal_smc_mapSecure_premium();
-        assert smchandler(old(this), pagedb_in, this, pagedb);
-    } else if (callno == const(KOM_SMC_MAP_INSECURE)) {
-        pagedb := kom_smc_map_insecure(arg1, arg2, arg3, r12, err, pagedb_in);
-        retval := 0;
-        reveal_smc_mapInsecure_premium();
-        assert smchandler(old(this), pagedb_in, this, pagedb);
-    } else if (callno == const(KOM_SMC_REMOVE)) {
-        pagedb := kom_smc_remove(arg1, r12, err, pagedb_in);
-        retval := 0;
-        reveal_smc_remove_premium();
-        assert smchandler(old(this), pagedb_in, this, pagedb);
-    } else if (callno == const(KOM_SMC_FINALISE)) {
-        pagedb := kom_smc_finalise(arg1, r12, err, pagedb_in);
-        retval := 0;
-        reveal_smc_finalise_premium();
-        assert smchandler(old(this), pagedb_in, this, pagedb);
-    } else if (callno == const(KOM_SMC_STOP)) {
-        pagedb := kom_smc_stop(arg1, r12, err, pagedb_in);
-        retval := 0;
-        reveal_smc_stop_premium();
-        assert smchandler(old(this), pagedb_in, this, pagedb);
-    } else {
-        pagedb := pagedb_in;
-        err := const(KOM_ERR_INVALID);
-        retval := 0;
-        assert smchandler(old(this), pagedb_in, this, pagedb);
     }
 
     ghost var prePopErr := err;
@@ -155,9 +206,9 @@ procedure {:frame false} smc_handler(
         assert SpsrsInvariant(old(this), this);
     }
 
-    ghost if (entry) {
-        assert validExceptionTransition(SysState(prePopThis, pagedb),
-                                        SysState(this, pagedb), old(arg1))
+    ghost if (old(callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME)) {
+        assert validExceptionTransition(prePopThis, pagedb,
+                                        this, pagedb, old(arg1))
             by { reveal validExceptionTransition; }
         lemma_ValidEntryPost(old(this), pagedb_in, prePopThis, pagedb, this,
                              old(arg1), old(arg2), old(arg3), old(arg4));
