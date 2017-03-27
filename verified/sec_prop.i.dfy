@@ -20,7 +20,9 @@ predicate ni_reqs_(d1: PageDb, d1': PageDb, d2: PageDb, d2': PageDb, atkr: PageN
 {
     validPageDb(d1) && validPageDb(d1') &&
     validPageDb(d2) && validPageDb(d2') &&
-    valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+    valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
+    // This is a slight weakening of the security property...
+    (forall n : PageNr :: d1[n].PageDbEntryFree? <==> d2[n].PageDbEntryFree?)
 }
 
 predicate same_call_args(s1:state, s2: state)
@@ -151,14 +153,7 @@ lemma initAddrspace_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     requires smc_initAddrspace(d1, addrspacePage, l1PTPage) == (d1', e1')
     requires smc_initAddrspace(d2, addrspacePage, l1PTPage) == (d2', e2')
     requires enc_enc_conf_eqpdb(d1, d2, atkr)
-    ensures enc_enc_conf_eqpdb(d1', d2', atkr) 
-    // Not sure that the following is really needed... I don't think the 
-    // enclaves can observe the error ?
-    // If this is needed, it should be pushed to the top-level thing
-    ensures (validPageNr(addrspacePage) &&
-        (d1[atkr].addrspace == addrspacePage ||
-            d2[atkr].addrspace == addrspacePage))
-        ==> e1' == e2'
+    ensures  enc_enc_conf_eqpdb(d1', d2', atkr) 
 {
     //var atkr_asp := d1[atkr].addrspace;
     if( atkr == addrspacePage ) {
@@ -195,7 +190,7 @@ lemma initDispatcher_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     requires smc_initDispatcher(d1, page, addrspacePage, entrypoint) == (d1', e1')
     requires smc_initDispatcher(d2, page, addrspacePage, entrypoint) == (d2', e2')
     requires enc_enc_conf_eqpdb(d1, d2, atkr)
-    ensures enc_enc_conf_eqpdb(d1', d2', atkr) 
+    ensures  enc_enc_conf_eqpdb(d1', d2', atkr) 
 {
     // PROVEME
     if( atkr == addrspacePage ) {
@@ -203,24 +198,26 @@ lemma initDispatcher_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
         assert valAddrPage(d2', atkr);
         assert valAddrPage(d1', atkr) <==> valAddrPage(d2', atkr);
        
-        // XXX page might be free in d1 but not d2
-        // What if we weaken the security property by imposing that input 
-        // states are only =_{in,atkr} if the set of free pages is the same, but 
-        // not requiring the same for output states to be =_{out,atkr}
-        assume (e1' == KOM_ERR_PAGEINUSE) <==> (e2' == KOM_ERR_PAGEINUSE);
-        
         forall(n : PageNr)
             ensures pgInAddrSpc(d1', n, atkr) <==> pgInAddrSpc(d2', n, atkr)
          {
-            if(e1' == KOM_ERR_SUCCESS){
-                assert e2' == KOM_ERR_SUCCESS;
-                forall(n: PageNr | n != page && n != atkr)
-                    ensures pgInAddrSpc(d1, n, atkr) <==>
-                        pgInAddrSpc(d1', n, atkr) {}
+            if(n == atkr) {
+                assert pgInAddrSpc(d1, n, atkr) <==> pgInAddrSpc(d1', n, atkr);
+                assert pgInAddrSpc(d2, n, atkr) <==> pgInAddrSpc(d2', n, atkr);
+            }
+            if(n == page) {
+                var as1 := d1[atkr].entry.state;
+                assert (pageIsFree(d1, n) && as1 == InitState) ==>
+                   pgInAddrSpc(d1', n, atkr);
+            }
+            if(n != page && n != atkr){
+                assert pgInAddrSpc(d1, n, atkr) <==> pgInAddrSpc(d1', n, atkr);
+                assert pgInAddrSpc(d2, n, atkr) <==> pgInAddrSpc(d2', n, atkr);
             }
          }
          forall( n : PageNr | pgInAddrSpc(d1', n, atkr)) 
              ensures d1'[n].entry == d2'[n].entry { 
+             assume (e1' == KOM_ERR_PAGEINUSE) <==> (e2' == KOM_ERR_PAGEINUSE);
              if(e1' == KOM_ERR_SUCCESS){
                 assert d1'[atkr].entry == d2'[atkr].entry;
                 assert d1'[page].entry == d2'[page].entry;
