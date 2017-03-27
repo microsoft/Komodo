@@ -312,25 +312,39 @@ lemma UserExecutionMemInvariant(s:state, s':state, d:PageDb, l1:PageNr)
     requires s.conf.ttbr0.ptbase == page_paddr(l1)
     ensures WSMemInvariantExceptAddrspaceAtPage(s, s', d, l1)
 {
-    reveal_evalUserspaceExecution();
     var abspt := mkAbsPTable(d, l1);
     lemma_ptablesmatch(s.m, d, l1);
     assert ExtractAbsPageTable(s) == Just(abspt);
-    assert forall a | ValidMem(a)
-        && BitwiseMaskHigh(a, 12) !in WritablePagesInTable(abspt)
-        :: MemContents(s'.m, a) == MemContents(s.m, a);
     forall a | ValidMem(a) && address_is_secure(a)
-        && BitwiseMaskHigh(a, 12) in WritablePagesInTable(abspt)
         ensures memSWrInAddrspace(d, l1, a)
+            || MemContents(s.m, a) == MemContents(s'.m, a)
     {
-        // sigh. there's a surprising amount of cruft here to prove
-        // that the page base is secure and on the same page as 'a'
         var pagebase := BitwiseMaskHigh(a, 12);
-        lemma_bitMaskAddrInPage(a, pagebase, l1);
-        lemma_WritablePages(d, l1, pagebase);
+        if pagebase !in WritablePagesInTable(abspt) {
+            assert MemContents(s'.m, a) == MemContents(s.m, a)
+                by { reveal_evalUserspaceExecution(); }
+        } else {
+            var page := lemma_secure_addrInPage(a, pagebase);
+            lemma_WritablePages(d, l1, pagebase);
+            assert memSWrInAddrspace(d, l1, a);
+        }
     }
 }
 
+lemma lemma_secure_addrInPage(a:addr, pagebase:addr) returns (p:PageNr)
+    requires address_is_secure(a)
+    requires pagebase == BitwiseMaskHigh(a, 12)
+    ensures address_is_secure(pagebase)
+    ensures addrInPage(a, p)
+    ensures p == monvaddr_page(pagebase)
+{
+    var pagebase := BitwiseMaskHigh(a, 12);
+    var dummy:PageNr;
+    lemma_bitMaskAddrInPage(a, pagebase, dummy);
+    p := monvaddr_page(pagebase);
+    lemma_bitMaskAddrInPage(a, pagebase, p);
+    assert addrInPage(a, p);
+}
 
 lemma lemma_bitMaskAddrInPage(a:addr, pagebase:addr, p:PageNr)
     requires address_is_secure(a);

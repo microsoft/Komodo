@@ -41,14 +41,18 @@ function {:opaque} smc_remove_premium(pageDbIn: PageDb, page: word)
 }
 
 function {:opaque} smc_mapSecure_premium(pageDbIn: PageDb, page: word,
-    addrspacePage: word, mapping: word, physPage: word) : (PageDb, word) // PageDbOut, KOM_ERR
+    addrspacePage: word, mapping: word, physPage: word, contents: Maybe<seq<word>>) : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
-    ensures  validPageDb(smc_mapSecure_premium(pageDbIn, page, addrspacePage, mapping, physPage).0)
-    ensures  smc_mapSecure_premium(pageDbIn, page, addrspacePage, mapping, physPage) ==
-        smc_mapSecure(pageDbIn, page, addrspacePage, mapping, physPage);
+    requires physPage == 0 || physPageIsInsecureRam(physPage) ==> contents.Just?
+    requires contents.Just? ==> |fromJust(contents)| == PAGESIZE / WORDSIZE
+    ensures  validPageDb(smc_mapSecure_premium(pageDbIn, page, addrspacePage, 
+        mapping, physPage, contents).0)
+    ensures  smc_mapSecure_premium(pageDbIn, page, addrspacePage, mapping, physPage, contents) ==
+        smc_mapSecure(pageDbIn, page, addrspacePage, mapping, physPage,  contents);
 {
-    mapSecurePreservesPageDBValidity(pageDbIn, page, addrspacePage, mapping, physPage);
-    smc_mapSecure(pageDbIn, page, addrspacePage, mapping, physPage)
+    mapSecurePreservesPageDBValidity(pageDbIn, page, addrspacePage, mapping, 
+        physPage, contents);
+    smc_mapSecure(pageDbIn, page, addrspacePage, mapping, physPage, contents)
 }
 
 function {:opaque} smc_mapInsecure_premium(pageDbIn: PageDb, addrspacePage: word,
@@ -266,24 +270,25 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: word)
 }
 
 lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: word,
-    addrspacePage: word, map_word: word, physPage: word)
+    addrspacePage: word, map_word: word, physPage: word, contents: Maybe<seq<word>>)
     requires validPageDb(pageDbIn)
+    requires physPage == 0 || physPageIsInsecureRam(physPage) ==> contents.Just?
+    requires contents.Just? ==> |fromJust(contents)| == PAGESIZE / WORDSIZE
     ensures  validPageDb(smc_mapSecure(pageDbIn, page, addrspacePage,
-        map_word, physPage).0)
+        map_word, physPage, contents).0)
 {
     reveal_validPageDb();
     var mapping := wordToMapping(map_word);
     var pageDbOut := smc_mapSecure(
-        pageDbIn, page, addrspacePage, map_word, physPage).0;
+        pageDbIn, page, addrspacePage, map_word, physPage, contents).0;
     var err := smc_mapSecure(
-        pageDbIn, page, addrspacePage, map_word, physPage).1;
+        pageDbIn, page, addrspacePage, map_word, physPage, contents).1;
 
     if( err != KOM_ERR_SUCCESS ){
     } else {
         assert validPageDbEntryTyped(pageDbOut, page);
-        
         var pageDbA := allocatePage(pageDbIn, page,
-            addrspacePage, DataPage).0;
+            addrspacePage, DataPage(fromJust(contents))).0;
 
         forall( n | validPageNr(n) && n != page
             && pageDbOut[n].PageDbEntryTyped?)
@@ -393,40 +398,83 @@ lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word)
     }
 }
 
+lemma lemma_validEnclaveExecutionStep_validPageDb(s1:state, d1:PageDb,
+    rs:state, rd:PageDb, dispPg:PageNr, retToEnclave:bool)
+    requires ValidState(s1) && validPageDb(d1) && SaneConstants()
+    requires nonStoppedDispatcher(d1, dispPg)
+    requires validEnclaveExecutionStep(s1, d1, rs, rd, dispPg, retToEnclave)
+    ensures validPageDb(rd)
+    ensures nonStoppedDispatcher(rd, dispPg)
+{
+    reveal_validEnclaveExecutionStep();
+    reveal_updateUserPagesFromState();
+
+    if retToEnclave {
+        var s2, s3, s4 :|
+            entryTransition(s1, s2)
+            && userspaceExecutionAndException(s2, s3, s4)
+            && rd == updateUserPagesFromState(s3, d1, dispPg);
+    } else {
+        var s2, s3, s4, d4 :|
+            entryTransition(s1, s2)
+            && userspaceExecutionAndException(s2, s3, s4)
+            && d4 == updateUserPagesFromState(s3, d1, dispPg)
+            && rd == exceptionHandled(s4, d4, dispPg).2;
+        var ex :| evalExceptionTaken(s3, ex, s4);
+        exceptionHandledValidPageDb(s3, ex, s4, d4, dispPg);
+        assert nonStoppedDispatcher(rd, dispPg);
+    }
+}
+
+lemma lemma_validEnclaveExecution(s1:state, d1:PageDb,
+    rs:state, rd:PageDb, dispPg:PageNr, steps:nat)
+    requires ValidState(s1) && validPageDb(d1) && SaneConstants()
+    requires nonStoppedDispatcher(d1, dispPg)
+    requires validEnclaveExecution(s1, d1, rs, rd, dispPg, steps)
+    ensures validPageDb(rd)
+    decreases steps
+{
+    reveal_validEnclaveExecution();
+    var retToEnclave := (steps > 0);
+    var s5, d5 :|
+        validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
+        && if retToEnclave then
+        (lemma_validEnclaveExecutionStep_validPageDb(s1, d1, s5, d5, dispPg, retToEnclave);
+        validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1))
+        else rd == d5;
+
+    if retToEnclave {
+        lemma_validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1);
+    }
+}
+
 lemma enterPreservesPageDbValidity(s:state, pageDbIn: PageDb, s':state,
     pageDbOut: PageDb, dispPage: word, arg1: word, arg2: word, arg3: word)
     requires ValidState(s) && validPageDb(pageDbIn) && ValidState(s')
+    requires SaneConstants()
     requires smc_enter(s, pageDbIn, s', pageDbOut, dispPage, arg1, arg2, arg3)
     ensures validPageDb(pageDbOut)
 {
     if (smc_enter_err(pageDbIn, dispPage, false) == KOM_ERR_SUCCESS) {
-        assert validEnter(SysState(s, pageDbIn), SysState(s', pageDbOut),
-                          dispPage, arg1, arg2, arg3);
-        assert validDispatcherPage(pageDbIn, dispPage) by { reveal_validPageDb(); }
-        reveal_validEnter();
-        var us, ex, es :| ValidState(us) && mode_of_state(us) == User
-            && evalExceptionTaken(us, ex, es)
-            && (lemma_evalExceptionTaken_NonUser(us, ex, es);
-            pageDbOut == exceptionHandled(es, pageDbIn, dispPage).2);
-        exceptionHandledValidPageDb(us, ex, es, pageDbIn, dispPage);
+        var s1, steps:nat :|
+            preEntryEnter(s, s1, pageDbIn, dispPage, arg1, arg2, arg3)
+            && validEnclaveExecution(s1, pageDbIn, s', pageDbOut, dispPage, steps);
+        lemma_validEnclaveExecution(s1, pageDbIn, s', pageDbOut, dispPage, steps);
     }
 }
 
 lemma resumePreservesPageDbValidity(s:state, pageDbIn: PageDb, s':state,
                                     pageDbOut: PageDb, dispPage: word)
     requires ValidState(s) && validPageDb(pageDbIn) && ValidState(s')
+    requires SaneConstants()
     requires smc_resume(s, pageDbIn, s', pageDbOut, dispPage)
     ensures validPageDb(pageDbOut)
 {
     if (smc_enter_err(pageDbIn, dispPage, true) == KOM_ERR_SUCCESS) {
-        assert validResume(SysState(s, pageDbIn), SysState(s', pageDbOut), dispPage);
-        assert validDispatcherPage(pageDbIn, dispPage) by { reveal_validPageDb(); }
-        reveal_validResume();
-        var us, ex, es :| ValidState(us) && mode_of_state(us) == User
-            && evalExceptionTaken(us, ex, es)
-            && (lemma_evalExceptionTaken_NonUser(us, ex, es);
-            pageDbOut == exceptionHandled(es, pageDbIn, dispPage).2);
-        exceptionHandledValidPageDb(us, ex, es, pageDbIn, dispPage);
+        var s1, steps:nat :|
+            preEntryResume(s, s1, pageDbIn, dispPage)
+            && validEnclaveExecution(s1, pageDbIn, s', pageDbOut, dispPage, steps);
+        lemma_validEnclaveExecution(s1, pageDbIn, s', pageDbOut, dispPage, steps);
     }
 }
 
@@ -481,7 +529,7 @@ lemma lemma_allocatePage_preservesMappingGoodness(
 
 lemma smchandlerPreservesPageDbValidity(s: state, pageDbIn: PageDb, s':state,
     pageDbOut: PageDb)
-    requires ValidState(s) && validPageDb(pageDbIn)
+    requires ValidState(s) && validPageDb(pageDbIn) && SaneConstants()
     requires smchandler(s, pageDbIn, s', pageDbOut)
     ensures validPageDb(pageDbOut)
 {
@@ -498,7 +546,8 @@ lemma smchandlerPreservesPageDbValidity(s: state, pageDbIn: PageDb, s':state,
     } else if(callno == KOM_SMC_INIT_L2PTABLE) {
         initL2PTablePreservesPageDBValidity(pageDbIn, arg1, arg2, arg3);
     } else if(callno == KOM_SMC_MAP_SECURE) {
-        mapSecurePreservesPageDBValidity(pageDbIn, arg1, arg2, arg3, arg4);
+        var pg := maybeContentsOfPhysPage(s, arg4);
+        mapSecurePreservesPageDBValidity(pageDbIn, arg1, arg2, arg3, arg4, pg);
     } else if(callno == KOM_SMC_MAP_INSECURE) {
         mapInsecurePreservesPageDbValidity(pageDbIn, arg1, arg2, arg3);
     } else if(callno == KOM_SMC_REMOVE) {

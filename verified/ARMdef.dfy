@@ -252,7 +252,7 @@ datatype ins =
 //-----------------------------------------------------------------------------
 // Code Representation
 //-----------------------------------------------------------------------------
-datatype ocmp = OEq | ONe | OLe | OGe | OLt | OGt
+datatype ocmp = OEq | ONe | OLe | OGe | OLt | OGt | OTstEq | OTstNe
 datatype obool = OCmp(cmp:ocmp, o1:operand, o2:operand)
 
 datatype codes = CNil | va_CCons(hd:code, tl:codes)
@@ -833,6 +833,8 @@ function evalCmp(c:ocmp, i1:word, i2:word):bool
     case OGe => i1 >= i2
     case OLt => i1 <  i2
     case OGt => i1 >  i2
+    case OTstEq => BitwiseAnd(i1, i2) == 0
+    case OTstNe => BitwiseAnd(i1, i2) != 0
 }
 
 function evalOBool(s:state, o:obool):bool

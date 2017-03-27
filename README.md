@@ -43,12 +43,12 @@ Required tools:
 
  * Vale, which is tracked via a git submodule:
     1. Run `git submodule init && git submodule update`
-    2. See `tools/vale/INSTALL.md` for full instructions, or, briefly:
+    2. Build Vale, making sure to point it at the correct copy of Dafny. (See
+       `tools/vale/INSTALL.md` for the generic, instructions.)
        1. Install `scons`, `fsharp`, `nuget` and `mono-devel` packages
        2. `cd tools/vale`
        3. `nuget restore ./tools/Vale/src/packages.config -PackagesDirectory tools/FsLexYacc`
        4. Build the vale tool with `scons --DAFNYPATH=$PWD/../dafny bin/vale.exe`
-       5. (If you're on WSL) manually copy over Z3: `cp ../dafny/z3.exe bin`
 
 The supported platform is currently Raspberry Pi 2, either a real
 board, or a custom QEMU, available from [this GitHub

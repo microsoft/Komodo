@@ -34,6 +34,8 @@ function method cmpNot(c:ocmp):ocmp
         case OGe => OLt
         case OLt => OGe
         case OGt => OLe
+        case OTstEq => OTstNe
+        case OTstNe => OTstEq
 }
 
 method printBcc(c:ocmp)
@@ -45,6 +47,17 @@ method printBcc(c:ocmp)
         case OGe => print("  BGE ");
         case OLt => print("  BLT ");
         case OGt => print("  BGT ");
+        case OTstEq => print("  BEQ ");
+        case OTstNe => print("  BNE ");
+}
+
+method printCmp(c:ocmp, o1:operand, o2:operand)
+{
+    if c == OTstEq || c == OTstNe {
+        printIns2Op("TST", o1, o2);
+    } else {
+        printIns2Op("CMP", o1, o2);
+    }
 }
 
 /*
@@ -276,7 +289,7 @@ method printCode(c:code, n:int) returns(n':int)
             var false_branch := n;
             var end_of_block := n + 1;
             // Do comparison
-            printIns2Op("CMP", ifb.o1, ifb.o2);
+            printCmp(ifb.cmp, ifb.o1, ifb.o2);
             // Branch to false branch if cond is false
             printBcc(cmpNot(ifb.cmp)); printLabel(false_branch); nl();
             // True branch
@@ -297,7 +310,7 @@ method printCode(c:code, n:int) returns(n':int)
           printLabel(n1); print(":"); nl();
           n' := printCode(loop, n + 2);
           printLabel(n2); print(":"); nl();
-          printIns2Op("CMP", b.o1, b.o2);
+          printCmp(b.cmp, b.o1, b.o2);
           printBcc(b.cmp); printLabel(n1); nl();
         }
     }

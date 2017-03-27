@@ -1557,6 +1557,7 @@ ensures
     IsCompleteSHA256Trace(trace_out);
     SHA256TraceIsCorrect(trace_out);
     SeqLength(trace_out.M) == SeqLength(trace_in.M) + old(r2);
+    trace_in.M == SeqSlice(trace_out.M, 0, SeqLength(trace_in.M));  // trace_in.M is a prefix of trace_out.M
     (forall i :: 0 <= i < old(r2) 
       ==> trace_out.M[SeqLength(trace_in.M) + i] == bswap32_seq(SeqSlice(input, i*SHA_BLOCKSIZE, (i+1)*SHA_BLOCKSIZE)));
     last(trace_out.H)[0] == AddrMemContents(mem, old(r0) + 0*WORDSIZE);
