@@ -569,6 +569,37 @@ lemma lemma_SHA256FinalHelper1(
     }
 }
 
+ghost method SHA_padding_words2bytes(words:seq<word>, length:word) returns (bytes:seq<byte>)
+    requires |words| == 16;
+    requires words[0] == 0x80;
+    requires forall i :: 1 <= i < 15 ==> words[i] == 0;
+    requires words[15] == length;
+    ensures |bytes| == 64;
+    ensures bytes[0] == 0x80;
+    ensures bytes[1..56] == RepeatByte(0, 55);
+    ensures bytes[56..64] == Uint64ToBytes(length);
+    ensures WordSeqToBytes(words) == bytes;
+
+lemma lemma_ConcatenateSeqs_M_length<T>(M:seq<seq<T>>)
+    //requires IsCompleteSHA256Trace(trace);
+    requires forall i :: 0 <= i < |M| ==> |M[i]| == 16;
+    //requires SHA256TraceIsCorrect(trace);
+    ensures  |ConcatenateSeqs(M)| == |M|*16;
+{
+    if |M| == 0 {
+    } else {
+        assert |M[0]| == 16;
+        lemma_ConcatenateSeqs_M_length(M[1..]);
+    }
+}
+
+lemma lemma_WordSeqToBytes_is_bswap32_seq(s:seq<word>)
+    ensures WordSeqToBytes(s) == bswap32_seq(s);
+
+lemma lemma_WordSeqToBytes_adds(s:seq<word>, s':seq<word>)
+    ensures WordSeqToBytes(s + s') == WordSeqToBytes(s) + WordSeqToBytes(s');
+    
+
 lemma lemma_SHA256FinalHelper1Wrapper(
     trace_in:SHA256Trace,
     trace_out:SHA256Trace,
