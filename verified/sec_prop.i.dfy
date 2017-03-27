@@ -247,22 +247,12 @@ lemma initDispatcher_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                 var a := addrspacePage; 
                 if(valAddrPage(d1, a)){
                     var as1 := d1[a].entry.state;
-                    assert (d1[n].PageDbEntryTyped? && as1 == InitState) ==>
-                       !pgInAddrSpc(d1, n, atkr);
-                }
-                if(valAddrPage(d2, a)){
-                    var as2 := d2[a].entry.state;
-                    assert (d2[n].PageDbEntryTyped? && as2 == InitState) ==>
-                       !pgInAddrSpc(d2, n, atkr);
+                    assert (pageIsFree(d1, n) && as1 == InitState) ==>
+                       !pgInAddrSpc(d1', n, atkr);
                 }
             }
         }
 
-        forall( n : PageNr | pgInAddrSpc(d1', n, atkr)) 
-             ensures d1'[n].entry == d2'[n].entry
-        {
-            assume false;
-        }
     }
 }
 
