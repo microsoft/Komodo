@@ -78,53 +78,45 @@ lemma enc_enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         := s1.regs[R0], s1.regs[R1], s1.regs[R2], s1.regs[R3], s1.regs[R4];
     var e1', e2' := s1'.regs[R0], s2'.regs[R0];
 
-    if(callno == KOM_SMC_INIT_ADDRSPACE){
+    if(callno == KOM_SMC_QUERY || callno == KOM_SMC_GETPHYSPAGES){
+        assert d1' == d1;
+        assert d2' == d2;
+    }
+    else if(callno == KOM_SMC_INIT_ADDRSPACE){
         initAddrspace_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, atkr);
     }
-    if(callno == KOM_SMC_INIT_DISPATCHER){
+    else if(callno == KOM_SMC_INIT_DISPATCHER){
         initDispatcher_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
     }
-    if(callno == KOM_SMC_INIT_L2PTABLE){
+    else if(callno == KOM_SMC_INIT_L2PTABLE){
         initL2PTable_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
     }
-    if(callno == KOM_SMC_MAP_SECURE){
+    else if(callno == KOM_SMC_MAP_SECURE){
         mapSecure_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, arg4, atkr);
     }
-    if(callno == KOM_SMC_MAP_INSECURE){
+    else if(callno == KOM_SMC_MAP_INSECURE){
         mapInsecure_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
     }
-    if(callno == KOM_SMC_REMOVE){
+    else if(callno == KOM_SMC_REMOVE){
         remove_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
     }
-    if(callno == KOM_SMC_FINALISE){
+    else if(callno == KOM_SMC_FINALISE){
         finalise_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
     }
-    if(callno == KOM_SMC_ENTER){
+    else if(callno == KOM_SMC_ENTER){
         enter_enc_enc_conf_ni(s1, d1, s1', d1', s2, d2, s2', d2', arg1, arg2, arg3, arg4, atkr);
     }
-    if(callno == KOM_SMC_RESUME){
+    else if(callno == KOM_SMC_RESUME){
         resume_enc_enc_conf_ni(s1, d1, s1', d1', s2, d2, s2', d2', arg1, atkr);
     }
-    if(callno == KOM_SMC_STOP){
+    else if(callno == KOM_SMC_STOP){
         stop_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
-        // var asp := s1.regs[R1];
-        // if(asp == atkr){
-        //     assert (callno == KOM_SMC_STOP && asp == atkr);
-        //     assert !(var callno := s1.regs[R0]; var asp := s1.regs[R1];
-        //         callno == KOM_SMC_STOP && asp == atkr) ==>
-        //         enc_enc_conf_eqpdb(d1', d2', atkr);
-        // } else {
-        //     stop_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
-        //     assert enc_enc_conf_eqpdb(d1', d2', atkr);
-        //     assert !(var callno := s1.regs[R0]; var asp := s1.regs[R1];
-        //         callno == KOM_SMC_STOP && asp == atkr) ==>
-        //         enc_enc_conf_eqpdb(d1', d2', atkr);
-        // }
-        // assert !(var callno := s1.regs[R0]; var asp := s1.regs[R1];
-        //     callno == KOM_SMC_STOP && asp == atkr) ==>
-        //     enc_enc_conf_eqpdb(d1', d2', atkr);
     }
     else {
+        assert e1' == KOM_ERR_INVALID;
+        assert e2' == KOM_ERR_INVALID;
+        assert d1' == d1;
+        assert d2' == d2;
     }
 }
 
@@ -322,7 +314,7 @@ lemma remove_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     requires smc_remove(d1, page) == (d1', e1')
     requires smc_remove(d2, page) == (d2', e2')
     requires enc_enc_conf_eqpdb(d1, d2, atkr)
-    ensures  page != atkr ==> enc_enc_conf_eqpdb(d1', d2', atkr) 
+    ensures  enc_enc_conf_eqpdb(d1', d2', atkr) 
 {
     // PROVEME
     assume false;
