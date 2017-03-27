@@ -43,7 +43,7 @@ function {:opaque} smc_remove_premium(pageDbIn: PageDb, page: word)
 function {:opaque} smc_mapSecure_premium(pageDbIn: PageDb, page: word,
     addrspacePage: word, mapping: word, physPage: word, contents: Maybe<seq<word>>) : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
-    requires physPage != 0 && physPageIsInsecureRam(physPage) ==> contents.Just?
+    requires physPage == 0 || physPageIsInsecureRam(physPage) ==> contents.Just?
     requires contents.Just? ==> |fromJust(contents)| == PAGESIZE / WORDSIZE
     ensures  validPageDb(smc_mapSecure_premium(pageDbIn, page, addrspacePage, 
         mapping, physPage, contents).0)
@@ -272,7 +272,7 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: word)
 lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: word,
     addrspacePage: word, map_word: word, physPage: word, contents: Maybe<seq<word>>)
     requires validPageDb(pageDbIn)
-    requires physPage != 0 && physPageIsInsecureRam(physPage) ==> contents.Just?
+    requires physPage == 0 || physPageIsInsecureRam(physPage) ==> contents.Just?
     requires contents.Just? ==> |fromJust(contents)| == PAGESIZE / WORDSIZE
     ensures  validPageDb(smc_mapSecure(pageDbIn, page, addrspacePage,
         map_word, physPage, contents).0)
@@ -287,12 +287,8 @@ lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: word,
     if( err != KOM_ERR_SUCCESS ){
     } else {
         assert validPageDbEntryTyped(pageDbOut, page);
-        var contents' := if physPage == 0
-            then SeqRepeat(PAGESIZE/WORDSIZE, 0) 
-            else fromJust(contents);
-        
         var pageDbA := allocatePage(pageDbIn, page,
-            addrspacePage, DataPage(contents')).0;
+            addrspacePage, DataPage(fromJust(contents))).0;
 
         forall( n | validPageNr(n) && n != page
             && pageDbOut[n].PageDbEntryTyped?)
@@ -550,8 +546,7 @@ lemma smchandlerPreservesPageDbValidity(s: state, pageDbIn: PageDb, s':state,
     } else if(callno == KOM_SMC_INIT_L2PTABLE) {
         initL2PTablePreservesPageDBValidity(pageDbIn, arg1, arg2, arg3);
     } else if(callno == KOM_SMC_MAP_SECURE) {
-        var pg := if arg4 == 0 || !physPageIsInsecureRam(arg4)
-            then Nothing else Just(contentsOfPhysPage(s, arg4));
+        var pg := maybeContentsOfPhysPage(s, arg4);
         mapSecurePreservesPageDBValidity(pageDbIn, arg1, arg2, arg3, arg4, pg);
     } else if(callno == KOM_SMC_MAP_INSECURE) {
         mapInsecurePreservesPageDbValidity(pageDbIn, arg1, arg2, arg3);
