@@ -65,6 +65,8 @@ function method va_cmp_le(o1:operand, o2:operand):obool { OCmp(OLe, o1, o2) }
 function method va_cmp_ge(o1:operand, o2:operand):obool { OCmp(OGe, o1, o2) }
 function method va_cmp_lt(o1:operand, o2:operand):obool { OCmp(OLt, o1, o2) }
 function method va_cmp_gt(o1:operand, o2:operand):obool { OCmp(OGt, o1, o2) }
+function method va_cmp_tst_eq(o1:operand, o2:operand):obool { OCmp(OTstEq, o1, o2) }
+function method va_cmp_tst_ne(o1:operand, o2:operand):obool { OCmp(OTstNe, o1, o2) }
 
 function method va_Block(block:codes):code { Block(block) }
 function method va_IfElse(ifb:obool, ift:code, iff:code):code { IfElse(ifb, ift, iff) }
@@ -84,6 +86,8 @@ function method va_op_operand_osp():operand { OSP }
 function method va_op_operand_olr():operand { OLR }
 function method va_op_operand_reg(r:ARMReg):operand { OReg(r) }
 function method va_op_cmp_reg(r:ARMReg):operand { OReg(r) }
+function method va_op_cmp_osp():operand { OSP }
+function method va_op_cmp_olr():operand { OLR }
 function method va_op_operand_sreg(sr:SReg):operand { OSReg(sr) }
 function va_get_ok(s:state):bool { s.ok }
 function va_get_reg(r:ARMReg, s:state):word

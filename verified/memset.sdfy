@@ -1,8 +1,8 @@
 include {:verbatim} "kom_common.i.dfy"
 include "ARMdecls.sdfy"
 
-procedure memcpy(operand dst:addr, operand src:addr, inout operand size:reg,
-                 out operand tmp:reg)
+procedure {:timeLimitMultiplier 2} memcpy(operand dst:addr, operand src:addr,
+                                          inout operand size:reg, out operand tmp:reg)
     modifies
         mem;
     requires/ensures

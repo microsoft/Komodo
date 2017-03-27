@@ -156,6 +156,17 @@ predicate {:opaque} pageDbEntryCorresponds(e:PageDbEntry, entryWords:seq<word>)
     }
 }
 
+predicate {:opaque} pageDbDataCorresponds(p: PageNr, e: PageDbEntryTyped, page:memmap)
+    requires memContainsPage(page, p)
+    requires e.DataPage?
+    requires wellFormedPageDbEntryTyped(e)
+{
+    var base := page_monvaddr(p);
+    forall i | 0 <= i < PAGESIZE / WORDSIZE ::
+        (assert base + i*4 in page;
+        e.contents[i] == page[base + i*4])
+}
+
 predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:memmap)
     requires memContainsPage(page, p)
     requires wellFormedPageDbEntry(e)
@@ -167,7 +178,8 @@ predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:memmap
         || (et.Dispatcher? && pageDbDispatcherCorresponds(p, et, page))
         || (et.L1PTable? && pageDbL1PTableCorresponds(p, et, page))
         || (et.L2PTable? && pageDbL2PTableCorresponds(p, et, page))
-        || et.DataPage?))
+        || (et.DataPage? && pageDbDataCorresponds(p, et, page))
+        ))
 }
 
 predicate {:opaque} pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
@@ -291,7 +303,7 @@ function pageDbEntryTypeVal(e: PageDbEntry): word
         case Dispatcher(ep, entered, ctxt) => KOM_PAGE_DISPATCHER
         case L1PTable(pt) => KOM_PAGE_L1PTABLE
         case L2PTable(pt) => KOM_PAGE_L2PTABLE
-        case DataPage => KOM_PAGE_DATA
+        case DataPage(cont) => KOM_PAGE_DATA
     }
 }
 

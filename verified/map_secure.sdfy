@@ -7,6 +7,7 @@ include "ARMdecls.sdfy"
 include "kom_utils.sdfy"
 include "allocate_page.sdfy"
 include "map_utils.sdfy"
+include "memset.sdfy"
 
 procedure update_l2pte(
     operand as_page:reg,
@@ -28,11 +29,12 @@ procedure update_l2pte(
         validPageDb(d) && wellFormedPageDb(d);
         abs_mapping.l1index == wordToMapping(mapping).l1index;
         abs_mapping.l2index == wordToMapping(mapping).l2index;
-        l2pte_abs is SecureMapping ==> (
+        /*l2pte_abs is SecureMapping ==> (
             pageDbCorrespondsExcluding(this.m,d,l2pte_abs.page)
             && pageDbEntryCorresponds(d[l2pte_abs.page],
                 extractPageDbEntry(this.m,l2pte_abs.page)));
-        !(l2pte_abs is SecureMapping) ==> pageDbCorresponds(this.m, d);
+        !(l2pte_abs is SecureMapping) ==> pageDbCorresponds(this.m, d);*/
+        pageDbCorresponds(this.m, d);
         isAddrspace(d, as_page);
         validMapping(abs_mapping,d,as_page);
         d[as_page].entry.state is InitState;
@@ -253,8 +255,8 @@ procedure is_valid_mapping_target(
     }
 }
 
-procedure phys_page_is_insecure_ram_nz(
-    operand phys_page:reg,
+procedure insecure_phys_to_virt(
+    inout operand phys_page:reg,
     out operand ret:reg)
     requires/ensures
         SaneState(this);
@@ -262,27 +264,71 @@ procedure phys_page_is_insecure_ram_nz(
         @phys_page != @ret && @phys_page != OSP && @ret != OSP;
     reads
         globals;
-    ensures 
+    ensures
         SmcProcedureInvariant(old(this), this);
-        ret == 0 <==> (old(phys_page) != 0 && !physPageIsInsecureRam(old(phys_page)));
+        if old(phys_page == 0 || physPageIsInsecureRam(phys_page))
+            then ret == 1 && (
+                if old(phys_page) == 0
+                then phys_page == 0
+                else phys_page == old(phys_page) * PAGESIZE + KOM_DIRECTMAP_VBASE)
+            else ret == 0;
 {
-    if (phys_page == 0) {
-       ret := 1;
-    } else {
-        LDRglobaladdr(ret, SecurePhysBaseOp());
-        LDRglobal(ret, SecurePhysBaseOp(), ret, 0);
-        lemma_RightShift12(ret);
-        LSR(ret,ret,12);
-        assert ret == SecurePhysBase() / PAGESIZE;
+    LDRglobaladdr(ret, MonitorPhysBaseOp());
+    LDRglobal(ret, MonitorPhysBaseOp(), ret, 0);
+    lemma_RightShift12(ret);
+    LSR(ret, ret, 12);
 
-        if(phys_page < ret)
-        {
-            assert physPageIsInsecureRam(phys_page);
-            ret := 1;
-        } else {
-            ret := 0;
-        }
+    if (phys_page >= ret) {
+        phys_page := 0;
+        ret := 0;
+    } else {
+        ret := 1;
     }
+
+    if (phys_page != 0) {
+        lemma_LeftShift12(phys_page);
+        LSL(phys_page, phys_page, 12);
+        assert phys_page == old(phys_page) * PAGESIZE;
+        ADD(phys_page, phys_page, const(KOM_DIRECTMAP_VBASE));
+    }
+}
+
+procedure init_secure_page(
+    operand page:reg,
+    operand insecure:reg,
+    ghost insecure_phys:word,
+    ghost entry:PageDbEntryTyped)
+    requires/ensures
+        SaneState(this);
+    requires
+        @page != OReg(R11);
+        @insecure != OReg(R9) && @insecure != OReg(R11) && @insecure != OReg(R12) && @insecure != OSP;
+        validPageNr(page);
+        if insecure == 0 then entry == DataPage(SeqRepeat(PAGESIZE/WORDSIZE, 0))
+        else physPageIsInsecureRam(insecure_phys)
+            && insecure == insecure_phys * PAGESIZE + KOM_DIRECTMAP_VBASE
+            && entry == DataPage(contentsOfPhysPage(this, insecure_phys));
+    reads
+        globals;
+    modifies
+        mem; r9; r11; r12;
+    ensures
+        SmcProcedureInvariant(old(this), this);
+        MemPreservingExcept(old(this), this, old(page_monvaddr(page)),
+                            old(page_monvaddr(page)) + PAGESIZE);
+        pageDbDataCorresponds(old(page), entry, extractPage(this.m, old(page)));
+{
+    page_monvaddr_impl(r12, page, r11);
+    MOV(r9, const(PAGESIZE));
+    if (insecure == 0) {
+        MOV(r11, 0);
+        memset(r12, r11, r9);
+    } else {
+        memcpy(r12, insecure, r9, r11);
+    }
+
+    assert pageDbDataCorresponds(old(page), entry, extractPage(this.m, old(page)))
+        by { reveal pageDbDataCorresponds; }
 }
 
 #verbatim
@@ -473,7 +519,7 @@ procedure kom_smc_map_secure(
     inout operand page:reg,
     operand as_page:reg,
     operand mapping:reg,
-    operand phys_page:reg,
+    inout operand phys_page:reg,
     operand pagedb_base:reg,
     out operand err:reg,
     ghost pagedb_in: PageDb)
@@ -492,13 +538,17 @@ procedure kom_smc_map_secure(
     ensures
         SmcProcedureInvariant(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
-        tuple(pagedb, err) == smc_mapSecure_premium(pagedb_in, old(page), old(as_page),
-            old(mapping), old(phys_page));
+        tuple(pagedb, err) == old(smc_mapSecure_premium(pagedb_in, page, as_page,
+            mapping, phys_page, if phys_page == 0 || !physPageIsInsecureRam(phys_page)
+            then Nothing else Just(contentsOfPhysPage(this, phys_page))));
         pageDbCorresponds(this.m, pagedb);
 {
+    ghost var contents := if phys_page == 0 || !physPageIsInsecureRam(phys_page)
+            then Nothing else Just(contentsOfPhysPage(this, phys_page));
+
     pagedb := pagedb_in;
     ghost var specResult := smc_mapSecure_premium(pagedb, page, as_page,
-            mapping, phys_page);
+            mapping, phys_page, contents);
 
     if (as_page >= const(KOM_SECURE_NPAGES)) {
         err := const(KOM_ERR_INVALID_ADDRSPACE);
@@ -518,12 +568,15 @@ procedure kom_smc_map_secure(
             if( err != const(KOM_ERR_SUCCESS) ) {
                 assert err == specErr(specResult);
             } else {
-                phys_page_is_insecure_ram_nz(phys_page, err);
+                insecure_phys_to_virt(phys_page, err);
                 if (err == 0) {
                     err := const(KOM_ERR_INVALID_PAGENO);
                     assert err == specErr(specResult);
                 } else {
-                    ghost var entry := PageDbEntryTyped(as_page, DataPage); 
+                    ghost var contents' := if contents == Nothing then
+                        SeqRepeat(PAGESIZE/WORDSIZE, 0)
+                        else fromJust(contents);
+                    ghost var entry := PageDbEntryTyped(as_page, DataPage(contents'));
                     assert entry.addrspace == as_page;
                     assert validAddrspacePage(pagedb, entry.addrspace);
                     assert page == old(page);
@@ -538,31 +591,43 @@ procedure kom_smc_map_secure(
                         assert pageDbCorresponds(this.m,pagedb);
                     } else {
                         assert err == KOM_ERR_SUCCESS;
-                        assert page == old(page);
-                        assert as_page == old(as_page);
+                        assert page == old(page) && as_page == old(as_page);
+                        assert contentsOfPhysPage(old(this), old(phys_page))
+                            == contentsOfPhysPage(this, old(phys_page))
+                            by { assert InsecureMemInvariant(old(this), this); }
+                        ghost var tmpst := this;
+                        init_secure_page(page, phys_page, old(phys_page), entry.entry);
+                        AllButOnePagePreserving(old(page), tmpst, this);
+
+                        assert pageContentsCorresponds(old(page), entry,
+                                                       extractPage(this.m,old(page)))
+                            by { reveal pageContentsCorresponds; }
+                        assert page == old(page) && as_page == old(as_page);
                         assert pageDbCorrespondsExcluding(this.m,pagedb,page);
                         assert pageDbEntryCorresponds(pagedb[page],
                                 extractPageDbEntry(this.m,page));
+
                         ghost var abs_mapping := wordToMapping(mapping);
                         assert isValidMappingTarget(pagedb_in, as_page, mapping)
                             == KOM_ERR_SUCCESS;
-                        forall :: isValidMappingTarget(pagedb, as_page, mapping)
+                        assert isValidMappingTarget(pagedb, as_page, mapping)
                             == KOM_ERR_SUCCESS
-                        {
+                        by {
                             lemma_allocatePage_preservesMappingGoodness(
-                                pagedb_in,page,as_page,entry.entry,
+                                pagedb_in,old(page),as_page,entry.entry,
                                 pagedb,err,mapping);
                         }
-                        reveal_wordToMapping();
-                        ghost var l2pte := SecureMapping(page, 
+                        reveal wordToMapping;
+                        ghost var l2pte := SecureMapping(old(page), 
                             abs_mapping.perm.w, abs_mapping.perm.x);
-                       
+
                         assert validL2PTE(pagedb, as_page, l2pte);
                         mkL2Pte_secure(mapping, page, abs_mapping, l2pte);
                         assert r10 == mkL1Pte(pagedb_in[pagedb_in[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
                         assert r10 == mkL1Pte(pagedb[pagedb[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
                         pagedb := update_l2pte(as_page, mapping, page, r10, r8, r12,
                                               pagedb, abs_mapping, l2pte);
+
                         assert pageDbCorresponds(this.m, pagedb);
                         //assert pagedb == updateL2Pte(d', as_page, abs_mapping, l2pte);
                         err := const(KOM_ERR_SUCCESS);
