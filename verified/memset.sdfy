@@ -1,8 +1,8 @@
 include {:verbatim} "kom_common.i.dfy"
 include "ARMdecls.sdfy"
 
-procedure {:timeLimitMultiplier 2} memcpy(operand dst:addr, operand src:addr,
-                                          inout operand size:reg, out operand tmp:reg)
+procedure memcpy(operand dst:addr, operand src:addr,
+                 inout operand size:reg, out operand tmp:reg)
     modifies
         mem;
     requires/ensures
@@ -17,9 +17,7 @@ procedure {:timeLimitMultiplier 2} memcpy(operand dst:addr, operand src:addr,
     ensures
         SmcProcedureInvariant(old(this),this);
         MemPreservingExcept(old(this), this, old(dst), old(dst + size));
-        //forall i :: 0 <= i < old(size) && WordAligned(i)
-        //    ==> MemContents(this.m, old(dst) + i) == old(MemContents(this.m, src + i));
-        forall a :: old(dst) <= a < old(dst + size) && WordAligned(a)
+        forall a:addr :: old(dst) <= a < old(dst + size)
             ==> MemContents(this.m, a) == old(MemContents(this.m, a - dst + src));
 {
     while (size > 0)
@@ -31,9 +29,7 @@ procedure {:timeLimitMultiplier 2} memcpy(operand dst:addr, operand src:addr,
             WordAligned(size) && 0 <= size <= old(size);
             dst == old(dst) && src == old(src);
             MemPreservingExcept(old(this), this, dst + size, dst + old(size));
-            //forall i :: (size <= i < old(size)) && WordAligned(i)
-            //    ==> MemContents(this.m, dst + i) == old(MemContents(this.m, src + i));
-            forall a :: dst + size <= a < dst + old(size) && WordAligned(a)
+            forall a:addr :: dst + size <= a < dst + old(size)
                 ==> MemContents(this.m, a) == old(MemContents(this.m, a - dst + src));
         decreases
             size;
@@ -45,8 +41,6 @@ procedure {:timeLimitMultiplier 2} memcpy(operand dst:addr, operand src:addr,
         assert tmp == MemContents(old(this.m), src + size);
         STR(tmp, dst, size);
         assert MemContents(this.m, dst + size) == MemContents(old(this.m), src + size);
-        assert forall p :: ValidMem(p) && p != dst + size
-            ==> MemContents(prevThis.m, p) == MemContents(this.m, p);
     }
 }
 
