@@ -293,11 +293,19 @@ lemma initL2PTable_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     assume false;
 }
 
+
+predicate contentsOk(physPage: word, contents: Maybe<seq<word>>)
+{
+    (physPage == 0 || physPageIsInsecureRam(physPage) ==> contents.Just?) &&
+    (contents.Just? ==> |fromJust(contents)| == PAGESIZE / WORDSIZE)
+}
+
 lemma mapSecure_enc_conf_ni(d1: PageDb, c1: Maybe<seq<word>>, d1': PageDb, e1':word,
                             d2: PageDb, c2: Maybe<seq<word>>, d2': PageDb, e2':word,
                             page:word, addrspacePage:word, mapping:word, 
                             physPage: word, atkr: PageNr)
     requires ni_reqs_(d1, d1', d2, d2', atkr)
+    requires contentsOk(physPage, c1) && contentsOk(physPage, c2)
     requires smc_mapSecure(d1, page, addrspacePage, mapping, physPage, c1) == (d1', e1')
     requires smc_mapSecure(d2, page, addrspacePage, mapping, physPage, c2) == (d2', e2')
     requires enc_conf_eqpdb(d1, d2, atkr)
