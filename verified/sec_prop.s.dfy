@@ -47,8 +47,6 @@ predicate regs_equiv(s1:state, s2:state)
     OperandContents(s1, OSP) == OperandContents(s2, OSP)
 }
 
-
-
 // TODO somehow this broke... put it back...
 // Like WritablePagesInTable but includes pages without the write bit set
 /*
@@ -128,6 +126,12 @@ predicate enc_start_equiv(s1: state, s2: state)
         OperandContents(s1, OLR) == OperandContents(s2, OLR))
 }
 
+predicate insecure_mem_eq(s1: state, s2: state)
+    requires SaneState(s1) && SaneState(s2)
+{
+    forall a: addr | addr_insecure(a) :: s1.m.addresses[a] == s2.m.addresses[a]
+}
+
 //-----------------------------------------------------------------------------
 // Confidentiality, Malicious OS
 //-----------------------------------------------------------------------------
@@ -136,8 +140,7 @@ predicate os_conf_eq(s1: state, s2: state)
     requires SaneState(s1) && SaneState(s2)
 {
     reveal_ValidMemState();
-    regs_equiv(s1, s2) && os_ctrl_eq(s1, s2) &&
-    forall a: addr | addr_insecure(a) :: s1.m.addresses[a] == s2.m.addresses[a]
+    regs_equiv(s1, s2) && os_ctrl_eq(s1, s2) && insecure_mem_eq(s1, s2)
 }
 
 predicate os_ctrl_eq(s1: state, s2: state)

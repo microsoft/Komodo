@@ -27,6 +27,15 @@ predicate ni_reqs_(d1: PageDb, d1': PageDb, d2: PageDb, d2': PageDb, atkr: PageN
     (forall n : PageNr :: d1[n].PageDbEntryFree? <==> d2[n].PageDbEntryFree?)
 }
 
+// Note, the proofs seem to go faster if I don't just reference ni_reqs_weak_ 
+// in ni_reqs_
+predicate ni_reqs_weak_(d1: PageDb, d1': PageDb, d2: PageDb, d2': PageDb, atkr: PageNr)
+{
+    validPageDb(d1) && validPageDb(d1') &&
+    validPageDb(d2) && validPageDb(d2') &&
+    valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+}
+
 predicate same_call_args(s1:state, s2: state)
     requires SaneState(s1) && SaneState(s2)
 {
@@ -55,12 +64,13 @@ lemma lemma_enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
                         s2: state, d2: PageDb, s2': state, d2': PageDb,
                         atkr: PageNr)
     requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
-    requires same_call_args(s1, s2)
     // If smchandler(s1, d1) => (s1', d1')
     requires smchandler(s1, d1, s1', d1')
     // and smchandler(s2, d2) => (s2', d2')
     requires smchandler(s2, d2, s2', d2')
     // s.t. (s1, d1) =_{atkr} (s2, d2)
+    requires same_call_args(s1, s2)
+    requires insecure_mem_eq(s1, s2) // public input to mapSecure.
     requires enc_conf_eqpdb(d1, d2, atkr)
     requires (var callno := s1.regs[R0]; var dispPage := s1.regs[R1];
         (callno == KOM_SMC_ENTER  && entering_atkr(d1, d2, dispPage, atkr, false))
@@ -103,9 +113,14 @@ lemma lemma_enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         lemma_initL2PTable_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
     }
     else if(callno == KOM_SMC_MAP_SECURE){
-        var c1 := maybeContentsOfPhysPage(s1, arg4);
-        var c2 := maybeContentsOfPhysPage(s2, arg4);
-        lemma_mapSecure_enc_conf_ni(d1, c1, d1', e1', d2, c2, d2', e2', arg1, arg2, arg3, arg4, atkr);
+        assert enc_conf_eqpdb(d1', d2', atkr) by {
+            var c1 := maybeContentsOfPhysPage(s1, arg4);
+            var c2 := maybeContentsOfPhysPage(s2, arg4);
+            assert contentsOk(arg4, c1) && contentsOk(arg4, c2);
+            lemma_maybeContents_insec_ni(s1, s2, c1, c2, arg4);
+            assert c1 == c2;
+            lemma_mapSecure_enc_conf_ni(d1, c1, d1', e1', d2, c2, d2', e2', arg1, arg2, arg3, arg4, atkr);
+        }
     }
     else if(callno == KOM_SMC_MAP_INSECURE){
         lemma_mapInsecure_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
@@ -170,6 +185,46 @@ lemma lemma_resume_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
 {
     // TODO proveme
     assume false;
+}
+
+lemma lemma_mapSecure_enc_conf_ni(d1: PageDb, c1: Maybe<seq<word>>, d1': PageDb, e1':word,
+                                  d2: PageDb, c2: Maybe<seq<word>>, d2': PageDb, e2':word,
+                                  page:word, addrspacePage:word, mapping:word, 
+                                  physPage: word, atkr: PageNr)
+    requires ni_reqs_(d1, d1', d2, d2', atkr)
+    requires contentsOk(physPage, c1) && contentsOk(physPage, c2)
+    requires c1 == c2;
+    requires smc_mapSecure(d1, page, addrspacePage, mapping, physPage, c1) == (d1', e1')
+    requires smc_mapSecure(d2, page, addrspacePage, mapping, physPage, c2) == (d2', e2')
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    ensures  enc_conf_eqpdb(d1', d2', atkr) 
+{
+    var go1, go2 := e1' == KOM_ERR_SUCCESS, e2' == KOM_ERR_SUCCESS; 
+    if( go1 && go2 ) {
+        assert enc_conf_eqpdb(d1', d2', atkr) by {
+            assert c1 == c2;
+            var data := DataPage(fromJust(c1)); 
+            var ap1 := allocatePage(d1, page, addrspacePage, data);
+            var ap2 := allocatePage(d2, page, addrspacePage, data);
+            lemma_allocatePage_enc_conf_ni(d1, ap1.0, ap1.1, d2, ap2.0, ap2.1,
+                page, addrspacePage, data, atkr);
+            assert ap1.1 == e1';
+            assert ap2.1 == e2';
+            var abs_mapping := wordToMapping(mapping);
+            var l2pte := SecureMapping(page, abs_mapping.perm.w, abs_mapping.perm.x);
+            assert d1' == updateL2Pte(ap1.0, addrspacePage, abs_mapping, l2pte); 
+            assert d2' == updateL2Pte(ap2.0, addrspacePage, abs_mapping, l2pte); 
+            lemma_updateL2Pte_enc_conf_ni(ap1.0, d1', ap2.0, d2', 
+                addrspacePage, abs_mapping, l2pte, atkr);
+        }
+    }
+    if( go1 && !go2 ) { assert enc_conf_eqpdb(d1', d2', atkr); }
+    if( !go1 && go2 ) { assert enc_conf_eqpdb(d1', d2', atkr); }
+    if( !go1 && !go2 ) {
+        assert d1' == d1;
+        assert d2' == d2;
+        assert enc_conf_eqpdb(d1', d2', atkr);
+    }
 }
 
 lemma lemma_initAddrspace_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
@@ -254,53 +309,6 @@ predicate contentsOk(physPage: word, contents: Maybe<seq<word>>)
     (contents.Just? ==> |fromJust(contents)| == PAGESIZE / WORDSIZE)
 }
 
-lemma lemma_mapSecure_enc_conf_ni(d1: PageDb, c1: Maybe<seq<word>>, d1': PageDb, e1':word,
-                                  d2: PageDb, c2: Maybe<seq<word>>, d2': PageDb, e2':word,
-                                  page:word, addrspacePage:word, mapping:word, 
-                                  physPage: word, atkr: PageNr)
-    requires ni_reqs_(d1, d1', d2, d2', atkr)
-    requires contentsOk(physPage, c1) && contentsOk(physPage, c2)
-    requires smc_mapSecure(d1, page, addrspacePage, mapping, physPage, c1) == (d1', e1')
-    requires smc_mapSecure(d2, page, addrspacePage, mapping, physPage, c2) == (d2', e2')
-    requires enc_conf_eqpdb(d1, d2, atkr)
-    ensures enc_conf_eqpdb(d1', d2', atkr) 
-{
-    // PROVEME
-    assume false;    
-    /*
-    if( atkr == addrspacePage ) {
-        valAddrPage(d1', aktr);
-        valAddrPage(d2', aktr);
-        assume false;
-    } else {
-        forall(n : PageNr)
-            ensures pgInAddrSpc(d1', n, atkr) <==> pgInAddrSpc(d2', n, atkr)
-         {
-            if(n == atkr) {
-                assert pgInAddrSpc(d1, n, atkr) <==> pgInAddrSpc(d1', n, atkr);
-                assert pgInAddrSpc(d2, n, atkr) <==> pgInAddrSpc(d2', n, atkr);
-            }
-            if(n != page && n != atkr){
-                assert pgInAddrSpc(d1, n, atkr) <==> pgInAddrSpc(d1', n, atkr);
-                assert pgInAddrSpc(d2, n, atkr) <==> pgInAddrSpc(d2', n, atkr);
-            }
-            assume false;
-         }
-         forall( n : PageNr | pgInAddrSpc(d1', n, atkr)) 
-             ensures d1'[n].entry == d2'[n].entry { 
-             assume (e1' == KOM_ERR_PAGEINUSE) <==> (e2' == KOM_ERR_PAGEINUSE);
-             if(e1' == KOM_ERR_SUCCESS){
-                assert d1'[atkr].entry == d2'[atkr].entry;
-                assert d1'[page].entry == d2'[page].entry;
-                if(n != atkr && n != page) {
-                    assert d1'[n].entry == d1[n].entry;
-                }
-                assume false;
-             }
-        }
-    }
-    */
-}
 
 lemma lemma_mapInsecure_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                                     d2: PageDb, d2': PageDb, e2':word,
@@ -438,6 +446,49 @@ lemma lemma_allocatePage_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                 }
             }
         }
+    }
+}
+
+lemma lemma_updateL2Pte_enc_conf_ni(d1: PageDb, d1': PageDb,
+                                    d2: PageDb, d2': PageDb,
+                                    a: PageNr, mapping: Mapping, l2e: L2PTE,
+                                    atkr: PageNr)
+    requires ni_reqs_weak_(d1, d1', d2, d2', atkr)
+    requires isAddrspace(d1, a) && isAddrspace(d2, a)
+    requires validMapping(mapping, d1, a) && validMapping(mapping, d1, a)
+    requires d1[a].entry.state.InitState? && d2[a].entry.state.InitState?
+    requires validL2PTE(d1, a, l2e) && validL2PTE(d2, a, l2e)
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    ensures  enc_conf_eqpdb(d1', d2', atkr) 
+{
+    assume false;
+}
+
+lemma lemma_maybeContents_insec_ni(s1: state, s2: state, c1: Maybe<seq<word>>, 
+        c2: Maybe<seq<word>>, physPage: word)
+    requires SaneState(s1) && SaneState(s2) && SaneConstants()
+    requires insecure_mem_eq(s1, s2)
+    requires c1 == maybeContentsOfPhysPage(s1, physPage)
+    requires c2 == maybeContentsOfPhysPage(s2, physPage)
+    ensures  c1 == c2;
+{
+    if(physPage == 0) {
+        assert c1 == c2;
+    } else if( physPageIsInsecureRam(physPage) ) {
+        var base := physPage * PAGESIZE + KOM_DIRECTMAP_VBASE;
+        forall( a: PageNr | base <= a < base + PAGESIZE)
+            ensures addr_insecure(a)
+            ensures s1.m.addresses[a] == s2.m.addresses[a]
+        {
+        }
+        reveal_addrRangeSeq();
+        reveal_addrSeqToContents();
+        assert c1 == Just(contentsOfPhysPage(s1, physPage));
+        assert c2 == Just(contentsOfPhysPage(s2, physPage));
+        assume false; // X_X
+        assert c1 == c2;
+    } else {
+        assert c1 == c2;
     }
 }
 
