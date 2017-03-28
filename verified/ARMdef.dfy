@@ -475,11 +475,11 @@ predicate evalExceptionTaken(s:state, e:exception, r:state)
     var newpsr := psr_of_exception(s, e);
     ValidPsrWord(newpsr) && ValidState(r) &&
     // update mode, copy CPSR of oldmode to SPSR of newmode, havoc LR
-    r == s.(conf := s.conf.(cpsr := decode_psr(newpsr),
+    r == takestep(s).(conf := s.conf.(cpsr := decode_psr(newpsr),
                             spsr := s.conf.spsr[newmode := s.conf.cpsr],
                             ex := e, excount := s.conf.excount + 1, exstep := s.steps),
             sregs := s.sregs[cpsr := newpsr][spsr(newmode) := s.sregs[cpsr]],
-            regs := s.regs[LR(newmode) := r.regs[LR(newmode)]])
+            regs := s.regs[LR(newmode) := nondeterministic_word(s, -2)])
 }
 
 //-----------------------------------------------------------------------------
@@ -499,8 +499,8 @@ predicate evalEnterUserspace(s:state, r:state)
 
 predicate {:opaque} evalUserspaceExecution(s:state, r:state)
     requires ValidState(s)
-    ensures  evalUserspaceExecution(s, r) ==>
-        ValidState(r) && mode_of_state(r) == User;
+    ensures  evalUserspaceExecution(s, r) ==> ValidState(r)
+    ensures  evalUserspaceExecution(s, r) && s.ok ==> r.ok
 {
     reveal_ValidMemState();
     reveal_ValidRegState();
@@ -511,7 +511,7 @@ predicate {:opaque} evalUserspaceExecution(s:state, r:state)
     var pages := WritablePagesInTable(fromJust(pt));
     ValidState(r) &&
     // havoc writable pages and user regs, and take some steps
-    r == s.(m := s.m.(addresses := havocPages(pages, s.m.addresses, r.m.addresses)),
+    r == s.(m := s.m.(addresses := havocPages(pages, s)),
             regs := r.regs,
             steps := r.steps)
     && r.steps > s.steps
@@ -519,20 +519,24 @@ predicate {:opaque} evalUserspaceExecution(s:state, r:state)
         ==> r.regs[SP(m)] == s.regs[SP(m)] && r.regs[LR(m)] == s.regs[LR(m)])
 }
 
-function havocPages(pages:set<addr>, s:memmap, r:memmap): memmap
-    requires forall a :: ValidMem(a) == (a in s) == (a in r)
+function havocPages(pages:set<addr>, s:state): memmap
+    requires ValidState(s)
 {
     // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
-    (map a:addr | ValidMem(a) && a in TheValidAddresses() :: if BitwiseMaskHigh(a, 12) in pages then r[a] else s[a])
+    (map a:addr | ValidMem(a) && a in TheValidAddresses() ::
+     if BitwiseMaskHigh(a, 12) in pages then nondeterministic_word(s, a)
+     else MemContents(s.m, a))
 }
 
 // XXX: To be defined by "application" (exception-handling) code
 predicate {:axiom} ApplicationUsermodeContinuationInvariant(s:state, r:state)
     requires ValidState(s)
-    ensures  ApplicationUsermodeContinuationInvariant(s, r) && s.ok ==> ValidState(r) && r.ok
+    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> ValidState(r)
+    ensures  ApplicationUsermodeContinuationInvariant(s, r) && s.ok ==> r.ok
 predicate {:axiom} ApplicationInterruptContinuationInvariant(s:state, r:state)
     requires ValidState(s)
-    ensures  ApplicationInterruptContinuationInvariant(s, r) && s.ok ==> ValidState(r) && r.ok
+    ensures  ApplicationInterruptContinuationInvariant(s, r) ==> ValidState(r)
+    ensures  ApplicationInterruptContinuationInvariant(s, r) && s.ok ==> r.ok
 
 //-----------------------------------------------------------------------------
 // Model of page tables for userspace execution
@@ -805,10 +809,10 @@ predicate evalUpdate(s:state, o:operand, v:word, r:state)
     reveal_ValidRegState();
     reveal_ValidSRegState();
     match o
-        case OReg(reg) => r == takestep(s).(regs := s.regs[o.r := v])
-        case OLR => r == takestep(s).(regs := s.regs[LR(mode_of_state(s)) := v])
-        case OSP => r == takestep(s).(regs := s.regs[SP(mode_of_state(s)) := v])
-        case OSReg(sr) => r == takestep(s).(sregs := s.sregs[sr := v],
+        case OReg(reg) => r == s.(regs := s.regs[o.r := v])
+        case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := v])
+        case OSP => r == s.(regs := s.regs[SP(mode_of_state(s)) := v])
+        case OSReg(sr) => r == s.(sregs := s.sregs[sr := v],
                                 conf := update_config_from_sreg(s, sr, v))
 }
 
@@ -818,7 +822,7 @@ predicate evalMemUpdate(s:state, m:addr, v:word, r:state)
     ensures evalMemUpdate(s, m, v, r) ==> ValidState(r)
 {
     reveal_ValidMemState();
-    r == takestep(s).(m := s.m.(addresses := s.m.addresses[m := v]))
+    r == s.(m := s.m.(addresses := s.m.addresses[m := v]))
 }
 
 predicate evalGlobalUpdate(s:state, g:symbol, offset:word, v:word, r:state)
@@ -830,7 +834,7 @@ predicate evalGlobalUpdate(s:state, g:symbol, offset:word, v:word, r:state)
     var oldval := s.m.globals[g];
     var newval := oldval[BytesToWords(offset) := v];
     assert |newval| == |oldval|;
-    r == takestep(s).(m := s.m.(globals := s.m.globals[g := newval]))
+    r == s.(m := s.m.(globals := s.m.globals[g := newval]))
 }
 
 function evalCmp(c:ocmp, i1:word, i2:word):bool
@@ -855,11 +859,10 @@ function evalOBool(s:state, o:obool):bool
 }
 
 predicate evalGuard(s:state, o:obool, r:state)
-    requires ValidOperand(o.o1)
-    requires ValidOperand(o.o2)
+    requires ValidState(s) && ValidOperand(o.o1) && ValidOperand(o.o2)
 {
     // TODO: this is where we havoc the flags for the comparison, once we model them
-    r == takestep(s)
+    maybeHandleInterrupt(s, r)
 }
 
 predicate ValidModeChange'(s:state, m:mode)
@@ -877,7 +880,7 @@ predicate ValidModeChange(s:state, v:word)
 }
 
 predicate ValidInstruction(s:state, ins:ins)
-{   
+{
     ValidState(s) && match ins
         case ADD(dest, src1, src2) => ValidOperand(src1) &&
             ValidSecondOperand(src2) && ValidRegOperand(dest)
@@ -944,75 +947,79 @@ predicate ValidInstruction(s:state, ins:ins)
             mod.OConst? && ValidModeEncoding(mod.n)
             && ValidModeChange'(s, decode_mode(mod.n))
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE =>
-            ValidState(s) &&
             ValidModeChange'(s, User) && spsr_of_state(s).m == User
 }
 
-predicate {:axiom} nondeterministic_choice(s:state, nondet:int)
+function {:axiom} nondeterministic_word(s:state, x:int): word
 
-predicate maybeHandleInterrupt(s:state, r:state, nondet:int)
+predicate maybeHandleInterrupt(s:state, r:state)
     requires ValidState(s)
-    ensures !interrupts_enabled(s) && maybeHandleInterrupt(s, r, nondet) ==> s == r
+    ensures !interrupts_enabled(s) && maybeHandleInterrupt(s, r) ==> r == takestep(s)
 {
-    if !s.conf.cpsr.f && nondeterministic_choice(s, nondet)
+    if !s.conf.cpsr.f && nondeterministic_word(s, -1) == 0
         then exists s' :: (evalExceptionTaken(s, ExFIQ, s')
                     && ApplicationInterruptContinuationInvariant(s', r))
-    else if !s.conf.cpsr.i && nondeterministic_choice(s, nondet + 1)
+    else if !s.conf.cpsr.i && nondeterministic_word(s, -1) == 1
         then exists s' :: (evalExceptionTaken(s, ExIRQ, s')
                     && ApplicationInterruptContinuationInvariant(s', r))
-    else s == r
+    else r == takestep(s)
 }
 
-predicate evalIns(ins:ins, s:state, r:state, nondet:int)
+predicate evalIns'(ins:ins, s:state, r:state)
 {
     if !s.ok || !ValidInstruction(s, ins) then !r.ok
-    else exists s' :: maybeHandleInterrupt(s, s', nondet)
-        && match ins
-        case ADD(dst, src1, src2) => evalUpdate(s', dst,
-            TruncateWord(OperandContents(s', src1) + OperandContents(s', src2)), r)
-        case SUB(dst, src1, src2) => evalUpdate(s', dst,
-            OperandContents(s', src1) - OperandContents(s', src2), r)
-        case MUL(dst, src1, src2) => evalUpdate(s', dst,
-            OperandContents(s', src1) * OperandContents(s', src2), r)
-        case UDIV(dst, src1, src2) => evalUpdate(s', dst,
-            OperandContents(s', src1) / OperandContents(s', src2), r)
-        case AND(dst, src1, src2) => evalUpdate(s', dst,
-            BitwiseAnd(OperandContents(s', src1), OperandContents(s', src2)), r)
-        case ORR(dst, src1, src2) => evalUpdate(s', dst,
-            BitwiseOr(OperandContents(s', src1), OperandContents(s', src2)), r)
-        case EOR(dst, src1, src2) => evalUpdate(s', dst,
-            BitwiseXor(OperandContents(s', src1), OperandContents(s', src2)), r)
+    else match ins
+        case ADD(dst, src1, src2) => evalUpdate(s, dst,
+            TruncateWord(OperandContents(s, src1) + OperandContents(s, src2)), r)
+        case SUB(dst, src1, src2) => evalUpdate(s, dst,
+            OperandContents(s, src1) - OperandContents(s, src2), r)
+        case MUL(dst, src1, src2) => evalUpdate(s, dst,
+            OperandContents(s, src1) * OperandContents(s, src2), r)
+        case UDIV(dst, src1, src2) => evalUpdate(s, dst,
+            OperandContents(s, src1) / OperandContents(s, src2), r)
+        case AND(dst, src1, src2) => evalUpdate(s, dst,
+            BitwiseAnd(OperandContents(s, src1), OperandContents(s, src2)), r)
+        case ORR(dst, src1, src2) => evalUpdate(s, dst,
+            BitwiseOr(OperandContents(s, src1), OperandContents(s, src2)), r)
+        case EOR(dst, src1, src2) => evalUpdate(s, dst,
+            BitwiseXor(OperandContents(s, src1), OperandContents(s, src2)), r)
         case LSL(dst, src1, src2) => if !(src2.OConst? && 0 <= src2.n <32) then !r.ok 
-            else evalUpdate(s', dst,
-                LeftShift(OperandContents(s', src1), OperandContents(s', src2)), r)
+            else evalUpdate(s, dst,
+                LeftShift(OperandContents(s, src1), OperandContents(s, src2)), r)
         case LSR(dst, src1, src2) => if !(src2.OConst? && 0 <= src2.n <32) then !r.ok
-            else evalUpdate(s', dst,
-                RightShift(OperandContents(s', src1), OperandContents(s', src2)), r)
-        case REV(dst, src) => evalUpdate(s', dst, bswap32(OperandContents(s', src)), r)
-        case MVN(dst, src) => evalUpdate(s', dst,
-            BitwiseNot(OperandContents(s', src)), r)
+            else evalUpdate(s, dst,
+                RightShift(OperandContents(s, src1), OperandContents(s, src2)), r)
+        case REV(dst, src) => evalUpdate(s, dst, bswap32(OperandContents(s, src)), r)
+        case MVN(dst, src) => evalUpdate(s, dst,
+            BitwiseNot(OperandContents(s, src)), r)
         case LDR(rd, base, ofs) => 
-            evalUpdate(s', rd, MemContents(s'.m, OperandContents(s', base) +
-                OperandContents(s', ofs)), r)
+            evalUpdate(s, rd, MemContents(s.m, OperandContents(s, base) +
+                OperandContents(s, ofs)), r)
         case LDR_global(rd, global, base, ofs) => 
-            evalUpdate(s', rd, GlobalWord(s'.m, global, OperandContents(s', base)
-                + OperandContents(s', ofs) - AddressOfGlobal(global)), r)
+            evalUpdate(s, rd, GlobalWord(s.m, global, OperandContents(s, base)
+                + OperandContents(s, ofs) - AddressOfGlobal(global)), r)
         case LDR_reloc(rd, name) =>
-            evalUpdate(s', rd, AddressOfGlobal(name), r)
+            evalUpdate(s, rd, AddressOfGlobal(name), r)
         case STR(rd, base, ofs) => 
-            evalMemUpdate(s', OperandContents(s', base) +
-                OperandContents(s', ofs), OperandContents(s', rd), r)
+            evalMemUpdate(s, OperandContents(s, base) +
+                OperandContents(s, ofs), OperandContents(s, rd), r)
         case STR_global(rd, global, base, ofs) => 
-            evalGlobalUpdate(s', global, OperandContents(s', base)
-                + OperandContents(s', ofs) - AddressOfGlobal(global),
-                OperandContents(s', rd), r)
-        case MOV(dst, src) => evalUpdate(s', dst, OperandContents(s', src), r)
-        case MRS(dst, src) => evalUpdate(s', dst, OperandContents(s', src), r)
-        case MSR(dst, src) => evalUpdate(s', dst, OperandContents(s', src), r)
-        case MRC(dst, src) => evalUpdate(s', dst, OperandContents(s', src), r)
-        case MCR(dst, src) => evalUpdate(s', dst, OperandContents(s', src), r)
-        case CPSID_IAF(mod) => evalCPSID_IAF(s', mod.n, r)
-        case MOVS_PCLR_TO_USERMODE_AND_CONTINUE => evalMOVSPCLRUC(s', r)
+            evalGlobalUpdate(s, global, OperandContents(s, base)
+                + OperandContents(s, ofs) - AddressOfGlobal(global),
+                OperandContents(s, rd), r)
+        case MOV(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
+        case MRS(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
+        case MSR(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
+        case MRC(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
+        case MCR(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
+        case CPSID_IAF(mod) => evalCPSID_IAF(s, mod.n, r)
+        case MOVS_PCLR_TO_USERMODE_AND_CONTINUE => evalMOVSPCLRUC(s, r)
+}
+
+predicate evalIns(ins:ins, s:state, r:state)
+{
+    if !s.ok || !ValidInstruction(s, ins) then !r.ok
+    else exists s' :: maybeHandleInterrupt(s, s') && evalIns'(ins, s', r)
 }
 
 predicate evalCPSID_IAF(s:state, mod:word, r:state)
@@ -1023,13 +1030,14 @@ predicate evalCPSID_IAF(s:state, mod:word, r:state)
     reveal_ValidSRegState();
     var newpsr := update_psr(s.sregs[cpsr], mod, true, true);
     ValidPsrWord(newpsr) &&
-    r == takestep(s).(sregs := s.sregs[cpsr := newpsr],
-                      conf := s.conf.(cpsr := decode_psr(newpsr)))
+    r == s.(sregs := s.sregs[cpsr := newpsr],
+            conf := s.conf.(cpsr := decode_psr(newpsr)))
 }
 
 predicate {:opaque} evalMOVSPCLRUC(s:state, r:state)
     requires ValidState(s)
-    ensures  evalMOVSPCLRUC(s, r) ==> ValidState(r) && r.ok
+    ensures  evalMOVSPCLRUC(s, r) ==> ValidState(r)
+    ensures  evalMOVSPCLRUC(s, r) && s.ok ==> r.ok
 {
     exists ex, s2, s3, s4 ::
         evalEnterUserspace(s, s2)
