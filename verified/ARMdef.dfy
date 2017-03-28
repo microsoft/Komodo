@@ -29,7 +29,8 @@ type shift_amount = s | 0 <= s < 32 // Some shifts allow s=32, but we'll be cons
 datatype ARMReg = R0|R1|R2|R3|R4|R5|R6|R7|R8|R9|R10|R11|R12| SP(spm:mode) | LR(lrm:mode)
 
 // Special register instruction operands
-datatype SReg = cpsr | spsr(m:mode) | scr | ttbr0
+// TODO (style nit): uppercase constructors
+datatype SReg = cpsr | spsr(m:mode) | SCR | ttbr0
 
 // A model of the relevant configuration register state. References refer to armv7a spec
 // **NOTE** The configuration registers are stored in the state in two places:
@@ -40,7 +41,7 @@ datatype SReg = cpsr | spsr(m:mode) | scr | ttbr0
 datatype config = Config(cpsr:PSR, spsr:map<mode,PSR>, scr:SCR, ttbr0:TTBR, 
     ex:exception, excount:nat, exstep:nat)
 datatype PSR  = PSR(m:mode, f:bool, i:bool) // See B1.3.3
-datatype SCR  = SCR(ns:world, irq:bool, fiq:bool) // See B4.1.129
+datatype SCR  = SCRT(ns:world, irq:bool, fiq:bool) // See B4.1.129
 datatype TTBR = TTBR(ptbase:addr)      // See B4.1.154
 
 datatype Shift = LSLShift(amount_lsl:shift_amount)
@@ -138,7 +139,7 @@ function decode_psr(v:word) : PSR
 // See B4.1.129
 function decode_scr(v:word) : SCR
 {
-    SCR(
+    SCRT(
         if BitwiseAnd(v, 1) != 0 then NotSecure else Secure,
         BitwiseAnd(v, 2) != 0, // IRQ bit
         BitwiseAnd(v, 4) != 0 // FIQ bit
@@ -170,7 +171,7 @@ function update_config_from_sreg(s:state, sr:SReg, v:word): config
             assert m != User;
             var spsr' := s.conf.spsr[ m := decode_psr(v) ];
             s.conf.(spsr := spsr') 
-        case scr => s.conf.(scr := decode_scr(v))
+        case SCR => s.conf.(scr := decode_scr(v))
 }
 
 //-----------------------------------------------------------------------------
@@ -289,7 +290,7 @@ predicate {:opaque} ValidSRegState(sregs:map<SReg, word>, c:config)
     && (forall m:mode :: m != User ==>
         ValidPsrWord(sregs[spsr(m)]) && c.spsr[m] == decode_psr(sregs[spsr(m)]))
     && ttbr0 in sregs && c.ttbr0 == decode_ttbr(sregs[ttbr0])
-    && scr in sregs && c.scr == decode_scr(sregs[scr])
+    && SCR in sregs && c.scr == decode_scr(sregs[SCR])
 }
 
 // All valid states have the same memory address domain, but we don't care what 
@@ -356,7 +357,7 @@ predicate ValidMcrMrcOperand(s:state,o:operand)
 {
     // to simplify the spec, we only consider secure PL1 modes
     o.OSReg? && priv_of_state(s) == PL1 && world_of_state(s) == Secure
-    && (o.sr.scr? || o.sr.ttbr0?)
+    && (o.sr.SCR? || o.sr.ttbr0?)
 }
 
 predicate ValidAnySrcOperand(s:state, o:operand)

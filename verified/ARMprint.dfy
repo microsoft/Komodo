@@ -131,7 +131,7 @@ method printOperand(o:operand)
         case OShift(r, s) => { printReg(r); print(","); printShift(s); }
         case OSReg(r)   => {match r
            case ttbr0   => print("ttbr0");
-           case scr     => print("scr");
+           case SCR     => print("scr");
            case cpsr    => print("cpsr");
            case spsr(m)    => print("spsr");
         }
@@ -202,7 +202,7 @@ method printMcr(instr:string, sro:operand, op:operand)
         var sr := sro.sr;
         print(" p15, 0, ");
         printOperand(op);
-        if (sr.scr?) {
+        if (sr.SCR?) {
             print(", c1, c1, 0");
         } else if (sr.ttbr0?) {
             print(", c2, c0, 0");

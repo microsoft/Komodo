@@ -43,6 +43,8 @@ var{:state sreg(spsr(Abort))}      spsr_abt:int;
 var{:state sreg(spsr(Undefined))}  spsr_und:int;
 var{:state sreg(spsr(Monitor))}    spsr_mon:int;
 var{:state sreg(cpsr)}             cpsr:int;
+var{:state sreg(SCR)}              scr:word;
+var{:state sreg(ttbr0)}            ttbr0:word;
 
 #verbatim
 function MaybeUpdateOk(s:va_state, r:va_state) : va_state
@@ -307,7 +309,7 @@ MCR(out operand dst:creg, operand src:reg)
     requires
         // don't consider writes to SCR outside monitor mode, so we can avoid
         // reasoning about the nonsense case where we drop out of secure world
-        @dst == OSReg(scr) ==> mode_of_state(this) == Monitor;
+        @dst == OSReg(SCR) ==> mode_of_state(this) == Monitor;
     ensures
         ValidMcrMrcOperand(this, @dst);
         dst == old(src);

@@ -92,13 +92,6 @@ lemma lemma_stackunstack_banked_regs(s1:state, m1:memstate, s2:state, m2:memstat
             { reveal_banked_regs_stackframe(); }
     }
 }
-
-predicate SpsrsInvariant(s:state, r:state)
-    requires ValidState(s) && ValidState(r)
-{
-    reveal_ValidSRegState();
-    forall m | m != User :: s.sregs[spsr(m)] == r.sregs[spsr(m)]
-}
 #endverbatim
 
 procedure MRS_STR(
@@ -399,9 +392,6 @@ procedure smc_enter_err(
     }
 }
 
-var {:state sreg(scr)} scr:word;
-var {:state sreg(ttbr0)} ttbr0:word;
-
 procedure switch_addrspace(
     operand pagenr:reg,
     operand pagedb_base:reg,
@@ -510,18 +500,6 @@ procedure leave_secure_world(out operand tmp:reg)
     lemma_scr_exit(old_scr, tmp);
     MCR(scr, tmp);
 }
-
-#verbatim
-predicate EnterResumeSmcProcedureInvariant(s:state, r:state)
-    requires SaneState(s) && SaneState(r)
-{
-    mode_of_state(r) == mode_of_state(s) // implied by SaneState
-        && StackPreserving(s,r)
-        && BankedRegsInvariant(s, r)
-        && SpsrsInvariant(s, r)
-        && r.conf.scr.ns == NotSecure
-}
-#endverbatim
 
 procedure pre_entry_enter(
     operand pagenr:reg,

@@ -35,6 +35,13 @@ predicate SRegsInvariant(s:state, s':state)
     s.sregs == s'.sregs && s.conf == s'.conf
 }
 
+predicate SpsrsInvariant(s:state, r:state)
+    requires ValidState(s) && ValidState(r)
+{
+    reveal_ValidSRegState();
+    forall m | m != User :: s.sregs[spsr(m)] == r.sregs[spsr(m)]
+}
+
 predicate AllRegsInvariant(s:state, s':state)
     requires ValidState(s) && ValidState(s')
 {
@@ -121,6 +128,16 @@ predicate SmcProcedureInvariant(s:state, r:state)
         && BankedRegsInvariant(s, r)
         && SRegsInvariant(s,r)
         // TODO: && InsecureMemInvariant(s,r)
+}
+
+predicate EnterResumeSmcProcedureInvariant(s:state, r:state)
+    requires SaneState(s) && SaneState(r)
+{
+    mode_of_state(r) == mode_of_state(s) // implied by SaneState
+        && StackPreserving(s,r)
+        && BankedRegsInvariant(s, r)
+        && SpsrsInvariant(s, r)
+        && r.conf.scr.ns == NotSecure
 }
 
 predicate InsecureMemInvariant(s:state, r:state)
