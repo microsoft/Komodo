@@ -39,17 +39,19 @@ predicate same_call_args(s1:state, s2: state)
     OperandContents(s1, OReg(R4))  == OperandContents(s2, OReg(R4))
 }
 
-predicate entering_atkr(d1: PageDb, d2: PageDb, disp: word, atkr: PageNr)
+predicate entering_atkr(d1: PageDb, d2: PageDb, disp: word, atkr: PageNr, is_resume:bool)
     requires validPageDb(d1) && validPageDb(d2)
     requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
 {
     validPageNr(disp) &&
     d1[disp].PageDbEntryTyped? && d1[disp].entry.Dispatcher? &&
     d2[disp].PageDbEntryTyped? && d2[disp].entry.Dispatcher? &&
-    d1[disp].addrspace == atkr && d2[disp].addrspace == atkr
+    d1[disp].addrspace == atkr && d2[disp].addrspace == atkr &&
+    smc_enter_err(d1, atkr, is_resume) == KOM_ERR_SUCCESS &&
+    smc_enter_err(d2, atkr, is_resume) == KOM_ERR_SUCCESS
 }
 
-lemma enc_enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
+lemma enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
                       s2: state, d2: PageDb, s2': state, d2': PageDb,
                       atkr: PageNr)
     requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
@@ -59,19 +61,28 @@ lemma enc_enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     // and smchandler(s2, d2) => (s2', d2')
     requires smchandler(s2, d2, s2', d2')
     // s.t. (s1, d1) =_{atkr} (s2, d2)
-    requires enc_enc_conf_eqpdb(d1, d2, atkr)
+    requires enc_conf_eqpdb(d1, d2, atkr)
     requires (var callno := s1.regs[R0]; var dispPage := s1.regs[R1];
-        ((callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME) && 
-            entering_atkr(d1, d2, dispPage, atkr))
-                ==> enc_enc_conf_eq(s1, s2, d1, d2, atkr))
+        (callno == KOM_SMC_ENTER  && entering_atkr(d1, d2, dispPage, atkr, false))
+                ==> enc_conf_eq_entry(s1, s2, d1, d2, atkr))
+    requires (var callno := s1.regs[R0]; var dispPage := s1.regs[R1];
+        (callno == KOM_SMC_RESUME  && entering_atkr(d1, d2, dispPage, atkr, true))
+                ==> enc_conf_eq_entry(s1, s2, d1, d2, atkr))
     // then (s1', d1') =_{atkr} (s2', d2')
     ensures (!(var callno := s1.regs[R0]; var asp := s1.regs[R1];
         callno == KOM_SMC_STOP && asp == atkr) ==>
-        enc_enc_conf_eqpdb(d1', d2', atkr))
-    ensures (var callno := s1.regs[R0]; var dispPage := s1.regs[R1];
-        ((callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME) && 
-            entering_atkr(d1, d2, dispPage, atkr))
-            ==> enc_enc_conf_eq(s1', s2', d1', d2', atkr))
+        enc_conf_eqpdb(d1', d2', atkr))
+    ensures (
+        var callno := s1.regs[R0]; var dispPage := s1.regs[R1];
+        (callno == KOM_SMC_ENTER && entering_atkr(d1, d2, dispPage, atkr, false))
+            // in the following line enc_start_equiv(s1, s2) is not a typo
+            ==> (enc_conf_eq_entry(s1', s2', d1', d2', atkr) && enc_start_equiv(s1, s2))
+    )
+    ensures (
+        var callno := s1.regs[R0]; var dispPage := s1.regs[R1];
+        (callno == KOM_SMC_RESUME && entering_atkr(d1, d2, dispPage, atkr, true))
+            ==> (enc_conf_eq_entry(s1', s2', d1', d2', atkr) && enc_start_equiv(s1, s2))
+    )
 {
     reveal_ValidRegState();
     var callno, arg1, arg2, arg3, arg4
@@ -83,34 +94,36 @@ lemma enc_enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         assert d2' == d2;
     }
     else if(callno == KOM_SMC_INIT_ADDRSPACE){
-        initAddrspace_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, atkr);
+        initAddrspace_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, atkr);
     }
     else if(callno == KOM_SMC_INIT_DISPATCHER){
-        initDispatcher_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
+        initDispatcher_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
     }
     else if(callno == KOM_SMC_INIT_L2PTABLE){
-        initL2PTable_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
+        initL2PTable_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
     }
     else if(callno == KOM_SMC_MAP_SECURE){
-        mapSecure_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, arg4, atkr);
+        var c1 := maybeContentsOfPhysPage(s1, arg4);
+        var c2 := maybeContentsOfPhysPage(s2, arg4);
+        mapSecure_enc_conf_ni(d1, c1, d1', e1', d2, c2, d2', e2', arg1, arg2, arg3, arg4, atkr);
     }
     else if(callno == KOM_SMC_MAP_INSECURE){
-        mapInsecure_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
+        mapInsecure_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
     }
     else if(callno == KOM_SMC_REMOVE){
-        remove_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
+        remove_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
     }
     else if(callno == KOM_SMC_FINALISE){
-        finalise_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
+        finalise_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
     }
     else if(callno == KOM_SMC_ENTER){
-        enter_enc_enc_conf_ni(s1, d1, s1', d1', s2, d2, s2', d2', arg1, arg2, arg3, arg4, atkr);
+        enter_enc_conf_ni(s1, d1, s1', d1', s2, d2, s2', d2', arg1, arg2, arg3, arg4, atkr);
     }
     else if(callno == KOM_SMC_RESUME){
-        resume_enc_enc_conf_ni(s1, d1, s1', d1', s2, d2, s2', d2', arg1, atkr);
+        resume_enc_conf_ni(s1, d1, s1', d1', s2, d2, s2', d2', arg1, atkr);
     }
     else if(callno == KOM_SMC_STOP){
-        stop_enc_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
+        stop_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
     }
     else {
         assert e1' == KOM_ERR_INVALID;
@@ -120,55 +133,58 @@ lemma enc_enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     }
 }
 
-lemma enter_enc_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
-                            s2: state, d2: PageDb, s2':state, d2': PageDb,
-                            dispPage: word, arg1: word, arg2: word, arg3: word,
-                            atkr: PageNr)
+
+lemma enter_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
+                        s2: state, d2: PageDb, s2':state, d2': PageDb,
+                        dispPage: word, arg1: word, arg2: word, arg3: word,
+                        atkr: PageNr)
     requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
     requires smc_enter(s1, d1, s1', d1', dispPage, arg1, arg2, arg3)
     requires smc_enter(s2, d2, s2', d2', dispPage, arg1, arg2, arg3)
-    requires enc_enc_conf_eqpdb(d1, d2, atkr)
-    requires entering_atkr(d1, d2, dispPage, atkr) ==>
-        enc_enc_conf_eq(s1, s2, d1, d2, atkr)
-    ensures enc_enc_conf_eqpdb(d1', d2', atkr)
-    ensures entering_atkr(d1, d2, dispPage, atkr) ==>
-        enc_enc_conf_eq(s1', s2', d1', d2', atkr)
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    requires entering_atkr(d1, d2, dispPage, atkr, false) ==>
+        enc_conf_eq_entry(s1, s2, d1, d2, atkr)
+    ensures enc_conf_eqpdb(d1', d2', atkr)
+    ensures entering_atkr(d1, d2, dispPage, atkr, false) ==>
+        (enc_conf_eq_entry(s1', s2', d1', d2', atkr) &&
+        enc_start_equiv(s1, s2))
 {
     // TODO proveme
     assume false;
 }
 
-lemma resume_enc_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
+lemma resume_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
                             s2: state, d2: PageDb, s2':state, d2': PageDb,
                             dispPage: word,
                             atkr: PageNr)
     requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
     requires smc_resume(s1, d1, s1', d1', dispPage)
     requires smc_resume(s2, d2, s2', d2', dispPage)
-    requires enc_enc_conf_eqpdb(d1, d2, atkr)
-    requires entering_atkr(d1, d2, dispPage, atkr) ==>
-        enc_enc_conf_eq(s1, s2, d1, d2, atkr)
-    ensures enc_enc_conf_eqpdb(d1', d2', atkr)
-    ensures entering_atkr(d1, d2, dispPage, atkr) ==>
-        enc_enc_conf_eq(s1', s2', d1', d2', atkr)
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    requires entering_atkr(d1, d2, dispPage, atkr, true) ==>
+        enc_conf_eq_entry(s1, s2, d1, d2, atkr)
+    ensures enc_conf_eqpdb(d1', d2', atkr)
+    ensures entering_atkr(d1, d2, dispPage, atkr, true) ==>
+        (enc_conf_eq_entry(s1', s2', d1', d2', atkr) &&
+        enc_start_equiv(s1, s2))
 {
     // TODO proveme
     assume false;
 }
 
-lemma initAddrspace_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
+lemma initAddrspace_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                                     d2: PageDb, d2': PageDb, e2':word,
                                     addrspacePage:word, l1PTPage:word,
                                     atkr: PageNr)
     requires ni_reqs_(d1, d1', d2, d2', atkr)
     requires smc_initAddrspace(d1, addrspacePage, l1PTPage) == (d1', e1')
     requires smc_initAddrspace(d2, addrspacePage, l1PTPage) == (d2', e2')
-    requires enc_enc_conf_eqpdb(d1, d2, atkr)
-    ensures  enc_enc_conf_eqpdb(d1', d2', atkr) 
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    ensures  enc_conf_eqpdb(d1', d2', atkr) 
 {
     //var atkr_asp := d1[atkr].addrspace;
     if( atkr == addrspacePage ) {
-        assert enc_enc_conf_eqpdb(d1', d2', atkr);
+        assert enc_conf_eqpdb(d1', d2', atkr);
         assert e1' == e2';
     } else {
         forall(n : PageNr)
@@ -193,17 +209,16 @@ lemma initAddrspace_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     }
 }
 
-lemma initDispatcher_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
+lemma initDispatcher_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                                      d2: PageDb, d2': PageDb, e2':word,
                                      page:word, addrspacePage:word, entrypoint:word,
                                      atkr: PageNr)
     requires ni_reqs_(d1, d1', d2, d2', atkr)
     requires smc_initDispatcher(d1, page, addrspacePage, entrypoint) == (d1', e1')
     requires smc_initDispatcher(d2, page, addrspacePage, entrypoint) == (d2', e2')
-    requires enc_enc_conf_eqpdb(d1, d2, atkr)
-    ensures  enc_enc_conf_eqpdb(d1', d2', atkr) 
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    ensures  enc_conf_eqpdb(d1', d2', atkr) 
 {
-    // PROVEME
     if( atkr == addrspacePage ) {
         assert valAddrPage(d1', atkr);
         assert valAddrPage(d2', atkr);
@@ -264,88 +279,88 @@ lemma initDispatcher_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     }
 }
 
-lemma initL2PTable_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
+lemma initL2PTable_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                                    d2: PageDb, d2': PageDb, e2':word,
                                    page:word, addrspacePage:word, l1index:word,
                                    atkr: PageNr)
     requires ni_reqs_(d1, d1', d2, d2', atkr)
     requires smc_initL2PTable(d1, page, addrspacePage, l1index) == (d1', e1')
     requires smc_initL2PTable(d2, page, addrspacePage, l1index) == (d2', e2')
-    requires enc_enc_conf_eqpdb(d1, d2, atkr)
-    ensures enc_enc_conf_eqpdb(d1', d2', atkr) 
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    ensures enc_conf_eqpdb(d1', d2', atkr) 
 {
     // PROVEME
     assume false;
 }
 
-lemma mapSecure_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
-                                d2: PageDb, d2': PageDb, e2':word,
-                                page:word, addrspacePage:word, mapping:word, physPage: word,
-                                atkr: PageNr)
+lemma mapSecure_enc_conf_ni(d1: PageDb, c1: Maybe<seq<word>>, d1': PageDb, e1':word,
+                            d2: PageDb, c2: Maybe<seq<word>>, d2': PageDb, e2':word,
+                            page:word, addrspacePage:word, mapping:word, 
+                            physPage: word, atkr: PageNr)
     requires ni_reqs_(d1, d1', d2, d2', atkr)
-    requires smc_mapSecure(d1, page, addrspacePage, mapping, physPage) == (d1', e1')
-    requires smc_mapSecure(d2, page, addrspacePage, mapping, physPage) == (d2', e2')
-    requires enc_enc_conf_eqpdb(d1, d2, atkr)
-    ensures enc_enc_conf_eqpdb(d1', d2', atkr) 
+    requires smc_mapSecure(d1, page, addrspacePage, mapping, physPage, c1) == (d1', e1')
+    requires smc_mapSecure(d2, page, addrspacePage, mapping, physPage, c2) == (d2', e2')
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    ensures enc_conf_eqpdb(d1', d2', atkr) 
 {
     // PROVEME
-    assume false;
+    assume false;    
 }
 
-lemma mapInsecure_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
+lemma mapInsecure_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                                   d2: PageDb, d2': PageDb, e2':word,
                                   addrspacePage:word, physPage: word, mapping: word,
                                   atkr: PageNr)
     requires ni_reqs_(d1, d1', d2, d2', atkr)
     requires smc_mapInsecure(d1, addrspacePage, physPage, mapping) == (d1', e1')
     requires smc_mapInsecure(d2, addrspacePage, physPage, mapping) == (d2', e2')
-    requires enc_enc_conf_eqpdb(d1, d2, atkr)
-    ensures enc_enc_conf_eqpdb(d1', d2', atkr) 
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    ensures enc_conf_eqpdb(d1', d2', atkr) 
 {
     // PROVEME
     assume false;
 }
 
-lemma remove_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
+lemma remove_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                              d2: PageDb, d2': PageDb, e2':word,
                              page:word,
                              atkr: PageNr)
     requires ni_reqs_(d1, d1', d2, d2', atkr)
     requires smc_remove(d1, page) == (d1', e1')
     requires smc_remove(d2, page) == (d2', e2')
-    requires enc_enc_conf_eqpdb(d1, d2, atkr)
-    ensures  enc_enc_conf_eqpdb(d1', d2', atkr) 
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    ensures  enc_conf_eqpdb(d1', d2', atkr) 
 {
     // PROVEME
     assume false;
 }
 
-lemma finalise_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
+lemma finalise_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                              d2: PageDb, d2': PageDb, e2':word,
                              addrspacePage:word,
                              atkr: PageNr)
     requires ni_reqs_(d1, d1', d2, d2', atkr)
     requires smc_finalise(d1, addrspacePage) == (d1', e1')
     requires smc_finalise(d2, addrspacePage) == (d2', e2')
-    requires enc_enc_conf_eqpdb(d1, d2, atkr)
-    ensures  enc_enc_conf_eqpdb(d1', d2', atkr) 
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    ensures  enc_conf_eqpdb(d1', d2', atkr) 
 {
     // PROVEME
     assume false;
 }
 
-lemma stop_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
+lemma stop_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                              d2: PageDb, d2': PageDb, e2':word,
                              addrspacePage:word,
                              atkr: PageNr)
     requires ni_reqs_(d1, d1', d2, d2', atkr)
     requires smc_stop(d1, addrspacePage) == (d1', e1')
     requires smc_stop(d2, addrspacePage) == (d2', e2')
-    requires enc_enc_conf_eqpdb(d1, d2, atkr)
-    ensures  addrspacePage != atkr ==> enc_enc_conf_eqpdb(d1', d2', atkr) 
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    ensures  addrspacePage != atkr ==> enc_conf_eqpdb(d1', d2', atkr) 
 {
     if(atkr == addrspacePage) {
-        assert addrspacePage != atkr ==> enc_enc_conf_eqpdb(d1', d2', atkr); 
+        assert addrspacePage != atkr ==> enc_conf_eqpdb(d1', d2', atkr); 
     } else {
         forall(n : PageNr)
             ensures pgInAddrSpc(d1', n, atkr) <==> pgInAddrSpc(d2', n, atkr)
@@ -360,19 +375,19 @@ lemma stop_enc_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
 // Enclave-Enclave Integrity
 //-----------------------------------------------------------------------------
 
-lemma enter_enc_enc_integ_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
+lemma enter_enc_integ_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
                             s2: state, d2: PageDb, s2':state, d2': PageDb,
                     dispPage: word, arg1: word, arg2: word, arg3: word,
                     atkr: PageNr)
     requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
     requires smc_enter(s1, d1, s1', d1', dispPage, arg1, arg2, arg3)
     requires smc_enter(s2, d2, s2', d2', dispPage, arg1, arg2, arg3)
-    requires enc_enc_integ_eqpdb(d1, d2, atkr)
-    requires entering_atkr(d1, d2, dispPage, atkr) ==>
-        enc_enc_integ_eq(s1, s2, d1, d2, atkr)
-    ensures enc_enc_integ_eqpdb(d1', d2', atkr)
-    ensures entering_atkr(d1, d2, dispPage, atkr) ==>
-        enc_enc_integ_eq(s1', s2', d1', d2', atkr)
+    requires enc_integ_eqpdb(d1, d2, atkr)
+    requires entering_atkr(d1, d2, dispPage, atkr, true) ==>
+        enc_integ_eq(s1, s2, d1, d2, atkr)
+    ensures enc_integ_eqpdb(d1', d2', atkr)
+    ensures entering_atkr(d1, d2, dispPage, atkr, true) ==>
+        enc_integ_eq(s1', s2', d1', d2', atkr)
 {
     // TODO proveme
     assume false;

@@ -25,66 +25,8 @@ predicate pgInAddrSpc(d: PageDb, n: PageNr, a: PageNr)
     d[n].PageDbEntryTyped? && d[n].addrspace == a
 }
 
-//-----------------------------------------------------------------------------
-//  Enclave-Enclave Confidentiality
-//-----------------------------------------------------------------------------
-// A malicious enclave can observe:
-// 1. Pages it owns.
-// 2. Public pages.
-// 3. (A subset of the) registers *only* when the malicious enclave is executing.
-
-// Our equivalent of an enclave number is a dispatcher page.
-
-// Low-equivalence relation that relates two PageDbs that appear equivalent to 
-// an attacker that controls an enclave "atkr". 
-predicate enc_enc_conf_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
-    requires validPageDb(d1) && validPageDb(d2)
-{
-     valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
-     // The set of pages that belong to the enclave is the same in both 
-     // states.
-     (forall n : PageNr :: pgInAddrSpc(d1, n, atkr) <==>
-         pgInAddrSpc(d2, n, atkr)) &&
-     // This together with two concrete states that refine d1, d2 ensure that 
-     // the contents of the pages that belong to the enclave are the same in 
-     // both states.
-     (forall n : PageNr | pgInAddrSpc(d1, n, atkr) ::
-         d1[n].entry == d2[n].entry)
-}
-
-// Low-equivalence relation that relates two concrete states that appear 
-// equivalent to an attacker that controls an enclave "atkr". 
-// A malicous attacker cannot observe anything when it is not executing (but it 
-// can always observe whether or not it is executing).
-//
-// The plan is to only check low-equivalence of states on entry/exit of 
-// the enclave so this only needs to hold then. This equivalence relation need 
-// not hold for smc calls other than enter/resume.
-predicate enc_enc_conf_eq(s1:state, s2:state, d1:PageDb, d2:PageDb, 
-    atkr:PageNr)
-    requires SaneState(s1) && SaneState(s2)
-    requires validPageDb(d1) && validPageDb(d2)
-    requires pageDbCorresponds(s1.m, d1) && pageDbCorresponds(s2.m, d2)
-{
-    valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
-    // valAddrPage(d1, d1[atkr].addrspace) && valAddrPage(d2, d2[atkr].addrspace) &&
-    (var l1p := d1[atkr].entry.l1ptnr; // same in both d1, d2 because of eqdb
-    regs_usr_equiv(s1, s2) &&
-    configs_usr_equiv(s1, s2) &&
-    nonStoppedL1(d1, l1p) <==> nonStoppedL1(d2, l1p) &&
-    nonStoppedL1(d1, l1p) ==>
-        (var atkr_pgs := PagesInTable(mkAbsPTable(d1, l1p));
-        // The set of pages the enclave can observe is the same
-        (PagesInTable(mkAbsPTable(d1, l1p)) == 
-            PagesInTable(mkAbsPTable(d2, l1p))) &&
-        // The contents of those addresses is the same
-        (forall a | a in TheValidAddresses() && a in atkr_pgs ::
-            s1.m.addresses[a] == s2.m.addresses[a]))
-    )
-}
-
-predicate regs_usr_equiv(s1:state, s2:state)
-    requires SaneState(s1) && SaneState(s2)
+predicate regs_equiv(s1:state, s2:state)
+    requires ValidState(s1) && ValidState(s2)
 {
     reveal_ValidRegState();
     reveal_ValidSRegState();
@@ -101,23 +43,15 @@ predicate regs_usr_equiv(s1:state, s2:state)
     OperandContents(s1, OReg(R10)) == OperandContents(s2, OReg(R10)) &&
     OperandContents(s1, OReg(R11)) == OperandContents(s2, OReg(R11)) &&
     OperandContents(s1, OReg(R12)) == OperandContents(s2, OReg(R12)) &&
-    // This contains the PC on both entry and exit from the enclave.
-    OperandContents(s1, OLR) == OperandContents(s2, OLR)
+    OperandContents(s1, OLR) == OperandContents(s2, OLR) &&
+    OperandContents(s1, OSP) == OperandContents(s2, OSP)
 }
 
-predicate configs_usr_equiv(s1:state, s2: state)
-    requires SaneState(s1) && SaneState(s2)
-{
-    reveal_ValidRegState();
-    reveal_ValidSRegState();
-    // Using s.conf to determine whether or not the CPSR is equivalent would be 
-    // insufficient here because a user process can read the value of the 
-    // CPSR but the Config only models parts of the CPSR.
-    OperandContents(s1, OSReg(cpsr)) == OperandContents(s2, OSReg(cpsr))
-}
 
+
+// TODO somehow this broke... put it back...
 // Like WritablePagesInTable but includes pages without the write bit set
-
+/*
 function PagesInTable(pt:AbsPTable): set<addr>
     requires WellformedAbsPTable(pt)
     ensures forall m:addr :: m in PagesInTable(pt) ==> PageAligned(m)
@@ -127,15 +61,80 @@ function PagesInTable(pt:AbsPTable): set<addr>
         :: (assert WellformedAbsPTE(pt[i].v[j]);
           pt[i].v[j].v.phys + PhysBase()))
 }
+*/
 
 //-----------------------------------------------------------------------------
-// Enclave-Enclave Integrity
+//  Confidentiality, Malicious Enclave
+//-----------------------------------------------------------------------------
+// A malicious enclave can observe:
+// 1. Pages it owns.
+// 2. Public pages.
+// 3. (A subset of the) registers *only* when the malicious enclave is executing.
+
+// Our equivalent of an enclave number is a dispatcher page.
+
+// Low-equivalence relation that relates two PageDbs that appear equivalent to 
+// an attacker that controls an enclave "atkr". 
+predicate enc_conf_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
+    requires validPageDb(d1) && validPageDb(d2)
+{
+     valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
+     // The set of pages that belong to the enclave is the same in both 
+     // states.
+     (forall n : PageNr :: pgInAddrSpc(d1, n, atkr) <==>
+         pgInAddrSpc(d2, n, atkr)) &&
+     // This together with two concrete states that refine d1, d2 ensure that 
+     // the contents of the pages that belong to the enclave are the same in 
+     // both states.
+     (forall n : PageNr | pgInAddrSpc(d1, n, atkr) ::
+         d1[n].entry == d2[n].entry)
+}
+
+// Low-equivalence relation that relates two concrete states that appear 
+// equivalent to an attacker that controls an enclave "atkr". 
+// A malicous attacker cannot observe anything when it is not executing
+
+// The plan is to only check low-equivalence of states on entry/exit of 
+// the enclave so this only needs to hold then. This equivalence relation need 
+// not hold for smc calls other than enter/resume.
+predicate enc_conf_eq_entry(s1:state, s2:state, d1:PageDb, d2:PageDb, 
+    atkr:PageNr)
+    requires SaneState(s1) && SaneState(s2)
+    requires validPageDb(d1) && validPageDb(d2)
+    requires pageDbCorresponds(s1.m, d1) && pageDbCorresponds(s2.m, d2)
+{
+    valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
+    // valAddrPage(d1, d1[atkr].addrspace) && valAddrPage(d2, d2[atkr].addrspace) &&
+    (var l1p := d1[atkr].entry.l1ptnr; // same in both d1, d2 because of eqdb
+    nonStoppedL1(d1, l1p) <==> nonStoppedL1(d2, l1p) &&
+    nonStoppedL1(d1, l1p) ==>
+        (var atkr_pgs := WritablePagesInTable(mkAbsPTable(d1, l1p));
+        // The set of pages the enclave can observe is the same
+        // Note: I think the following is subsumed by eqdb.
+        (WritablePagesInTable(mkAbsPTable(d1, l1p)) == 
+            WritablePagesInTable(mkAbsPTable(d2, l1p))) &&
+        // The contents of those addresses is the same
+        (forall a | a in TheValidAddresses() && a in atkr_pgs ::
+            s1.m.addresses[a] == s2.m.addresses[a]))
+    ) 
+}
+
+// The register state at the start of execution for an enclave will be 
+// equivalent if enter/resume begin from s1 or s2
+predicate enc_start_equiv(s1: state, s2: state)
+    requires SaneState(s1) && SaneState(s2)
+{
+    forall r1:state, r2:state | entryTransition(s1, r1) && entryTransition(s2, r2) ::
+        regs_equiv(r1, r2) && (r1.sregs[cpsr] == r2.sregs[cpsr])
+}
+
+
+//-----------------------------------------------------------------------------
+// Integrity, Malicious Enclave
 //-----------------------------------------------------------------------------
 // These relate states if the parts that the attacker cannot modify are the 
 // same in both.
-//
-// TODO lots of fixing similar to the fixes for the conf spec.
-predicate enc_enc_integ_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
+predicate enc_integ_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
     requires validPageDb(d1) && validPageDb(d2)
 {
     valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
@@ -150,7 +149,7 @@ predicate enc_enc_integ_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
             d1[n].entry == d2[n].entry)
 }
 
-predicate enc_enc_integ_eq(s1:state, s2:state, d1:PageDb, d2:PageDb, 
+predicate enc_integ_eq(s1:state, s2:state, d1:PageDb, d2:PageDb, 
     atkr:PageNr)
     requires SaneState(s1) && SaneState(s2)
     requires validPageDb(d1) && validPageDb(d2)
@@ -169,3 +168,8 @@ predicate enc_enc_integ_eq(s1:state, s2:state, d1:PageDb, d2:PageDb,
             s1.m.addresses[a] == s2.m.addresses[a])
     ))
 }
+
+//-----------------------------------------------------------------------------
+// Malicious OS
+//-----------------------------------------------------------------------------
+// Coming soon!
