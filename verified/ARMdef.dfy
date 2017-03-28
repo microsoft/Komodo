@@ -151,6 +151,7 @@ function decode_ttbr(v:word): TTBR
     // assuming 4k alignment, n == 2 / x == 12
 {
     var ptbase := BitwiseMaskHigh(v, 12);
+    reveal_PageAligned();
     TTBR(ptbase)
 }
 
@@ -544,7 +545,7 @@ predicate {:axiom} ApplicationInterruptContinuationInvariant(s:state, r:state)
 
 const PAGESIZE:int := 0x1000;
 
-predicate PageAligned(addr:int)
+predicate {:opaque} PageAligned(addr:int)
     ensures PageAligned(addr) ==> WordAligned(addr)
 {
     lemma_PageAlignedImpliesWordAligned(addr);
@@ -597,12 +598,11 @@ function ExtractAbsPageTable(s:state): Maybe<AbsPTable>
 
 function WritablePagesInTable(pt:AbsPTable): set<addr>
     requires WellformedAbsPTable(pt)
-    ensures forall m:addr :: m in WritablePagesInTable(pt) ==> PageAligned(m)
+    //ensures forall m:addr :: m in WritablePagesInTable(pt) ==> PageAligned(m)
 {
     (set i, j | 0 <= i < |pt| && pt[i].Just? && 0 <= j < |pt[i].v|
         && pt[i].v[j].Just? && pt[i].v[j].v.write
-        :: (assert WellformedAbsPTE(pt[i].v[j]);
-          pt[i].v[j].v.phys + PhysBase()))
+        :: pt[i].v[j].v.phys + PhysBase())
 }
 
 function WordOffset(a:addr, i:int): addr
@@ -700,7 +700,7 @@ function ExtractAbsL2PTE(pteword:word): Maybe<AbsPTE>
     var exec := BitAnd(pte, ARM_L2PTE_NX_BIT) == 0;
     var write := BitAnd(pte, ARM_L2PTE_RO_BIT) == 0;
     var pagebase := BitwiseMaskHigh(pteword, 12); // BitwiseAnd(pteword, 0xfffff000);
-    assert PageAligned(pagebase);
+    assert PageAligned(pagebase) by { reveal_PageAligned(); }
     // if the type is zero, it's an invalid entry, which is fine (maps nothing)
     if typebits == 0 then Nothing else Just(AbsPTE(pagebase, write, exec))
 }
