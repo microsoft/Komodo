@@ -119,15 +119,42 @@ predicate enc_conf_eq_entry(s1:state, s2:state, d1:PageDb, d2:PageDb,
     ) 
 }
 
-// The register state at the start of execution for an enclave will be 
 // equivalent if enter/resume begin from s1 or s2
 predicate enc_start_equiv(s1: state, s2: state)
     requires SaneState(s1) && SaneState(s2)
 {
     forall r1:state, r2:state | entryTransition(s1, r1) && entryTransition(s2, r2) ::
-        regs_equiv(r1, r2) && (r1.sregs[cpsr] == r2.sregs[cpsr])
+        (regs_equiv(r1, r2) && r1.sregs[cpsr] == r2.sregs[cpsr] && 
+        OperandContents(s1, OLR) == OperandContents(s2, OLR))
 }
 
+//-----------------------------------------------------------------------------
+// Confidentiality, Malicious OS
+//-----------------------------------------------------------------------------
+
+predicate os_conf_eq(s1: state, s2: state)
+    requires SaneState(s1) && SaneState(s2)
+{
+    reveal_ValidMemState();
+    regs_equiv(s1, s2) && os_ctrl_eq(s1, s2) &&
+    forall a: addr | addr_insecure(a) :: s1.m.addresses[a] == s2.m.addresses[a]
+}
+
+predicate os_ctrl_eq(s1: state, s2: state)
+    requires SaneState(s1) && SaneState(s2)
+{
+    var spsr_ := OSReg(spsr(Supervisor));
+    var cpsr_ := OSReg(cpsr);
+    OperandContents(s1, spsr_) == OperandContents(s2, spsr_) &&
+    OperandContents(s1, cpsr_) == OperandContents(s2, cpsr_)
+
+}
+
+predicate addr_insecure(a: addr)
+{
+    a in TheValidAddresses() && !address_is_secure(a) &&
+        !(StackLimit() <= a < StackBase())
+}
 
 //-----------------------------------------------------------------------------
 // Integrity, Malicious Enclave
@@ -169,7 +196,3 @@ predicate enc_integ_eq(s1:state, s2:state, d1:PageDb, d2:PageDb,
     ))
 }
 
-//-----------------------------------------------------------------------------
-// Malicious OS
-//-----------------------------------------------------------------------------
-// Coming soon!

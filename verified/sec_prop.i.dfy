@@ -3,7 +3,7 @@ include "pagedb.s.dfy"
 include "entry.s.dfy"
 
 //-----------------------------------------------------------------------------
-// Enclave-Enclave Confidentiality
+// Confidentiality, Enclaves are NI with other Enclaves 
 //-----------------------------------------------------------------------------
 predicate ni_reqs(s1: state, d1: PageDb, s1': state, d1': PageDb,
                   s2: state, d2: PageDb, s2': state, d2': PageDb,
@@ -358,9 +358,9 @@ lemma finalise_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
 }
 
 lemma stop_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
-                             d2: PageDb, d2': PageDb, e2':word,
-                             addrspacePage:word,
-                             atkr: PageNr)
+                       d2: PageDb, d2': PageDb, e2':word,
+                       addrspacePage:word,
+                       atkr: PageNr)
     requires ni_reqs_(d1, d1', d2, d2', atkr)
     requires smc_stop(d1, addrspacePage) == (d1', e1')
     requires smc_stop(d2, addrspacePage) == (d2', e2')
@@ -378,15 +378,85 @@ lemma stop_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     }
 }
 
+//-----------------------------------------------------------------------------
+// Confidentiality, OS is NI with Enclaves 
+//-----------------------------------------------------------------------------
+
+predicate os_ni_reqs(s1: state, d1: PageDb, s1': state, d1': PageDb,
+                     s2: state, d2: PageDb, s2': state, d2': PageDb)
+{
+    SaneState(s1) && validPageDb(d1) && SaneState(s1') && validPageDb(d1') &&
+    SaneState(s2) && validPageDb(d2) && SaneState(s2') && validPageDb(d2') &&
+    pageDbCorresponds(s1.m, d1) && pageDbCorresponds(s1'.m, d1') &&
+    pageDbCorresponds(s2.m, d2) && pageDbCorresponds(s2'.m, d2')
+}
+
+lemma os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
+                 s2: state, d2: PageDb, s2': state, d2': PageDb,
+                 atkr: PageNr)
+    requires os_ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2')
+    // If smchandler(s1, d1) => (s1', d1')
+    requires smchandler(s1, d1, s1', d1')
+    // and smchandler(s2, d2) => (s2', d2')
+    requires smchandler(s2, d2, s2', d2')
+    // s.t. (s1, d1) =_{os} (s2, d2)
+    requires os_conf_eq(s1, s2)
+    // then (s1', d1') =_{os} (s2', d2')
+    ensures os_conf_eq(s1', s2')
+{
+    reveal_ValidRegState();
+    var callno, arg1, arg2, arg3, arg4
+        := s1.regs[R0], s1.regs[R1], s1.regs[R2], s1.regs[R3], s1.regs[R4];
+    var e1', e2' := s1'.regs[R0], s2'.regs[R0];
+
+    if(callno == KOM_SMC_QUERY || callno == KOM_SMC_GETPHYSPAGES){
+        assume false;
+    }
+    else if(callno == KOM_SMC_INIT_ADDRSPACE){
+        assume false;
+    }
+    else if(callno == KOM_SMC_INIT_DISPATCHER){
+        assume false;
+    }
+    else if(callno == KOM_SMC_INIT_L2PTABLE){
+        assume false;
+    }
+    else if(callno == KOM_SMC_MAP_SECURE){
+        assume false;
+    }
+    else if(callno == KOM_SMC_MAP_INSECURE){
+        assume false;
+    }
+    else if(callno == KOM_SMC_REMOVE){
+        assume false;
+    }
+    else if(callno == KOM_SMC_FINALISE){
+        assume false;
+    }
+    else if(callno == KOM_SMC_ENTER){
+        assume false;
+    }
+    else if(callno == KOM_SMC_RESUME){
+        assume false;
+    }
+    else if(callno == KOM_SMC_STOP){
+        assume false;
+    }
+    else {
+        assert e1' == KOM_ERR_INVALID;
+        assert e2' == KOM_ERR_INVALID;
+        assume false;
+    }
+}
 
 //-----------------------------------------------------------------------------
-// Enclave-Enclave Integrity
+// Integrity, Enclaves are NI with other Enclaves
 //-----------------------------------------------------------------------------
 
 lemma enter_enc_integ_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
-                            s2: state, d2: PageDb, s2':state, d2': PageDb,
-                    dispPage: word, arg1: word, arg2: word, arg3: word,
-                    atkr: PageNr)
+                         s2: state, d2: PageDb, s2':state, d2': PageDb,
+                         dispPage: word, arg1: word, arg2: word, arg3: word,
+                         atkr: PageNr)
     requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
     requires smc_enter(s1, d1, s1', d1', dispPage, arg1, arg2, arg3)
     requires smc_enter(s2, d2, s2', d2', dispPage, arg1, arg2, arg3)
