@@ -59,6 +59,8 @@ procedure {:bridge} {:refined} {:instruction Ins(ADD(dst, src1, src2))}
 ADD(out operand dst:word, operand src1:word, operand src2:word)
     requires
         isUInt32(src1 + src2);
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == old(src1 + src2);
 {
@@ -70,6 +72,8 @@ ADD(out operand dst:word, operand src1:word, operand src2:word)
 
 procedure {:bridge} {:refined} {:instruction Ins(ADD(dst, src1, src2))}
 ADDWrap(out operand dst:word, operand src1:word, operand src2:word)
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == TruncateWord(old(src1 + src2));
 {
@@ -80,6 +84,8 @@ ADDWrap(out operand dst:word, operand src1:word, operand src2:word)
 
 procedure {:bridge} {:refined} {:instruction Ins(ADD(dst, src1, OShift(GetProbableReg(src2), shift)))}
 ADDWrapShift(out operand dst:word, operand src1:word, operand src2:snd, inline shift:Shift)
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == TruncateWord(old(src1 + EvalShift(old(src2), shift)));
 {
@@ -92,6 +98,8 @@ procedure {:bridge} {:refined} {:instruction Ins(SUB(dst, src1, src2))}
 SUB(out operand dst:word, operand src1:word, operand src2:word)
     requires
         isUInt32(src1 - src2);
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == old(src1 - src2);
 {
@@ -104,6 +112,8 @@ procedure {:bridge} {:refined} {:instruction Ins(MUL(dst, src1, src2))}
 MUL(out operand dst:word, operand src1:reg, operand src2:reg)
     requires
         isUInt32(src1 * src2);
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == old(src1 * src2);
 {
@@ -117,6 +127,8 @@ UDIV(out operand dst:word, operand src1:word, operand src2:word)
     requires
         src2 > 0;
         isUInt32(src1 / src2);
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == old(src1 / src2);
 {
@@ -127,6 +139,8 @@ UDIV(out operand dst:word, operand src1:word, operand src2:word)
 
 procedure {:bridge} {:refined} {:instruction Ins(AND(dst, src1, src2))}
 AND(out operand dst:word, operand src1:word, operand src2:word)
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == old(BitwiseAnd(src1, src2));
 {
@@ -137,6 +151,8 @@ AND(out operand dst:word, operand src1:word, operand src2:word)
 
 procedure {:bridge} {:refined} {:instruction Ins(ORR(dst, src1, src2))}
 ORR(out operand dst:word, operand src1:word, operand src2:word)
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == old(BitwiseOr(src1, src2));
 {
@@ -147,6 +163,8 @@ ORR(out operand dst:word, operand src1:word, operand src2:word)
 
 procedure {:bridge} {:refined} {:instruction Ins(EOR(dst, src1, src2))}
 EOR(out operand dst:word, operand src1:word, operand src2:word)
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == old(BitwiseXor(src1, src2));
 {
@@ -157,6 +175,8 @@ EOR(out operand dst:word, operand src1:word, operand src2:word)
 
 procedure {:bridge} {:refined} {:instruction Ins(EOR(dst, src1, OShift(GetProbableReg(src2), shift)))}
 EORShift(out operand dst:word, operand src1:word, operand src2:snd, inline shift:Shift)
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == BitwiseXor(old(src1), EvalShift(old(src2), shift));
 {
@@ -170,6 +190,7 @@ LSL(out operand dst:word, operand src1:word, operand src2:word)
     requires
         0 <= src2 < 32;
     requires {:refined false}
+        !interrupts_enabled(this);
         @src2 is OConst;
     ensures
         dst == old(LeftShift(src1, src2));
@@ -184,6 +205,7 @@ LSR(out operand dst:word, operand src1:word, operand src2:word)
     requires
         0 <= src2 < 32;
     requires {:refined false}
+        !interrupts_enabled(this);
         @src2 is OConst;
     ensures
         dst == old(RightShift(src1, src2));
@@ -195,6 +217,8 @@ LSR(out operand dst:word, operand src1:word, operand src2:word)
 
 procedure {:bridge} {:refined} {:instruction Ins(REV(dst, src))}
 REV(out operand dst:word, operand src:reg)
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == old(bswap32(src));
 {
@@ -205,6 +229,8 @@ REV(out operand dst:word, operand src:reg)
 
 procedure {:bridge} {:refined} {:instruction Ins(MVN(dst, src))}
 MVN(out operand dst:word, operand src:word)
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == old(BitwiseNot(src));
 {
@@ -215,6 +241,8 @@ MVN(out operand dst:word, operand src:word)
 
 procedure {:bridge} {:refined} {:instruction Ins(MOV(dst, src))}
 MOV(out operand dst:word, operand src:word)
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == old(src);
 {
@@ -225,6 +253,8 @@ MOV(out operand dst:word, operand src:word)
 
 procedure {:bridge} {:refined} {:instruction Ins(MOV(dst, OShift(GetProbableReg(src), shift)))}
 MOVShift(out operand dst:word, operand src:snd, inline shift:Shift)
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == old(EvalShift(old(src), shift));
 {
@@ -240,6 +270,8 @@ LDR(out operand dst:word, operand base:word, operand ofs:word)
     requires
         ValidAddrMemStateOpaque(mem);
         ValidMem(base + ofs);
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == AddrMemContents(mem, old(base + ofs));
     ensures {:refined false}
@@ -259,87 +291,10 @@ STR(operand rd:reg, operand base:word, operand ofs:word)
         ValidAddrMemStateOpaque(mem);
     requires
         ValidMem(base + ofs);
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         mem == AddrMemUpdate(old(mem), old(base + ofs), old(rd));
-{
-    reveal va_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-
-procedure {:instruction Ins(MRS(dst, src))}
-MRS(out operand dst:reg, operand src:sreg)
-    requires
-        priv_of_state(this) == PL1;
-    ensures
-        dst == old(src);
-{
-    reveal va_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-
-procedure {:instruction Ins(MSR(dst, src))}
-MSR(out operand dst:sreg, operand src:reg)
-    requires
-        priv_of_state(this) == PL1;
-        @dst is OSReg && @dst.sr is cpsr ==> ValidModeChange(this, src);
-        @dst is OSReg && @dst.sr is spsr ==> ValidPsrWord(src);
-    ensures
-        ValidMrsMsrOperand(this, @dst);
-        dst == old(src);
-{
-    reveal va_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-
-procedure {:instruction Ins(MRC(dst, src))}
-MRC(out operand dst:reg, operand src:creg)
-    ensures
-        dst == old(src);
-{
-    reveal va_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-
-procedure {:instruction Ins(MCR(dst, src))}
-MCR(out operand dst:creg, operand src:reg)
-    requires
-        // don't consider writes to SCR outside monitor mode, so we can avoid
-        // reasoning about the nonsense case where we drop out of secure world
-        @dst == OSReg(SCR) ==> mode_of_state(this) == Monitor;
-    ensures
-        ValidMcrMrcOperand(this, @dst);
-        dst == old(src);
-{
-    reveal va_eval;
-    reveal ValidRegState;
-    this := MaybeUpdateOk(old(this), this);
-}
-
-procedure {:frame false} {:instruction Ins(MOVS_PCLR_TO_USERMODE_AND_CONTINUE)}
-MOVS_PCLR_TO_USERMODE_AND_CONTINUE()
-    requires/ensures
-        ValidState(this) && this.ok;
-    requires
-        ValidModeChange'(this, User);
-        spsr_of_state(this).m == User;
-    ensures
-        evalMOVSPCLRUC(old(this), this);
-{
-    reveal va_eval;
-}
-
-procedure {:instruction Ins(CPSID_IAF(mod))} CPSID_IAF(operand mod:constop)
-    requires
-        ValidModeEncoding(mod);
-        ValidModeChange'(this, decode_mode(mod));
-    modifies
-        cpsr;
-    ensures
-        evalCPSID_IAF(old(this), old(mod), this);
 {
     reveal va_eval;
     reveal ValidRegState;
@@ -350,6 +305,8 @@ procedure {:bridge} {:refined} {:instruction Ins(LDR_reloc(dst, g))}
 LDRglobaladdr(out operand dst:word, inline g:symbol)
     requires
         ValidGlobal(g);
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == AddressOfGlobal(g);
 {
@@ -366,6 +323,8 @@ LDRglobal(out operand dst:word, inline g:symbol,
     requires
         ValidGlobalStateOpaque(globals);
         ValidGlobalAddr(g, base + ofs);
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         dst == GlobalContents(globals, g, old(base + ofs));
 {
@@ -382,9 +341,68 @@ STRglobal(operand rd:reg, inline g:symbol,
     requires
         ValidGlobalStateOpaque(globals);
         ValidGlobalAddr(g, base + ofs);
+    requires {:refined false}
+        !interrupts_enabled(this);
     ensures
         ValidGlobalStateOpaque(globals);
         globals == GlobalUpdate(old(globals), g, old(base + ofs), old(rd));
+{
+    reveal va_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
+}
+
+procedure {:instruction Ins(MRS(dst, src))}
+MRS(out operand dst:reg, operand src:sreg)
+    requires
+        priv_of_state(this) == PL1;
+        !interrupts_enabled(this);
+    ensures
+        dst == old(src);
+{
+    reveal va_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
+}
+
+procedure {:instruction Ins(MSR(dst, src))}
+MSR(out operand dst:sreg, operand src:reg)
+    requires
+        priv_of_state(this) == PL1;
+        @dst is OSReg && @dst.sr is cpsr ==> ValidModeChange(this, src);
+        @dst is OSReg && @dst.sr is spsr ==> ValidPsrWord(src);
+        !interrupts_enabled(this);
+    ensures
+        ValidMrsMsrOperand(this, @dst);
+        dst == old(src);
+{
+    reveal va_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
+}
+
+procedure {:instruction Ins(MRC(dst, src))}
+MRC(out operand dst:reg, operand src:creg)
+    requires
+        !interrupts_enabled(this);
+    ensures
+        dst == old(src);
+{
+    reveal va_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
+}
+
+procedure {:instruction Ins(MCR(dst, src))}
+MCR(out operand dst:creg, operand src:reg)
+    requires
+        // don't consider writes to SCR outside monitor mode, so we can avoid
+        // reasoning about the nonsense case where we drop out of secure world
+        @dst == OSReg(SCR) ==> mode_of_state(this) == Monitor;
+        !interrupts_enabled(this);
+    ensures
+        ValidMcrMrcOperand(this, @dst);
+        dst == old(src);
 {
     reveal va_eval;
     reveal ValidRegState;

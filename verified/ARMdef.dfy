@@ -467,6 +467,7 @@ function psr_of_exception(s:state, e:exception): word
 predicate evalExceptionTaken(s:state, e:exception, r:state)
     requires ValidState(s)
     ensures evalExceptionTaken(s, e, r) ==> ValidState(r)
+    //ensures evalExceptionTaken(s, e, r) && s.ok ==> r.ok
 {
     reveal_ValidRegState();
     reveal_ValidSRegState();
@@ -501,7 +502,7 @@ predicate evalEnterUserspace(s:state, r:state)
 predicate {:opaque} evalUserspaceExecution(s:state, r:state)
     requires ValidState(s)
     ensures  evalUserspaceExecution(s, r) ==> ValidState(r)
-    ensures  evalUserspaceExecution(s, r) && s.ok ==> r.ok
+    //ensures  evalUserspaceExecution(s, r) && s.ok ==> r.ok
 {
     reveal_ValidMemState();
     reveal_ValidRegState();
@@ -529,15 +530,23 @@ function havocPages(pages:set<addr>, s:state): memmap
      else MemContents(s.m, a))
 }
 
-// XXX: To be defined by "application" (exception-handling) code
-predicate {:axiom} ApplicationUsermodeContinuationInvariant(s:state, r:state)
+// To be defined/established by "application" code (i.e. komodo exception handlers)
+// XXX: for soundness, application must prove the essential properties
+
+predicate EssentialContinuationInvariantProperties(s:state, r:state)
+{
+    (ValidState(s) ==> ValidState(r)) && (s.ok ==> r.ok)
+}
+
+predicate {:axiom} UsermodeContinuationInvariant(s:state, r:state)
     requires ValidState(s)
-    ensures  ApplicationUsermodeContinuationInvariant(s, r) ==> ValidState(r)
-    ensures  ApplicationUsermodeContinuationInvariant(s, r) && s.ok ==> r.ok
-predicate {:axiom} ApplicationInterruptContinuationInvariant(s:state, r:state)
+    ensures UsermodeContinuationInvariant(s, r)
+        ==> EssentialContinuationInvariantProperties(s, r)
+
+predicate {:axiom} InterruptContinuationInvariant(s:state, r:state)
     requires ValidState(s)
-    ensures  ApplicationInterruptContinuationInvariant(s, r) ==> ValidState(r)
-    ensures  ApplicationInterruptContinuationInvariant(s, r) && s.ok ==> r.ok
+    ensures InterruptContinuationInvariant(s, r)
+        ==> EssentialContinuationInvariantProperties(s, r)
 
 //-----------------------------------------------------------------------------
 // Model of page tables for userspace execution
@@ -958,10 +967,10 @@ predicate maybeHandleInterrupt(s:state, r:state)
 {
     if !s.conf.cpsr.f && nondeterministic_word(s, -1) == 0
         then exists s' :: (evalExceptionTaken(s, ExFIQ, s')
-                    && ApplicationInterruptContinuationInvariant(s', r))
+                    && InterruptContinuationInvariant(s', r))
     else if !s.conf.cpsr.i && nondeterministic_word(s, -1) == 1
         then exists s' :: (evalExceptionTaken(s, ExIRQ, s')
-                    && ApplicationInterruptContinuationInvariant(s', r))
+                    && InterruptContinuationInvariant(s', r))
     else r == takestep(s)
 }
 
@@ -1023,28 +1032,25 @@ predicate evalIns(ins:ins, s:state, r:state)
 }
 
 predicate evalCPSID_IAF(s:state, mod:word, r:state)
-    requires ValidState(s)
-    requires ValidModeEncoding(mod) && ValidModeChange'(s, decode_mode(mod))
+    requires ValidState(s) && ValidModeEncoding(mod)
     ensures  evalCPSID_IAF(s, mod, r) ==> ValidState(r)
+    //ensures  evalCPSID_IAF(s, mod, r) && s.ok ==> r.ok
 {
     reveal_ValidSRegState();
     var newpsr := update_psr(s.sregs[cpsr], mod, true, true);
-    ValidPsrWord(newpsr) &&
-    r == s.(sregs := s.sregs[cpsr := newpsr],
-            conf := s.conf.(cpsr := decode_psr(newpsr)))
+    ValidModeChange'(s, decode_mode(mod)) && ValidPsrWord(newpsr)
+    && evalUpdate(s, OSReg(cpsr), newpsr, r)
 }
 
 predicate {:opaque} evalMOVSPCLRUC(s:state, r:state)
     requires ValidState(s)
-    ensures  evalMOVSPCLRUC(s, r) ==> ValidState(r)
-    ensures  evalMOVSPCLRUC(s, r) && s.ok ==> r.ok
+    ensures evalMOVSPCLRUC(s, r) ==> ValidState(r)
 {
     exists ex, s2, s3, s4 ::
         evalEnterUserspace(s, s2)
         && evalUserspaceExecution(s2, s3)
         && evalExceptionTaken(s3, ex, s4)
-        && ApplicationUsermodeContinuationInvariant(s4, r)
-        && r.ok
+        && UsermodeContinuationInvariant(s4, r)
 }
 
 predicate evalBlock(block:codes, s:state, r:state)

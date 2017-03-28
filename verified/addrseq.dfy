@@ -11,14 +11,11 @@ include "pagedb.s.dfy"
 // so this stuff is in its own file.
 
 function {:opaque} addrRangeSeq(l: addr, r: addr) : seq<addr>
-    requires isUInt32(l) && WordAligned(l) &&
-        isUInt32(r) && WordAligned(r)
     requires l <= r
-    ensures |addrRangeSeq(l, r)| == (r-l) / WORDSIZE
-    ensures forall i | 0 <= i < (r-l) / WORDSIZE ::
-        addrRangeSeq(l, r)[i] == l + i * WORDSIZE
-    //ensures forall a: addr :: l <= a <= r <==>
-    //    a in addrRangeSeq(l, r)
+    ensures |addrRangeSeq(l, r)| == BytesToWords(r-l)
+    ensures forall i | 0 <= i < BytesToWords(r-l) ::
+        addrRangeSeq(l, r)[i] == l + WordsToBytes(i)
+    //ensures forall a: addr :: l <= a <= r <==> a in addrRangeSeq(l, r)
     decreases r-l
 {
     assert l+WORDSIZE > l;
@@ -32,6 +29,7 @@ function addrsInPhysPage(physPage: word, base: addr) : seq<addr>
     requires SaneConstants()
     ensures forall a : addr | a in addrsInPhysPage(physPage, base) :: ValidMem(a)
 {
+    reveal_PageAligned(); // why?
     addrRangeSeq(base, base+PAGESIZE)
 }
 

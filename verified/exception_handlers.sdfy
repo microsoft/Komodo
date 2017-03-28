@@ -5,6 +5,42 @@ include {:verbatim} "entry.i.dfy"
 
 include "ARMdecls.sdfy"
 
+procedure {:frame false} {:instruction Ins(CPSID_IAF(mod))}
+CPSID_IAF(operand mod:word)
+    requires/ensures
+        this.ok;
+    requires
+        @mod is OConst;
+        ValidModeEncoding(mod);
+        ValidModeChange'(this, decode_mode(mod));
+    modifies
+        cpsr;
+    ensures
+        !interrupts_enabled(this);
+{
+    reveal va_eval;
+    exists s2 :: maybeHandleInterrupt(old(this), s2) && evalIns'(CPSID_IAF(@mod), s2, this);
+    ghost var nondet := nondeterministic_word(old(this), (-1));
+    ghost if (!old(this).conf.cpsr.f && nondet == 0) {
+        exists s1 :: (evalExceptionTaken(old(this), ExFIQ, s1)
+                    && InterruptContinuationInvariant(s1, s2));
+        assert ValidState(s1) && s1.ok;
+        assert ValidState(s2) && s2.ok;
+    } else if (!old(this).conf.cpsr.i && nondet == 1) {
+        exists s1 :: (evalExceptionTaken(old(this), ExIRQ, s1)
+                    && InterruptContinuationInvariant(s1, s2));
+        assert ValidState(s1) && s1.ok;
+        assert ValidState(s2) && s2.ok;
+    } else {
+        assert s2 == takestep(old(this));
+        assert ValidState(s2) && s2.ok;
+    }
+    assert ValidState(s2) && s2.ok;
+    assert mode_of_state(s2) == mode_of_state(old(this)) && world_of_state(s2) == world_of_state(old(this));
+    assert ValidInstruction(s2, CPSID_IAF(@mod));
+    assert evalCPSID_IAF(s2, mod, this);
+}
+
 procedure switch_to_monitor(inline oldmode:mode)
     modifies
         cpsr; lr; /* spsr_mon; */

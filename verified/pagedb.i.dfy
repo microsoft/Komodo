@@ -278,7 +278,7 @@ function mkL2Pte(pte: L2PTE): word
             assert validInsecurePageNr(ipg);
             assert PAGESIZE == 0x1000; // sigh
             var pa := ipg * PAGESIZE;
-            assert PageAligned(pa); // double sigh
+            assert PageAligned(pa) by { reveal_PageAligned(); }
             ARM_L2PTE(pa, w, false))
         case NoMapping => 0
 }

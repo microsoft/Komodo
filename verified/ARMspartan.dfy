@@ -127,7 +127,7 @@ function va_get_olr(s:state):word
     s.regs[LR(mode_of_state(s))]
 }
 
-function va_update_ok(sM:state, sK:state):state { sK.(ok := sM.ok, steps := sM.steps) }
+function va_update_ok(sM:state, sK:state):state { sK.(ok := sM.ok) }
 function va_update_reg(r:ARMReg, sM:state, sK:state):state 
     requires ValidRegState(sK.regs) && ValidRegState(sM.regs)
     ensures ValidRegState(va_update_reg(r, sM, sK).regs)
@@ -271,7 +271,6 @@ predicate va_state_eq(s0:state, s1:state)
  && s0.m == s1.m
  && s0.conf == s1.conf
  && s0.ok == s1.ok
- && s0.steps == s1.steps
 }
 
 predicate {:opaque} ValidAddrMemStateOpaque(mem: memmap)

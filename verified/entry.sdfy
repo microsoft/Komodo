@@ -7,6 +7,22 @@ include {:verbatim} "entrybits.i.dfy"
 include "ARMdecls.sdfy"
 include "kom_utils.sdfy"
 
+procedure {:frame false} {:instruction Ins(MOVS_PCLR_TO_USERMODE_AND_CONTINUE)}
+MOVS_PCLR_TO_USERMODE_AND_CONTINUE()
+    requires/ensures
+        this.ok;
+    requires
+        ValidModeChange'(this, User);
+        spsr_of_state(this).m == User;
+        !interrupts_enabled(this);
+    ensures
+        evalMOVSPCLRUC(takestep(old(this)), this);
+{
+    reveal va_eval;
+    reveal evalMOVSPCLRUC;
+    reveal evalUserspaceExecution;
+}
+
 #verbatim
 const BANKED_FRAMESIZE:int := 18*WORDSIZE;
 

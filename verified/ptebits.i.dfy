@@ -35,7 +35,7 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
     }
 
     assert BitAnd(WordAsBits(pa), 0xfff) == 0 by {
-        assert BitwiseMaskLow(pa, 12) == 0;
+        assert BitwiseMaskLow(pa, 12) == 0 by { reveal_PageAligned(); }
         calc {
             BitwiseMaskLow(pa, 12);
             { reveal_BitwiseMaskLow(); }

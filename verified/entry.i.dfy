@@ -9,6 +9,7 @@ predicate SaneStateAfterException(s:state)
     && ValidState(s) && s.ok
     && SaneMem(s.m)
     && mode_of_state(s) == Monitor
+    && !interrupts_enabled(s)
 }
 
 // what do we know between the start and end of the exception handler
@@ -39,6 +40,17 @@ predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr)
         && (r.regs[R0], r.regs[R1], rd) == exceptionHandled(s, sd, dp))
 }
 
+// this lemma is trivial, but justifies the soundness of the ARMdef assumptions
+// ("EssentialContinuationInvariantProperties") about the handler
+lemma lemma_KomExceptionHandlerInvariant_soundness(s:state, sd:PageDb, r:state,
+                                                   dp:PageNr)
+    requires ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
+    requires validPageDb(sd) && pageDbCorresponds(s.m, sd)
+    requires nonStoppedDispatcher(sd, dp)
+    requires KomExceptionHandlerInvariant(s, sd, r, dp)
+    ensures EssentialContinuationInvariantProperties(s, r)
+{}
+
 predicate {:opaque} AUCIdef()
     requires SaneConstants()
 {
@@ -47,7 +59,7 @@ predicate {:opaque} AUCIdef()
         | ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
             && validPageDb(sd) && pageDbCorresponds(s.m, sd)
             && nonStoppedDispatcher(sd, dp)
-        :: ApplicationUsermodeContinuationInvariant(s, r)
+        :: UsermodeContinuationInvariant(s, r)
         ==> KomExceptionHandlerInvariant(s, sd, r, dp)
 }
 
@@ -56,7 +68,7 @@ lemma lemma_AUCIdef(s:state, r:state, d:PageDb, dp:PageNr)
     requires ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
         && validPageDb(d) && pageDbCorresponds(s.m, d)
         && nonStoppedDispatcher(d, dp)
-    requires ApplicationUsermodeContinuationInvariant(s, r)
+    requires UsermodeContinuationInvariant(s, r)
     ensures KomExceptionHandlerInvariant(s, d, r, dp)
 {
     reveal_AUCIdef();
@@ -131,8 +143,11 @@ lemma nonWritablePagesAreSafeFromHavoc(m:addr,s:state,s':state)
     var pt := ExtractAbsPageTable(s);
     assert pt.Just?;
     var pages := WritablePagesInTable(fromJust(pt));
-    assert s'.m.addresses[m] == havocPages(pages, s.m.addresses, s'.m.addresses)[m];
-    assert havocPages(pages, s.m.addresses, s'.m.addresses)[m] == s.m.addresses[m];
+    calc {
+        s'.m.addresses[m];
+        havocPages(pages, s)[m];
+        s.m.addresses[m];
+    }
 }
 
 lemma onlyDataPagesAreWritable(p:PageNr,a:addr,d:PageDb,s:state,s':state,l1:PageNr)
@@ -319,6 +334,7 @@ lemma userspaceExecutionPreservesPrivState(s:state,s':state)
     requires evalUserspaceExecution(s,s')
     ensures GlobalsInvariant(s,s')
     ensures (reveal_ValidRegState(); s.regs[SP(Monitor)] == s'.regs[SP(Monitor)])
+    ensures mode_of_state(s) == mode_of_state(s')
 {
     reveal_evalUserspaceExecution();
 }
@@ -384,7 +400,7 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
         evalEnterUserspace(s, s2)
         && evalUserspaceExecution(s2, s3)
         && evalExceptionTaken(s3, ex, s4)
-        && ApplicationUsermodeContinuationInvariant(s4, r);
+        && UsermodeContinuationInvariant(s4, r);
 
     enterUserspacePreservesStuff(d, s, s2);
     userspaceExecutionPreservesPrivState(s2, s3);
@@ -440,7 +456,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     requires validPageDb(sd) && pageDbCorresponds(s.m, sd)
     requires nonStoppedDispatcher(sd, dispPg)
     requires s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(sd, dispPg))
-    requires evalMOVSPCLRUC(s, r)
+    requires evalMOVSPCLRUC(takestep(s), r)
     requires AUCIdef()
     ensures SaneStateAfterException(r)
     ensures ParentStackPreserving(s, r)
@@ -454,10 +470,10 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     ensures validEnclaveExecutionStep(s, sd, r, rd, dispPg, retToEnclave)
     ensures retToEnclave ==> spsr_of_state(r).m == User
 {
-    var s2, s3, ex, s4, d4 := lemma_evalMOVSPCLRUC_inner(s, r, sd, dispPg);
+    var s2, s3, ex, s4, d4 := lemma_evalMOVSPCLRUC_inner(takestep(s), r, sd, dispPg);
 
     assert entryTransition(s, s2);
-    enterUserspacePreservesStuff(sd, s, s2);
+    enterUserspacePreservesStuff(sd, takestep(s), s2);
     assert userspaceExecutionAndException(s2, s3, s4)
         by { reveal_evalUserspaceExecution(); }
     userspaceExecutionPreservesPrivState(s2, s3);

@@ -3,7 +3,7 @@ include "bitvectors.i.dfy"
 
 lemma lemma_scr_entry(pre: word, post: word)
     requires post == BitwiseOr(BitwiseAnd(pre, 0xfffffffe), 6)
-    ensures decode_scr(post) == SCR(Secure, true, true)
+    ensures decode_scr(post) == SCRT(Secure, true, true)
 {
     assert WordAsBits(1) == 1 && WordAsBits(2) == 2 && WordAsBits(4) == 4
            && WordAsBits(6) == 6 && WordAsBits(0xfffffffe) == 0xfffffffe
@@ -56,7 +56,7 @@ lemma lemma_scr_entry(pre: word, post: word)
 
 lemma lemma_scr_exit(pre: word, post: word)
     requires post == BitwiseOr(BitwiseAnd(pre, 0xfffffff9), 1)
-    ensures decode_scr(post) == SCR(NotSecure, false, false)
+    ensures decode_scr(post) == SCRT(NotSecure, false, false)
 {
     assert WordAsBits(1) == 1 && WordAsBits(2) == 2 && WordAsBits(4) == 4
            && WordAsBits(0xfffffff9) == 0xfffffff9

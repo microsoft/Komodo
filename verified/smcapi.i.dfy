@@ -420,6 +420,7 @@ lemma lemma_validEnclaveExecutionStep_validPageDb(s1:state, d1:PageDb,
             && userspaceExecutionAndException(s2, s3, s4)
             && d4 == updateUserPagesFromState(s3, d1, dispPg)
             && rd == exceptionHandled(s4, d4, dispPg).2;
+        userspaceExecutionPreservesPrivState(s2, s3);
         var ex :| evalExceptionTaken(s3, ex, s4);
         exceptionHandledValidPageDb(s3, ex, s4, d4, dispPg);
         assert nonStoppedDispatcher(rd, dispPg);

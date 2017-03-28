@@ -190,5 +190,6 @@ predicate SaneState(s:state)
     && SaneStack(s)
     && SaneMem(s.m)
     && mode_of_state(s) == Monitor
+    && !interrupts_enabled(s)
 }
 

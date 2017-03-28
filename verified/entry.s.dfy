@@ -264,17 +264,16 @@ predicate preEntryReturn(s:state,lr:word,regs:SvcReturnRegs)
 
 predicate equivStates(s1:state, s2:state)
 {
-    s1 == s2 ||
-        (s1.regs == s2.regs && s1.m == s2.m && s1.sregs == s2.sregs
-        && s1.conf == s2.conf && s1.ok == s2.ok)
+    s1.regs == s2.regs && s1.m == s2.m && s1.sregs == s2.sregs
+        && s1.conf == s2.conf && s1.ok == s2.ok
 }
 
 predicate entryTransition(s:state, r:state)
     requires ValidState(s)
     ensures entryTransition(s, r) ==> ValidState(r)
 {
-    // we've entered userland, and didn't change anything before doing so
-    exists s' :: equivStates(s, s') && evalEnterUserspace(s', r) && r.steps == s'.steps + 1
+    // we've entered userland, and didn't change anything before/after doing so
+    exists s' :: equivStates(s, s') && evalEnterUserspace(s', r) && r.steps == s'.steps
 }
 
 predicate userspaceExecutionAndException(s:state, s':state, r:state)
@@ -286,7 +285,7 @@ predicate userspaceExecutionAndException(s:state, s':state, r:state)
     && evalExceptionTaken(s', ex, r)
     && mode_of_state(r) != User // known, but we need a lemma to prove it
     && s.conf.excount + 1 == r.conf.excount
-    && r.conf.exstep == r.steps
+    && r.conf.exstep == s'.steps
 }
 
 //-----------------------------------------------------------------------------

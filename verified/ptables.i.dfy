@@ -105,7 +105,8 @@ function mkAbsPTE(pte: L2PTE): Maybe<AbsPTE>
             assert validInsecurePageNr(p);
             var pa := p * PAGESIZE;
             assert 0 <= pa < KOM_PHYSMEM_LIMIT;
-            assert PageAligned(pa) && isUInt32(pa + PhysBase());
+            assert isUInt32(pa + PhysBase());
+            assert PageAligned(pa) by { reveal_PageAligned(); }
             AbsPTE(pa, w, false))
         case NoMapping => Nothing
     }
@@ -135,6 +136,7 @@ lemma lemma_l2ptesmatch(pte: L2PTE)
             case InsecureMapping(p, wi) =>
                 assert validInsecurePageNr(p);
                 pa, w, x := p * PAGESIZE, wi, false;
+                assert PageAligned(pa) by { reveal_PageAligned(); }
         }
         assert ptew == ARM_L2PTE(pa, w, x);
         lemma_ARM_L2PTE(pa, w, x);
@@ -267,10 +269,11 @@ function {:opaque} mkAbsPTable(d:PageDb, l1:PageNr): AbsPTable
 }
 
 lemma lemma_PageAlignedAdd(x:int, y:int)
-    requires x % 0x1000 == y % 0x1000 == 0
-    ensures (x + y) % 0x1000 == 0
+    requires PageAligned(x) && PageAligned(y)
+    ensures PageAligned(x + y)
 {
     // sigh. why do I need a lemma to prove this??
+    reveal_PageAligned();
 }
 
 lemma lemma_WritablePages(d:PageDb, l1p:PageNr, pagebase:addr)
@@ -356,14 +359,15 @@ lemma lemma_bitMaskAddrInPage(a:addr, pagebase:addr, p:PageNr)
     // that the page base is secure and on the same page as 'a'
     var pagebase := BitwiseMaskHigh(a, 12);
     var securebase := KOM_DIRECTMAP_VBASE + SecurePhysBase();
-    assert PageAligned(pagebase);
-    assert pagebase == a / PAGESIZE * PAGESIZE;
+    assert PageAligned(pagebase) by { reveal_PageAligned(); }
+    assert PageAligned(KOM_DIRECTMAP_VBASE) by { reveal_PageAligned(); }
     lemma_PageAlignedAdd(KOM_DIRECTMAP_VBASE, SecurePhysBase());
     assert PageAligned(securebase);
+    assert pagebase == a / PAGESIZE * PAGESIZE by { reveal_PageAligned(); }
     assert pagebase == a - a % PAGESIZE;
-    if (a / 0x1000 == securebase / 0x1000) {
-        assert pagebase / 0x1000 == securebase / 0x1000;
+    if (a / PAGESIZE == securebase / PAGESIZE) {
+        assert pagebase / PAGESIZE == securebase / PAGESIZE;
     }
-    assert securebase <= pagebase <= a;
+    assert securebase <= pagebase <= a by { reveal_PageAligned(); }
     assert address_is_secure(pagebase);
 }

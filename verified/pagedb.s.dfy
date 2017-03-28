@@ -32,6 +32,7 @@ function page_paddr(p: PageNr): addr
     ensures PageAligned(page_paddr(p))
     ensures SecurePhysBase() <= page_paddr(p) < SecurePhysBase() + KOM_SECURE_RESERVE
 {
+    reveal_PageAligned();
     assert PageAligned(PAGESIZE);
     assert PageAligned(SecurePhysBase());
     SecurePhysBase() + p * PAGESIZE
@@ -45,6 +46,7 @@ function page_monvaddr(p: PageNr): addr
     assert p < KOM_SECURE_NPAGES;
     var pa := page_paddr(p);
     assert pa < SecurePhysBase() + KOM_SECURE_RESERVE;
+    reveal_PageAligned();
     pa + KOM_DIRECTMAP_VBASE
 }
 
