@@ -593,11 +593,48 @@ lemma lemma_ConcatenateSeqs_M_length<T>(M:seq<seq<T>>)
     }
 }
 
+// From words_and_bytes.i.dfy <- Relies on math libraries
+lemma lemma_BytesToWord_WordToBytes_inverses(b0:byte, b1:byte, b2:byte, b3:byte)
+    ensures WordToBytes(BytesToWord(b0,b1,b2,b3)) == [b0,b1,b2,b3];
+
 lemma lemma_WordSeqToBytes_is_bswap32_seq(s:seq<word>)
     ensures WordSeqToBytes(s) == bswap32_seq(s);
+{
+	  assume false;
+    if s == [] {
+        reveal_bswap32_seq();
+    } else {
+        var bytes := WordToBytes(s[0]);
+        calc {
+            WordSeqToBytes(s);
+            WordToBytes(s[0]) + WordSeqToBytes(s[1..]);
+                { lemma_BytesToWord_WordToBytes_inverses(bytes[3], bytes[2], bytes[1], bytes[0]); }
+            [BytesToWord(bytes[3], bytes[2], bytes[1], bytes[0])] + WordSeqToBytes(s[1..]);
+            [bswap32(s[0])] + WordSeqToBytes(s[1..]);
+                { lemma_WordSeqToBytes_is_bswap32_seq(s[1..]); }
+            [bswap32(s[0])] + bswap32_seq(s[1..]);
+                { reveal_bswap32_seq(); }
+            bswap32_seq(s);
+        }
+    }
+}
 
 lemma lemma_WordSeqToBytes_adds(s:seq<word>, s':seq<word>)
     ensures WordSeqToBytes(s + s') == WordSeqToBytes(s) + WordSeqToBytes(s');
+{
+    if s == [] {
+    } else {
+        calc {
+            WordSeqToBytes(s + s');
+            WordToBytes((s + s')[0]) + WordSeqToBytes((s + s')[1..]);
+                { assert (s + s')[0] == s[0]; }
+            WordToBytes(s[0]) + WordSeqToBytes((s + s')[1..]);
+                { lemma_WordSeqToBytes_adds(s[1..], s'); assert s[1..] + s' == (s+s')[1..]; }
+            WordToBytes(s[0]) + WordSeqToBytes(s[1..]) + WordSeqToBytes(s');
+            WordSeqToBytes(s) + WordSeqToBytes(s');
+        }
+    }
+}
     
 
 lemma lemma_SHA256FinalHelper1Wrapper(

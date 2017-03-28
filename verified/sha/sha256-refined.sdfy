@@ -1196,6 +1196,7 @@ ensures
 }
 
 procedure {:refined} sha256_loop_body(
+    ghost old_trace:SHA256Trace,
     ghost ctx_ptr:word,
     ghost input_ptr:word,
     ghost input:seq(word),
@@ -1206,7 +1207,7 @@ procedure {:refined} sha256_loop_body(
     )
 requires block < num_blocks;
 requires exists trace_in ::
-         BlockInvariant(trace_in, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
+         BlockInvariant(trace_in, old_trace, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, block);
 reads
@@ -1214,7 +1215,7 @@ reads
 modifies
     mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
 ensures exists trace_out ::
-        BlockInvariant(trace_out, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
+        BlockInvariant(trace_out, old_trace, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, block+1);
 {
@@ -1229,13 +1230,14 @@ ensures exists trace_out ::
     }
     ghost var prev_mem := mem;
     exists trace_in ::
-         BlockInvariant(trace_in, input, globals, old_M_length, mem, mem, sp, lr, r1, r12,
+         BlockInvariant(trace_in, old_trace, input, globals, old_M_length, mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, block);
     sha256_one_block(ctx_ptr, trace_in, block_input);
     exists trace_out:SHA256Trace ::
            IsCompleteSHA256Trace(trace_out)
         && SHA256TraceIsCorrect(trace_out)
+        //&& trace_out.M == SeqSlice(old_trace.M, 0, SeqLength(old_trace.M))  // old_trace.M is a prefix of trace_out.M
         && trace_out.M == trace_in.M + seq(bswap32_seq(block_input))
         && AddrMemContents(mem, ctx_ptr + 0*WORDSIZE) ==  r4 == last(trace_out.H)[0]
         && AddrMemContents(mem, ctx_ptr + 1*WORDSIZE) ==  r5 == last(trace_out.H)[1]
@@ -1262,13 +1264,18 @@ ensures exists trace_out ::
         assert ValidMem(input_ptr + j*WORDSIZE);
     }
 
-    assert BlockInvariant(trace_out, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
+    assert trace_out.M == trace_in.M + seq(bswap32_seq(block_input));
+    assert old_trace.M == SeqSlice(trace_in.M, 0, SeqLength(old_trace.M)); 
+    assert old_trace.M == SeqSlice(trace_out.M, 0, SeqLength(old_trace.M)); 
+
+    assert BlockInvariant(trace_out, old_trace, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
                           r4, r5, r6, r7, r8, r9, r10, r11,
                           input_ptr, ctx_ptr, num_blocks, block+1);
 }
 
 
 procedure {:refined} sha256_loop(
+    ghost old_trace:SHA256Trace,
     ghost ctx_ptr:word,
     ghost input_ptr:word,
     ghost input:seq(word),
@@ -1277,7 +1284,7 @@ procedure {:refined} sha256_loop(
     ghost old_mem:memmap
     )
 requires exists trace_in ::
-         BlockInvariant(trace_in, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
+         BlockInvariant(trace_in, old_trace, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, 0);
 reads
@@ -1285,7 +1292,7 @@ reads
 modifies
     mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
 ensures exists trace_out ::
-        BlockInvariant(trace_out, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
+        BlockInvariant(trace_out, old_trace, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, num_blocks);
 {
@@ -1293,12 +1300,12 @@ ensures exists trace_out ::
     while (r1 < r12)
         invariant
             exists trace :: 
-                BlockInvariant(trace, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
+                BlockInvariant(trace, old_trace, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
                                r4, r5, r6, r7, r8, r9, r10, r11,
                                input_ptr, ctx_ptr, num_blocks, block);
          decreases r12 - r1;
     {
-        sha256_loop_body(ctx_ptr, input_ptr, input, num_blocks, old_M_length, old_mem, block);
+        sha256_loop_body(old_trace, ctx_ptr, input_ptr, input, num_blocks, old_M_length, old_mem, block);
         block := block + 1;
     }
 }
@@ -1362,6 +1369,7 @@ ensures
            IsCompleteSHA256Trace(trace_out)
         && SHA256TraceIsCorrect(trace_out)
         && SeqLength(trace_out.M) == SeqLength(trace_in.M) + old(r2)
+        && trace_in.M == SeqSlice(trace_out.M, 0, SeqLength(trace_in.M))  // trace_in.M is a prefix of trace_out.M
         && (forall i :: 0 <= i < old(r2) 
              ==> trace_out.M[SeqLength(trace_in.M) + i] == bswap32_seq(SeqSlice(input, i*16, (i+1)*16))) 
         && last(trace_out.H)[0] == AddrMemContents(mem, old(r0) + 0*WORDSIZE)
@@ -1430,12 +1438,12 @@ ensures
     // OBSERVE
     ghost var prev_mem := mem;  // Avoid Spartan mis-capture
     ghost var len_M := SeqLength(trace_in.M);   
-    assert BlockInvariant(trace_in, input, globals, len_M, prev_mem, mem, sp, lr, r1, r12,
+    assert BlockInvariant(trace_in, trace_in, input, globals, len_M, prev_mem, mem, sp, lr, r1, r12,
                           r4, r5, r6, r7, r8, r9, r10, r11,
                           input_ptr, ctx_ptr, num_blocks, 0);
-    sha256_loop(ctx_ptr, input_ptr, input, num_blocks, len_M, prev_mem);
+    sha256_loop(trace_in, ctx_ptr, input_ptr, input, num_blocks, len_M, prev_mem);
     exists trace_out ::
-        BlockInvariant(trace_out, input, globals, len_M, prev_mem, mem, sp, lr, r1, r12,
+        BlockInvariant(trace_out, trace_in, input, globals, len_M, prev_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, num_blocks);
     assert IsCompleteSHA256Trace(trace_out);
