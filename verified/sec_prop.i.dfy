@@ -51,7 +51,7 @@ predicate entering_atkr(d1: PageDb, d2: PageDb, disp: word, atkr: PageNr, is_res
     smc_enter_err(d2, atkr, is_resume) == KOM_ERR_SUCCESS
 }
 
-lemma enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
+lemma lemma_enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
                       s2: state, d2: PageDb, s2': state, d2': PageDb,
                       atkr: PageNr)
     requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
@@ -94,36 +94,36 @@ lemma enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         assert d2' == d2;
     }
     else if(callno == KOM_SMC_INIT_ADDRSPACE){
-        initAddrspace_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, atkr);
+        lemma_initAddrspace_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, atkr);
     }
     else if(callno == KOM_SMC_INIT_DISPATCHER){
-        initDispatcher_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
+        lemma_initDispatcher_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
     }
     else if(callno == KOM_SMC_INIT_L2PTABLE){
-        initL2PTable_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
+        lemma_initL2PTable_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
     }
     else if(callno == KOM_SMC_MAP_SECURE){
         var c1 := maybeContentsOfPhysPage(s1, arg4);
         var c2 := maybeContentsOfPhysPage(s2, arg4);
-        mapSecure_enc_conf_ni(d1, c1, d1', e1', d2, c2, d2', e2', arg1, arg2, arg3, arg4, atkr);
+        lemma_mapSecure_enc_conf_ni(d1, c1, d1', e1', d2, c2, d2', e2', arg1, arg2, arg3, arg4, atkr);
     }
     else if(callno == KOM_SMC_MAP_INSECURE){
-        mapInsecure_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
+        lemma_mapInsecure_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
     }
     else if(callno == KOM_SMC_REMOVE){
-        remove_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
+        lemma_remove_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
     }
     else if(callno == KOM_SMC_FINALISE){
-        finalise_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
+        lemma_finalise_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
     }
     else if(callno == KOM_SMC_ENTER){
-        enter_enc_conf_ni(s1, d1, s1', d1', s2, d2, s2', d2', arg1, arg2, arg3, arg4, atkr);
+        lemma_enter_enc_conf_ni(s1, d1, s1', d1', s2, d2, s2', d2', arg1, arg2, arg3, arg4, atkr);
     }
     else if(callno == KOM_SMC_RESUME){
-        resume_enc_conf_ni(s1, d1, s1', d1', s2, d2, s2', d2', arg1, atkr);
+        lemma_resume_enc_conf_ni(s1, d1, s1', d1', s2, d2, s2', d2', arg1, atkr);
     }
     else if(callno == KOM_SMC_STOP){
-        stop_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
+        lemma_stop_enc_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
     }
     else {
         assert e1' == KOM_ERR_INVALID;
@@ -134,7 +134,7 @@ lemma enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
 }
 
 
-lemma enter_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
+lemma lemma_enter_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
                         s2: state, d2: PageDb, s2':state, d2': PageDb,
                         dispPage: word, arg1: word, arg2: word, arg3: word,
                         atkr: PageNr)
@@ -153,7 +153,7 @@ lemma enter_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
     assume false;
 }
 
-lemma resume_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
+lemma lemma_resume_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
                             s2: state, d2: PageDb, s2':state, d2': PageDb,
                             dispPage: word,
                             atkr: PageNr)
@@ -172,7 +172,7 @@ lemma resume_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
     assume false;
 }
 
-lemma initAddrspace_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
+lemma lemma_initAddrspace_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                                     d2: PageDb, d2': PageDb, e2':word,
                                     addrspacePage:word, l1PTPage:word,
                                     atkr: PageNr)
@@ -209,7 +209,7 @@ lemma initAddrspace_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     }
 }
 
-lemma initDispatcher_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
+lemma lemma_initDispatcher_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                                      d2: PageDb, d2': PageDb, e2':word,
                                      page:word, addrspacePage:word, entrypoint:word,
                                      atkr: PageNr)
@@ -279,7 +279,7 @@ lemma initDispatcher_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     }
 }
 
-lemma initL2PTable_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
+lemma lemma_initL2PTable_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                                    d2: PageDb, d2': PageDb, e2':word,
                                    page:word, addrspacePage:word, l1index:word,
                                    atkr: PageNr)
@@ -300,7 +300,7 @@ predicate contentsOk(physPage: word, contents: Maybe<seq<word>>)
     (contents.Just? ==> |fromJust(contents)| == PAGESIZE / WORDSIZE)
 }
 
-lemma mapSecure_enc_conf_ni(d1: PageDb, c1: Maybe<seq<word>>, d1': PageDb, e1':word,
+lemma lemma_mapSecure_enc_conf_ni(d1: PageDb, c1: Maybe<seq<word>>, d1': PageDb, e1':word,
                             d2: PageDb, c2: Maybe<seq<word>>, d2': PageDb, e2':word,
                             page:word, addrspacePage:word, mapping:word, 
                             physPage: word, atkr: PageNr)
@@ -315,7 +315,7 @@ lemma mapSecure_enc_conf_ni(d1: PageDb, c1: Maybe<seq<word>>, d1': PageDb, e1':w
     assume false;    
 }
 
-lemma mapInsecure_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
+lemma lemma_mapInsecure_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                                   d2: PageDb, d2': PageDb, e2':word,
                                   addrspacePage:word, physPage: word, mapping: word,
                                   atkr: PageNr)
@@ -329,7 +329,7 @@ lemma mapInsecure_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     assume false;
 }
 
-lemma remove_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
+lemma lemma_remove_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                              d2: PageDb, d2': PageDb, e2':word,
                              page:word,
                              atkr: PageNr)
@@ -343,7 +343,7 @@ lemma remove_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     assume false;
 }
 
-lemma finalise_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
+lemma lemma_finalise_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                              d2: PageDb, d2': PageDb, e2':word,
                              addrspacePage:word,
                              atkr: PageNr)
@@ -357,7 +357,7 @@ lemma finalise_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     assume false;
 }
 
-lemma stop_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
+lemma lemma_stop_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                        d2: PageDb, d2': PageDb, e2':word,
                        addrspacePage:word,
                        atkr: PageNr)
@@ -391,7 +391,7 @@ predicate os_ni_reqs(s1: state, d1: PageDb, s1': state, d1': PageDb,
     pageDbCorresponds(s2.m, d2) && pageDbCorresponds(s2'.m, d2')
 }
 
-lemma os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
+lemma lemma_os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
                  s2: state, d2: PageDb, s2': state, d2': PageDb,
                  atkr: PageNr)
     requires os_ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2')
@@ -453,7 +453,7 @@ lemma os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
 // Integrity, Enclaves are NI with other Enclaves
 //-----------------------------------------------------------------------------
 
-lemma enter_enc_integ_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
+lemma lemma_enter_enc_integ_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
                          s2: state, d2: PageDb, s2':state, d2': PageDb,
                          dispPage: word, arg1: word, arg2: word, arg3: word,
                          atkr: PageNr)
