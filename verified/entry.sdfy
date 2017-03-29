@@ -777,9 +777,9 @@ procedure {:frame false} enclaveexecution_loop(
         spsr_of_state(this).m == User;
         this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb_in, dispPg));
     modifies
-        sp;
+        sp; globals;
     ensures
-        GlobalsInvariant(old(this), this);
+        GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp()));
         StackPreserving(old(this), this);
         validEnclaveExecution(old(this), pagedb_in, this, pagedb, dispPg, steps);
         validPageDb(pagedb);
@@ -799,7 +799,7 @@ procedure {:frame false} enclaveexecution_loop(
             SaneState(loop0);
             SaneStateAfterException(this);
             ParentStackPreserving(old(this), this);
-            GlobalsInvariant(old(this), this);
+            GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp()));
             validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
             nonStoppedDispatcher(pagedb, dispPg);
             this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, dispPg));

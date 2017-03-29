@@ -31,7 +31,7 @@ predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr)
     && s.conf.ttbr0 == r.conf.ttbr0 && s.conf.scr == r.conf.scr
     && (forall a:addr | ValidMem(a) && !(StackLimit() <= a < StackBase()) &&
         !addrInPage(a, dp) :: MemContents(s.m, a) == MemContents(r.m, a))
-    && GlobalsInvariant(s, r)
+    && GlobalsPreservingExcept(s, r, {PendingInterruptOp()})
     && pageDbCorresponds(r.m, rd)
     && (if retToEnclave
        then rsp == ssp
@@ -378,7 +378,7 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
         || OperandContents(r, OSP) == BitwiseOr(OperandContents(s, OSP), 1)
     ensures OperandContents(s, OSP) != BitwiseOr(OperandContents(s, OSP), 1)
     ensures ParentStackPreserving(s, r)
-    ensures GlobalsInvariant(s, r)
+    ensures GlobalsPreservingExcept(s, r, {PendingInterruptOp()})
     ensures evalEnterUserspace(s, s2)
         && evalUserspaceExecution(s2, s3)
         && evalExceptionTaken(s3, ex, s4)
@@ -460,7 +460,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     requires AUCIdef()
     ensures SaneStateAfterException(r)
     ensures ParentStackPreserving(s, r)
-    ensures GlobalsInvariant(s, r)
+    ensures GlobalsPreservingExcept(s, r, {PendingInterruptOp()})
     ensures OperandContents(s, OSP) != BitwiseOr(OperandContents(s, OSP), 1)
             && if retToEnclave
             then OperandContents(r, OSP) == OperandContents(s, OSP)

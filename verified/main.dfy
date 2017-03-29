@@ -7,6 +7,13 @@ method printExceptionHandlerReturn()
     printInsFixed("B", user_continue_label());
 }
 
+method printInterruptHandlerReturn()
+{
+    printIns2Op("TST", OSP, OConst(1));
+    printInsFixed("BNE", user_continue_label());
+    printInsFixed("MOVS", "pc, lr");
+}
+
 method printSMCHandlerReturn()
 {
     printInsFixed("MOVS", "pc, lr");

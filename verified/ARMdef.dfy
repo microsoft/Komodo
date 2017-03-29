@@ -507,7 +507,7 @@ predicate evalMOVSPCLR(s:state, r:state)
     var spsr_val := OperandContents(s, spsr_reg);
     ValidPsrWord(spsr_val) &&
     ValidModeChange(s, spsr_val) &&
-    evalUpdate(s, OSReg(cpsr), spsr_val, r)
+    evalUpdate(takestep(s), OSReg(cpsr), spsr_val, r)
 }
 
 predicate {:opaque} evalUserspaceExecution(s:state, r:state)
@@ -972,16 +972,22 @@ predicate ValidInstruction(s:state, ins:ins)
 
 function {:axiom} nondeterministic_word(s:state, x:int): word
 
+predicate handleInterrupt(s:state, ex:exception, r:state)
+    requires ValidState(s)
+{
+    exists s1, s2 :: evalExceptionTaken(s, ex, s1)
+        && InterruptContinuationInvariant(s1, s2)
+        && evalMOVSPCLR(s2, r)
+}
+
 predicate maybeHandleInterrupt(s:state, r:state)
     requires ValidState(s)
     ensures !interrupts_enabled(s) && maybeHandleInterrupt(s, r) ==> r == takestep(s)
 {
     if !s.conf.cpsr.f && nondeterministic_word(s, -1) == 0
-        then exists s' :: (evalExceptionTaken(s, ExFIQ, s')
-                    && InterruptContinuationInvariant(s', r))
+        then handleInterrupt(s, ExFIQ, r)
     else if !s.conf.cpsr.i && nondeterministic_word(s, -1) == 1
-        then exists s' :: (evalExceptionTaken(s, ExIRQ, s')
-                    && InterruptContinuationInvariant(s', r))
+        then handleInterrupt(s, ExIRQ, r)
     else r == takestep(s)
 }
 
@@ -1036,6 +1042,11 @@ predicate evalIns'(ins:ins, s:state, r:state)
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE => evalMOVSPCLRUC(s, r)
 }
 
+/* FIXME: this spec allows at most one interrupt prior to instruction execution,
+ * however, on real hardware we can take an unbounded number of interrupts if
+ * the handler re-enables them... to fix this, we should either call evalIns
+ * recursively, or require the handler to leave interrupts disabled.
+ */
 predicate evalIns(ins:ins, s:state, r:state)
 {
     if !s.ok || !ValidInstruction(s, ins) then !r.ok

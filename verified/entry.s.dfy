@@ -273,7 +273,7 @@ predicate entryTransition(s:state, r:state)
     ensures entryTransition(s, r) ==> ValidState(r)
 {
     // we've entered userland, and didn't change anything before/after doing so
-    exists s' :: equivStates(s, s') && evalEnterUserspace(s', r) && r.steps == s'.steps
+    exists s' :: equivStates(s, s') && evalEnterUserspace(s', r) && r.steps == s'.steps + 1
 }
 
 predicate userspaceExecutionAndException(s:state, s':state, r:state)

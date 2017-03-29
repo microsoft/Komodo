@@ -2,43 +2,53 @@ include {:verbatim} "kom_common.i.dfy"
 include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
 include {:verbatim} "entry.i.dfy"
+include {:verbatim} "exceptions.i.dfy"
 
 include "ARMdecls.sdfy"
 
 procedure {:frame false} {:instruction Ins(CPSID_IAF(mod))}
 CPSID_IAF(operand mod:word)
-    requires/ensures
-        this.ok;
     requires
+        ValidState(this) && this.ok;
+        SaneStack(this);
+        priv_of_state(this) == PL1 && SaneMem(this.m);
         @mod is OConst;
         ValidModeEncoding(mod);
         ValidModeChange'(this, decode_mode(mod));
+        InterruptContinuationInvariantDef();
     modifies
         cpsr;
     ensures
         !interrupts_enabled(this);
+        mode_of_state(this) == decode_mode(mod);
+        SaneStack(this);
+        ParentStackPreserving(old(this), this);
+        NonStackMemPreserving(old(this), this);
+        GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp()));
+        this.conf.ttbr0 == old(this).conf.ttbr0;
+        this.conf.scr == old(this).conf.scr;
+        CoreRegPreservingExcept(old(this), this, set(OSP, OLR)); // banked
+        forall m :: m != mode_of_exception(old(this).conf, ExIRQ)
+            && m != mode_of_exception(old(this).conf, ExFIQ)
+            ==> old(this).regs[LR(m)] == this.regs[LR(m)];
 {
     reveal va_eval;
-    exists s2 :: maybeHandleInterrupt(old(this), s2) && evalIns'(CPSID_IAF(@mod), s2, this);
+    exists s3 :: maybeHandleInterrupt(old(this), s3) && evalIns'(CPSID_IAF(@mod), s3, this);
     ghost var nondet := nondeterministic_word(old(this), (-1));
-    ghost if (!old(this).conf.cpsr.f && nondet == 0) {
-        exists s1 :: (evalExceptionTaken(old(this), ExFIQ, s1)
-                    && InterruptContinuationInvariant(s1, s2));
-        assert ValidState(s1) && s1.ok;
-        assert ValidState(s2) && s2.ok;
-    } else if (!old(this).conf.cpsr.i && nondet == 1) {
-        exists s1 :: (evalExceptionTaken(old(this), ExIRQ, s1)
-                    && InterruptContinuationInvariant(s1, s2));
-        assert ValidState(s1) && s1.ok;
-        assert ValidState(s2) && s2.ok;
+    ghost if (!old(this).conf.cpsr.f && nondet == 0
+        || !old(this).conf.cpsr.i && nondet == 1) {
+        exists ex :: ex == ExFIQ || ex == ExIRQ && handleInterrupt(old(this), ex, s3);
+        exists s1, s2 :: evalExceptionTaken(old(this), ex, s1)
+            && InterruptContinuationInvariant(s1, s2)
+            && evalMOVSPCLR(s2, s3);
+        lemma_InterruptContinuationInvariantDef(s1, s2);
+        assert KomInterruptHandlerInvariant(s1, dummyPageDb(), s2, dummyPageNr());
     } else {
-        assert s2 == takestep(old(this));
-        assert ValidState(s2) && s2.ok;
+        assert s3 == takestep(old(this));
     }
-    assert ValidState(s2) && s2.ok;
-    assert mode_of_state(s2) == mode_of_state(old(this)) && world_of_state(s2) == world_of_state(old(this));
-    assert ValidInstruction(s2, CPSID_IAF(@mod));
-    assert evalCPSID_IAF(s2, mod, this);
+    assert mode_of_state(s3) == mode_of_state(old(this)) && world_of_state(s3) == world_of_state(old(this));
+    assert ValidInstruction(s3, CPSID_IAF(@mod));
+    assert evalCPSID_IAF(s3, mod, this);
 }
 
 procedure switch_to_monitor(inline oldmode:mode)
