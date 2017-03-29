@@ -272,10 +272,6 @@ procedure unstack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
         banked_regs_stackframe(this, old(this.m), old(sp));
         //CoreRegPreservingExcept(old(this), this, set(@tmp,@sp));
 {
-    reveal_banked_regs_stackframe();
-    reveal_wellformed_banked_regs_stackframe();
-    reveal ValidSRegState;
-
     LDR_MSR_banked(sp_usr, sp, const(0*WORDSIZE), tmp);
     LDR_MSR_banked(sp_fiq, sp, const(1*WORDSIZE), tmp);
     LDR_MSR_banked(sp_irq, sp, const(2*WORDSIZE), tmp);
@@ -290,6 +286,10 @@ procedure unstack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
     LDR_MSR_banked(lr_abt, sp, const(10*WORDSIZE), tmp);
     LDR_MSR_banked(lr_und, sp, const(11*WORDSIZE), tmp);
 
+    reveal_wellformed_banked_regs_stackframe();
+    assert this.m == old(this.m);
+    assert wellformed_banked_regs_stackframe(this.m, sp);
+
     LDR_MSR_spsr(spsr_fiq, sp, const(12*WORDSIZE), tmp);
     LDR_MSR_spsr(spsr_irq, sp, const(13*WORDSIZE), tmp);
     LDR_MSR_spsr(spsr_svc, sp, const(14*WORDSIZE), tmp);
@@ -299,6 +299,8 @@ procedure unstack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
 
     ADD(sp, sp, const(BANKED_FRAMESIZE));
     stack_bytes := stack_bytes_in + BANKED_FRAMESIZE;
+
+    reveal_banked_regs_stackframe();
 }
 
 procedure smc_enter_err(
