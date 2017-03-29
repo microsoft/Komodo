@@ -58,7 +58,7 @@ lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
 
     assert forall k | 0 <= k < ARM_L1PTES ::
         ValidAbsL1PTEWord(MemContents(s, WordOffset(l1base, k)));
-    assert ValidAbsL1PTable(s, l1base);
+    assert {:split_here} ValidAbsL1PTable(s, l1base);
 
     forall k | 0 <= k < ARM_L1PTES
         ensures ExtractAbsL1PTable(s, l1base)[k] == mkAbsPTable(d, l1p)[k]
