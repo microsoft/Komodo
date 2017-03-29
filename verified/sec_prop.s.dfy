@@ -76,16 +76,18 @@ function PagesInTable(pt:AbsPTable): set<addr>
 predicate enc_conf_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
     requires validPageDb(d1) && validPageDb(d2)
 {
-     valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
-     // The set of pages that belong to the enclave is the same in both 
-     // states.
-     (forall n : PageNr :: pgInAddrSpc(d1, n, atkr) <==>
-         pgInAddrSpc(d2, n, atkr)) &&
-     // This together with two concrete states that refine d1, d2 ensure that 
-     // the contents of the pages that belong to the enclave are the same in 
-     // both states.
-     (forall n : PageNr | pgInAddrSpc(d1, n, atkr) ::
-         d1[n].entry == d2[n].entry)
+    d1[atkr].PageDbEntryTyped? <==> d2[atkr].PageDbEntryTyped? &&
+    (d1[atkr].PageDbEntryTyped? ==>
+    (valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
+    // The set of pages that belong to the enclave is the same in both 
+    // states.
+    (forall n : PageNr :: pgInAddrSpc(d1, n, atkr) <==>
+        pgInAddrSpc(d2, n, atkr)) &&
+    // This together with two concrete states that refine d1, d2 ensure that 
+    // the contents of the pages that belong to the enclave are the same in 
+    // both states.
+    (forall n : PageNr | pgInAddrSpc(d1, n, atkr) ::
+        d1[n].entry == d2[n].entry)))
 }
 
 // Low-equivalence relation that relates two concrete states that appear 

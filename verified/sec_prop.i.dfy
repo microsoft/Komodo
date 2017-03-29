@@ -388,7 +388,61 @@ lemma lemma_remove_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     ensures  enc_conf_eqpdb(d1', d2', atkr) 
 {
     // PROVEME
-    assume false;
+    // assume false;
+    if(!validPageNr(page) || d1[page].PageDbEntryFree? || 
+        d2[page].PageDbEntryFree?) {
+        assert d1' == d1;
+        assert d2' == d2;
+    } else {
+        var asp1, asp2 := d1[page].addrspace, d2[page].addrspace;
+        assert pgInAddrSpc(d1, page, atkr) ==> asp1 == atkr;
+        assert pgInAddrSpc(d2, page, atkr) ==> asp2 == atkr;
+        assert asp1 == atkr <==> asp2 == atkr;
+        if(asp1 == atkr){
+            if(page == atkr){
+                assert d1[page].entry.Addrspace? && d2[page].entry.Addrspace?;
+                assert e1' == KOM_ERR_PAGEINUSE <==> e1' == KOM_ERR_PAGEINUSE;
+                if(e1' == KOM_ERR_PAGEINUSE) {
+                    assert d1' == d1;
+                    assert d2' == d2;
+                } else {
+                    assert !(d1'[atkr].PageDbEntryTyped?) && !(d2'[atkr].PageDbEntryTyped?);
+                    assert d1'[atkr].PageDbEntryTyped? <==> d2'[atkr].PageDbEntryTyped?; 
+                }
+            } else {
+                assert !(d1[page].entry.Addrspace?);
+                assert !(d2[page].entry.Addrspace?);
+                assert d1'[atkr].PageDbEntryTyped? <==> d2'[atkr].PageDbEntryTyped?;
+                assert d1'[atkr].PageDbEntryTyped?;
+                assert valAddrPage(d1', atkr) && valAddrPage(d2', atkr);
+                forall(n : PageNr) ensures pgInAddrSpc(d1', n, atkr) <==>
+                    pgInAddrSpc(d2', n, atkr)
+                {
+                    assert asp1 == asp2;
+                    if( n == asp1 ){
+                        assert pgInAddrSpc(d1', n, atkr);
+                        assert pgInAddrSpc(d2', n, atkr);
+                    }
+                    if( n != page && n!= asp1 ){
+                        assert pgInAddrSpc(d1', n, atkr) <==>
+                            pgInAddrSpc(d1, n, atkr);
+                        assert pgInAddrSpc(d2', n, atkr) <==>
+                            pgInAddrSpc(d2, n, atkr);
+                    }
+                }
+                assert forall n : PageNr | pgInAddrSpc(d1', n, atkr) ::
+                    d1'[n].entry == d2'[n].entry;
+            }
+        } else {
+            assert d1'[atkr].PageDbEntryTyped?;
+            assert d2'[atkr].PageDbEntryTyped?;
+            forall(n: PageNr )
+                ensures pgInAddrSpc(d1', n, atkr) <==>
+                    pgInAddrSpc(d1, n, atkr)
+                ensures pgInAddrSpc(d2', n, atkr) <==>
+                    pgInAddrSpc(d2, n, atkr) { }
+        }
+    }
 }
 
 lemma lemma_finalise_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
