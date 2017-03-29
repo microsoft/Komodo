@@ -5,7 +5,7 @@ $dafny = "tools/Dafny/Dafny.exe"
 $remoteboogie = "Boogie.exe"
 $args_ignore = @("/ironDafny","/compile:0")
 $args_keep = @("/trace")
-$argpats_ignore = @("/allocated")
+$argpats_ignore = @("/allocated","/induction")
 $argpats_keep = @("/timeLimit","/proverOpt","/proc","/errorTrace")
 
 $dafnyargs = @()
