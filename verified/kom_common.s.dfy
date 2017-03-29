@@ -88,6 +88,7 @@ function method {:opaque} PageDb(): symbol { "g_pagedb" }
 function method {:opaque} MonitorPhysBaseOp(): symbol {"g_monitor_physbase" }
 function method {:opaque} SecurePhysBaseOp(): symbol {"g_secure_physbase" }
 function method {:opaque} CurDispatcherOp(): symbol { "g_cur_dispatcher" }
+function method {:opaque} PendingInterruptOp(): symbol { "g_pending_interrupt" }
 function method {:opaque} K_SHA256s(): symbol { "g_k_sha256" }
 
 // XXX: workaround so dafny sees that these are distinct, despite the opaques
@@ -96,13 +97,18 @@ predicate DistinctGlobals()
     PageDb() != MonitorPhysBaseOp()
     && PageDb() != SecurePhysBaseOp()
     && PageDb() != CurDispatcherOp()
+    && PageDb() != PendingInterruptOp()
     && PageDb() != K_SHA256s()
     && MonitorPhysBaseOp() != SecurePhysBaseOp()
     && MonitorPhysBaseOp() != CurDispatcherOp()
+    && MonitorPhysBaseOp() != PendingInterruptOp()
     && MonitorPhysBaseOp() != K_SHA256s()
     && SecurePhysBaseOp() != CurDispatcherOp()
+    && SecurePhysBaseOp() != PendingInterruptOp()
     && SecurePhysBaseOp() != K_SHA256s()
+    && CurDispatcherOp() != PendingInterruptOp()
     && CurDispatcherOp() != K_SHA256s()
+    && PendingInterruptOp() != K_SHA256s()
 }
 
 lemma lemma_DistinctGlobals()
@@ -112,6 +118,7 @@ lemma lemma_DistinctGlobals()
     reveal_MonitorPhysBaseOp();
     reveal_SecurePhysBaseOp();
     reveal_CurDispatcherOp();
+    reveal_PendingInterruptOp();
     reveal_K_SHA256s();
 }
 
@@ -130,10 +137,11 @@ function method {:axiom} SecurePhysBase(): addr
 function method KomGlobalDecls(): globaldecls
     ensures ValidGlobalDecls(KomGlobalDecls());
 {
-    map[MonitorPhysBaseOp() := WORDSIZE,
+    map[PageDb() := G_PAGEDB_SIZE,
+        MonitorPhysBaseOp() := WORDSIZE,
         SecurePhysBaseOp() := WORDSIZE,
         CurDispatcherOp() := WORDSIZE,
-        PageDb() := G_PAGEDB_SIZE,
+        PendingInterruptOp() := WORDSIZE,
         K_SHA256s() := 256
         ]
 }
