@@ -269,8 +269,8 @@ ensures
     assert trace_out.M[SeqLength(trace_in.M) + 0] == bswap32_seq(SeqSlice(last_block, 0*SHA_BLOCKSIZE, (0+1)*SHA_BLOCKSIZE));
     assert trace_out.M[SeqLength(trace_in.M)] == bswap32_seq(SeqSlice(last_block, 0, SHA_BLOCKSIZE))
                                               == bswap32_seq(last_block);
-    lemma_WordSeqToBytes_is_bswap32_seq(last_block);
-    assert bswap32_seq(last_block) == WordSeqToBytes(last_block);
+//    lemma_WordSeqToBytes_is_bswap32_seq(last_block);
+//    assert bswap32_seq(last_block) == WordSeqToBytes(last_block);
 
 //    lemma_SHA256FinalHelper1(trace_out, last(trace_out.H), WordSeqToBytes(ConcatenateSeqs(trace_out.M)),
 //                             WordSeqToBytes(last_block), WordSeqToBytes(ConcatenateSeqs(trace_in.M)));

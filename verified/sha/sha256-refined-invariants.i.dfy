@@ -37,7 +37,7 @@ const SHA_CTXSIZE:int := 8; // 8 words
 const SHA_STACKSIZE:int := 19; // 19 words on the stack
 
 predicate BlockInvariant(
-            trace:SHA256Trace, input:seq<word>, globals:globalsmap,
+            trace:SHA256Trace, old_trace:SHA256Trace, input:seq<word>, globals:globalsmap,
             old_M_len:nat, old_mem:memmap, mem:memmap, sp:word, lr:word, r1:word, r12:word,
             a:word, b:word, c:word, d:word, e:word, f:word, g:word, h:word,
             input_ptr:word, ctx_ptr:word,             
@@ -70,6 +70,8 @@ predicate BlockInvariant(
  // Trace properties
  && IsCompleteSHA256Trace(trace)
  && SHA256TraceIsCorrect(trace) 
+ && |old_trace.M| <= |trace.M|
+ && old_trace.M == trace.M[0..|old_trace.M|]  // old_trace.M is a prefix of trace.M
  && |trace.M| == old_M_len + block
  && (forall i :: 0 <= i < block 
              ==> trace.M[old_M_len + i] == bswap32_seq(input[i*16..(i+1)*16])) 
