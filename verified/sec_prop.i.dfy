@@ -545,8 +545,25 @@ lemma lemma_finalise_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     requires enc_conf_eqpdb(d1, d2, atkr)
     ensures  enc_conf_eqpdb(d1', d2', atkr) 
 {
-    // PROVEME
-    assume false;
+    if(atkr == addrspacePage) {
+        assert e1' == KOM_ERR_SUCCESS <==> e2' == KOM_ERR_SUCCESS;
+        if(e1' == KOM_ERR_SUCCESS){
+            forall(n: PageNr)
+                ensures pgInAddrSpc(d1', n, atkr) <==>
+                    pgInAddrSpc(d1, n, atkr)
+                ensures pgInAddrSpc(d2', n, atkr) <==>
+                    pgInAddrSpc(d2, n, atkr) { }
+        } else {
+            assert d1' == d1;
+            assert d2' == d2;
+        }
+    } else {
+        forall(n: PageNr)
+            ensures pgInAddrSpc(d1', n, atkr) <==>
+                pgInAddrSpc(d1, n, atkr)
+            ensures pgInAddrSpc(d2', n, atkr) <==>
+                pgInAddrSpc(d2, n, atkr) { }
+    }
 }
 
 lemma lemma_stop_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
