@@ -298,8 +298,45 @@ lemma lemma_initL2PTable_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     requires enc_conf_eqpdb(d1, d2, atkr)
     ensures enc_conf_eqpdb(d1', d2', atkr) 
 {
-    // PROVEME
-    assume false;
+    var ex1_alloc := !(e1' == KOM_ERR_ALREADY_FINAL ||
+        e1' == KOM_ERR_ADDRINUSE || e1' == KOM_ERR_INVALID_MAPPING ||
+            e1' == KOM_ERR_INVALID_ADDRSPACE);
+    var ex2_alloc := !(e2' == KOM_ERR_ALREADY_FINAL ||
+        e2' == KOM_ERR_ADDRINUSE || e2' == KOM_ERR_INVALID_MAPPING ||
+            e2' == KOM_ERR_INVALID_ADDRSPACE);
+    if( ex1_alloc && ex2_alloc) {
+        var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
+        var ap1 := allocatePage(d1, page, addrspacePage, l2pt);
+        var ap2 := allocatePage(d2, page, addrspacePage, l2pt);
+        lemma_allocatePage_enc_conf_ni(d1, ap1.0, e1', d2, ap2.0, e2',
+            page, addrspacePage, l2pt, atkr);
+        assert ap1.1 != KOM_ERR_SUCCESS ==> ap1.0 == d1;
+        assert ap2.1 != KOM_ERR_SUCCESS ==> ap2.0 == d2;
+        if(e1' == KOM_ERR_SUCCESS){
+            var l1ptnr1 := ap1.0[addrspacePage].entry.l1ptnr;
+            forall(n : PageNr | n != l1ptnr1)
+                ensures d1'[n] == ap1.0[n]; 
+                ensures pgInAddrSpc(d1', n, atkr) <==>
+                    pgInAddrSpc(ap1.0, n, atkr) { }
+        } else {
+            assert d1' == ap1.0;
+        }
+        if(e2' == KOM_ERR_SUCCESS){
+            var l1ptnr2 := ap2.0[addrspacePage].entry.l1ptnr;
+            forall(n : PageNr | n != l1ptnr2)
+                ensures d2'[n] == ap2.0[n]; 
+                ensures pgInAddrSpc(d2', n, atkr) <==>
+                    pgInAddrSpc(ap2.0, n, atkr) { }
+        } else {
+            assert d2' == ap2.0;
+        }
+    }
+    // TODO I bet I can get all of these cases to work faster if I just prove 
+    // thatallocatePage only touches the allocated page, and the addrspace of 
+    // the allocated page doesn't change.
+    if( ex1_alloc  && !ex2_alloc) { }
+    if( !ex1_alloc && ex2_alloc ) { }
+    if( !ex1_alloc && !ex2_alloc) { }
 }
 
 
