@@ -578,7 +578,9 @@ ghost method SHA_padding_words2bytes(words:seq<word>, length:word) returns (byte
     ensures bytes[0] == 0x80;
     ensures bytes[1..56] == RepeatByte(0, 55);
     ensures bytes[56..64] == Uint64ToBytes(length);
-    ensures WordSeqToBytes(words) == bytes;
+//    ensures WordSeqToBytes(words) == bytes;
+// More likely true:    
+    ensures bswap32_seq(words) == bytes;
 
 lemma lemma_ConcatenateSeqs_M_length<T>(M:seq<seq<T>>)
     //requires IsCompleteSHA256Trace(trace);
@@ -593,31 +595,32 @@ lemma lemma_ConcatenateSeqs_M_length<T>(M:seq<seq<T>>)
     }
 }
 
-// From words_and_bytes.i.dfy <- Relies on math libraries
-lemma lemma_BytesToWord_WordToBytes_inverses(b0:byte, b1:byte, b2:byte, b3:byte)
-    ensures WordToBytes(BytesToWord(b0,b1,b2,b3)) == [b0,b1,b2,b3];
-
-lemma lemma_WordSeqToBytes_is_bswap32_seq(s:seq<word>)
-    ensures WordSeqToBytes(s) == bswap32_seq(s);
-{
-	  assume false;
-    if s == [] {
-        reveal_bswap32_seq();
-    } else {
-        var bytes := WordToBytes(s[0]);
-        calc {
-            WordSeqToBytes(s);
-            WordToBytes(s[0]) + WordSeqToBytes(s[1..]);
-                { lemma_BytesToWord_WordToBytes_inverses(bytes[3], bytes[2], bytes[1], bytes[0]); }
-            [BytesToWord(bytes[3], bytes[2], bytes[1], bytes[0])] + WordSeqToBytes(s[1..]);
-            [bswap32(s[0])] + WordSeqToBytes(s[1..]);
-                { lemma_WordSeqToBytes_is_bswap32_seq(s[1..]); }
-            [bswap32(s[0])] + bswap32_seq(s[1..]);
-                { reveal_bswap32_seq(); }
-            bswap32_seq(s);
-        }
-    }
-}
+//// From words_and_bytes.i.dfy <- Relies on math libraries
+//lemma lemma_BytesToWord_WordToBytes_inverses(b0:byte, b1:byte, b2:byte, b3:byte)
+//    ensures WordToBytes(BytesToWord(b0,b1,b2,b3)) == [b0,b1,b2,b3];
+//
+//// Probably not true:    
+//lemma lemma_WordSeqToBytes_is_bswap32_seq(s:seq<word>)
+//    ensures WordSeqToBytes(s) == bswap32_seq(s);
+//{
+//	  assume false;
+//    if s == [] {
+//        reveal_bswap32_seq();
+//    } else {
+//        var bytes := WordToBytes(s[0]);
+//        calc {
+//            WordSeqToBytes(s);
+//            WordToBytes(s[0]) + WordSeqToBytes(s[1..]);
+//                { lemma_BytesToWord_WordToBytes_inverses(bytes[3], bytes[2], bytes[1], bytes[0]); }
+//            [BytesToWord(bytes[3], bytes[2], bytes[1], bytes[0])] + WordSeqToBytes(s[1..]);
+//            [bswap32(s[0])] + WordSeqToBytes(s[1..]);
+//                { lemma_WordSeqToBytes_is_bswap32_seq(s[1..]); }
+//            [bswap32(s[0])] + bswap32_seq(s[1..]);
+//                { reveal_bswap32_seq(); }
+//            bswap32_seq(s);
+//        }
+//    }
+//}
 
 lemma lemma_WordSeqToBytes_adds(s:seq<word>, s':seq<word>)
     ensures WordSeqToBytes(s + s') == WordSeqToBytes(s) + WordSeqToBytes(s');
