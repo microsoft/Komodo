@@ -492,11 +492,22 @@ predicate evalEnterUserspace(s:state, r:state)
     requires ValidState(s)
     ensures evalEnterUserspace(s, r) ==> ValidState(r) && mode_of_state(r) == User
 {
-    mode_of_state(s) != User && ValidModeChange'(s, User) &&
     var spsr := OSReg(spsr(mode_of_state(s)));
-    assert ValidSReg(spsr.sr);
-    decode_mode'(psr_mask_mode(OperandContents(s, spsr))) == Just(User) &&
-    evalUpdate(s, OSReg(cpsr), OperandContents(s, spsr), r)
+    mode_of_state(s) != User
+    && decode_mode'(psr_mask_mode(OperandContents(s, spsr))) == Just(User)
+    && evalMOVSPCLR(s, r)
+}
+
+predicate evalMOVSPCLR(s:state, r:state)
+    requires ValidState(s)
+{
+    priv_of_state(s) == PL1 &&
+    var spsr_reg := OSReg(spsr(mode_of_state(s)));
+    assert ValidSReg(spsr_reg.sr);
+    var spsr_val := OperandContents(s, spsr_reg);
+    ValidPsrWord(spsr_val) &&
+    ValidModeChange(s, spsr_val) &&
+    evalUpdate(s, OSReg(cpsr), spsr_val, r)
 }
 
 predicate {:opaque} evalUserspaceExecution(s:state, r:state)
