@@ -357,8 +357,24 @@ lemma lemma_mapInsecure_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     requires enc_conf_eqpdb(d1, d2, atkr)
     ensures enc_conf_eqpdb(d1', d2', atkr) 
 {
-    // PROVEME
-    assume false;
+    var go1, go2 := e1' == KOM_ERR_SUCCESS, e2' == KOM_ERR_SUCCESS; 
+    if( go1 && go2 ) {
+        assert enc_conf_eqpdb(d1', d2', atkr) by {
+            var abs_mapping := wordToMapping(mapping);
+            var l2pte := InsecureMapping(physPage, abs_mapping.perm.w);
+            assert d1' == updateL2Pte(d1, addrspacePage, abs_mapping, l2pte); 
+            assert d2' == updateL2Pte(d2, addrspacePage, abs_mapping, l2pte); 
+            lemma_updateL2Pte_enc_conf_ni(d1, d1', d2, d2', 
+                addrspacePage, abs_mapping, l2pte, atkr);
+        }
+    }
+    if( go1 && !go2 ) { assert enc_conf_eqpdb(d1', d2', atkr); }
+    if( !go1 && go2 ) { assert enc_conf_eqpdb(d1', d2', atkr); }
+    if( !go1 && !go2 ) {
+        assert d1' == d1;
+        assert d2' == d2;
+        assert enc_conf_eqpdb(d1', d2', atkr);
+    }
 }
 
 lemma lemma_remove_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
