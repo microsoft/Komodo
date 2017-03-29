@@ -455,13 +455,34 @@ lemma lemma_updateL2Pte_enc_conf_ni(d1: PageDb, d1': PageDb,
                                     atkr: PageNr)
     requires ni_reqs_weak_(d1, d1', d2, d2', atkr)
     requires isAddrspace(d1, a) && isAddrspace(d2, a)
-    requires validMapping(mapping, d1, a) && validMapping(mapping, d1, a)
+    requires validMapping(mapping, d1, a) && validMapping(mapping, d2, a)
     requires d1[a].entry.state.InitState? && d2[a].entry.state.InitState?
     requires validL2PTE(d1, a, l2e) && validL2PTE(d2, a, l2e)
+    requires d1' == updateL2Pte(d1, a, mapping, l2e) 
+    requires d2' == updateL2Pte(d2, a, mapping, l2e) 
     requires enc_conf_eqpdb(d1, d2, atkr)
     ensures  enc_conf_eqpdb(d1', d2', atkr) 
 {
-    assume false;
+    assert d1[a].addrspace == a;
+    assert d2[a].addrspace == a;
+    var l11 := d1[d1[a].entry.l1ptnr].entry;
+    var l12 := d2[d2[a].entry.l1ptnr].entry;
+    var l1pte1 := fromJust(l11.l1pt[mapping.l1index]);
+    var l1pte2 := fromJust(l12.l1pt[mapping.l1index]);
+    assert d1[l1pte1].addrspace == a;
+    assert d2[l1pte2].addrspace == a;
+    forall( n: PageNr | n != l1pte1)
+        ensures d1'[n] == d1[n]; 
+        ensures pgInAddrSpc(d1', n, atkr) <==>
+            pgInAddrSpc(d1, n, atkr) { }
+    forall( n: PageNr | n != l1pte2)
+        ensures d2'[n] == d2[n]; 
+        ensures pgInAddrSpc(d1', n, atkr) <==>
+            pgInAddrSpc(d1, n, atkr) { }
+    assert d1'[l1pte1].PageDbEntryTyped?;
+    assert d2'[l1pte2].PageDbEntryTyped?;
+    assert d1'[l1pte1].addrspace == a;
+    assert d2'[l1pte2].addrspace == a;
 }
 
 lemma lemma_maybeContents_insec_ni(s1: state, s2: state, c1: Maybe<seq<word>>, 
