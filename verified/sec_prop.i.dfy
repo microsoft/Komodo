@@ -350,6 +350,34 @@ lemma lemma_initDispatcher_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     }
 }
 
+predicate l2initgo(e1':word) {
+    !(e1' == KOM_ERR_ALREADY_FINAL ||
+        e1' == KOM_ERR_ADDRINUSE || e1' == KOM_ERR_INVALID_MAPPING ||
+            e1' == KOM_ERR_INVALID_ADDRSPACE)
+}
+
+lemma lemma_initL2PTable_enc_conf_ni_one_go(d1: PageDb, d1': PageDb, e1':word,
+                                     d2: PageDb, d2': PageDb, e2':word,
+                                     page:word, addrspacePage:word, l1index:word,
+                                     atkr: PageNr)
+    requires ni_reqs_(d1, d1', d2, d2', atkr)
+    requires smc_initL2PTable(d1, page, addrspacePage, l1index) == (d1', e1')
+    requires smc_initL2PTable(d2, page, addrspacePage, l1index) == (d2', e2')
+    requires l2initgo(e1') && !l2initgo(e2')
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    ensures enc_conf_eqpdb(d1', d2', atkr) 
+{
+    assert d1'[atkr].PageDbEntryTyped? <==> d1[atkr].PageDbEntryTyped?;
+    assert d2'[atkr].PageDbEntryTyped? <==> d2[atkr].PageDbEntryTyped?;
+    assert d2'[atkr].PageDbEntryTyped? <==> d1'[atkr].PageDbEntryTyped?;
+    assert d2' == d2;
+    if( d1'[atkr].PageDbEntryTyped? ){
+        assert enc_conf_eqpdb(d1', d2', atkr);
+    } else {
+        assert enc_conf_eqpdb(d1', d2', atkr);
+    }
+}
+
 lemma lemma_initL2PTable_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
                                      d2: PageDb, d2': PageDb, e2':word,
                                      page:word, addrspacePage:word, l1index:word,
@@ -360,12 +388,8 @@ lemma lemma_initL2PTable_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     requires enc_conf_eqpdb(d1, d2, atkr)
     ensures enc_conf_eqpdb(d1', d2', atkr) 
 {
-    var ex1_alloc := !(e1' == KOM_ERR_ALREADY_FINAL ||
-        e1' == KOM_ERR_ADDRINUSE || e1' == KOM_ERR_INVALID_MAPPING ||
-            e1' == KOM_ERR_INVALID_ADDRSPACE);
-    var ex2_alloc := !(e2' == KOM_ERR_ALREADY_FINAL ||
-        e2' == KOM_ERR_ADDRINUSE || e2' == KOM_ERR_INVALID_MAPPING ||
-            e2' == KOM_ERR_INVALID_ADDRSPACE);
+    var ex1_alloc := l2initgo(e1');
+    var ex2_alloc := l2initgo(e2');
     if( ex1_alloc && ex2_alloc) {
         var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
         var ap1 := allocatePage(d1, page, addrspacePage, l2pt);
@@ -393,11 +417,14 @@ lemma lemma_initL2PTable_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
             assert d2' == ap2.0;
         }
     }
-    // TODO I bet I can get all of these cases to work faster if I just prove 
-    // thatallocatePage only touches the allocated page, and the addrspace of 
-    // the allocated page doesn't change.
-    if( ex1_alloc  && !ex2_alloc) { }
-    if( !ex1_alloc && ex2_alloc ) { }
+    if( ex1_alloc  && !ex2_alloc) { 
+        lemma_initL2PTable_enc_conf_ni_one_go(
+            d1, d1', e1', d2, d2', e2', page, addrspacePage, l1index, atkr);
+    }
+    if( !ex1_alloc && ex2_alloc ) {
+        lemma_initL2PTable_enc_conf_ni_one_go(
+            d2, d2', e2', d1, d1', e1', page, addrspacePage, l1index, atkr);
+    }
     if( !ex1_alloc && !ex2_alloc) { 
         assert d1' == d1;
         assert d2' == d2;
@@ -452,8 +479,6 @@ lemma lemma_remove_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     requires enc_conf_eqpdb(d1, d2, atkr)
     ensures  enc_conf_eqpdb(d1', d2', atkr) 
 {
-    // PROVEME
-    // assume false;
     if(!validPageNr(page) || d1[page].PageDbEntryFree? || 
         d2[page].PageDbEntryFree?) {
         assert d1' == d1;
