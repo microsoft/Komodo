@@ -31,7 +31,7 @@ procedure mkl2pte_insecure(
     lemma_LeftShift12(page);
     LSL(page,page,12);
     assert page == old(page) * PAGESIZE;
-    assert PageAligned(page);
+    assert PageAligned(page) by { reveal PageAligned; }
 
     // mask out X bit in mapping, so it can't construct an executable mapping
     // TODO: it would be better to elide this code from ARM_L2PTE
@@ -66,7 +66,7 @@ procedure phys_page_is_insecure_ram(
     assert ret == MonitorPhysBase() / PAGESIZE;
 
     if (phys_page >= ret) {
-        assert !physPageIsInsecureRam(phys_page);
+        assert !physPageIsInsecureRam(phys_page) by { reveal PageAligned; }
         ret := 0;
     } else {
         assert validInsecurePageNr(phys_page)

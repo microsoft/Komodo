@@ -275,6 +275,7 @@ procedure insecure_phys_to_virt(
 {
     LDRglobaladdr(ret, MonitorPhysBaseOp());
     LDRglobal(ret, MonitorPhysBaseOp(), ret, 0);
+    reveal PageAligned;
     lemma_RightShift12(ret);
     LSR(ret, ret, 12);
 

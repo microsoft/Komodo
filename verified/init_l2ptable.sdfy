@@ -29,6 +29,7 @@ lemma lemma_SecurePage(pagebase:word)
 {
     var lower := KOM_DIRECTMAP_VBASE + SecurePhysBase();
     var upper := lower + KOM_SECURE_RESERVE;
+    reveal_PageAligned();
     assert PageAligned(lower);
     assert PageAligned(upper);
     assert lower <= pagebase < upper;
@@ -39,7 +40,7 @@ lemma pa_implies_modl2p(p:int)
     requires PageAligned(p)
     ensures  p % ARM_L2PTABLE_BYTES == 0
 {
-    assert p % PAGESIZE == 0;
+    assert p % PAGESIZE == 0 by { reveal_PageAligned(); }
     assert PAGESIZE == 0x1000;
     assert ARM_L2PTABLE_BYTES == 0x400;
     assert PAGESIZE % ARM_L2PTABLE_BYTES == 0;
