@@ -61,3 +61,56 @@ lemma lemma_InterruptContinuationInvariantDef(s:state, r:state)
 {
     reveal_InterruptContinuationInvariantDef();
 }
+
+lemma lemma_PrivInterruptInvariants(s:state, r:state)
+    requires InterruptContinuationInvariantDef()
+    requires ValidState(s) && SaneMem(s.m)
+    requires priv_of_state(s) == PL1
+    requires maybeHandleInterrupt(s, r)
+    requires SaneStack(s)
+    ensures mode_of_state(r) == mode_of_state(s)
+    ensures r.conf.ttbr0 == s.conf.ttbr0 && r.conf.scr == s.conf.scr
+    ensures SaneStack(r)
+    ensures StackPreserving(s, r)
+    ensures NonStackMemPreserving(s, r)
+    ensures GlobalsPreservingExcept(s, r, {PendingInterruptOp()})
+    ensures CoreRegPreservingExcept(s, r, {OLR})
+    ensures forall m :: m != mode_of_exception(s.conf, ExIRQ)
+            && m != mode_of_exception(s.conf, ExFIQ)
+            ==> s.regs[LR(m)] == r.regs[LR(m)]
+{
+    var nondet := nondeterministic_word(s, -1);
+    if (!s.conf.cpsr.f && nondet == 0) || (!s.conf.cpsr.i && nondet == 1) {
+        ghost var ex := if nondet == 0 then ExFIQ else ExIRQ;
+        assert handleInterrupt(s, ex, r);
+        var s1, s2 :| evalExceptionTaken(s, ex, s1)
+            && InterruptContinuationInvariant(s1, s2)
+            && evalMOVSPCLR(s2, r);
+        lemma_evalExceptionTaken_Mode(s, ex, s1);
+        lemma_InterruptContinuationInvariantDef(s1, s2);
+        forall m | m != mode_of_exception(s.conf, ex)
+            ensures s.regs[LR(m)] == r.regs[LR(m)]
+        {
+            calc {
+                s.regs[LR(m)];
+                s1.regs[LR(m)];
+                s2.regs[LR(m)];
+                r.regs[LR(m)];
+            }
+        }
+        calc {
+            s.regs[SP(Monitor)];
+            s1.regs[SP(Monitor)];
+            { if mode_of_state(s1) == Monitor {
+                assert CoreRegPreservingExcept(s1, s2, {});
+                assert OperandContents(s1, OSP) == OperandContents(s2, OSP);
+            } else {
+                assert BankedRegsInvariant(s1, s2);
+            } }
+            s2.regs[SP(Monitor)];
+            r.regs[SP(Monitor)];
+        }
+    } else {
+        assert r == takestep(s);
+    }
+}

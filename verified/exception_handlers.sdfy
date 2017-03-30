@@ -6,23 +6,29 @@ include {:verbatim} "exceptions.i.dfy"
 
 include "ARMdecls.sdfy"
 
+#verbatim
+function cpsr_of_state(s:state): word
+    requires ValidState(s)
+{ reveal_ValidSRegState(); s.sregs[cpsr] }
+#endverbatim
+
 procedure {:frame false} {:instruction Ins(CPSID_IAF(mod))}
 CPSID_IAF(operand mod:word)
-    requires
+    requires/ensures
         ValidState(this) && this.ok;
-        SaneStack(this);
-        priv_of_state(this) == PL1 && SaneMem(this.m);
+        SaneStack(this) && SaneMem(this.m);
+    requires
+        InterruptContinuationInvariantDef();
         @mod is OConst;
         ValidModeEncoding(mod);
+        priv_of_state(this) == PL1;
         ValidModeChange'(this, decode_mode(mod));
-        InterruptContinuationInvariantDef();
     modifies
         cpsr;
     ensures
         !interrupts_enabled(this);
         mode_of_state(this) == decode_mode(mod);
-        SaneStack(this);
-        ParentStackPreserving(old(this), this);
+        StackPreserving(old(this), this);
         NonStackMemPreserving(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp()));
         this.conf.ttbr0 == old(this).conf.ttbr0;
@@ -33,30 +39,21 @@ CPSID_IAF(operand mod:word)
             ==> old(this).regs[LR(m)] == this.regs[LR(m)];
 {
     reveal va_eval;
-    exists s3 :: maybeHandleInterrupt(old(this), s3) && evalIns'(CPSID_IAF(@mod), s3, this);
-    ghost var nondet := nondeterministic_word(old(this), (-1));
-    ghost if (!old(this).conf.cpsr.f && nondet == 0
-        || !old(this).conf.cpsr.i && nondet == 1) {
-        exists ex :: ex == ExFIQ || ex == ExIRQ && handleInterrupt(old(this), ex, s3);
-        exists s1, s2 :: evalExceptionTaken(old(this), ex, s1)
-            && InterruptContinuationInvariant(s1, s2)
-            && evalMOVSPCLR(s2, s3);
-        lemma_InterruptContinuationInvariantDef(s1, s2);
-        assert KomInterruptHandlerInvariant(s1, dummyPageDb(), s2, dummyPageNr());
-    } else {
-        assert s3 == takestep(old(this));
-    }
-    assert mode_of_state(s3) == mode_of_state(old(this)) && world_of_state(s3) == world_of_state(old(this));
-    assert ValidInstruction(s3, CPSID_IAF(@mod));
-    assert evalCPSID_IAF(s3, mod, this);
+    exists s' :: maybeHandleInterrupt(old(this), s') && evalIns'(CPSID_IAF(@mod), s', this);
+    lemma_PrivInterruptInvariants(old(this), s');
+    assert mode_of_state(s') == mode_of_state(old(this))
+        && world_of_state(s') == world_of_state(old(this));
+    assert ValidInstruction(s', CPSID_IAF(@mod)) && evalCPSID_IAF(s', mod, this);
+    lemma_update_psr(cpsr_of_state(s'), mod, true, true);
 }
 
-procedure switch_to_monitor(inline oldmode:mode)
+procedure {:frame false} switch_to_monitor(inline oldmode:mode)
     modifies
         cpsr; lr; /* spsr_mon; */
     reads
         /* spsr_svc; spsr_abt; spsr_und; */ lr_svc; lr_abt; lr_und;
     requires
+        InterruptContinuationInvariantDef();
         SaneConstants() && ValidState(this) && SaneStack(this) && SaneMem(this.m);
         priv_of_state(this) == PL1 && world_of_state(this) == Secure;
         mode_of_state(this) == oldmode;
@@ -64,12 +61,17 @@ procedure switch_to_monitor(inline oldmode:mode)
         this.ok;
     ensures
         SaneState(this);
+        SaneStack(this);
+        StackPreserving(old(this), this);
+        NonStackMemPreserving(old(this), this);
+        GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp()));
+        CoreRegPreservingExcept(old(this), this, set(OSP, OLR)); // banked
         //spsr_of_state(this) == spsr_of_state(old(this));
         lr == OperandContents(old(this), OLR);
+        this.conf.ttbr0 == old(this).conf.ttbr0;
+        this.conf.scr == old(this).conf.scr;
 {
-    assert ValidPsrWord(cpsr) by { reveal_ValidSRegState(); }
     CPSID_IAF(const(encode_mode(Monitor)));
-    lemma_update_psr(old(cpsr), encode_mode(Monitor), true, true);
 
     // inline if (oldmode == Supervisor) {
     //    MRS(lr, spsr_svc);
@@ -90,6 +92,7 @@ procedure switch_to_monitor(inline oldmode:mode)
 }
 
 procedure svc_exit(
+    ghost exstate: state,
     ghost pagedb_in: PageDb,
     ghost dispPg: PageNr) returns (ghost pagedb: PageDb)
     reads
@@ -99,14 +102,17 @@ procedure svc_exit(
     requires/ensures
         SaneState(this);
     requires
-        this.conf.ex == ExSVC;
+        ValidState(exstate) && exstate.conf.ex == ExSVC && mode_of_state(exstate) != User;
+        r1 == OperandContents(exstate, OReg(R1));
         //this.conf.scr.ns == Secure;
         validPageDb(pagedb_in);
+        SaneMem(exstate.m);
+        pageDbCorresponds(exstate.m, pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         nonStoppedDispatcher(pagedb_in, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
-        tuple(r0, r1, pagedb) == exceptionHandled(old(this), pagedb_in, dispPg);
+        tuple(r0, r1, pagedb) == exceptionHandled(exstate, pagedb_in, dispPg);
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg);
@@ -134,7 +140,7 @@ procedure svc_exit(
     }
 
     pagedb := pagedb_in[dispPg := pagedb_in[dispPg].(entry := dispEntry)];
-    assert pagedb == exPageDb(exceptionHandled(old(this), pagedb_in, dispPg));
+    assert pagedb == exPageDb(exceptionHandled(exstate, pagedb_in, dispPg));
     //exceptionHandledValidPageDb(user_state, ExSVC, old(this), pagedb_in, dispPg);
     assume validPageDb(pagedb); // TODO!!
 
@@ -148,6 +154,7 @@ procedure svc_exit(
 }
 
 procedure svc_returning(
+    ghost exstate: state,
     ghost stack_bytes: int,
     ghost pagedb: PageDb,
     ghost dispPg: PageNr)
@@ -160,17 +167,19 @@ procedure svc_returning(
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
     requires
+        ValidState(exstate) && mode_of_state(exstate) != User;
+        isReturningSvc(exstate);
+        CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validDispatcherPage(pagedb, dispPg);
-        isReturningSvc(this);
     ensures
         lr == old(lr);
         StackPreserving(old(this), this);
         NonStackMemPreserving(old(this), this);
-        preEntryReturn(this, old(lr), svcHandled(old(this), pagedb, dispPg));
+        preEntryReturn(this, old(lr), svcHandled(exstate, pagedb, dispPg));
 {
-    assert svcHandled(this, pagedb, dispPg) == tuple(KOM_ERR_INVALID,0,0,0,0,0,0,0,0);
+    assert svcHandled(exstate, pagedb, dispPg) == tuple(KOM_ERR_INVALID,0,0,0,0,0,0,0,0);
 
     MOV(r0, const(encode_mode(User)));
     MSR(spsr_mon, r0);
@@ -197,6 +206,7 @@ procedure {:frame false} svc_handler(
     modifies
         mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; cpsr; lr; spsr_mon;
     requires
+        InterruptContinuationInvariantDef();
         SaneConstants() && ValidState(this)  && SaneStack(this) && SaneMem(this.m);
         this.ok;
         StackBytesRemaining(this, stack_bytes);
@@ -217,19 +227,24 @@ procedure {:frame false} svc_handler(
     assert mode_of_state(this) == Supervisor
         by { lemma_evalExceptionTaken_Mode(user_state, ExSVC, this); }
     switch_to_monitor(Supervisor);
+    lemma_SameMemAndGlobalsPreservesPageDb'(old(this), this, pagedb1);
 
     if (r0 == const(KOM_SVC_EXIT)) {
         assert !isReturningSvc(old(this));
-        pagedb := svc_exit(pagedb1, dispPg);
+        pagedb := svc_exit(old(this), pagedb1, dispPg);
         ORR(sp, sp, 1); // report that we're done
+        assert pageDbCorresponds(this.m, pagedb);
+        assert tuple(r0, r1, pagedb) == exceptionHandled(old(this), pagedb1, dispPg);
     } else {
         assert isReturningSvc(old(this));
         pagedb := pagedb1;
-        svc_returning(stack_bytes, pagedb, dispPg);
+        svc_returning(old(this), stack_bytes, pagedb, dispPg);
+        assert pageDbCorresponds(this.m, pagedb);
         assert preEntryReturn(this, OperandContents(old(this), OLR),
                               svcHandled(old(this), pagedb, dispPg));
     }
 
+    assert pageDbCorresponds(this.m, pagedb);
     assert validExceptionTransition(old(this), pagedb1, this, pagedb, dispPg)
         by { reveal validExceptionTransition; }
 }
@@ -246,6 +261,7 @@ procedure {:frame false} abort_handler(
     modifies
         mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; cpsr; lr; spsr_mon;
     requires
+        InterruptContinuationInvariantDef();
         SaneConstants() && ValidState(this)  && SaneStack(this) && SaneMem(this.m);
         this.ok;
         StackBytesRemaining(this, stack_bytes);

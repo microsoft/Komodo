@@ -403,7 +403,7 @@ lemma allOnlyCorrespondImpliesCorresponds(s:memstate,d:PageDb)
 */
 
 lemma lemma_SameMemAndGlobalsPreservesPageDb(s:state, s':state, pagedb:PageDb)
-    requires SaneState(s) && SaneState(s')
+    requires ValidState(s) && SaneMem(s.m) && ValidState(s') && SaneMem(s'.m)
     requires validPageDb(pagedb)
     requires pageDbCorresponds(s.m, pagedb)
     requires NonStackMemPreserving(s,s')
@@ -414,7 +414,7 @@ lemma lemma_SameMemAndGlobalsPreservesPageDb(s:state, s':state, pagedb:PageDb)
 }
 
 lemma lemma_SameMemAndGlobalsPreservesPageDb'(s:state, s':state, pagedb:PageDb)
-    requires SaneState(s) && SaneState(s')
+    requires ValidState(s) && SaneMem(s.m) && ValidState(s') && SaneMem(s'.m)
     requires validPageDb(pagedb)
     requires pageDbCorresponds(s.m, pagedb)
     requires NonStackMemPreserving(s,s')
