@@ -63,6 +63,7 @@ procedure {:refined} LDRPostInc(
 reads
     mem;
 requires {:refined false}
+    !interrupts_enabled(this);
     @dst != @src;
 requires
     ValidAddrMemStateOpaque(mem);
@@ -84,6 +85,7 @@ procedure {:refined} LDRglobalPostInc(
 reads
     globals;
 requires {:refined false}
+    !interrupts_enabled(this);
     @dst != @base;
 requires
     SaneShaGlobal(globals);
@@ -130,6 +132,7 @@ reads
 modifies
     mem; lr;
 requires {:refined false}
+    !interrupts_enabled(this);
     //mode_of_state(this) == Monitor;
     @t0 == OReg(R0);
     @t1 == OReg(R2);
@@ -494,7 +497,8 @@ procedure {:refined} {:recursive} {:timeLimitMultiplier 2} Body_00_15UnrolledRec
     0 <= n <= SHA_BLOCKSIZE;
     n == SHA_BLOCKSIZE - i;
     perm == OpaqueMod(i, 8);
-  requires {:refined false}
+requires {:refined false}
+    !interrupts_enabled(this);
     @t0 == OReg(R0);
     @t1 == OReg(R2);
     @t2 == OReg(GetReg(if Even(i) then 12 else 3));
@@ -554,6 +558,7 @@ procedure {:refined} Body_00_15LoopUnrolled(
     requires Body_00_15LoopStateInvariantBreakdown(mem, mem, input_ptr, trace_in, trace_in, 0, sp, globals, lr,
                                                    r2, r12, r3, r1, input,
                                                    r4, r5, r6, r7, r8, r9, r10, r11);
+    requires {:refined false} !interrupts_enabled(this);
     reads  sp; globals;
     modifies mem; lr; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12;
     ensures  Body_00_15LoopStateInvariantBreakdown(old(mem), mem, input_ptr, trace_in, trace_out, 16, sp, globals, lr,
@@ -597,6 +602,7 @@ reads
 modifies 
     mem; lr;
 requires {:refined false}
+    !interrupts_enabled(this);
     @t0 == OReg(R0);
     @t1 == OReg(R2);
     @t2 == OReg(GetReg(if Even(i) then 12 else 3));
@@ -810,6 +816,7 @@ procedure {:refined} Body_16_XXWrap(
     modifies
         mem; lr;
     requires {:refined false}
+        !interrupts_enabled(this);
         @t0 == OReg(R0);
         @t1 == OReg(R2);
         @t2 == OReg(GetReg(if Even(i) then 12 else 3));
@@ -883,6 +890,7 @@ procedure {:refined}{:recursive}{:timeLimitMultiplier 2} Body_16_XXUnroller(
     modifies
         mem; lr;
     requires {:refined false}
+        !interrupts_enabled(this);
         @t0 == OReg(R0);
         @t1 == OReg(R2);
         @t2 == OReg(GetReg(if Even(i) then 12 else 3));
@@ -933,6 +941,7 @@ procedure {:refined} Body_16_XXLoopUnrolled(
     requires Body_16_XXLoopStateInvariantBreakdown(mem, mem, trace_in, trace_in, 16, sp, globals, lr,
                                                    r2, r12, r3, r1, input,
                                                    r4, r5, r6, r7, r8, r9, r10, r11);
+    requires {:refined false} !interrupts_enabled(this);
     reads  sp; globals;
     modifies mem; lr; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12;
     ensures  exists trace_out ::
@@ -976,6 +985,7 @@ requires
 
     ValidMemRange(base_ptr, base_ptr + SHA_CTXSIZE * WORDSIZE);
 requires {:refined false}   // Using this style so I can give explicit names to all the registers.  Less confusing this way.
+    !interrupts_enabled(this);
     @t0 == OReg(R0);
     @t1 == OReg(R2);
     @t2 == OReg(R12);
@@ -1040,6 +1050,8 @@ ensures
     STR(g, t3, 24); 
     //assert ValidMem(t3 + 28);     // OBSERVE
     STR(h, t3, 28); 
+
+    assert {:split_here}{:refined} true;
 }
 
 procedure {:refined} {:timeLimitMultiplier 3} sha256_one_block(
@@ -1050,6 +1062,8 @@ procedure {:refined} {:timeLimitMultiplier 3} sha256_one_block(
 requires/ensures
     ValidAddrMemStateOpaque(mem);
 
+requires {:refined false}
+    !interrupts_enabled(this);
 requires
     // Stack is accessible
     ValidMemRange(sp, sp + SHA_STACKSIZE * WORDSIZE);
@@ -1206,6 +1220,8 @@ procedure {:refined} sha256_loop_body(
     ghost block:nat
     )
 requires block < num_blocks;
+requires {:refined false}
+    !interrupts_enabled(this);
 requires exists trace_in ::
          BlockInvariant(trace_in, old_trace, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
@@ -1283,6 +1299,8 @@ procedure {:refined} sha256_loop(
     ghost old_M_length:nat,
     ghost old_mem:memmap
     )
+requires {:refined false}
+    !interrupts_enabled(this);
 requires exists trace_in ::
          BlockInvariant(trace_in, old_trace, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
@@ -1317,6 +1335,8 @@ procedure {:refined} {:timeLimitMultiplier 2} sha256_block_data_order_inner(
     )
 requires/ensures
     ValidAddrMemStateOpaque(mem);
+requires {:refined false}
+    !interrupts_enabled(this);
 requires
     // Stack is accessible
     ValidMemRange(sp, sp + SHA_STACKSIZE * WORDSIZE);
@@ -1453,6 +1473,8 @@ ensures
 procedure {:refined} scrub_stack()
 requires/ensures
     ValidAddrMemStateOpaque(mem);
+requires {:refined false}
+    !interrupts_enabled(this);
 requires
     ValidMemRange(sp, sp + 29 * WORDSIZE);  // Stack is accessible
 reads r0; sp;
@@ -1501,6 +1523,8 @@ procedure {:refined} {:timeLimitMultiplier 3} sha256_block_data_order(
     )
 requires/ensures
     ValidAddrMemStateOpaque(mem);
+requires {:refined false}
+    !interrupts_enabled(this);
 requires
     IsCompleteSHA256Trace(trace_in);
     SHA256TraceIsCorrect(trace_in);
