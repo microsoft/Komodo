@@ -85,8 +85,8 @@ predicate CoreRegPreservingExcept(s:state, r:state, trashed:set<operand>)
     requires ValidState(s) && ValidState(r);
     requires forall o :: o in trashed ==> ValidRegOperand(o);
 {
-    forall reg {:trigger OReg(reg)} :: OReg(reg) !in trashed && ValidRegOperand(OReg(reg))
-        ==> OperandContents(s, OReg(reg)) == OperandContents(r, OReg(reg))
+    (forall reg {:trigger OReg(reg)} :: OReg(reg) !in trashed && ValidRegOperand(OReg(reg))
+        ==> OperandContents(s, OReg(reg)) == OperandContents(r, OReg(reg)))
     && (OSP !in trashed ==> OperandContents(s, OSP) == OperandContents(r, OSP))
     && (OLR !in trashed ==> OperandContents(s, OLR) == OperandContents(r, OLR))
 }
