@@ -2,6 +2,18 @@ include "ARMprint.dfy"
 include "smc_handler.gen.dfy"
 include "exception_handlers.gen.dfy"
 
+function method smc_handler():va_code
+{
+    va_code_smc_handler(OReg(R0), OReg(R1), OReg(R2),
+                        OReg(R3), OReg(R4), OReg(R0), OReg(R1))
+}
+
+function method svc_handler():va_code  { va_code_svc_handler() }
+function method abt_handler():va_code  { va_code_abort_handler(ExAbt) }
+function method und_handler():va_code  { va_code_abort_handler(ExUnd) }
+function method fiq_handler():va_code  { va_code_interrupt_handler(ExFIQ) }
+function method irq_handler():va_code  { va_code_interrupt_handler(ExIRQ) }
+
 method printExceptionHandlerReturn()
 {
     printInsFixed("B", user_continue_label());
@@ -19,11 +31,13 @@ method printSMCHandlerReturn()
     printInsFixed("MOVS", "pc, lr");
 }
 
-method printAll(smc_handler:va_code, svc_handler:va_code, abt_handler:va_code,
-                und_handler:va_code)
+method printAll()
 {
     var n := 0;
-    var monitor_vectbl := emptyVecTbl().(svc_smc := Just("smc"));
+    var monitor_vectbl := emptyVecTbl().(
+        svc_smc := Just("smc"),
+        fiq := Just("fiq"),
+        irq := Just("irq"));
     var secure_vectbl := emptyVecTbl().(
         undef := Just("undefined"),
         svc_smc := Just("svc"),
@@ -39,17 +53,23 @@ method printAll(smc_handler:va_code, svc_handler:va_code, abt_handler:va_code,
     nl();
     print(".section .text"); nl();
 
-    n := printFunction("abort", abt_handler, n);
+    n := printFunction("abort", abt_handler(), n);
     printExceptionHandlerReturn(); nl();
 
-    n := printFunction("undefined", und_handler, n);
+    n := printFunction("undefined", und_handler(), n);
     printExceptionHandlerReturn(); nl();
 
-    n := printFunction("svc", svc_handler, n);
+    n := printFunction("svc", svc_handler(), n);
     printExceptionHandlerReturn(); nl();
 
-    n := printFunction("smc", smc_handler, n);
+    n := printFunction("smc", smc_handler(), n);
     printSMCHandlerReturn(); nl();
+
+    n := printFunction("fiq", fiq_handler(), n);
+    printInterruptHandlerReturn(); nl();
+
+    n := printFunction("irq", irq_handler(), n);
+    printInterruptHandlerReturn(); nl();
 
     printBss(KomGlobalDecls());
     printFooter();
@@ -70,11 +90,6 @@ predicate InitialState(s:state)
 
 method Main()
 {
-    var smc_handler := va_code_smc_handler(OReg(R0), OReg(R1), OReg(R2),
-                                        OReg(R3), OReg(R4), OReg(R0), OReg(R1));
-    var svc_handler := va_code_svc_handler();
-    var abt_handler := va_code_abort_handler(ExAbt);
-    var und_handler := va_code_abort_handler(ExUnd);
 /*
     // prove that the final state for an SMC call is valid
     forall s1:state, p1:PageDb, s2:state
@@ -99,5 +114,5 @@ method Main()
         assert validPageDb(p2') && pageDbCorresponds(s2.m, p2');
     }
 */
-    printAll(smc_handler, svc_handler, abt_handler, und_handler);
+    printAll();
 }

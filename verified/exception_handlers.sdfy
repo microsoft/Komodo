@@ -209,7 +209,7 @@ predicate handler_requires(s: state, stack_bytes: int)
     InterruptContinuationInvariantDef()
     && SaneConstants() && ValidState(s)  && SaneStack(s) && SaneMem(s.m) && s.ok
     && StackBytesRemaining(s, stack_bytes)
-    && s.conf.scr.ns == Secure
+    && s.conf.scr == SCRT(Secure, true, true)
     && mode_of_state(s) != User
 }
 #endverbatim
@@ -293,6 +293,85 @@ procedure {:frame false} abort_handler(
 
     pagedb := fault_exit(ex, old(this), pagedb1, dispPg);
     ORR(sp, sp, 1); // report that we're done
+
+    assert validExceptionTransition(old(this), pagedb1, this, pagedb, dispPg)
+        by { reveal_validExceptionTransition(); }
+}
+
+procedure {:frame false} interrupt_handler(
+    inline ex: exception,
+    ghost prior_state: state,
+    ghost stack_bytes: int,
+    ghost pagedb0: PageDb,
+    ghost pagedb1: PageDb,
+    ghost dispPg: PageNr) returns (ghost pagedb: PageDb)
+    reads
+        globals; /* spsr_svc; spsr_abt; spsr_und; */ lr_svc; lr_abt; lr_und;
+    modifies
+        mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; cpsr; lr; spsr_mon;
+    requires
+        handler_requires(this, stack_bytes);
+        stack_bytes >= 2*WORDSIZE;
+        ValidState(prior_state);
+        ex == ExFIQ || ex == ExIRQ;
+        evalExceptionTaken(prior_state, ex, this);
+        validPageDb(pagedb0) && validPageDb(pagedb1);
+        nonStoppedDispatcher(pagedb0, dispPg);
+        if mode_of_state(prior_state) == User
+            then pagedb1 == updateUserPagesFromState(prior_state, pagedb0, dispPg)
+            else pagedb1 == pagedb0;
+        pageDbCorresponds(this.m, pagedb1);
+        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+    ensures
+        KomInterruptHandlerInvariant(old(this), pagedb1, this, dispPg);
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+{
+    assert mode_of_state(this) == Monitor
+        by { lemma_evalExceptionTaken_Mode(prior_state, ex, this); }
+    lemma_update_psr(cpsr_of_state(prior_state), encode_mode(Monitor), true, true);
+    assert !interrupts_enabled(this);
+
+    // push r0, r1
+    SUB(sp, sp, const(2 * WORDSIZE));
+    STR(r0, sp, 0);
+    STR(r1, sp, const(WORDSIZE));
+
+    // store pending interrupt
+    LDRglobaladdr(r0, PendingInterruptOp());
+    MOV(r1, 1);
+    STRglobal(r1, PendingInterruptOp(), r0, 0);
+
+    // figure out where we came from
+    MRS(r0, spsr_mon);
+    AND(r0, r0, 0x1f);
+    assert r0 == psr_mask_mode(old(spsr_mon));
+    if (r0 == const(encode_mode(User))) { // we came from user-mode, and need to save context
+        assert spsr_of_state(old(this)).m == User;
+
+        /* // restore r0, r1, sp
+        LDR(r0, sp, 0);
+        LDR(r1, sp, const(WORDSIZE));
+        ADD(sp, sp, const(2 * WORDSIZE));
+        assert r0 == old(r0) && r1 == old(r1) && sp == old(sp);
+        */
+
+        // TODO: save dispatcher context!
+        assume tuple(r0, r1, pagedb) == exceptionHandled(old(this), pagedb1, dispPg);
+
+        ORR(sp, sp, 1);
+    } else { // we came from another exception handler
+        assert spsr_of_state(old(this)).m != User;
+
+        // restore r0, r1, sp
+        LDR(r0, sp, 0);
+        LDR(r1, sp, const(WORDSIZE));
+        ADD(sp, sp, const(2 * WORDSIZE));
+        assert r0 == old(r0) && r1 == old(r1) && sp == old(sp);
+
+        pagedb := pagedb1;
+        lemma_SameMemAndGlobalsPreservesPageDb'(old(this), this, pagedb);
+    }
 
     assert validExceptionTransition(old(this), pagedb1, this, pagedb, dispPg)
         by { reveal_validExceptionTransition(); }
