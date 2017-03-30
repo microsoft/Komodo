@@ -1452,6 +1452,7 @@ ensures
     assert {:split_here}{:refined} true;
 }
 
+/*
 procedure {:refined} scrub_stack()
 requires/ensures
     ValidAddrMemStateOpaque(mem);
@@ -1493,6 +1494,7 @@ ensures
     STR(r0, sp, 108);
     STR(r0, sp, 112);
 }
+*/
 
 // Wrapper around the inner version that conforms to the calling convention
 procedure {:refined} {:timeLimitMultiplier 3} sha256_block_data_order(
