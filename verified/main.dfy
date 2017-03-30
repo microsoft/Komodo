@@ -19,12 +19,13 @@ method printSMCHandlerReturn()
     printInsFixed("MOVS", "pc, lr");
 }
 
-method printAll(smc_handler:va_code, svc_handler:va_code, abt_handler:va_code)
+method printAll(smc_handler:va_code, svc_handler:va_code, abt_handler:va_code,
+                und_handler:va_code)
 {
     var n := 0;
     var monitor_vectbl := emptyVecTbl().(svc_smc := Just("smc"));
     var secure_vectbl := emptyVecTbl().(
-        undef := Just("abort"),
+        undef := Just("undefined"),
         svc_smc := Just("svc"),
         prefetch_abort := Just("abort"),
         data_abort := Just("abort"));
@@ -39,6 +40,9 @@ method printAll(smc_handler:va_code, svc_handler:va_code, abt_handler:va_code)
     print(".section .text"); nl();
 
     n := printFunction("abort", abt_handler, n);
+    printExceptionHandlerReturn(); nl();
+
+    n := printFunction("undefined", und_handler, n);
     printExceptionHandlerReturn(); nl();
 
     n := printFunction("svc", svc_handler, n);
@@ -69,8 +73,9 @@ method Main()
     var smc_handler := va_code_smc_handler(OReg(R0), OReg(R1), OReg(R2),
                                         OReg(R3), OReg(R4), OReg(R0), OReg(R1));
     var svc_handler := va_code_svc_handler();
-    var abt_handler := va_code_abort_handler();
-
+    var abt_handler := va_code_abort_handler(ExAbt);
+    var und_handler := va_code_abort_handler(ExUnd);
+/*
     // prove that the final state for an SMC call is valid
     forall s1:state, p1:PageDb, s2:state
         | InitialState(s1)
@@ -93,6 +98,6 @@ method Main()
         assert smchandler(s1, p1, s2, p2');
         assert validPageDb(p2') && pageDbCorresponds(s2.m, p2');
     }
-    
-    printAll(smc_handler, svc_handler, abt_handler);
+*/
+    printAll(smc_handler, svc_handler, abt_handler, und_handler);
 }
