@@ -96,7 +96,6 @@ ensures
     assert {:split_here}{:refined} true;    // Split right before we try to prove the preconditions for the abstract lemma
 }
 
-// TODO: Update to satisfy all of sha256_block_order's pre/post-conditions
 procedure {:refined} sha256_finalize(
         ghost trace_in:SHA256Trace
     ) 
@@ -110,8 +109,6 @@ requires
     // 
     IsCompleteSHA256Trace(trace_in);
     SHA256TraceIsCorrect(trace_in);
-
-
 
     // Stack is accessible
     sp >= ((29 + 16) * WORDSIZE);   // Add some stack for storing the last block
@@ -152,8 +149,6 @@ ensures
                              sp - ((29 + 16) * WORDSIZE), sp, 
                              old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE);
 
-    // Need more framing copied from block_data_order
-    
     // SHA results
     let hash := seq(AddrMemContents(mem, old(r0) + 0*4),
                     AddrMemContents(mem, old(r0) + 1*4),
@@ -163,31 +158,7 @@ ensures
                     AddrMemContents(mem, old(r0) + 5*4),
                     AddrMemContents(mem, old(r0) + 6*4),
                     AddrMemContents(mem, old(r0) + 7*4)) in
-    //true; //IsSHA256(words2bytes(bswap32_seq(input)), hash);
     IsSHA256(WordSeqToBytes(ConcatenateSeqs(trace_in.M)), hash);
-
-//    IsCompleteSHA256Trace(trace_out);
-//    SHA256TraceIsCorrect(trace_out);
-//    SeqLength(trace_out.M) == SeqLength(trace_in.M) + old(r2);
-//    (forall i :: 0 <= i < old(r2) 
-//      ==> trace_out.M[SeqLength(trace_in.M) + i] == bswap32_seq(SeqSlice(input, i*16, (i+1)*16))) ;
-//    last(trace_out.H)[0] == AddrMemContents(mem, old(r0) + 0*4);
-//    last(trace_out.H)[1] == AddrMemContents(mem, old(r0) + 1*4);
-//    last(trace_out.H)[2] == AddrMemContents(mem, old(r0) + 2*4);
-//    last(trace_out.H)[3] == AddrMemContents(mem, old(r0) + 3*4);
-//    last(trace_out.H)[4] == AddrMemContents(mem, old(r0) + 4*4);
-//    last(trace_out.H)[5] == AddrMemContents(mem, old(r0) + 5*4);
-//    last(trace_out.H)[6] == AddrMemContents(mem, old(r0) + 6*4);
-//    last(trace_out.H)[7] == AddrMemContents(mem, old(r0) + 7*4);
-
-//    SHA(input) == seq(AddrMemContents(mem, old(r0) + 0*4),
-//                      AddrMemContents(mem, old(r0) + 1*4),
-//                      AddrMemContents(mem, old(r0) + 2*4),
-//                      AddrMemContents(mem, old(r0) + 3*4),
-//                      AddrMemContents(mem, old(r0) + 4*4),
-//                      AddrMemContents(mem, old(r0) + 5*4),
-//                      AddrMemContents(mem, old(r0) + 6*4),
-//                      AddrMemContents(mem, old(r0) + 7*4))
 {
     ghost var length_in_bytes := r2;
     SUB(sp, sp, 64);      // Make room for the final 256-bit input buffer
@@ -212,19 +183,6 @@ ensures
     STR(r3, sp,  const(12*WORDSIZE)); 
     STR(r3, sp,  const(13*WORDSIZE)); 
     STR(r3, sp,  const(14*WORDSIZE)); 
-//    STR(0, sp,  4); 
-//    STR(0, sp,  8);
-//    STR(0, sp, 16);
-//    STR(0, sp, 20);
-//    STR(0, sp, 24);
-//    STR(0, sp, 28);
-//    STR(0, sp, 32);
-//    STR(0, sp, 36);
-//    STR(0, sp, 40);
-//    STR(0, sp, 44);
-//    STR(0, sp, 48);
-//    STR(0, sp, 52);
-//    STR(0, sp, 56);
 
     // Store the length
     //STR(r2, sp, 60);
@@ -240,24 +198,6 @@ ensures
     // Compute one last compression
     ghost var last_block := seq(0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, length_in_bytes);
 
-//    assert AddrMemContents(mem, r1 + 0*WORDSIZE ) == last_block[0];
-//    assert AddrMemContents(mem, r1 + 1*WORDSIZE ) == last_block[1];
-//    assert AddrMemContents(mem, r1 + 2*WORDSIZE ) == last_block[2];
-//    assert AddrMemContents(mem, r1 + 3*WORDSIZE ) == last_block[3];
-//    assert AddrMemContents(mem, r1 + 4*WORDSIZE ) == last_block[4];
-//    assert AddrMemContents(mem, r1 + 5*WORDSIZE ) == last_block[5];
-//    assert AddrMemContents(mem, r1 + 6*WORDSIZE ) == last_block[6];
-//    assert AddrMemContents(mem, r1 + 7*WORDSIZE ) == last_block[7];
-//    assert AddrMemContents(mem, r1 + 8*WORDSIZE ) == last_block[8];
-//    assert AddrMemContents(mem, r1 + 9*WORDSIZE ) == last_block[9];
-//    assert AddrMemContents(mem, r1 + 10*WORDSIZE ) == last_block[10];
-//    assert AddrMemContents(mem, r1 + 11*WORDSIZE ) == last_block[11];
-//    assert AddrMemContents(mem, r1 + 12*WORDSIZE ) == last_block[12];
-//    assert AddrMemContents(mem, r1 + 13*WORDSIZE ) == last_block[13];
-//    assert AddrMemContents(mem, r1 + 14*WORDSIZE ) == last_block[14];
-//    assert AddrMemContents(mem, r1 + 15*WORDSIZE ) == last_block[15];
-
-
     assert ValidAddrMemStateOpaque(mem); 
     ghost var trace_out;
     trace_out := sha256_block_data_order(trace_in, last_block);
@@ -269,11 +209,6 @@ ensures
     assert trace_out.M[SeqLength(trace_in.M) + 0] == bswap32_seq(SeqSlice(last_block, 0*SHA_BLOCKSIZE, (0+1)*SHA_BLOCKSIZE));
     assert trace_out.M[SeqLength(trace_in.M)] == bswap32_seq(SeqSlice(last_block, 0, SHA_BLOCKSIZE))
                                               == bswap32_seq(last_block);
-//    lemma_WordSeqToBytes_is_bswap32_seq(last_block);
-//    assert bswap32_seq(last_block) == WordSeqToBytes(last_block);
-
-//    lemma_SHA256FinalHelper1(trace_out, last(trace_out.H), WordSeqToBytes(ConcatenateSeqs(trace_out.M)),
-//                             WordSeqToBytes(last_block), WordSeqToBytes(ConcatenateSeqs(trace_in.M)));
 
     ghost var last_block_bytes := SHA_padding_words2bytes(last_block, length_in_bytes);
     lemma_ConcatenateSeqs_M_length(trace_in.M);

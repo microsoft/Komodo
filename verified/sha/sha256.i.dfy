@@ -807,10 +807,26 @@ lemma lemma_SHA256FinalHelper1Wrapper(
     requires |WordSeqToBytes(ConcatenateSeqs(trace_in.M))|*8 < 0x1_0000_0000_0000_0000;
     requires unprocessed_bytes[56..64] == Uint64ToBytes(|WordSeqToBytes(ConcatenateSeqs(trace_in.M))|*8);
     requires WordSeqToBytes(ConcatenateSeqs(trace_out.M)) == WordSeqToBytes(ConcatenateSeqs(trace_in.M)) + unprocessed_bytes;
-    ensures  IsCompleteSHA256Trace(trace_out);
-    ensures  SHA256TraceIsCorrect(trace_out);
+    requires IsCompleteSHA256Trace(trace_out);
+    requires SHA256TraceIsCorrect(trace_out);
     ensures  IsSHA256(WordSeqToBytes(ConcatenateSeqs(trace_in.M)), last(trace_out.H));
-// Should call lemma_SHA256FinalHelper1
+{
+    var message_bytes := WordSeqToBytes(ConcatenateSeqs(trace_in.M));
+    var hash := last(trace_out.H);
+
+    calc {
+        |message_bytes|;
+        |WordSeqToBytes(ConcatenateSeqs(trace_in.M))|;
+        |ConcatenateSeqs(trace_in.M)| * 4;
+            { lemma_ConcatenateSeqs_M_length(trace_in.M); }
+        |trace_in.M|*16 * 4;
+        |trace_in.M|*64;
+    }
+    lemma_SHA256FinalHelper1(trace_out, hash, WordSeqToBytes(ConcatenateSeqs(trace_out.M)),
+                             unprocessed_bytes, message_bytes);
+    assert DoesTraceDemonstrateSHA256(trace_out, message_bytes, hash);
+    assert IsSHA256(message_bytes, hash);
+}
 
 ghost method ComputeWs(input:seq<word>) returns (W:seq<word>)
     requires |input| == 16;
