@@ -105,6 +105,20 @@ SUB(out operand dst:word, operand src1:word, operand src2:word)
 {
     reveal va_eval;
     reveal ValidRegState;
+    reveal TruncateWord;
+    this := MaybeUpdateOk(old(this), this);
+}
+
+procedure {:bridge} {:refined} {:instruction Ins(SUB(dst, src1, src2))}
+SUBWrap(out operand dst:word, operand src1:word, operand src2:word)
+    requires {:refined false}
+        !interrupts_enabled(this);
+    ensures
+        dst == old(TruncateWord(src1 - src2));
+{
+    reveal va_eval;
+    reveal ValidRegState;
+    reveal TruncateWord;
     this := MaybeUpdateOk(old(this), this);
 }
 
@@ -119,6 +133,7 @@ MUL(out operand dst:word, operand src1:reg, operand src2:reg)
 {
     reveal va_eval;
     reveal ValidRegState;
+    reveal TruncateWord;
     this := MaybeUpdateOk(old(this), this);
 }
 
@@ -134,6 +149,7 @@ UDIV(out operand dst:word, operand src1:word, operand src2:word)
 {
     reveal va_eval;
     reveal ValidRegState;
+    reveal TruncateWord;
     this := MaybeUpdateOk(old(this), this);
 }
 

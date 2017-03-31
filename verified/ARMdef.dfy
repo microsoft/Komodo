@@ -905,15 +905,12 @@ predicate ValidInstruction(s:state, ins:ins)
         case ADD(dest, src1, src2) => ValidOperand(src1) &&
             ValidSecondOperand(src2) && ValidRegOperand(dest)
         case SUB(dest, src1, src2) => ValidOperand(src1) &&
-            ValidOperand(src2) && ValidRegOperand(dest) &&
-            isUInt32(OperandContents(s,src1) - OperandContents(s,src2))
+            ValidOperand(src2) && ValidRegOperand(dest)
         case MUL(dest,src1,src2) => ValidRegOperand(src1) &&
-            ValidRegOperand(src2) && ValidRegOperand(dest) &&
-            isUInt32(OperandContents(s,src1) * OperandContents(s,src2))
+            ValidRegOperand(src2) && ValidRegOperand(dest)
         case UDIV(dest,src1,src2) => ValidOperand(src1) &&
             ValidOperand(src2) && ValidRegOperand(dest) &&
-            (OperandContents(s,src2) > 0) &&
-            isUInt32(OperandContents(s,src1) / OperandContents(s,src2))
+            (OperandContents(s,src2) != 0)
         case AND(dest, src1, src2) => ValidOperand(src1) &&
             ValidOperand(src2) && ValidRegOperand(dest)
         case ORR(dest, src1, src2) => ValidOperand(src1) &&
@@ -998,11 +995,11 @@ predicate evalIns'(ins:ins, s:state, r:state)
         case ADD(dst, src1, src2) => evalUpdate(s, dst,
             TruncateWord(OperandContents(s, src1) + OperandContents(s, src2)), r)
         case SUB(dst, src1, src2) => evalUpdate(s, dst,
-            OperandContents(s, src1) - OperandContents(s, src2), r)
+            TruncateWord(OperandContents(s, src1) - OperandContents(s, src2)), r)
         case MUL(dst, src1, src2) => evalUpdate(s, dst,
-            OperandContents(s, src1) * OperandContents(s, src2), r)
+            TruncateWord(OperandContents(s, src1) * OperandContents(s, src2)), r)
         case UDIV(dst, src1, src2) => evalUpdate(s, dst,
-            OperandContents(s, src1) / OperandContents(s, src2), r)
+            TruncateWord(OperandContents(s, src1) / OperandContents(s, src2)), r)
         case AND(dst, src1, src2) => evalUpdate(s, dst,
             BitwiseAnd(OperandContents(s, src1), OperandContents(s, src2)), r)
         case ORR(dst, src1, src2) => evalUpdate(s, dst,
