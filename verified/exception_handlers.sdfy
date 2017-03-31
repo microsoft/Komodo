@@ -94,6 +94,7 @@ procedure {:frame false} switch_to_monitor(inline oldmode:mode)
 
 procedure fault_exit(
     inline ex: exception,
+    ghost user_state: state,
     ghost exstate: state,
     ghost pagedb_in: PageDb,
     ghost dispPg: PageNr) returns (ghost pagedb: PageDb)
@@ -104,6 +105,8 @@ procedure fault_exit(
     requires/ensures
         SaneState(this);
     requires
+        ValidState(user_state) && mode_of_state(user_state) == User;
+        evalExceptionTaken(user_state, ex, exstate);
         ValidState(exstate) && mode_of_state(exstate) != User;
         exstate.conf.ex == ex && set(ExSVC, ExAbt, ExUnd) ?[ex];
         r1 == OperandContents(exstate, OReg(R1));
@@ -150,8 +153,7 @@ procedure fault_exit(
 
     pagedb := pagedb_in[dispPg := pagedb_in[dispPg].(entry := dispEntry)];
     assert pagedb == exPageDb(exceptionHandled(exstate, pagedb_in, dispPg));
-    //exceptionHandledValidPageDb(user_state, ExSVC, old(this), pagedb_in, dispPg);
-    assume validPageDb(pagedb); // TODO!!
+    exceptionHandledValidPageDb(user_state, ex, exstate, pagedb_in, dispPg);
 
     assert GlobalsInvariant(old(this), this);
     assert pageDbCorrespondsOnly(this.m, pagedb, dispPg)
@@ -246,7 +248,7 @@ procedure {:frame false} svc_handler(
 
     if (r0 == const(KOM_SVC_EXIT)) {
         assert !isReturningSvc(old(this));
-        pagedb := fault_exit(ExSVC, old(this), pagedb1, dispPg);
+        pagedb := fault_exit(ExSVC, user_state, old(this), pagedb1, dispPg);
         ORR(sp, sp, 1); // report that we're done
     } else {
         assert isReturningSvc(old(this));
@@ -292,7 +294,7 @@ procedure {:frame false} abort_handler(
     switch_to_monitor(if ex == ExAbt then Abort else Undefined);
     lemma_SameMemAndGlobalsPreservesPageDb'(old(this), this, pagedb1);
 
-    pagedb := fault_exit(ex, old(this), pagedb1, dispPg);
+    pagedb := fault_exit(ex, user_state, old(this), pagedb1, dispPg);
     ORR(sp, sp, 1); // report that we're done
 
     assert validExceptionTransition(old(this), pagedb1, this, pagedb, dispPg)
@@ -349,16 +351,22 @@ procedure save_disp_context_helper(operand base:reg, ghost dispPg:PageNr)
     MRS_STR(spsr_mon, base, const(DISP_CTXT_PSR), r1);
 }
 
-procedure save_disp_context(ghost exstate:state, ghost dispPg:PageNr, ghost pagedb_in:PageDb)
-    returns (ghost pagedb:PageDb)
+procedure save_disp_context(ghost ustate:state, ghost ex:exception,
+                            ghost exstate:state,
+                            ghost dispPg:PageNr, ghost pagedb_in:PageDb)
+                        returns  (ghost pagedb:PageDb)
     requires/ensures
         SaneState(this);
     requires
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         validDispatcherPage(pagedb_in, dispPg);
-        ValidState(exstate) && mode_of_state(exstate) != User;
+        ValidState(ustate) && mode_of_state(ustate) == User;
+        ex == exstate.conf.ex && (ex == ExFIQ || ex == ExIRQ);
+        evalExceptionTaken(ustate, ex, exstate) && mode_of_state(exstate) == Monitor;
         CoreRegPreservingExcept(exstate, this, set(OReg(R0), OSP));
+        forall o :: set(OSReg(spsr(Monitor)), OReg(LR(User)), OReg(SP(User))) ?[o]
+            ==> OperandContents(exstate, o) == OperandContents(this, o);
         ValidMem(sp) && OperandContents(exstate, OReg(R0)) == MemContents(this.m, sp);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     reads
@@ -373,16 +381,19 @@ procedure save_disp_context(ghost exstate:state, ghost dispPg:PageNr, ghost page
 {
     ghost var gr0 := OperandContents(exstate, OReg(R0));
     ghost var base := page_monvaddr(dispPg);
+    ghost var orig_disp := pagedb_in[dispPg].entry;
 
-    assert pagedb_in[dispPg].entry.entrypoint
+    assert orig_disp.entrypoint
             == extractPage(old(this.m), dispPg)[base + DISPATCHER_ENTRYPOINT]
         by { reveal pageContentsCorresponds; reveal pageDbDispatcherCorresponds; }
 
     LDRglobaladdr(r0, CurDispatcherOp());
     LDRglobal(r0, CurDispatcherOp(), r0, 0);
     assert r0 == base;
+    assert this.m == old(this).m;
 
     save_disp_context_helper(r0, dispPg);
+    ghost var st0 := this;
     LDR(r1,sp,0);
     assert r1 == gr0;
     STR(r1,r0,const(DISP_CTXT_R0));
@@ -390,38 +401,56 @@ procedure save_disp_context(ghost exstate:state, ghost dispPg:PageNr, ghost page
     STR(r1,r0,const(DISPATCHER_ENTERED));
 
     pagedb := exPageDb(exceptionHandled(exstate, pagedb_in, dispPg));
-    exceptionHandledValidPageDb(prior_state, old(this).conf.ex, old(this), pagedb_in, dispPg);
+    exceptionHandledValidPageDb(ustate, ex, exstate, pagedb_in, dispPg);
     ghost var disp := pagedb[dispPg].entry;
     ghost var ctxt := disp.ctxt;
     ghost var pg := extractPage(this.m, dispPg);
     assert pageDbDispatcherCorresponds(dispPg, disp, pg) by {
+        // TODO: figure out how to clean up this disgusting mess of triggers
+        // and explicit assertions... later :(
         reveal pageDbDispatcherCorresponds;
-        assert pg[base + DISPATCHER_ENTERED] == 1 == to_i(true);
-        assert pagedb_in[dispPg].entry.entrypoint
+        assert pg[base + DISPATCHER_ENTERED] == to_i(true) == to_i(disp.entered);
+        assert orig_disp.entrypoint
             == disp.entrypoint
             == pg[base + DISPATCHER_ENTRYPOINT];
-        assert pg[base + DISP_CTXT_PC] == old(lr);
-        assert pg[base + DISP_CTXT_PSR] == old(spsr_mon);
-        assert pg[base + DISP_CTXT_LR] == old(lr_usr);
-        assert pg[base + DISP_CTXT_SP] == old(sp_usr);
-        assert pg[base + DISP_CTXT_R0] == gr0;
-        assert pg[base + DISP_CTXT_R1] == old(r1);
-        assert pg[base + DISP_CTXT_R2] == old(r2);
-        assert pg[base + DISP_CTXT_R3] == old(r3);
-        assert pg[base + DISP_CTXT_R4] == old(r4);
-        assert pg[base + DISP_CTXT_R5] == old(r5);
-        assert pg[base + DISP_CTXT_R6] == old(r6);
-        assert pg[base + DISP_CTXT_R7] == old(r7);
-        assert pg[base + DISP_CTXT_R8] == old(r8);
-        assert pg[base + DISP_CTXT_R9] == old(r9);
-        assert pg[base + DISP_CTXT_R10] == old(r10);
-        assert pg[base + DISP_CTXT_R11] == old(r11);
-        assert pg[base + DISP_CTXT_R12] == old(r12);
+        assert pg[base + DISP_CTXT_PC] == old(lr) == OperandContents(exstate, OLR);
+        // oh for a calc statement...
+        assert pg[base + DISP_CTXT_PSR] == old(spsr_mon)
+            == OperandContents(exstate, OSReg(spsr(Monitor)))
+            == exstate.sregs[spsr(mode_of_state(exstate))];
+        assert ctxt == DispatcherContext(exstate.regs, old(lr), old(spsr_mon));
+        assert pg[base + DISP_CTXT_R0] == gr0 == ctxt.regs[R0];
+        assert forall a:addr :: pg?[a] && a != base + DISP_CTXT_R0
+                && a != base + DISPATCHER_ENTERED
+            ==> extractPage(st0.m, dispPg)[a] == pg[a];
+        assert forall r :: ValidRegOperand(OReg(r)) && r != R0
+            ==> (OperandContents(old(this), OReg(r))
+                == OperandContents(exstate, OReg(r)) == ctxt.regs[r]);
+        assert pg[base + DISP_CTXT_R1] == old(r1) == ctxt.regs[R1];
+        assert pg[base + DISP_CTXT_R2] == old(r2) == ctxt.regs[R2];
+        assert pg[base + DISP_CTXT_R3] == old(r3) == ctxt.regs[R3];
+        assert pg[base + DISP_CTXT_R4] == old(r4) == ctxt.regs[R4];
+        assert pg[base + DISP_CTXT_R5] == old(r5) == ctxt.regs[R5];
+        assert pg[base + DISP_CTXT_R6] == old(r6) == ctxt.regs[R6];
+        assert pg[base + DISP_CTXT_R7] == old(r7) == ctxt.regs[R7];
+        assert pg[base + DISP_CTXT_R8] == old(r8) == ctxt.regs[R8];
+        assert pg[base + DISP_CTXT_R9] == old(r9) == ctxt.regs[R9];
+        assert pg[base + DISP_CTXT_R10] == old(r10) == ctxt.regs[R10];
+        assert pg[base + DISP_CTXT_R11] == old(r11) == ctxt.regs[R11];
+        assert pg[base + DISP_CTXT_R12] == old(r12) == ctxt.regs[R12];
+        assert pg[base + DISP_CTXT_LR] == old(lr_usr)
+            == OperandContents(exstate, OReg(LR(User))) == ctxt.regs[LR(User)];
+        assert pg[base + DISP_CTXT_SP] == old(sp_usr)
+            == OperandContents(exstate, OReg(SP(User))) == ctxt.regs[SP(User)];
     }
 
     assert pageDbCorrespondsOnly(this.m, pagedb, dispPg) by {
-        reveal pageContentsCorresponds;
-        assert pageContentsCorresponds(dispPg, pagedb[dispPg], pg);
+        assert pageDbEntryCorresponds(pagedb[dispPg],
+                                      extractPageDbEntry(this.m, dispPg))
+            by { reveal pageDbEntryCorresponds;
+                 assert GlobalsInvariant(old(this), this); }
+        assert pageContentsCorresponds(dispPg, pagedb[dispPg], pg)
+            by { reveal pageContentsCorresponds; }
     }
     AllButOnePagePreserving(dispPg, old(this), this);
     assert pageDbCorresponds(this.m, pagedb);
@@ -480,15 +509,19 @@ procedure {:frame false} interrupt_handler(
     assert r0 == psr_mask_mode(old(spsr_mon));
     if (r0 == const(encode_mode(User))) { // we came from user-mode
         assert spsr_of_state(old(this)).m == User;
+        assert mode_of_state(prior_state) == User;
 
         // save dispatcher context
         LDR(r1, sp, const(WORDSIZE));
-        pagedb := save_disp_context(prior_state, dispPg, pagedb1);
+        assert r1 == old(r1);
+        lemma_SameMemAndGlobalsPreservesPageDb'(old(this), this, pagedb1);
+        pagedb := save_disp_context(prior_state, ex, old(this), dispPg, pagedb1);
         assert tuple(r0, r1, pagedb) == exceptionHandled(old(this), pagedb1, dispPg);
 
         ADD(sp, sp, const(2 * WORDSIZE));
         assert sp == old(sp);
         ORR(sp, sp, 1);
+        assume KomInterruptHandlerInvariant(old(this), pagedb1, this, dispPg); // TODO
     } else { // we came from another exception handler
         assert spsr_of_state(old(this)).m != User;
 
