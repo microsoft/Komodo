@@ -110,27 +110,6 @@ lemma lemma_stackunstack_banked_regs(s1:state, m1:memstate, s2:state, m2:memstat
 }
 #endverbatim
 
-procedure MRS_STR(
-    operand reg:sreg,
-    operand base:word,
-    operand ofs:word,
-    out operand tmp:reg)
-    requires/ensures
-        SaneState(this);
-    requires
-        ValidMem(base + ofs);
-        @tmp != OSP && @tmp != @base && @tmp != @ofs;
-    modifies
-        mem;
-    ensures
-        //sp == old(sp);
-        MemPreservingExcept(old(this), this, old(base+ofs), old(base+ofs+WORDSIZE));
-        MemContents(this.m, old(base+ofs)) == old(reg);
-{
-    MRS(tmp, reg);
-    STR(tmp, base, ofs);
-}
-
 procedure stack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
           returns (ghost stack_bytes:int)
     requires/ensures

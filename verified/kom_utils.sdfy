@@ -261,3 +261,23 @@ procedure update_pagedb_entry(
     assert extractPageDbEntry(this.m, page) == seq(old(typeword), old(as_va));
     reveal pageDbEntryCorresponds;
 }
+
+procedure MRS_STR(
+    operand reg:sreg,
+    operand base:word,
+    operand ofs:word,
+    out operand tmp:reg)
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidMem(base + ofs);
+        @tmp != OSP && @tmp != @base && @tmp != @ofs;
+    modifies
+        mem;
+    ensures
+        MemPreservingExcept(old(this), this, old(base+ofs), old(base+ofs+WORDSIZE));
+        MemContents(this.m, old(base+ofs)) == old(reg);
+{
+    MRS(tmp, reg);
+    STR(tmp, base, ofs);
+}

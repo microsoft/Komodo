@@ -5,6 +5,7 @@ include {:verbatim} "entry.i.dfy"
 include {:verbatim} "exceptions.i.dfy"
 
 include "ARMdecls.sdfy"
+include "kom_utils.sdfy"
 
 #verbatim
 function cpsr_of_state(s:state): word
@@ -298,6 +299,137 @@ procedure {:frame false} abort_handler(
         by { reveal_validExceptionTransition(); }
 }
 
+procedure save_disp_context_helper(operand base:reg, ghost dispPg:PageNr)
+    requires/ensures
+        SaneState(this);
+    requires
+        @base == OReg(R0);
+        base == page_monvaddr(dispPg);
+    reads
+        globals;
+        r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr_usr; sp_usr; lr; spsr_mon;
+    modifies
+        mem; r1;
+    ensures
+        MemPreservingExcept(old(this), this, old(base) + DISP_CTXT_R1,
+                            old(base) + DISP_CTXT_PSR + WORDSIZE);
+        let pg := extractPage(this.m, dispPg) in
+            pg[old(base) + DISP_CTXT_R1] == old(r1)
+            && pg[old(base) + DISP_CTXT_R2] == old(r2)
+            && pg[old(base) + DISP_CTXT_R3] == old(r3)
+            && pg[old(base) + DISP_CTXT_R4] == old(r4)
+            && pg[old(base) + DISP_CTXT_R5] == old(r5)
+            && pg[old(base) + DISP_CTXT_R6] == old(r6)
+            && pg[old(base) + DISP_CTXT_R7] == old(r7)
+            && pg[old(base) + DISP_CTXT_R8] == old(r8)
+            && pg[old(base) + DISP_CTXT_R9] == old(r9)
+            && pg[old(base) + DISP_CTXT_R10] == old(r10)
+            && pg[old(base) + DISP_CTXT_R11] == old(r11)
+            && pg[old(base) + DISP_CTXT_R12] == old(r12)
+            && pg[old(base) + DISP_CTXT_LR] == old(lr_usr)
+            && pg[old(base) + DISP_CTXT_SP] == old(sp_usr)
+            && pg[old(base) + DISP_CTXT_PC] == old(lr)
+            && pg[old(base) + DISP_CTXT_PSR] == old(spsr_mon);
+{
+    STR(r1, base, const(DISP_CTXT_R1));
+    STR(r2, base, const(DISP_CTXT_R2));
+    STR(r3, base, const(DISP_CTXT_R3));
+    STR(r4, base, const(DISP_CTXT_R4));
+    STR(r5, base, const(DISP_CTXT_R5));
+    STR(r6, base, const(DISP_CTXT_R6));
+    STR(r7, base, const(DISP_CTXT_R7));
+    STR(r8, base, const(DISP_CTXT_R8));
+    STR(r9, base, const(DISP_CTXT_R9));
+    STR(r10, base, const(DISP_CTXT_R10));
+    STR(r11, base, const(DISP_CTXT_R11));
+    STR(r12, base, const(DISP_CTXT_R12));
+    MRS_STR(lr_usr, base, const(DISP_CTXT_LR), r1);
+    MRS_STR(sp_usr, base, const(DISP_CTXT_SP), r1);
+    STR(lr, base, const(DISP_CTXT_PC));
+    MRS_STR(spsr_mon, base, const(DISP_CTXT_PSR), r1);
+}
+
+procedure save_disp_context(ghost exstate:state, ghost dispPg:PageNr, ghost pagedb_in:PageDb)
+    returns (ghost pagedb:PageDb)
+    requires/ensures
+        SaneState(this);
+    requires
+        validPageDb(pagedb_in);
+        pageDbCorresponds(this.m, pagedb_in);
+        validDispatcherPage(pagedb_in, dispPg);
+        ValidState(exstate) && mode_of_state(exstate) != User;
+        CoreRegPreservingExcept(exstate, this, set(OReg(R0), OSP));
+        ValidMem(sp) && OperandContents(exstate, OReg(R0)) == MemContents(this.m, sp);
+        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+    reads
+        globals;
+        r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr_usr; sp_usr; lr; sp; spsr_mon;
+    modifies
+        mem; r0; r1;
+    ensures
+        validPageDb(pagedb);
+        tuple(r0, r1, pagedb) == exceptionHandled(exstate, pagedb_in, dispPg);
+        pageDbCorresponds(this.m, pagedb);
+{
+    ghost var gr0 := OperandContents(exstate, OReg(R0));
+    ghost var base := page_monvaddr(dispPg);
+
+    assert pagedb_in[dispPg].entry.entrypoint
+            == extractPage(old(this.m), dispPg)[base + DISPATCHER_ENTRYPOINT]
+        by { reveal pageContentsCorresponds; reveal pageDbDispatcherCorresponds; }
+
+    LDRglobaladdr(r0, CurDispatcherOp());
+    LDRglobal(r0, CurDispatcherOp(), r0, 0);
+    assert r0 == base;
+
+    save_disp_context_helper(r0, dispPg);
+    LDR(r1,sp,0);
+    assert r1 == gr0;
+    STR(r1,r0,const(DISP_CTXT_R0));
+    MOV(r1,1);
+    STR(r1,r0,const(DISPATCHER_ENTERED));
+
+    pagedb := exPageDb(exceptionHandled(exstate, pagedb_in, dispPg));
+    exceptionHandledValidPageDb(prior_state, old(this).conf.ex, old(this), pagedb_in, dispPg);
+    ghost var disp := pagedb[dispPg].entry;
+    ghost var ctxt := disp.ctxt;
+    ghost var pg := extractPage(this.m, dispPg);
+    assert pageDbDispatcherCorresponds(dispPg, disp, pg) by {
+        reveal pageDbDispatcherCorresponds;
+        assert pg[base + DISPATCHER_ENTERED] == 1 == to_i(true);
+        assert pagedb_in[dispPg].entry.entrypoint
+            == disp.entrypoint
+            == pg[base + DISPATCHER_ENTRYPOINT];
+        assert pg[base + DISP_CTXT_PC] == old(lr);
+        assert pg[base + DISP_CTXT_PSR] == old(spsr_mon);
+        assert pg[base + DISP_CTXT_LR] == old(lr_usr);
+        assert pg[base + DISP_CTXT_SP] == old(sp_usr);
+        assert pg[base + DISP_CTXT_R0] == gr0;
+        assert pg[base + DISP_CTXT_R1] == old(r1);
+        assert pg[base + DISP_CTXT_R2] == old(r2);
+        assert pg[base + DISP_CTXT_R3] == old(r3);
+        assert pg[base + DISP_CTXT_R4] == old(r4);
+        assert pg[base + DISP_CTXT_R5] == old(r5);
+        assert pg[base + DISP_CTXT_R6] == old(r6);
+        assert pg[base + DISP_CTXT_R7] == old(r7);
+        assert pg[base + DISP_CTXT_R8] == old(r8);
+        assert pg[base + DISP_CTXT_R9] == old(r9);
+        assert pg[base + DISP_CTXT_R10] == old(r10);
+        assert pg[base + DISP_CTXT_R11] == old(r11);
+        assert pg[base + DISP_CTXT_R12] == old(r12);
+    }
+
+    assert pageDbCorrespondsOnly(this.m, pagedb, dispPg) by {
+        reveal pageContentsCorresponds;
+        assert pageContentsCorresponds(dispPg, pagedb[dispPg], pg);
+    }
+    AllButOnePagePreserving(dispPg, old(this), this);
+    assert pageDbCorresponds(this.m, pagedb);
+
+    MOV(r0, const(KOM_ERR_INTERRUPTED));
+    MOV(r1, 0);
+}
+
 procedure {:frame false} interrupt_handler(
     inline ex: exception,
     ghost prior_state: state,
@@ -346,19 +478,16 @@ procedure {:frame false} interrupt_handler(
     MRS(r0, spsr_mon);
     AND(r0, r0, 0x1f);
     assert r0 == psr_mask_mode(old(spsr_mon));
-    if (r0 == const(encode_mode(User))) { // we came from user-mode, and need to save context
+    if (r0 == const(encode_mode(User))) { // we came from user-mode
         assert spsr_of_state(old(this)).m == User;
 
-        /* // restore r0, r1, sp
-        LDR(r0, sp, 0);
+        // save dispatcher context
         LDR(r1, sp, const(WORDSIZE));
+        pagedb := save_disp_context(prior_state, dispPg, pagedb1);
+        assert tuple(r0, r1, pagedb) == exceptionHandled(old(this), pagedb1, dispPg);
+
         ADD(sp, sp, const(2 * WORDSIZE));
-        assert r0 == old(r0) && r1 == old(r1) && sp == old(sp);
-        */
-
-        // TODO: save dispatcher context!
-        assume tuple(r0, r1, pagedb) == exceptionHandled(old(this), pagedb1, dispPg);
-
+        assert sp == old(sp);
         ORR(sp, sp, 1);
     } else { // we came from another exception handler
         assert spsr_of_state(old(this)).m != User;
