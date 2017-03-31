@@ -792,7 +792,46 @@ lemma lemma_WordSeqToBytes_adds(s:seq<word>, s':seq<word>)
         }
     }
 }
+
+lemma lemma_ConcatenateSeqs_Adds<T>(s:seq<seq<T>>, s':seq<seq<T>>)
+    ensures ConcatenateSeqs(s + s') == ConcatenateSeqs(s) + ConcatenateSeqs(s'); 
+{
+    if s == [] {
+    } else {
+        calc {
+            ConcatenateSeqs(s + s');
+            s[0] + ConcatenateSeqs((s + s')[1..]);
+                { assert (s + s')[1..] == s[1..] + s'; }
+            s[0] + ConcatenateSeqs(s[1..] + s');
+                { lemma_ConcatenateSeqs_Adds(s[1..], s'); }
+            s[0] + ConcatenateSeqs(s[1..]) + ConcatenateSeqs(s');
+            ConcatenateSeqs(s) + ConcatenateSeqs(s'); 
+        }
+    }
+}
     
+lemma lemma_Trace_stitching(M:seq<seq<word>>, M':seq<seq<word>>, words:seq<word>, bytes:seq<byte>)
+    requires forall i :: 0 <= i < |M| ==> |M[i]| == 16;
+    requires |M'| == |M| + 1;
+    requires M'[0..|M|] == M;
+    requires M'[|M|] == bswap32_seq(words);
+    requires bytes == WordSeqToBytes(bswap32_seq(words)); 
+    ensures  WordSeqToBytes(ConcatenateSeqs(M')) == WordSeqToBytes(ConcatenateSeqs(M)) + bytes;
+{
+    var swap_words := bswap32_seq(words);
+    calc {
+        WordSeqToBytes(ConcatenateSeqs(M'));
+            { assert M' == M + [swap_words]; }
+        WordSeqToBytes(ConcatenateSeqs(M + [swap_words]));
+            { lemma_ConcatenateSeqs_Adds(M, [swap_words]); }
+        WordSeqToBytes(ConcatenateSeqs(M) + ConcatenateSeqs([swap_words]));
+            { assert ConcatenateSeqs([swap_words]) == swap_words; }
+        WordSeqToBytes(ConcatenateSeqs(M) + swap_words);
+            { lemma_WordSeqToBytes_adds(ConcatenateSeqs(M), swap_words); }
+        WordSeqToBytes(ConcatenateSeqs(M)) + WordSeqToBytes(swap_words);
+        WordSeqToBytes(ConcatenateSeqs(M)) + bytes;
+    }
+}
 
 lemma lemma_SHA256FinalHelper1Wrapper(
     trace_in:SHA256Trace,

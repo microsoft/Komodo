@@ -119,7 +119,7 @@ requires
     lr == AddressOfGlobal(K_SHA256s());
 
     let ctx := r0 in
-    let num_bytes := r2 in // Number of bytes we've hashed so far
+    let num_bits := r2 in // Number of bits we've hashed so far
 
      // Old H values are laid out in memory pointed at by ctx
         ValidMemRange(ctx, ctx + SHA_CTXSIZE*WORDSIZE)
@@ -132,8 +132,8 @@ requires
      && last(trace_in.H)[6] == AddrMemContents(mem, ctx + 6*WORDSIZE)
      && last(trace_in.H)[7] == AddrMemContents(mem, ctx + 7*WORDSIZE)
      
-     // Total number of hashed bytes can't exceed 2^64
-     && num_bytes == SeqLength(trace_in.M)*64
+     // Total number of hashed bits can't exceed 2^64
+     && num_bits == SeqLength(trace_in.M) * 16 * 32 // M comes in chunks of 16 words, each of which is 32 bits//SeqLength(trace_in.M)*64
      //&& SeqLength(WordSeqToBytes(ConcatenateSeqs(trace_in.M)))*8 < 0x1_0000_0000_0000_0000
 
      // Anti-aliasing
@@ -150,17 +150,17 @@ ensures
                              old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE);
 
     // SHA results
-    let hash := seq(AddrMemContents(mem, old(r0) + 0*4),
-                    AddrMemContents(mem, old(r0) + 1*4),
-                    AddrMemContents(mem, old(r0) + 2*4),
-                    AddrMemContents(mem, old(r0) + 3*4),
-                    AddrMemContents(mem, old(r0) + 4*4),
-                    AddrMemContents(mem, old(r0) + 5*4),
-                    AddrMemContents(mem, old(r0) + 6*4),
-                    AddrMemContents(mem, old(r0) + 7*4)) in
+    let hash := seq(AddrMemContents(mem, old(r0) + 0*WORDSIZE),
+                    AddrMemContents(mem, old(r0) + 1*WORDSIZE),
+                    AddrMemContents(mem, old(r0) + 2*WORDSIZE),
+                    AddrMemContents(mem, old(r0) + 3*WORDSIZE),
+                    AddrMemContents(mem, old(r0) + 4*WORDSIZE),
+                    AddrMemContents(mem, old(r0) + 5*WORDSIZE),
+                    AddrMemContents(mem, old(r0) + 6*WORDSIZE),
+                    AddrMemContents(mem, old(r0) + 7*WORDSIZE)) in
     IsSHA256(WordSeqToBytes(ConcatenateSeqs(trace_in.M)), hash);
 {
-    ghost var length_in_bytes := r2;
+    ghost var length_in_bits := r2;
     SUB(sp, sp, 64);      // Make room for the final 256-bit input buffer
 
     //STR(0x80, sp, 0);
@@ -188,7 +188,7 @@ ensures
     //STR(r2, sp, 60);
     STR(r2, sp, const(15*WORDSIZE));
 
-    assert AddrMemContents(mem, sp + 15*WORDSIZE) == length_in_bytes;
+    assert AddrMemContents(mem, sp + 15*WORDSIZE) == length_in_bits;
 
     // Parameters to sha256_block_data_order
     // r0 is already set to ctx
@@ -196,7 +196,7 @@ ensures
     MOV(r2, 1);     // num_blocks
 
     // Compute one last compression
-    ghost var last_block := seq(0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, length_in_bytes);
+    ghost var last_block := seq(0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, length_in_bits);
 
     assert ValidAddrMemStateOpaque(mem); 
     ghost var trace_out;
@@ -210,10 +210,25 @@ ensures
     assert trace_out.M[SeqLength(trace_in.M)] == bswap32_seq(SeqSlice(last_block, 0, SHA_BLOCKSIZE))
                                               == bswap32_seq(last_block);
 
-    ghost var last_block_bytes := SHA_padding_words2bytes(last_block, length_in_bytes);
+    ghost var last_block_bytes := SHA_padding_words2bytes(last_block, length_in_bits);
+    ghost var M_in_bytes := WordSeqToBytes(ConcatenateSeqs(trace_in.M));
+    ghost var M_out_bytes := WordSeqToBytes(ConcatenateSeqs(trace_out.M));
+    lemma_Trace_stitching(trace_in.M, trace_out.M, last_block, last_block_bytes);
+    assert M_out_bytes == M_in_bytes + last_block_bytes;
     lemma_ConcatenateSeqs_M_length(trace_in.M);
     lemma_WordSeqToBytes_adds(ConcatenateSeqs(trace_in.M), last_block_bytes);
     lemma_SHA256FinalHelper1Wrapper(trace_in, trace_out, last_block_bytes);
+
+    ghost var hash := 
+        seq(AddrMemContents(mem, old(r0) + 0*WORDSIZE),
+            AddrMemContents(mem, old(r0) + 1*WORDSIZE),
+            AddrMemContents(mem, old(r0) + 2*WORDSIZE),
+            AddrMemContents(mem, old(r0) + 3*WORDSIZE),
+            AddrMemContents(mem, old(r0) + 4*WORDSIZE),
+            AddrMemContents(mem, old(r0) + 5*WORDSIZE),
+            AddrMemContents(mem, old(r0) + 6*WORDSIZE),
+            AddrMemContents(mem, old(r0) + 7*WORDSIZE));
+    assert hash == last(trace_out.H);
     
     // Restore the stack pointer
     ADD(sp, sp, 64);
