@@ -20,7 +20,9 @@ predicate KomInterruptHandlerInvariant(s:state, sd:PageDb, r:state, dispPg:PageN
         // if interrupted in privileged mode, we just set the pending flag
         mode_of_state(r) == mode_of_state(s)
         && spsr_of_state(r) == spsr_of_state(s)
-        && CoreRegPreservingExcept(s, r, {})
+        && CoreRegPreservingExcept(s, r, {OLR})
+        // see B1.8.3 "Link values saved on exception entry"
+        && OperandContents(r, OLR) == TruncateWord(OperandContents(s, OLR) - 4)
         && BankedRegsInvariant(s, r)
         && NonStackMemPreserving(s, r)
         && SaneStack(r)
@@ -102,7 +104,7 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
             s.regs[SP(Monitor)];
             s1.regs[SP(Monitor)];
             { if mode_of_state(s1) == Monitor {
-                assert CoreRegPreservingExcept(s1, s2, {});
+                assert CoreRegPreservingExcept(s1, s2, {OLR});
                 assert OperandContents(s1, OSP) == OperandContents(s2, OSP);
             } else {
                 assert BankedRegsInvariant(s1, s2);

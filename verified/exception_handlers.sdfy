@@ -366,10 +366,11 @@ procedure save_disp_context(inout operand base: reg, ghost ustate:state,
         ValidState(ustate) && mode_of_state(ustate) == User;
         ex == exstate.conf.ex && (ex == ExFIQ || ex == ExIRQ);
         evalExceptionTaken(ustate, ex, exstate) && mode_of_state(exstate) == Monitor;
-        CoreRegPreservingExcept(exstate, this, set(OReg(R0), OSP));
+        CoreRegPreservingExcept(exstate, this, set(OReg(R0), OSP, OLR));
         forall o :: set(OSReg(spsr(Monitor)), OReg(LR(User)), OReg(SP(User))) ?[o]
             ==> OperandContents(exstate, o) == OperandContents(this, o);
         ValidMem(sp) && OperandContents(exstate, OReg(R0)) == MemContents(this.m, sp);
+        lr == TruncateWord(OperandContents(exstate, OLR) - 4);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     reads
         globals;
@@ -412,7 +413,7 @@ procedure save_disp_context(inout operand base: reg, ghost ustate:state,
         assert orig_disp.entrypoint
             == disp.entrypoint
             == pg[pgbase + DISPATCHER_ENTRYPOINT];
-        assert pg[pgbase + DISP_CTXT_PC] == old(lr) == OperandContents(exstate, OLR);
+        assert pg[pgbase + DISP_CTXT_PC] == old(lr);
         // oh for a calc statement...
         assert pg[pgbase + DISP_CTXT_PSR] == old(spsr_mon)
             == OperandContents(exstate, OSReg(spsr(Monitor)))
@@ -491,6 +492,9 @@ procedure {:frame false} interrupt_handler(
         by { lemma_evalExceptionTaken_Mode(prior_state, ex, this); }
     lemma_update_psr(cpsr_of_state(prior_state), encode_mode(Monitor), true, true);
     assert !interrupts_enabled(this);
+
+    // adjust LR for interrupt offset
+    SUBWrap(lr, lr, 4);
 
     // push r0, r1
     SUB(sp, sp, const(2 * WORDSIZE));

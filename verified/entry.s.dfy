@@ -332,7 +332,8 @@ function exceptionHandled(s:state, d:PageDb, dispPg:PageNr): (word, word, PageDb
         assert s.conf.ex.ExIRQ? || s.conf.ex.ExFIQ?;
         reveal_ValidSRegState();
         var p := dispPg;
-        var pc := OperandContents(s, OLR);
+        // ARM spec B1.8.3 "Link values saved on exception entry"
+        var pc := TruncateWord(OperandContents(s, OLR) - 4);
         var psr := s.sregs[spsr(mode_of_state(s))];
         var ctxt' := DispatcherContext(s.regs, pc, psr);
         var disp' := d[p].entry.(entered:=true, ctxt:=ctxt');

@@ -557,7 +557,11 @@ predicate {:axiom} UsermodeContinuationInvariant(s:state, r:state)
 predicate {:axiom} InterruptContinuationInvariant(s:state, r:state)
     requires ValidState(s)
     ensures InterruptContinuationInvariant(s, r)
-        ==> EssentialContinuationInvariantProperties(s, r)
+    ==> (EssentialContinuationInvariantProperties(s, r)
+        // B1.8.3 "Link values saved on exception entry"
+        // these are necessary to get MOVS PC, LR to restore the same PC
+        // (this is needed here, because we don't model the PC explicitly)
+        && OperandContents(r, OLR) == TruncateWord(OperandContents(s, OLR) - 4))
 
 //-----------------------------------------------------------------------------
 // Model of page tables for userspace execution
