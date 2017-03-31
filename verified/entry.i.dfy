@@ -6,7 +6,7 @@ include "psrbits.i.dfy"
 predicate SaneStateAfterException(s:state)
 {
     SaneConstants()
-    && ValidState(s) && s.ok
+    && ValidState(s)
     && SaneMem(s.m)
     && mode_of_state(s) == Monitor
     && !interrupts_enabled(s)
@@ -25,7 +25,7 @@ predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr)
     validExceptionTransition(s, sd, r, rd, dp)
     // sp unaltered except it may have the low bit set to signify !retToEnclave
     && var ssp, rsp := s.regs[SP(Monitor)], r.regs[SP(Monitor)];
-    SaneStateAfterException(r)
+    SaneStateAfterException(r) && (s.ok ==> r.ok)
     && SaneStackPointer(ssp)
     && ParentStackPreserving(s, r)
     && s.conf.ttbr0 == r.conf.ttbr0 && s.conf.scr == r.conf.scr

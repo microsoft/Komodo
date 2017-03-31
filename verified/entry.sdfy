@@ -776,7 +776,7 @@ procedure {:frame false} enclaveexecution_loop(
     while (tst_eq(sp, 1)) // test bottom bit of SP for this kludge
         invariant
             SaneState(loop0);
-            SaneStateAfterException(this);
+            SaneStateAfterException(this) && this.ok;
             ParentStackPreserving(old(this), this);
             GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp()));
             validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);

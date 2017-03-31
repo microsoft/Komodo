@@ -351,13 +351,15 @@ procedure save_disp_context_helper(operand base:reg, ghost dispPg:PageNr)
     MRS_STR(spsr_mon, base, const(DISP_CTXT_PSR), r1);
 }
 
-procedure save_disp_context(ghost ustate:state, ghost ex:exception,
-                            ghost exstate:state,
+procedure save_disp_context(inout operand base: reg, ghost ustate:state,
+                            ghost ex:exception, ghost exstate:state,
                             ghost dispPg:PageNr, ghost pagedb_in:PageDb)
                         returns  (ghost pagedb:PageDb)
     requires/ensures
         SaneState(this);
     requires
+        @base == OReg(R0);
+        base == page_monvaddr(dispPg);
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         validDispatcherPage(pagedb_in, dispPg);
@@ -378,69 +380,66 @@ procedure save_disp_context(ghost ustate:state, ghost ex:exception,
         validPageDb(pagedb);
         tuple(r0, r1, pagedb) == exceptionHandled(exstate, pagedb_in, dispPg);
         pageDbCorresponds(this.m, pagedb);
+        StackPreserving(old(this), this);
+        MemPreservingExcept(old(this), this, old(base), old(base) + PAGESIZE);
 {
     ghost var gr0 := OperandContents(exstate, OReg(R0));
-    ghost var base := page_monvaddr(dispPg);
     ghost var orig_disp := pagedb_in[dispPg].entry;
 
     assert orig_disp.entrypoint
             == extractPage(old(this.m), dispPg)[base + DISPATCHER_ENTRYPOINT]
         by { reveal pageContentsCorresponds; reveal pageDbDispatcherCorresponds; }
 
-    LDRglobaladdr(r0, CurDispatcherOp());
-    LDRglobal(r0, CurDispatcherOp(), r0, 0);
-    assert r0 == base;
-    assert this.m == old(this).m;
-
-    save_disp_context_helper(r0, dispPg);
+    save_disp_context_helper(base, dispPg);
     ghost var st0 := this;
     LDR(r1,sp,0);
     assert r1 == gr0;
-    STR(r1,r0,const(DISP_CTXT_R0));
-    MOV(r1,1);
-    STR(r1,r0,const(DISPATCHER_ENTERED));
+    STR(r1, base, const(DISP_CTXT_R0));
+    MOV(r1, 1);
+    STR(r1, base, const(DISPATCHER_ENTERED));
 
     pagedb := exPageDb(exceptionHandled(exstate, pagedb_in, dispPg));
     exceptionHandledValidPageDb(ustate, ex, exstate, pagedb_in, dispPg);
     ghost var disp := pagedb[dispPg].entry;
     ghost var ctxt := disp.ctxt;
     ghost var pg := extractPage(this.m, dispPg);
+    ghost var pgbase := page_monvaddr(dispPg);
     assert pageDbDispatcherCorresponds(dispPg, disp, pg) by {
         // TODO: figure out how to clean up this disgusting mess of triggers
         // and explicit assertions... later :(
         reveal pageDbDispatcherCorresponds;
-        assert pg[base + DISPATCHER_ENTERED] == to_i(true) == to_i(disp.entered);
+        assert pg[pgbase + DISPATCHER_ENTERED] == to_i(true) == to_i(disp.entered);
         assert orig_disp.entrypoint
             == disp.entrypoint
-            == pg[base + DISPATCHER_ENTRYPOINT];
-        assert pg[base + DISP_CTXT_PC] == old(lr) == OperandContents(exstate, OLR);
+            == pg[pgbase + DISPATCHER_ENTRYPOINT];
+        assert pg[pgbase + DISP_CTXT_PC] == old(lr) == OperandContents(exstate, OLR);
         // oh for a calc statement...
-        assert pg[base + DISP_CTXT_PSR] == old(spsr_mon)
+        assert pg[pgbase + DISP_CTXT_PSR] == old(spsr_mon)
             == OperandContents(exstate, OSReg(spsr(Monitor)))
             == exstate.sregs[spsr(mode_of_state(exstate))];
         assert ctxt == DispatcherContext(exstate.regs, old(lr), old(spsr_mon));
-        assert pg[base + DISP_CTXT_R0] == gr0 == ctxt.regs[R0];
-        assert forall a:addr :: pg?[a] && a != base + DISP_CTXT_R0
-                && a != base + DISPATCHER_ENTERED
+        assert pg[pgbase + DISP_CTXT_R0] == gr0 == ctxt.regs[R0];
+        assert forall a:addr :: pg?[a] && a != pgbase + DISP_CTXT_R0
+                && a != pgbase + DISPATCHER_ENTERED
             ==> extractPage(st0.m, dispPg)[a] == pg[a];
         assert forall r :: ValidRegOperand(OReg(r)) && r != R0
             ==> (OperandContents(old(this), OReg(r))
                 == OperandContents(exstate, OReg(r)) == ctxt.regs[r]);
-        assert pg[base + DISP_CTXT_R1] == old(r1) == ctxt.regs[R1];
-        assert pg[base + DISP_CTXT_R2] == old(r2) == ctxt.regs[R2];
-        assert pg[base + DISP_CTXT_R3] == old(r3) == ctxt.regs[R3];
-        assert pg[base + DISP_CTXT_R4] == old(r4) == ctxt.regs[R4];
-        assert pg[base + DISP_CTXT_R5] == old(r5) == ctxt.regs[R5];
-        assert pg[base + DISP_CTXT_R6] == old(r6) == ctxt.regs[R6];
-        assert pg[base + DISP_CTXT_R7] == old(r7) == ctxt.regs[R7];
-        assert pg[base + DISP_CTXT_R8] == old(r8) == ctxt.regs[R8];
-        assert pg[base + DISP_CTXT_R9] == old(r9) == ctxt.regs[R9];
-        assert pg[base + DISP_CTXT_R10] == old(r10) == ctxt.regs[R10];
-        assert pg[base + DISP_CTXT_R11] == old(r11) == ctxt.regs[R11];
-        assert pg[base + DISP_CTXT_R12] == old(r12) == ctxt.regs[R12];
-        assert pg[base + DISP_CTXT_LR] == old(lr_usr)
+        assert pg[pgbase + DISP_CTXT_R1] == old(r1) == ctxt.regs[R1];
+        assert pg[pgbase + DISP_CTXT_R2] == old(r2) == ctxt.regs[R2];
+        assert pg[pgbase + DISP_CTXT_R3] == old(r3) == ctxt.regs[R3];
+        assert pg[pgbase + DISP_CTXT_R4] == old(r4) == ctxt.regs[R4];
+        assert pg[pgbase + DISP_CTXT_R5] == old(r5) == ctxt.regs[R5];
+        assert pg[pgbase + DISP_CTXT_R6] == old(r6) == ctxt.regs[R6];
+        assert pg[pgbase + DISP_CTXT_R7] == old(r7) == ctxt.regs[R7];
+        assert pg[pgbase + DISP_CTXT_R8] == old(r8) == ctxt.regs[R8];
+        assert pg[pgbase + DISP_CTXT_R9] == old(r9) == ctxt.regs[R9];
+        assert pg[pgbase + DISP_CTXT_R10] == old(r10) == ctxt.regs[R10];
+        assert pg[pgbase + DISP_CTXT_R11] == old(r11) == ctxt.regs[R11];
+        assert pg[pgbase + DISP_CTXT_R12] == old(r12) == ctxt.regs[R12];
+        assert pg[pgbase + DISP_CTXT_LR] == old(lr_usr)
             == OperandContents(exstate, OReg(LR(User))) == ctxt.regs[LR(User)];
-        assert pg[base + DISP_CTXT_SP] == old(sp_usr)
+        assert pg[pgbase + DISP_CTXT_SP] == old(sp_usr)
             == OperandContents(exstate, OReg(SP(User))) == ctxt.regs[SP(User)];
     }
 
@@ -498,6 +497,8 @@ procedure {:frame false} interrupt_handler(
     STR(r0, sp, 0);
     STR(r1, sp, const(WORDSIZE));
 
+    assert ParentStackPreserving(old(this), this);
+
     // store pending interrupt
     LDRglobaladdr(r0, PendingInterruptOp());
     MOV(r1, 1);
@@ -512,16 +513,18 @@ procedure {:frame false} interrupt_handler(
         assert mode_of_state(prior_state) == User;
 
         // save dispatcher context
+        LDRglobaladdr(r0, CurDispatcherOp());
+        LDRglobal(r0, CurDispatcherOp(), r0, 0);
         LDR(r1, sp, const(WORDSIZE));
         assert r1 == old(r1);
         lemma_SameMemAndGlobalsPreservesPageDb'(old(this), this, pagedb1);
-        pagedb := save_disp_context(prior_state, ex, old(this), dispPg, pagedb1);
+        pagedb := save_disp_context(r0, prior_state, ex, old(this), dispPg, pagedb1);
         assert tuple(r0, r1, pagedb) == exceptionHandled(old(this), pagedb1, dispPg);
 
         ADD(sp, sp, const(2 * WORDSIZE));
         assert sp == old(sp);
+        assert StackPreserving(old(this), this);
         ORR(sp, sp, 1);
-        assume KomInterruptHandlerInvariant(old(this), pagedb1, this, dispPg); // TODO
     } else { // we came from another exception handler
         assert spsr_of_state(old(this)).m != User;
 

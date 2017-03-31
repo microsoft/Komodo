@@ -12,8 +12,7 @@ predicate KomInterruptHandlerInvariant(s:state, sd:PageDb, r:state, dispPg:PageN
         && nonStoppedDispatcher(sd, dispPg))
 {
     ValidState(r) && (s.ok ==> r.ok)
-    && SaneMem(r.m)
-    && SaneStack(r)
+    && SaneStateAfterException(r)
     && ParentStackPreserving(s, r)
     && GlobalsPreservingExcept(s, r, {PendingInterruptOp()})
     && s.conf.ttbr0 == r.conf.ttbr0 && s.conf.scr == r.conf.scr
@@ -24,6 +23,7 @@ predicate KomInterruptHandlerInvariant(s:state, sd:PageDb, r:state, dispPg:PageN
         && CoreRegPreservingExcept(s, r, {})
         && BankedRegsInvariant(s, r)
         && NonStackMemPreserving(s, r)
+        && SaneStack(r)
     ) else (
         mode_of_state(s) != User
         && KomExceptionHandlerInvariant(s, sd, r, dispPg)
