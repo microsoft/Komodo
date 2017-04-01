@@ -127,7 +127,7 @@ predicate SmcProcedureInvariant(s:state, r:state)
         && StackPreserving(s,r)
         && BankedRegsInvariant(s, r)
         && SRegsInvariant(s,r)
-        // TODO: && InsecureMemInvariant(s,r)
+        && InsecureMemInvariant(s,r)
 }
 
 predicate EnterResumeSmcProcedureInvariant(s:state, r:state)

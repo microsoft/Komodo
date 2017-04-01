@@ -70,6 +70,8 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
         pa;
     }
 
+    assert {:split_here} true;
+
     assert BitAnd(pteb, 0x3) == 2 || BitAnd(pteb, 0x3) == 3 by {
         calc {
             BitAnd(pteb, 0x3);

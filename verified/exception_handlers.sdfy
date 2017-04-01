@@ -386,10 +386,13 @@ procedure save_disp_context(inout operand base: reg, ghost ustate:state,
 {
     ghost var gr0 := OperandContents(exstate, OReg(R0));
     ghost var orig_disp := pagedb_in[dispPg].entry;
-
-    assert orig_disp.entrypoint
-            == extractPage(old(this.m), dispPg)[base + DISPATCHER_ENTRYPOINT]
-        by { reveal pageContentsCorresponds; reveal pageDbDispatcherCorresponds; }
+    ghost var orig_pg := extractPage(old(this.m), dispPg);
+    assert orig_disp.entrypoint == orig_pg[base + DISPATCHER_ENTRYPOINT]
+    by {
+        assert pageDbDispatcherCorresponds(dispPg, orig_disp, orig_pg)
+            by { reveal pageContentsCorresponds; }
+        reveal pageDbDispatcherCorresponds;
+    }
 
     save_disp_context_helper(base, dispPg);
     ghost var st0 := this;

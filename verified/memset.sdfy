@@ -14,6 +14,8 @@ procedure memcpy(operand dst:addr, operand src:addr,
         ValidMemRange(src, src + size);
         dst + size <= src || src + size <= dst;
         dst >= StackBase() || dst + size <= StackLimit();
+        // no writing to insecure mem
+        dst >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || dst + size <= KOM_DIRECTMAP_VBASE;
     ensures
         SmcProcedureInvariant(old(this),this);
         MemPreservingExcept(old(this), this, old(dst), old(dst + size));
@@ -54,6 +56,8 @@ procedure memset(operand base:addr, operand val:word, inout operand size:reg)
         WordAligned(size);
         ValidMemRange(base, base + size);
         base >= StackBase() || base + size <= StackLimit();
+        // no writing to insecure mem
+        base >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || base + size <= KOM_DIRECTMAP_VBASE;
     ensures
         SmcProcedureInvariant(old(this),this);
         MemPreservingExcept(old(this), this, old(base), old(base + size));

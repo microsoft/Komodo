@@ -140,7 +140,6 @@ procedure allocate_page_success(
     ensures
         GlobalsPreservingExcept(old(this),this,set(PageDb()));
         SmcProcedureInvariant(old(this),this);
-        InsecureMemInvariant(old(this),this);
         pagenr == old(pagenr); // redundant with the above, but makes life easier
         pagedb == specPageDb(allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry));
         pageDbCorrespondsExcluding(this.m, pagedb, pagenr);
@@ -203,10 +202,11 @@ procedure allocate_page(
     requires/ensures
         SaneState(this);
     requires
+        @err == OReg(R0) && @pagedb_base == OReg(R12);
         @tmp != @tmp2 && @tmp != @pagenr && @tmp != @as_pagenr && @tmp != @pagedb_base;
         @tmp2 != @err && @tmp2 != @pagenr && @tmp2 != @as_pagenr && @tmp2 != @pagedb_base;
         @err != @tmp && @err != @pagenr && @err != @as_pagenr && @err != @pagedb_base;
-        @tmp != OSP && @tmp2 != OSP && @err != OSP;
+        @tmp != OSP && @tmp2 != OSP;
         ValidOperand(@typeval) && @typeval is OConst;
         pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb_in);
@@ -221,7 +221,6 @@ procedure allocate_page(
     ensures
         GlobalsPreservingExcept(old(this),this,set(PageDb()));
         SmcProcedureInvariant(old(this),this);
-        InsecureMemInvariant(old(this),this);
         tuple(pagedb, err)
             == allocatePage(pagedb_in, old(pagenr), entry.addrspace, entry.entry);
         // we update all of the pagedb except the target page itself,

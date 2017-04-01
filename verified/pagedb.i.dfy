@@ -18,37 +18,36 @@ const PAGEDB_ENTRY_ADDRSPACE:int := 4;
 //-----------------------------------------------------------------------------
 // Addrspace Fields
 //-----------------------------------------------------------------------------
-// addrspc = start address of address space metadata
-// TODO requires that this thing is an addrspce?
 const ADDRSPACE_L1PT:int        := 0;
-const ADDRSPACE_L1PT_PHYS:int   := 4;
-const ADDRSPACE_REF:int         := 8;
-const ADDRSPACE_STATE:int       := 12;
-const ADDRSPACE_SIZE:int        := 16;
+const ADDRSPACE_L1PT_PHYS:int   := 1*WORDSIZE;
+const ADDRSPACE_REF:int         := 2*WORDSIZE;
+const ADDRSPACE_STATE:int       := 3*WORDSIZE;
+const ADDRSPACE_SIZE:int        := 4*WORDSIZE;
 
 //-----------------------------------------------------------------------------
 // Dispatcher Fields
 //-----------------------------------------------------------------------------
 const DISPATCHER_ENTERED:int    := 0;
-const DISPATCHER_ENTRYPOINT:int := 4;
+const DISPATCHER_ENTRYPOINT:int := 1*WORDSIZE;
 
-const DISP_CTXT_R0:int          := 8;
-const DISP_CTXT_R1:int          := 12;
-const DISP_CTXT_R2:int          := 16;
-const DISP_CTXT_R3:int          := 20;
-const DISP_CTXT_R4:int          := 24;
-const DISP_CTXT_R5:int          := 28;
-const DISP_CTXT_R6:int          := 32;
-const DISP_CTXT_R7:int          := 36;
-const DISP_CTXT_R8:int          := 40;
-const DISP_CTXT_R9:int          := 44;
-const DISP_CTXT_R10:int         := 48;
-const DISP_CTXT_R11:int         := 52;
-const DISP_CTXT_R12:int         := 56;
-const DISP_CTXT_LR:int          := 60;
-const DISP_CTXT_SP:int          := 64;
-const DISP_CTXT_PC:int          := 68;
-const DISP_CTXT_PSR:int         := 72;
+const DISP_CTXT_R0:int          := 2*WORDSIZE;
+const DISP_CTXT_R1:int          := 3*WORDSIZE;
+const DISP_CTXT_R2:int          := 4*WORDSIZE;
+const DISP_CTXT_R3:int          := 5*WORDSIZE;
+const DISP_CTXT_R4:int          := 6*WORDSIZE;
+const DISP_CTXT_R5:int          := 7*WORDSIZE;
+const DISP_CTXT_R6:int          := 8*WORDSIZE;
+const DISP_CTXT_R7:int          := 9*WORDSIZE;
+const DISP_CTXT_R8:int          := 10*WORDSIZE;
+const DISP_CTXT_R9:int          := 11*WORDSIZE;
+const DISP_CTXT_R10:int         := 12*WORDSIZE;
+const DISP_CTXT_R11:int         := 13*WORDSIZE;
+const DISP_CTXT_R12:int         := 14*WORDSIZE;
+const DISP_CTXT_LR:int          := 15*WORDSIZE;
+const DISP_CTXT_SP:int          := 16*WORDSIZE;
+const DISP_CTXT_PC:int          := 17*WORDSIZE;
+const DISP_CTXT_PSR:int         := 18*WORDSIZE;
+const DISP_SIZE:int             := 19*WORDSIZE;
 
 //-----------------------------------------------------------------------------
 // Page Types
@@ -205,7 +204,7 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
     assert wellformedDispatcherContext(e.ctxt);
     page[base + DISPATCHER_ENTERED] == to_i(e.entered)
     && page[base + DISPATCHER_ENTRYPOINT] == e.entrypoint
-    && page[base + DISP_CTXT_PC]  == e.ctxt.pc
+    && (e.entered ==> (page[base + DISP_CTXT_PC] == e.ctxt.pc
     && page[base + DISP_CTXT_PSR] == e.ctxt.cpsr
     && page[base + DISP_CTXT_LR]  == e.ctxt.regs[LR(User)]
     && page[base + DISP_CTXT_SP]  == e.ctxt.regs[SP(User)]
@@ -221,7 +220,7 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
     && page[base + DISP_CTXT_R9]  == e.ctxt.regs[R9]
     && page[base + DISP_CTXT_R10] == e.ctxt.regs[R10]
     && page[base + DISP_CTXT_R11] == e.ctxt.regs[R11]
-    && page[base + DISP_CTXT_R12] == e.ctxt.regs[R12]
+    && page[base + DISP_CTXT_R12] == e.ctxt.regs[R12]))
 }
 
 function ARM_L1PTE(paddr: word): word

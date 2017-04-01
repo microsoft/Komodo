@@ -593,7 +593,7 @@ procedure pre_entry_resume_context(ghost dispPg:PageNr, ghost pagedb:PageDb)
         lr == page_monvaddr(dispPg);
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
-        validDispatcherPage(pagedb, dispPg);
+        validDispatcherPage(pagedb, dispPg) && pagedb[dispPg].entry.entered;
     reads
         mem;
     modifies
@@ -866,7 +866,7 @@ lemma lemma_ValidEntryPost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp
 }
 #endverbatim
 
-procedure {:frame false} smc_enterresume_success(
+procedure {:frame false} {:timeLimitMultiplier 2} smc_enterresume_success(
     operand pagenr:reg,
     operand arg1:reg,
     operand arg2:reg,
@@ -911,7 +911,6 @@ procedure {:frame false} smc_enterresume_success(
 {
     pagedb := pagedb_in;
     ghost var dispPg := old(pagenr);
-    ghost var isEnter := old(callno) == KOM_SMC_ENTER;
     assert nonStoppedDispatcher(pagedb, dispPg);
 
     ghost var stack_bytes_local;
@@ -929,13 +928,13 @@ procedure {:frame false} smc_enterresume_success(
         assert preEntryResume(old(this), this, pagedb, dispPg);
     }
 
-    ghost var s1 := this;
-
     ghost var steps:nat;
     pagedb, steps := enclaveexecution_loop(pagedb, dispPg);
 
     ghost var s6 := this;
     ghost var s6_sp := sp;
+
+    leave_secure_world(r2);
 
     lemma_wellformed_banked_regs_stackframe_preserved(s0.m, this.m, sp);
     stack_bytes_local := unstack_banked_regs(r2, stack_bytes_local);
@@ -944,8 +943,6 @@ procedure {:frame false} smc_enterresume_success(
 
     assert StackPreserving(old(this), this);
     lemma_stackunstack_banked_regs(old(this), s0.m, this, s6.m, s6_sp);
-
-    leave_secure_world(r2);
 
     lemma_ValidEntryPre(old(this), s0, pagedb_in, s6, pagedb, dispPg,
                             old(arg1), old(arg2), old(arg3));

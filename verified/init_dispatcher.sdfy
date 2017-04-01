@@ -10,61 +10,52 @@ include "memset.sdfy"
 procedure init_dispatcher_page(
     inout operand disp_page:reg,
     operand entrypoint:reg,
-    out operand tmp:reg,
-    out operand tmp2:reg)
+    out operand tmp:reg)
     requires/ensures
         SaneState(this);
     requires
-        @disp_page != @entrypoint && @disp_page != @tmp && @disp_page != @tmp2
-            && @disp_page != OSP;
-        @tmp != @entrypoint && @tmp != @tmp2 && @tmp != OSP;
-        @tmp2 != @entrypoint && @tmp2 != OSP;
+        @disp_page != @entrypoint && @disp_page != @tmp && @disp_page != OSP;
+        @entrypoint != @tmp && @entrypoint != OSP && @tmp != OSP;
         validPageNr(disp_page);
     reads
         globals;
     modifies
         mem;
     ensures
-        SmcProcedureInvariant(old(this), this);
         MemPreservingExcept(old(this), this, page_monvaddr(old(disp_page)),
-                                 page_monvaddr(old(disp_page)) + PAGESIZE);
+                            page_monvaddr(old(disp_page)) + PAGESIZE);
+        SmcProcedureInvariant(old(this), this);
         pageDbDispatcherCorresponds(old(disp_page),
             Dispatcher(old(entrypoint), false, initDispCtxt()),
             extractPage(this.m, old(disp_page)));
 {
     ghost var dispva := page_monvaddr(old(disp_page));
+    assert dispva >= KOM_DIRECTMAP_VBASE + MonitorPhysBase();
     page_monvaddr_impl(disp_page, disp_page, tmp);
-    tmp := 0;
-    tmp2 := const(PAGESIZE);
-    memset(disp_page, tmp, tmp2);
     assert disp_page == dispva;
 
     assert entrypoint == old(entrypoint);
     STR(entrypoint, disp_page, const(DISPATCHER_ENTRYPOINT));
 
-    tmp := 0x10;
-    STR(tmp, disp_page, const(DISP_CTXT_PSR));
+    tmp := 0;
+    STR(tmp, disp_page, const(DISPATCHER_ENTERED));
+
+    assert MemPreservingExcept(old(this), this, dispva, dispva + DISP_SIZE);
 
     ghost var pg := extractPage(this.m, old(disp_page));
-    assert pg[dispva + DISPATCHER_ENTRYPOINT] == old(entrypoint);
-    assert pg[dispva + DISP_CTXT_PSR] == 0x10 == encode_mode(User);
-
-    assert MemPreservingExcept(old(this), this, dispva, dispva + PAGESIZE);
-
     assert pageDbDispatcherCorresponds(old(disp_page),
             Dispatcher(old(entrypoint), false, initDispCtxt()), pg)
     by {
         reveal pageDbDispatcherCorresponds;
-        assert forall a:addr :: addrInPage(a, old(disp_page))
-            && a != dispva + DISPATCHER_ENTRYPOINT
-            && a != dispva + DISP_CTXT_PSR ==> pg[a] == 0;
+        assert pg[dispva + DISPATCHER_ENTRYPOINT] == old(entrypoint);
+        assert pg[dispva + DISPATCHER_ENTERED] == to_i(false);
     }
 }
 
 procedure {:frame false} kom_smc_init_dispatcher(
     inout operand disp_page:reg, // r1
     operand as_page:reg, // r2
-    operand entrypoint:reg, // r3
+    inout operand entrypoint:reg, // r3
     operand pagedb_base:addr,
     out operand err:reg,
     out operand tmp:reg,
@@ -76,6 +67,8 @@ procedure {:frame false} kom_smc_init_dispatcher(
         ValidRegOperand(@disp_page) && ValidRegOperand(@as_page)
             && ValidRegOperand(@entrypoint) && ValidRegOperand(@pagedb_base)
             && ValidRegOperand(@err) && ValidRegOperand(@tmp) && ValidRegOperand(@tmp2);
+        @disp_page == OReg(R1) && @as_page == OReg(R2) && @entrypoint == OReg(R3) && @err == OReg(R0);
+        @pagedb_base == OReg(R12) && pagedb_base == AddressOfGlobal(PageDb());
         @disp_page != @as_page && @disp_page != @entrypoint && @disp_page != @err
             && @disp_page != @tmp && @disp_page != @tmp2 && @disp_page != @pagedb_base
             && @disp_page != OSP;
@@ -83,7 +76,6 @@ procedure {:frame false} kom_smc_init_dispatcher(
             && @err != @pagedb_base && @err != OSP;
         @tmp != @as_page && @tmp != @entrypoint && @tmp != @tmp2 && @tmp != @pagedb_base && @tmp != OSP;
         @tmp2 != @as_page && @tmp2 != @entrypoint && @tmp2 != @pagedb_base && @tmp2 != OSP;
-        pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
     modifies
@@ -127,7 +119,7 @@ procedure {:frame false} kom_smc_init_dispatcher(
                 ghost var tmpstate := this;
 
                 // update dispatcher page
-                init_dispatcher_page(disp_page, entrypoint, tmp, tmp2);
+                init_dispatcher_page(disp_page, entrypoint, tmp);
 
                 assert pageDbCorrespondsOnly(this.m, pagedb, old(disp_page))
                     by { reveal pageContentsCorresponds; }
