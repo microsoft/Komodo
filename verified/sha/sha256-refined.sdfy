@@ -1642,4 +1642,6 @@ ensures
 
     // Restore the stack pointer
     ADD(sp, sp, 116);
+
+    assert {:split_here} {:refined} true;
 }
