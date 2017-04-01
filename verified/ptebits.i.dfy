@@ -163,8 +163,7 @@ lemma lemma_l1ptesmatch(e: Maybe<PageNr>, subpage:int)
     assert WordAsBits(0x3fc) == 0x3fc && WordAsBits(0x3) == 0x3
         && WordAsBits(1) == 1 by { reveal_WordAsBits(); }
 
-    match e {
-    case Nothing => assert ptew == 0; reveal_BitAnd();
+    match e
     case Just(pg) => {
         var pa := page_paddr(pg) + subpage * ARM_L2PTABLE_BYTES;
         assert pa % ARM_L2PTABLE_BYTES == 0;
@@ -233,7 +232,10 @@ lemma lemma_l1ptesmatch(e: Maybe<PageNr>, subpage:int)
             { lemma_WordAsBitsAsWord(pa); }
             pa;
         }
-    } }
+    }
+    case Nothing => {
+        assert ptew == 0; reveal_BitAnd();
+    }
 }
 
 function nonexec_mapping(mapping: Mapping): Mapping
