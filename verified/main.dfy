@@ -2,12 +2,7 @@ include "ARMprint.dfy"
 include "smc_handler.gen.dfy"
 include "exception_handlers.gen.dfy"
 
-function method smc_handler():va_code
-{
-    va_code_smc_handler(OReg(R0), OReg(R1), OReg(R2),
-                        OReg(R3), OReg(R4), OReg(R0), OReg(R1))
-}
-
+function method smc_handler():va_code  { va_code_smc_handler() }
 function method svc_handler():va_code  { va_code_svc_handler() }
 function method abt_handler():va_code  { va_code_abort_handler(ExAbt) }
 function method und_handler():va_code  { va_code_abort_handler(ExUnd) }
@@ -86,17 +81,17 @@ predicate InitialState(s:state)
         && s.conf.scr.ns == NotSecure
         && s.regs[SP(Monitor)] == StackBase()
         && SaneMem(s.m)
+        && !interrupts_enabled(s)
 }
 
 method Main()
 {
-/*
     // prove that the final state for an SMC call is valid
     forall s1:state, p1:PageDb, s2:state
         | InitialState(s1)
         && validPageDb(p1)
         && pageDbCorresponds(s1.m, p1)
-        && evalCode(smc_handler, s1, s2)
+        && evalCode(smc_handler(), s1, s2)
         && AUCIdef() // XXX
         ensures smchandlerInvariant(s1, s2)
         ensures exists p2:PageDb :: smchandler(s1, p1, s2, p2)
@@ -105,14 +100,11 @@ method Main()
         var stack_bytes := KOM_STACK_SIZE - WORDSIZE;
         assert StackBytesRemaining(s1, stack_bytes);
         reveal_va_eval();
-        var block := va_CCons(smc_handler, va_CNil());
+        var block := va_CCons(smc_handler(), va_CNil());
         assert va_eval(Block(block), s1, s2) by { assert evalBlock(block, s1, s2); }
-        var _, _, p2' := va_lemma_smc_handler(block, s1, s2,
-            OReg(R0), OReg(R1), OReg(R2), OReg(R3), OReg(R4), OReg(R0),
-            OReg(R1), stack_bytes, p1);
+        var _, _, p2' := va_lemma_smc_handler(block, s1, s2, stack_bytes, p1);
         assert smchandler(s1, p1, s2, p2');
         assert validPageDb(p2') && pageDbCorresponds(s2.m, p2');
     }
-*/
     printAll();
 }

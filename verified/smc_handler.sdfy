@@ -137,22 +137,12 @@ procedure {:frame false} smc_handler_inner(
 
 
 procedure {:frame false} smc_handler(
-    operand callno:reg,
-    operand arg1:reg,
-    operand arg2:reg,
-    operand arg3:reg,
-    operand arg4:reg,
-    out operand err:reg,
-    out operand retval:reg,
     ghost stack_bytes: int,
     ghost pagedb_in: PageDb) returns (ghost pagedb: PageDb)
     requires/ensures
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
     requires
-        @callno == OReg(R0) && @arg1 == OReg(R1) && @arg2 == OReg(R2)
-            && @arg3 == OReg(R3) && @arg4 == OReg(R4);
-        @err == OReg(R0) && @retval == OReg(R1);
         stack_bytes >= 120;
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
@@ -170,23 +160,23 @@ procedure {:frame false} smc_handler(
 
     LDRglobaladdr(r12, PageDb());
 
-    ghost if (callno == KOM_SMC_MAP_SECURE
-              && !(arg4 == 0 || !physPageIsInsecureRam(arg4))) {
-        assert contentsOfPhysPage(old(this), arg4) == contentsOfPhysPage(this, arg4)
+    ghost if (old(r0 == KOM_SMC_MAP_SECURE
+              && !(r4 == 0 || !physPageIsInsecureRam(r4)))) {
+        assert contentsOfPhysPage(old(this), old(r4)) == contentsOfPhysPage(this, old(r4))
             by { assert InsecureMemInvariant(old(this), this); }
     }
 
     ghost var s0 := this;
-    pagedb := smc_handler_inner(callno, arg1, arg2, arg3, arg4, r12, err, retval,
+    pagedb := smc_handler_inner(r0, r1, r2, r3, r4, r12, r0, r1,
                                 stack_bytes_local, pagedb_in);
 
-    ghost if (old(callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME)) {
+    ghost if (old(r0 == KOM_SMC_ENTER || r0 == KOM_SMC_RESUME)) {
             lemma_ValidEntryPre(old(this), s0, pagedb_in, this, pagedb,
-                            old(arg1), old(arg2), old(arg3), old(arg4));
+                                old(r1), old(r2), old(r3), old(r4));
     }
 
-    ghost var prePopErr := err;
-    ghost var prePopRet := retval;
+    ghost var prePopErr := r0;
+    ghost var prePopRet := r1;
     ghost var prePopThis := this;
 
     stack_bytes_local := unstack_nonvolatiles(stack_bytes_local);
@@ -197,8 +187,8 @@ procedure {:frame false} smc_handler(
     r2 := 0;
     r3 := 0;
 
-    assert prePopErr == err;
-    assert prePopRet == retval;
+    assert prePopErr == r0;
+    assert prePopRet == r1;
 
     assert smchandlerInvariant(old(this), this) by {
         assert nonvolatileRegInvariant(old(this), this);
@@ -206,11 +196,11 @@ procedure {:frame false} smc_handler(
         assert SpsrsInvariant(old(this), this);
     }
 
-    ghost if (old(callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME)) {
+    ghost if (old(r0 == KOM_SMC_ENTER || r0 == KOM_SMC_RESUME)) {
         assert validExceptionTransition(prePopThis, pagedb,
-                                        this, pagedb, old(arg1))
+                                        this, pagedb, old(r1))
             by { reveal validExceptionTransition; }
         lemma_ValidEntryPost(old(this), pagedb_in, prePopThis, pagedb, this,
-                             old(arg1), old(arg2), old(arg3), old(arg4));
+                             old(r1), old(r2), old(r3), old(r4));
     }
 }
