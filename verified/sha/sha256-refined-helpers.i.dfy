@@ -7,6 +7,50 @@ include "../kom_common.s.dfy"
 include "../sha/sha256.i.dfy"
 include "../sha/bit-vector-lemmas.i.dfy"
 
+function method Sigma0(i:int) : word
+    requires 0 <= i < 3;
+{
+    [2, 13, 22][i]
+}
+
+function method Sigma1(i:int) : word
+    requires 0 <= i < 3;
+{
+    [6, 11, 25][i]
+}
+
+function method sigma0(i:int) : word
+    requires 0 <= i < 3;
+{
+    [7, 18, 3][i]
+}
+
+function method sigma1(i:int) : word
+    requires 0 <= i < 3;
+{
+    [17, 19, 10][i]
+}
+
+type SHA_step = i | 0 <= i < 64
+
+function method GetReg(r:int) : ARMReg
+    requires 0 <= r <= 12;
+{
+         if r ==  0 then R0
+    else if r ==  1 then R1
+    else if r ==  2 then R2
+    else if r ==  3 then R3
+    else if r ==  4 then R4
+    else if r ==  5 then R5
+    else if r ==  6 then R6
+    else if r ==  7 then R7
+    else if r ==  8 then R8
+    else if r ==  9 then R9
+    else if r == 10 then R10
+    else if r == 11 then R11
+    else R12 
+}
+
 function{:opaque} OpaqueMod(x:int, y:int):int requires y > 0 { x % y }
 
 function method CheapMod16(j:int) : int

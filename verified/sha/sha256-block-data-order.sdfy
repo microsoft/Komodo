@@ -1,0 +1,323 @@
+///////////////////////////////////////////////////
+//
+//  Based on sha256-armv4.pl form OpenSSL 1.0.2j
+//
+///////////////////////////////////////////////////
+
+
+include {:verbatim} "sha256.i.dfy"
+include {:verbatim} "sha256-refined-helpers.i.dfy"
+include {:verbatim} "sha256-refined-invariants.i.dfy"
+
+include "../ARMdecls.sdfy"
+include "sha256-one-block.sdfy"
+
+procedure {:refined} sha256_loop(
+    ghost old_trace:SHA256Trace,
+    ghost ctx_ptr:word,
+    ghost input_ptr:word,
+    ghost input:seq(word),
+    ghost num_blocks:nat,
+    ghost old_M_length:nat,
+    ghost old_mem:memmap
+    )
+requires {:refined false}
+    !interrupts_enabled(this);
+requires exists trace_in ::
+         BlockInvariant(trace_in, old_trace, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
+                        r4, r5, r6, r7, r8, r9, r10, r11,
+                        input_ptr, ctx_ptr, num_blocks, 0);
+reads
+    sp; globals;
+modifies
+    mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
+ensures exists trace_out ::
+        BlockInvariant(trace_out, old_trace, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
+                        r4, r5, r6, r7, r8, r9, r10, r11,
+                        input_ptr, ctx_ptr, num_blocks, num_blocks);
+{
+    ghost var block:nat := 0;
+    while (r1 < r12)
+        invariant
+            exists trace :: 
+                BlockInvariant(trace, old_trace, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
+                               r4, r5, r6, r7, r8, r9, r10, r11,
+                               input_ptr, ctx_ptr, num_blocks, block);
+         decreases r12 - r1;
+    {
+        sha256_loop_body(old_trace, ctx_ptr, input_ptr, input, num_blocks, old_M_length, old_mem, block);
+        block := block + 1;
+    }
+}
+
+// Core implementation that does the real work
+procedure {:refined} {:timeLimitMultiplier 2} sha256_block_data_order_inner(
+    ghost trace_in:SHA256Trace,
+    ghost input:seq(word)
+    ) returns (
+    ghost trace_out:SHA256Trace
+    )
+
+requires/ensures
+    ValidAddrMemStateOpaque(mem);
+requires {:refined false}
+    !interrupts_enabled(this);
+requires
+    // Stack is accessible
+    ValidMemRange(sp, sp + SHA_STACKSIZE * WORDSIZE);
+
+    IsCompleteSHA256Trace(trace_in);
+    SHA256TraceIsCorrect(trace_in);
+
+    // K table is valid
+    SaneShaGlobal(globals);
+    lr == AddressOfGlobal(K_SHA256s());
+    //ValidGlobalAddr(K_SHA256s(), lr);
+
+    let ctx := r0 in
+    let input_ptr := r1 in
+    let num_blocks := r2 in // Number of 64-byte blocks to process
+
+     // Old H values are laid out in memory pointed at by ctx
+        ValidMemRange(ctx, ctx + SHA_CTXSIZE * WORDSIZE)
+     && last(trace_in.H)[0] == AddrMemContents(mem, ctx + 0*WORDSIZE)
+     && last(trace_in.H)[1] == AddrMemContents(mem, ctx + 1*WORDSIZE)
+     && last(trace_in.H)[2] == AddrMemContents(mem, ctx + 2*WORDSIZE)
+     && last(trace_in.H)[3] == AddrMemContents(mem, ctx + 3*WORDSIZE)
+     && last(trace_in.H)[4] == AddrMemContents(mem, ctx + 4*WORDSIZE)
+     && last(trace_in.H)[5] == AddrMemContents(mem, ctx + 5*WORDSIZE)
+     && last(trace_in.H)[6] == AddrMemContents(mem, ctx + 6*WORDSIZE)
+     && last(trace_in.H)[7] == AddrMemContents(mem, ctx + 7*WORDSIZE)
+
+     // Ghost input matches in-memory input
+     && SeqLength(input) == num_blocks * SHA_BLOCKSIZE
+     && isUInt32(input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
+     && ValidMemRange(input_ptr, input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
+     && (forall j :: 0 <= j < num_blocks * SHA_BLOCKSIZE ==> AddrMemContents(mem, input_ptr + j*WORDSIZE) == input[j]
+         )
+
+     // Anti-aliasing
+     && (ctx + SHA_CTXSIZE*WORDSIZE < input_ptr || ctx > input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE)    // input_ptr != ctx
+     && (ctx + SHA_CTXSIZE*WORDSIZE < sp || ctx > sp + SHA_STACKSIZE*WORDSIZE)                             // ctx != sp
+     && (input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE < sp || input_ptr >= sp + SHA_STACKSIZE*WORDSIZE);  // input_ptr != sp
+
+reads
+    sp; globals;
+modifies
+    mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
+ensures
+    // Memory framing:  We only touch the stack and 8 bytes pointed to by ctx_ptr
+    AddrMemPreservingExcept2(old(mem), mem, sp, sp + SHA_STACKSIZE * WORDSIZE,
+                             old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE);
+
+    IsCompleteSHA256Trace(trace_out);
+    SHA256TraceIsCorrect(trace_out);
+    SeqLength(trace_out.M) == SeqLength(trace_in.M) + old(r2);
+    trace_in.M == SeqSlice(trace_out.M, 0, SeqLength(trace_in.M));  // trace_in.M is a prefix of trace_out.M
+    (forall i :: 0 <= i < old(r2)
+      ==> trace_out.M[SeqLength(trace_in.M) + i] == bswap32_seq(SeqSlice(input, i*16, (i+1)*16))) ;
+    last(trace_out.H)[0] == AddrMemContents(mem, old(r0) + 0*WORDSIZE);
+    last(trace_out.H)[1] == AddrMemContents(mem, old(r0) + 1*WORDSIZE);
+    last(trace_out.H)[2] == AddrMemContents(mem, old(r0) + 2*WORDSIZE);
+    last(trace_out.H)[3] == AddrMemContents(mem, old(r0) + 3*WORDSIZE);
+    last(trace_out.H)[4] == AddrMemContents(mem, old(r0) + 4*WORDSIZE);
+    last(trace_out.H)[5] == AddrMemContents(mem, old(r0) + 5*WORDSIZE);
+    last(trace_out.H)[6] == AddrMemContents(mem, old(r0) + 6*WORDSIZE);
+    last(trace_out.H)[7] == AddrMemContents(mem, old(r0) + 7*WORDSIZE);
+
+{
+    assert ValidGlobal(K_SHA256s()) by { reveal SaneShaGlobal; }
+    LDRglobaladdr(lr, K_SHA256s());
+
+    ghost var ctx_ptr := r0;
+    ghost var input_ptr := r1;
+    ghost var num_blocks := r2;
+
+    ADDWrapShift(r2, r1, r2, LSLShift(6)); // r2 <- input_ptr + 64 * num_blocks
+    assert r2 == r1 + 64 * num_blocks by {
+        reveal TruncateWord;
+        lemma_ShiftsAdd(num_blocks, 2, 4);
+        lemma_LeftShift2(num_blocks);
+        lemma_LeftShift4(num_blocks*4);
+    }
+
+    // Save some of the initial state away.  We'll need it later.
+    STR(r0, sp, const(16*WORDSIZE));
+    STR(r2, sp, const(18*WORDSIZE));
+    // Move end_ptr into r12 to satisfy the BlockInvariant. 
+    // Note: OpenSSL appears to avoid this by assuming num_blocks > 0
+    MOV(r12, r2);  
+
+    // Load a - h values into registers
+    LDR(r4, r0, 0);
+    LDR(r5, r0, const(WORDSIZE));
+    LDR(r6, r0, const(2*WORDSIZE));
+    LDR(r7, r0, const(3*WORDSIZE));
+    LDR(r8, r0, const(4*WORDSIZE));
+    LDR(r9, r0, const(5*WORDSIZE));
+    LDR(r10, r0, const(6*WORDSIZE));
+    LDR(r11, r0, const(7*WORDSIZE));
+
+    // forall j :| 0 <= j < 19 :: ValidMem(sp + j*4)
+    // {
+    //     assert ValidMem(sp + j*4);
+    // }
+
+
+    forall addr :| input_ptr <= addr < input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE && (addr - input_ptr) % WORDSIZE == 0
+        :: ValidMem(addr)
+    {
+        assert ValidMem(addr);
+    }
+    assert ValidMemRange(input_ptr, input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE);
+
+
+
+    forall j :| 0 <= j < num_blocks * SHA_BLOCKSIZE :: AddrMemContents(mem, input_ptr + j*WORDSIZE) == input[j]
+    {
+        assert ValidMem(input_ptr + j*WORDSIZE);
+    }
+
+    // OBSERVE
+    ghost var prev_mem := mem;  // Avoid Spartan mis-capture
+    ghost var len_M := SeqLength(trace_in.M);   
+    assert BlockInvariant(trace_in, trace_in, input, globals, len_M, prev_mem, mem, sp, lr, r1, r12,
+                          r4, r5, r6, r7, r8, r9, r10, r11,
+                          input_ptr, ctx_ptr, num_blocks, 0);
+    sha256_loop(trace_in, ctx_ptr, input_ptr, input, num_blocks, len_M, prev_mem);
+    exists trace_ret ::
+        BlockInvariant(trace_ret, trace_in, input, globals, len_M, prev_mem, mem, sp, lr, r1, r12,
+                        r4, r5, r6, r7, r8, r9, r10, r11,
+                        input_ptr, ctx_ptr, num_blocks, num_blocks);
+    //assert IsCompleteSHA256Trace(trace_ret);
+    trace_out := trace_ret;
+    assert {:split_here}{:refined} true;
+}
+
+// Wrapper around the inner version that conforms to the calling convention
+procedure {:refined} {:timeLimitMultiplier 3} sha256_block_data_order(
+    ghost trace_in:SHA256Trace,
+    ghost input:seq(word)
+    ) returns (
+    ghost trace_out:SHA256Trace
+    )
+requires/ensures
+    ValidAddrMemStateOpaque(mem);
+requires {:refined false}
+    !interrupts_enabled(this);
+requires
+    IsCompleteSHA256Trace(trace_in);
+    SHA256TraceIsCorrect(trace_in);
+
+    // Stack is accessible
+    sp >= 116;
+    ValidMemRange(sp-116, sp);
+
+    // K table is valid
+    SaneShaGlobal(globals);
+    lr == AddressOfGlobal(K_SHA256s());
+    //ValidGlobalAddr(K_SHA256s(), lr);
+
+    let ctx := r0 in
+    let input_ptr := r1 in
+    let num_blocks := r2 in // Number of 64-byte blocks to process
+
+     // Old H values are laid out in memory pointed at by ctx
+        ValidMemRange(ctx, ctx + SHA_CTXSIZE * WORDSIZE)
+     && last(trace_in.H)[0] == AddrMemContents(mem, ctx + 0*WORDSIZE)
+     && last(trace_in.H)[1] == AddrMemContents(mem, ctx + 1*WORDSIZE)
+     && last(trace_in.H)[2] == AddrMemContents(mem, ctx + 2*WORDSIZE)
+     && last(trace_in.H)[3] == AddrMemContents(mem, ctx + 3*WORDSIZE)
+     && last(trace_in.H)[4] == AddrMemContents(mem, ctx + 4*WORDSIZE)
+     && last(trace_in.H)[5] == AddrMemContents(mem, ctx + 5*WORDSIZE)
+     && last(trace_in.H)[6] == AddrMemContents(mem, ctx + 6*WORDSIZE)
+     && last(trace_in.H)[7] == AddrMemContents(mem, ctx + 7*WORDSIZE)
+
+     // Ghost input matches in-memory input
+     && SeqLength(input) == num_blocks * SHA_BLOCKSIZE
+     && isUInt32(input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
+     && ValidMemRange(input_ptr, input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
+     && (forall j :: 0 <= j < num_blocks*SHA_BLOCKSIZE ==> AddrMemContents(mem, input_ptr + j*WORDSIZE) == input[j])
+
+     // Anti-aliasing
+     && (ctx + SHA_CTXSIZE*WORDSIZE < input_ptr || ctx > input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE)    // input_ptr != ctx
+     && (ctx + SHA_CTXSIZE*WORDSIZE < sp - 116 || ctx >= sp)                              // ctx != sp
+     && (input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE < sp - 116 || input_ptr >= sp);   // input_ptr != sp
+
+reads
+    globals;
+modifies
+    mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
+ensures
+    // Calling convention
+    r4 == old(r4);
+    r5 == old(r5);
+    r6 == old(r6);
+    r7 == old(r7);
+    r8 == old(r8);
+    r9 == old(r9);
+    r10== old(r10);
+    r11== old(r11);
+    sp == old(sp);  
+    lr == old(lr);
+
+    // Memory framing:  We only touch the stack and 8 bytes pointed to by ctx_ptr
+    AddrMemPreservingExcept2(old(mem), mem, sp - 116, sp, old(r0),
+                            old(r0) + SHA_CTXSIZE * WORDSIZE);
+
+    // SHA results
+    IsCompleteSHA256Trace(trace_out);
+    SHA256TraceIsCorrect(trace_out);
+    SeqLength(trace_out.M) == SeqLength(trace_in.M) + old(r2);
+    trace_in.M == SeqSlice(trace_out.M, 0, SeqLength(trace_in.M));  // trace_in.M is a prefix of trace_out.M
+    (forall i :: 0 <= i < old(r2) 
+      ==> trace_out.M[SeqLength(trace_in.M) + i] == bswap32_seq(SeqSlice(input, i*SHA_BLOCKSIZE, (i+1)*SHA_BLOCKSIZE)));
+    last(trace_out.H)[0] == AddrMemContents(mem, old(r0) + 0*WORDSIZE);
+    last(trace_out.H)[1] == AddrMemContents(mem, old(r0) + 1*WORDSIZE);
+    last(trace_out.H)[2] == AddrMemContents(mem, old(r0) + 2*WORDSIZE);
+    last(trace_out.H)[3] == AddrMemContents(mem, old(r0) + 3*WORDSIZE);
+    last(trace_out.H)[4] == AddrMemContents(mem, old(r0) + 4*WORDSIZE);
+    last(trace_out.H)[5] == AddrMemContents(mem, old(r0) + 5*WORDSIZE);
+    last(trace_out.H)[6] == AddrMemContents(mem, old(r0) + 6*WORDSIZE);
+    last(trace_out.H)[7] == AddrMemContents(mem, old(r0) + 7*WORDSIZE);
+{
+    // We need 10 slots to save/restore registers, and then the inner routine needs 19 slots for scratch space
+    SUB(sp, sp, 116);
+
+    // Save nonvolatile registers
+    STR(lr,  sp, 112);
+    STR(r4,  sp, 108);
+    STR(r5,  sp, 104);
+    STR(r6,  sp, 100);
+    STR(r7,  sp, 96);
+    STR(r8,  sp, 92);
+    STR(r9,  sp, 88);
+    STR(r10, sp, 84);
+    STR(r11, sp, 80);
+    STR(r12, sp, 76);
+
+    ghost var old_mem := mem;
+    assert forall j :: 0 <= j < r2*16 ==> AddrMemContents(mem, r1 + j*WORDSIZE)
+            == AddrMemContents(old(mem), r1 + j*WORDSIZE) == input[j];
+    trace_out := sha256_block_data_order_inner(trace_in, input);
+
+    assert AddrMemPreservingExcept2(old_mem, mem, sp, sp + SHA_STACKSIZE * WORDSIZE,
+                                    old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE);
+
+    // Restore the nonvolatile registers
+    LDR(lr,  sp, 112);
+    LDR(r4,  sp, 108);
+    LDR(r5,  sp, 104);
+    LDR(r6,  sp, 100);
+    LDR(r7,  sp, 96);
+    LDR(r8,  sp, 92);
+    LDR(r9,  sp, 88);
+    LDR(r10, sp, 84);
+    LDR(r11, sp, 80);
+    LDR(r12, sp, 76);
+
+    // Restore the stack pointer
+    ADD(sp, sp, 116);
+
+    assert {:split_here} {:refined} true;
+}
