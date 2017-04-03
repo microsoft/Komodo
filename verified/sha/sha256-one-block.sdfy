@@ -6,8 +6,8 @@
 
 
 include {:verbatim} "sha256.i.dfy"
-include {:verbatim} "sha256-refined-helpers.i.dfy"
-include {:verbatim} "sha256-refined-invariants.i.dfy"
+include {:verbatim} "sha256-helpers.i.dfy"
+include {:verbatim} "sha256-invariants.i.dfy"
 
 include "../ARMdecls.sdfy"
 include "sha256-body-00-15.sdfy"
