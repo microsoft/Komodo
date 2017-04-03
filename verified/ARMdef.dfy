@@ -758,15 +758,6 @@ function RotateRight(x:word, amount:shift_amount) : word
     { BitsAsWord(BitRotateRight(WordAsBits(x), amount)) }
 
 //-----------------------------------------------------------------------------
-// Functions for bytewise operations
-//-----------------------------------------------------------------------------
-
-function bswap32(x:word) : word { 
-    var bytes := WordToBytes(x);
-    BytesToWord(bytes[3], bytes[2], bytes[1], bytes[0])
-}
-
-//-----------------------------------------------------------------------------
 // Evaluation
 //-----------------------------------------------------------------------------
 
