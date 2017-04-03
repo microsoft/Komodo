@@ -65,7 +65,9 @@ datatype state = State(regs:map<ARMReg, word>,
                        m:memstate,
                        conf:config,
                        ok:bool,
-                       steps:nat)
+                       steps:nat,
+                       nd_private:int,
+                       nd_public:int)
 
 // System mode is not modeled
 datatype mode = User | FIQ | IRQ | Supervisor | Abort | Undefined | Monitor
@@ -109,6 +111,20 @@ predicate interrupts_enabled(s:state)
 {
     !s.conf.cpsr.f || !s.conf.cpsr.i
 }
+
+//-----------------------------------------------------------------------------
+// Nondeterministic inputs, used to model havocing, interrupts, etc.
+//-----------------------------------------------------------------------------
+
+function {:axiom} nondet_int(x:int, y:int): int
+function {:axiom} nondet_nat(x:int, y:int): nat
+function {:axiom} nondet_word(x:int, y:int): word
+
+function {:axiom} NONDET_GENERATOR():int
+function {:axiom} NONDET_FIQ():int
+function {:axiom} NONDET_IRQ():int
+function {:axiom} NONDET_REG(r:ARMReg):int
+function {:axiom} NONDET_STEPS():int
 
 //-----------------------------------------------------------------------------
 // Configuration Register Decoding
@@ -481,7 +497,8 @@ predicate evalExceptionTaken(s:state, e:exception, r:state)
                             spsr := s.conf.spsr[newmode := s.conf.cpsr],
                             ex := e, excount := s.conf.excount + 1, exstep := s.steps),
             sregs := s.sregs[cpsr := newpsr][spsr(newmode) := s.sregs[cpsr]],
-            regs := s.regs[LR(newmode) := nondeterministic_word(s, -2)])
+            regs := s.regs[LR(newmode) := nondet_word(s.nd_private,
+                                                     NONDET_REG(LR(newmode)))])
 }
 
 //-----------------------------------------------------------------------------
@@ -525,11 +542,8 @@ predicate {:opaque} evalUserspaceExecution(s:state, r:state)
     ValidState(r) &&
     // havoc writable pages and user regs, and take some steps
     r == s.(m := s.m.(addresses := havocPages(pages, s)),
-            regs := r.regs,
-            steps := r.steps)
-    && r.steps > s.steps
-    && (forall m:mode {:trigger SP(m)} {:trigger LR(m)} :: m != User
-        ==> r.regs[SP(m)] == s.regs[SP(m)] && r.regs[LR(m)] == s.regs[LR(m)])
+            regs := havocUserRegs(s.nd_private, s.regs),
+            steps := s.steps + nondet_nat(s.nd_private, NONDET_STEPS()))
 }
 
 function havocPages(pages:set<addr>, s:state): memmap
@@ -537,8 +551,19 @@ function havocPages(pages:set<addr>, s:state): memmap
 {
     // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
     (map a:addr | ValidMem(a) && a in TheValidAddresses() ::
-     if BitwiseMaskHigh(a, 12) in pages then nondeterministic_word(s, a)
+     if BitwiseMaskHigh(a, 12) in pages then
+        nondet_word(if addrIsSecure(a) then s.nd_private else s.nd_public, a)
      else MemContents(s.m, a))
+}
+
+function havocUserRegs(nondet:int, regs:map<ARMReg, word>): map<ARMReg, word>
+    requires ValidRegState(regs)
+    ensures ValidRegState(havocUserRegs(nondet, regs))
+{
+    reveal_ValidRegState();
+    map r | r in regs ::
+        if (r.SP? && r.spm != User) || (r.LR? && r.lrm != User) then regs[r]
+        else nondet_word(nondet, NONDET_REG(r))
 }
 
 // To be defined/established by "application" code (i.e. komodo exception handlers)
@@ -580,6 +605,10 @@ predicate {:opaque} PageAligned(addr:int)
 // with a flat 1:1 mapping of virtual to physical addresses.
 function {:axiom} PhysBase(): addr
     ensures PageAligned(PhysBase());
+
+// We need to know which addresses are "public" (non-secure) to model
+// a different source of nondeterminism for non-interference proofs.
+function {:axiom} addrIsSecure(a:addr): bool
 
 // Our model of page tables is also very abstract, because it just needs to encode
 // which pages are mapped and their permissions
@@ -820,7 +849,11 @@ function GlobalWord(s:memstate, g:symbol, offset:word): word
 }
 
 function takestep(s:state): state
-    { s.(steps := s.steps + 1) }
+{
+    s.(steps := s.steps + 1,
+       nd_private := nondet_int(s.nd_private, NONDET_GENERATOR()),
+       nd_public := nondet_int(s.nd_public, NONDET_GENERATOR()))
+}
 
 predicate evalUpdate(s:state, o:operand, v:word, r:state)
     requires ValidState(s)
@@ -971,8 +1004,6 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidModeChange'(s, User) && spsr_of_state(s).m == User
 }
 
-function {:axiom} nondeterministic_word(s:state, x:int): word
-
 predicate handleInterrupt(s:state, ex:exception, r:state)
     requires ValidState(s)
 {
@@ -985,9 +1016,9 @@ predicate maybeHandleInterrupt(s:state, r:state)
     requires ValidState(s)
     ensures !interrupts_enabled(s) && maybeHandleInterrupt(s, r) ==> r == takestep(s)
 {
-    if !s.conf.cpsr.f && nondeterministic_word(s, -1) == 0
+    if !s.conf.cpsr.f && nondet_word(s.nd_private, NONDET_FIQ()) == 0
         then handleInterrupt(s, ExFIQ, r)
-    else if !s.conf.cpsr.i && nondeterministic_word(s, -1) == 1
+    else if !s.conf.cpsr.i && nondet_word(s.nd_private, NONDET_IRQ()) == 1
         then handleInterrupt(s, ExIRQ, r)
     else r == takestep(s)
 }
