@@ -9,6 +9,7 @@ include{:verbatim} "sha256.i.dfy"
 include{:verbatim} "sha256-invariants.i.dfy"
 include{:verbatim} "bit-vector-lemmas.i.dfy"
 include "sha256-block-data-order.sdfy"
+include{:verbatim} "memory-helpers.i.dfy"
 
 include "../ARMdecls.sdfy"
 
@@ -43,7 +44,16 @@ ensures
     AddrMemPreservingExcept(old(mem), mem, old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE);
     IsCompleteSHA256Trace(trace_out);
     SHA256TraceIsCorrect(trace_out);
+    SeqLength(trace_out.M) == 0;
     forall i :: 0 <= i < SHA_CTXSIZE ==> trace_out.H[0][i] == AddrMemContents(mem, old(r0) + i*WORDSIZE);
+    last(trace_out.H)[0] == AddrMemContents(mem, r0 + 0*WORDSIZE);
+    last(trace_out.H)[1] == AddrMemContents(mem, r0 + 1*WORDSIZE);
+    last(trace_out.H)[2] == AddrMemContents(mem, r0 + 2*WORDSIZE);
+    last(trace_out.H)[3] == AddrMemContents(mem, r0 + 3*WORDSIZE);
+    last(trace_out.H)[4] == AddrMemContents(mem, r0 + 4*WORDSIZE);
+    last(trace_out.H)[5] == AddrMemContents(mem, r0 + 5*WORDSIZE);
+    last(trace_out.H)[6] == AddrMemContents(mem, r0 + 6*WORDSIZE);
+    last(trace_out.H)[7] == AddrMemContents(mem, r0 + 7*WORDSIZE);
 {
     load_32_bit_const(r1, 1779033703);
     STR(r1, r0, 0);
@@ -225,3 +235,163 @@ ensures
     // Restore the stack pointer
     ADD(sp, sp, 64);
 }
+
+
+#verbatim
+
+lemma lemma_mul_associates_very_specific(x:int)
+  ensures x * 16 * 32 == x * (16 * 32);
+{
+}
+
+#endverbatim
+
+
+procedure {:refined} sha256_one_shot() 
+requires/ensures
+    ValidAddrMemStateOpaque(mem);
+requires {:refined false}
+    !interrupts_enabled(this);
+    mode_of_state(this) == Monitor;
+requires
+    // Stack is accessible
+    sp >= ((3 + 29 + 16) * WORDSIZE);   // Add 3 extra slots for preserving registers
+    ValidMemRange(sp - ((3 + 29 + 16) * WORDSIZE), sp);
+
+    // K table is valid
+    SaneShaGlobal(globals);
+    lr == AddressOfGlobal(K_SHA256s());
+
+    let ctx := r0 in
+    let input_ptr := r1 in
+    let num_blocks := r2 in // Number of 64-byte blocks to process
+
+     // ctx points to a reasonable memory location
+        ValidMemRange(ctx, ctx + SHA_CTXSIZE * WORDSIZE)
+
+     // In-memory input is reasonable
+     && isUInt32(input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
+     && ValidMemRange(input_ptr, input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
+
+     // We aren't hashing too many bits
+     && isUInt32(num_blocks * (SHA_BLOCKSIZE * WORDSIZE * 8))
+
+     // Anti-aliasing
+     && (ctx + SHA_CTXSIZE*WORDSIZE < input_ptr || ctx > input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE)    // input_ptr != ctx
+     && (ctx + SHA_CTXSIZE*WORDSIZE < sp - ((3 + 29 + 16) * WORDSIZE) || ctx >= sp)                            // ctx != sp
+     && (input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE < sp - ((3 + 29 + 16) * WORDSIZE) || input_ptr >= sp);  // input_ptr != sp
+reads
+    globals;
+modifies
+    mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
+ensures
+    // Framing
+    ValidAddrMemStateOpaque(old(mem)); 
+    ValidAddrMemStateOpaque(mem); 
+
+    // Memory framing:  We only touch the stack and 8 words pointed to by ctx_ptr
+    AddrMemPreservingExcept2(old(mem), mem, 
+                             sp - ((3 + 29 + 16) * WORDSIZE), sp, 
+                             old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE);
+
+    // Calling convention
+    r4 == old(r4);
+    r5 == old(r5);
+    r6 == old(r6);
+    r7 == old(r7);
+    r8 == old(r8);
+    r9 == old(r9);
+    r10== old(r10);
+    r11== old(r11);
+    sp == old(sp);  
+    lr == old(lr);
+    
+    // Bonus
+    r0 == old(r0);
+    r1 == old(r1);
+    r2 == old(r2);
+
+    // SHA results
+    let hash := seq(AddrMemContents(mem, r0 + 0*WORDSIZE),
+                    AddrMemContents(mem, r0 + 1*WORDSIZE),
+                    AddrMemContents(mem, r0 + 2*WORDSIZE),
+                    AddrMemContents(mem, r0 + 3*WORDSIZE),
+                    AddrMemContents(mem, r0 + 4*WORDSIZE),
+                    AddrMemContents(mem, r0 + 5*WORDSIZE),
+                    AddrMemContents(mem, r0 + 6*WORDSIZE),
+                    AddrMemContents(mem, r0 + 7*WORDSIZE)) in
+    IsSHA256(WordSeqToBytes(bswap32_seq(AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * old(r2)))), hash);
+{
+  ghost var ctx := r0; 
+  ghost var input_ptr := r1;
+  ghost var num_blocks := r2;
+
+  SUB(sp, sp, 12);      // Make room to save r0, r1, and r2
+  
+  STR(r0, sp, const(0*WORDSIZE)); 
+  STR(r1, sp, const(1*WORDSIZE)); 
+  STR(r2, sp, const(2*WORDSIZE)); 
+
+  MOV(r3, r1);  // Save r1, which gets clobbered by init
+  ghost var trace;
+  trace := sha256_init();
+  assert SeqLength(trace.M) == 0;
+  MOV(r1, r3);  // Restore r1  (could restore from memory, but this seems faster to execute and verify)
+
+  ghost var input_mem := mem;
+  ghost var input := AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE*old(r2));
+  trace := sha256_block_data_order(trace, input);
+
+  // Annoying forall that shouldn't be necessary
+  forall i :| 0 <= i < SeqLength(trace.M) :: trace.M[i] == bswap32_seq(SeqSlice(input, i*16, (i+1)*16))
+  {
+    assert trace.M[i] == trace.M[0 + i];
+    assert bswap32_seq(SeqSlice(input, i*16, (i+1)*16)) == bswap32_seq(SeqSlice(input, i*SHA_BLOCKSIZE, (i+1)*SHA_BLOCKSIZE));
+  }
+  lemma_InputHelper(trace.M, input); // Proves: ConcatenateSeqs(trace.M) == bswap_seq(input);
+
+  // Prove that input still accurate in memory
+  assert input == AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * old(r2)) by { 
+    lemma_AddrMemContentsSeq_framing(input_mem, mem, input_ptr, SHA_BLOCKSIZE*num_blocks, sp - 116, sp,
+                                     old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE); 
+  }
+
+  // Reload the ctx pointer and num_blocks
+  LDR(r0, sp, const(0*WORDSIZE));
+  LDR(r2, sp, const(2*WORDSIZE));
+
+  // Convert num_blocks into bits
+  MOV(r3, const(SHA_BLOCKSIZE * WORDSIZE * 8));
+  assert r3 == 16 * 32;
+  assert r2 == SeqLength(trace.M);
+  MUL(r2, r2, r3);
+
+  assert r2 == SeqLength(trace.M) * (16 * 32);
+  assert r2 == SeqLength(trace.M) * 16 * 32 by { lemma_mul_associates_very_specific(SeqLength(trace.M)); }
+  sha256_finalize(trace);
+   
+  // Prove that input still accurate in memory
+  assert input == AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * old(r2)) by { 
+    lemma_AddrMemContentsSeq_framing(input_mem, mem, input_ptr, SHA_BLOCKSIZE*num_blocks, sp - ((29 + 16) * WORDSIZE), sp,
+                                     old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE); 
+  }
+  
+  // Restore registers, since we have them handy
+  LDR(r0, sp, const(0*WORDSIZE));
+  LDR(r1, sp, const(1*WORDSIZE));
+  LDR(r2, sp, const(2*WORDSIZE));
+  
+  // Restore the stack pointer
+  ADD(sp, sp, 12);
+
+  ghost var hash := seq(AddrMemContents(mem, r0 + 0*WORDSIZE),
+                    AddrMemContents(mem, r0 + 1*WORDSIZE),
+                    AddrMemContents(mem, r0 + 2*WORDSIZE),
+                    AddrMemContents(mem, r0 + 3*WORDSIZE),
+                    AddrMemContents(mem, r0 + 4*WORDSIZE),
+                    AddrMemContents(mem, r0 + 5*WORDSIZE),
+                    AddrMemContents(mem, r0 + 6*WORDSIZE),
+                    AddrMemContents(mem, r0 + 7*WORDSIZE));
+  assert IsSHA256(WordSeqToBytes(bswap32_seq(input)), hash);
+}
+

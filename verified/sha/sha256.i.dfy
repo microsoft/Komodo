@@ -810,3 +810,16 @@ ghost method ComputeWs(input:seq<word>) returns (W:seq<word>)
     }
 
 }
+
+lemma lemma_InputHelper(M:seq<seq<word>>, input:seq<word>)
+    requires forall i :: 0 <= i < |M| ==> |M[i]| == 16;
+    requires |input| == |M| * 16;
+    requires forall i :: 0 <= i < |M| ==> M[i] == bswap32_seq(input[i*16..(i+1)*16]);
+    ensures  ConcatenateSeqs(M) == bswap32_seq(input);
+{
+    reveal_bswap32_seq();
+    if input == [] {
+    } else {
+        lemma_InputHelper(M[1..], input[16..]);
+    }
+}
