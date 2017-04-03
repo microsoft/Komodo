@@ -2,25 +2,6 @@ include "ARMdef.dfy"
 include "pagedb.s.dfy"
 include "addrseq.dfy"
 
-predicate nonStoppedL1(d:PageDb, l1:PageNr)
-{
-    validL1PTPage(d, l1) && !hasStoppedAddrspace(d, l1)
-}
-
-predicate nonStoppedDispatcher(d:PageDb, p:PageNr)
-{
-    validDispatcherPage(d,p) && (validPageDbImpliesWellFormed(d);
-        !hasStoppedAddrspace(d,p))
-}
-
-function l1pOfDispatcher(d:PageDb, p:PageNr) : PageNr
-    requires nonStoppedDispatcher(d, p)
-    ensures  nonStoppedL1(d,l1pOfDispatcher(d,p))
-{
-    reveal_validPageDb();
-    d[d[p].addrspace].entry.l1ptnr
-}
-
 // common success/failure checks for enter and resume
 function smc_enter_err(d: PageDb, p: word, isresume: bool): word
     requires validPageDb(d)

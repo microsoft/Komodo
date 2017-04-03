@@ -321,6 +321,25 @@ predicate validAddrspacePage(d: PageDb, a: int)
     wellFormedPageDb(d) && isAddrspace(d, a)
 }
 
+predicate nonStoppedL1(d:PageDb, l1:PageNr)
+{
+    validL1PTPage(d, l1) && !hasStoppedAddrspace(d, l1)
+}
+
+predicate nonStoppedDispatcher(d:PageDb, p:PageNr)
+{
+    validDispatcherPage(d,p) && (validPageDbImpliesWellFormed(d);
+        !hasStoppedAddrspace(d,p))
+}
+
+function l1pOfDispatcher(d:PageDb, p:PageNr) : PageNr
+    requires nonStoppedDispatcher(d, p)
+    ensures  nonStoppedL1(d,l1pOfDispatcher(d,p))
+{
+    reveal_validPageDb();
+    d[d[p].addrspace].entry.l1ptnr
+}
+
 //=============================================================================
 // Mapping
 //=============================================================================
@@ -356,4 +375,48 @@ function {:opaque} wordToMapping(arg:word) : Mapping
 {
     Mapping(l1indexFromMapping(arg),l2indexFromMapping(arg),
         permFromMapping(arg))
+}
+
+//=============================================================================
+// Representation in physical memory
+//=============================================================================
+
+predicate memContainsPage(page: memmap, p:PageNr)
+{
+    forall m:addr :: addrInPage(m,p) ==> m in page
+}
+
+function extractPage(s:memstate, p:PageNr): memmap
+    requires SaneMem(s)
+    ensures memContainsPage(extractPage(s,p), p)
+{
+    reveal_ValidMemState();
+    // XXX: expanded addrInPage() to help Dafny see a bounded set
+    var res := (map m:addr {:trigger addrInPage(m, p)} {:trigger MemContents(s, m)}
+        | page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE
+        :: MemContents(s, m));
+    res
+}
+
+predicate dataPagesCorrespond(s:memstate, pagedb:PageDb)
+    requires SaneMem(s)
+    requires wellFormedPageDb(pagedb)
+{
+    // XXX: unpack the page contents here to help dafny see
+    // that we have no other dependencies on the state
+    var secpages := (map p | 0 <= p < KOM_SECURE_NPAGES :: extractPage(s,p));
+    forall p {:trigger validPageNr(p)} | validPageNr(p)
+        && pagedb[p].PageDbEntryTyped? && pagedb[p].entry.DataPage?
+        :: pageDbDataCorresponds(p, pagedb[p].entry, secpages[p])
+}
+
+predicate {:opaque} pageDbDataCorresponds(p: PageNr, e: PageDbEntryTyped, page:memmap)
+    requires memContainsPage(page, p)
+    requires e.DataPage?
+    requires wellFormedPageDbEntryTyped(e)
+{
+    var base := page_monvaddr(p);
+    forall i | 0 <= i < PAGESIZE / WORDSIZE ::
+        (assert base + i*WORDSIZE in page;
+        e.contents[i] == page[base + i*WORDSIZE])
 }
