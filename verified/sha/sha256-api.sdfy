@@ -128,6 +128,18 @@ ensures
                              sp - ((29 + 16) * WORDSIZE), sp, 
                              old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE);
 
+    // Calling convention
+    r4 == old(r4);
+    r5 == old(r5);
+    r6 == old(r6);
+    r7 == old(r7);
+    r8 == old(r8);
+    r9 == old(r9);
+    r10== old(r10);
+    r11== old(r11);
+    sp == old(sp);  
+    lr == old(lr);
+
     // SHA results
     let hash := seq(AddrMemContents(mem, old(r0) + 0*WORDSIZE),
                     AddrMemContents(mem, old(r0) + 1*WORDSIZE),
