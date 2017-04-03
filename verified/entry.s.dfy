@@ -1,5 +1,6 @@
 include "ARMdef.dfy"
 include "pagedb.s.dfy"
+include "ptables.s.dfy"
 include "addrseq.dfy"
 
 // common success/failure checks for enter and resume
@@ -84,10 +85,12 @@ predicate validEnclaveExecutionStep'(s1:state, d1:PageDb,
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
     requires nonStoppedDispatcher(d1, dispPg)
 {
-    reveal_ValidRegState();
-    reveal_validExceptionTransition();
-    reveal_updateUserPagesFromState();
-    entryTransition(s1, s2)
+    var l1p := l1pOfDispatcher(d1, dispPg);
+    assert nonStoppedL1(d1, l1p) by { reveal_validPageDb(); }
+
+    pageTableCorresponds(s1, d1, l1p)
+        && dataPagesCorrespond(s1.m, d1)
+        && entryTransition(s1, s2)
         && userspaceExecutionAndException(s2, s3, s4)
         && d4 == updateUserPagesFromState(s3, d1, dispPg)
         && validExceptionTransition(s4, d4, rs, rd, dispPg)
@@ -96,7 +99,7 @@ predicate validEnclaveExecutionStep'(s1:state, d1:PageDb,
             var lr := OperandContents(s4, OLR);
             var retRegs := svcHandled(s4, d4, dispPg);
             d4 == rd && preEntryReturn(rs, lr, retRegs)
-          else
+          else reveal_ValidRegState();
             (rs.regs[R0], rs.regs[R1], rd) == exceptionHandled(s4, d4, dispPg))
 }
 
@@ -334,7 +337,6 @@ predicate {:opaque} validExceptionTransition(s:state, d:PageDb, s':state,
         validPageNr(dispPg) && validDispatcherPage(d, dispPg)
         && equivalentExceptPage(d, d', dispPg)
         && nonStoppedDispatcher(d', dispPg)))
-    // TODO: we didn't scribble on user memory
 }
 
 predicate WSMemInvariantExceptAddrspaceAtPage(hw:state, hw':state, 

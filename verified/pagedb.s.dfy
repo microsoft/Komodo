@@ -387,7 +387,7 @@ predicate memContainsPage(page: memmap, p:PageNr)
 }
 
 function extractPage(s:memstate, p:PageNr): memmap
-    requires SaneMem(s)
+    requires SaneConstants() && ValidMemState(s)
     ensures memContainsPage(extractPage(s,p), p)
 {
     reveal_ValidMemState();
@@ -399,7 +399,7 @@ function extractPage(s:memstate, p:PageNr): memmap
 }
 
 predicate dataPagesCorrespond(s:memstate, pagedb:PageDb)
-    requires SaneMem(s)
+    requires SaneConstants() && ValidMemState(s)
     requires wellFormedPageDb(pagedb)
 {
     // XXX: unpack the page contents here to help dafny see

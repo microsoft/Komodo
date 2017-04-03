@@ -81,9 +81,10 @@ function {:opaque} mkAbsPTable(d:PageDb, l1:PageNr): AbsPTable
     SeqConcat4(IMapSeqToSeq(l1pt, fn))
 }
 
-predicate pageTablesCorrespond(s:memstate, d:PageDb)
-    requires SaneMem(s) && validPageDb(d)
+predicate {:opaque} pageTableCorresponds(s:state, d:PageDb, l1p:PageNr)
+    requires ValidState(s) && SaneConstants() && validPageDb(d) && nonStoppedL1(d, l1p)
 {
-    forall l1p:PageNr | nonStoppedL1(d, l1p) :: ValidAbsL1PTable(s, page_monvaddr(l1p))
-       && ExtractAbsL1PTable(s, page_monvaddr(l1p)) == mkAbsPTable(d, l1p)
+    s.conf.ttbr0.ptbase == page_paddr(l1p)
+        && ValidAbsL1PTable(s.m, page_monvaddr(l1p))
+        && ExtractAbsL1PTable(s.m, page_monvaddr(l1p)) == mkAbsPTable(d, l1p)
 }
