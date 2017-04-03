@@ -81,7 +81,7 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
             && m != mode_of_exception(s.conf, ExFIQ)
             ==> s.regs[LR(m)] == r.regs[LR(m)]
 {
-    var nondet := nondeterministic_word(s, -1);
+    var nondet := nondet_word(s.nd_private, NONDET_INT());
     if (!s.conf.cpsr.f && nondet == 0) || (!s.conf.cpsr.i && nondet == 1) {
         ghost var ex := if nondet == 0 then ExFIQ else ExIRQ;
         assert handleInterrupt(s, ex, r);

@@ -121,8 +121,7 @@ function {:axiom} nondet_nat(x:int, y:int): nat
 function {:axiom} nondet_word(x:int, y:int): word
 
 function {:axiom} NONDET_GENERATOR():int
-function {:axiom} NONDET_FIQ():int
-function {:axiom} NONDET_IRQ():int
+function {:axiom} NONDET_INT():int
 function {:axiom} NONDET_REG(r:ARMReg):int
 function {:axiom} NONDET_STEPS():int
 
@@ -1016,9 +1015,9 @@ predicate maybeHandleInterrupt(s:state, r:state)
     requires ValidState(s)
     ensures !interrupts_enabled(s) && maybeHandleInterrupt(s, r) ==> r == takestep(s)
 {
-    if !s.conf.cpsr.f && nondet_word(s.nd_private, NONDET_FIQ()) == 0
+    if !s.conf.cpsr.f && nondet_word(s.nd_private, NONDET_INT()) == 0
         then handleInterrupt(s, ExFIQ, r)
-    else if !s.conf.cpsr.i && nondet_word(s.nd_private, NONDET_IRQ()) == 1
+    else if !s.conf.cpsr.i && nondet_word(s.nd_private, NONDET_INT()) == 1
         then handleInterrupt(s, ExIRQ, r)
     else r == takestep(s)
 }
