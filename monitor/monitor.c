@@ -7,7 +7,7 @@
 #define ARM_SCR_NS      0x01 // non-secure bit
 
 static struct kom_pagedb_entry g_pagedb[KOM_SECURE_NPAGES];
-uintptr_t g_secure_physbase;
+uintptr_t g_monitor_physbase, g_secure_physbase;
 static struct kom_addrspace *g_cur_addrspace;
 struct kom_dispatcher *g_cur_dispatcher;
 
@@ -343,7 +343,7 @@ static void map_page(struct kom_addrspace *addrspace, uint32_t mapping,
 static bool phys_page_is_secure(uintptr_t phys_pageno)
 {
     uintptr_t paddr = phys_pageno * KOM_PAGE_SIZE;
-    return paddr >= g_secure_physbase
+    return paddr >= g_monitor_physbase
         && paddr < g_secure_physbase + page_paddr(KOM_SECURE_NPAGES);
 }
 

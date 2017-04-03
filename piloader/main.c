@@ -33,7 +33,7 @@
 extern char monitor_image_start, monitor_image_data, monitor_image_end;
 // defined in monitor image
 extern char monitor_stack_base, _monitor_vectors, _secure_vectors,
-    g_secure_physbase;
+    g_monitor_physbase, g_secure_physbase;
 
 void park_secondary_cores(void);
 void leave_secure_world(void);
@@ -286,6 +286,9 @@ void __attribute__((noreturn)) main(void)
     /* init the monitor by setting up the secure physbase */
     console_printf("passing secure_physbase %lx to monitor\n", secure_physbase);
 
+    uintptr_t *monitor_monitor_physbase
+        = (uintptr_t *)(&g_monitor_physbase - &monitor_image_start + KOM_MON_VBASE);
+    *monitor_monitor_physbase = monitor_physbase;
     uintptr_t *monitor_secure_physbase
         = (uintptr_t *)(&g_secure_physbase - &monitor_image_start + KOM_MON_VBASE);
     *monitor_secure_physbase = secure_physbase;
