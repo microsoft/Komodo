@@ -1,0 +1,398 @@
+///////////////////////////////////////////////////
+//
+//  Based on sha256-armv4.pl form OpenSSL 1.0.2j
+//
+///////////////////////////////////////////////////
+
+
+include {:verbatim} "sha256.i.dfy"
+include {:verbatim} "sha256-helpers.i.dfy"
+include {:verbatim} "sha256-invariants.i.dfy"
+
+include "../ARMdecls.sdfy"
+include "sha256-body-00-15.sdfy"
+
+procedure {:refined} {:timeLimitMultiplier 3} Body_16_XX( 
+    inline i:SHA_step,
+    inline perm:perm_index,
+    inline input_slot:word,
+    inline input_slot_9:word,
+    ghost trace_in:SHA256Trace,
+    ghost input:seq(word),
+    inout operand t0:word,
+    inout operand t1:word,
+    inout operand t2:word,
+    inout operand t3:word,
+    inout operand t4:word,
+    inout operand a:word,
+          operand b:word,
+          operand c:word,
+    inout operand d:word,
+          operand e:word,
+          operand f:word,
+          operand g:word,
+    inout operand h:word)
+
+requires/ensures
+    // Stack is accessible
+    ValidMemRange(sp, sp + 19 * WORDSIZE);
+reads 
+    sp; globals;
+modifies 
+    mem; lr;
+requires {:refined false}
+    !interrupts_enabled(this);
+    @t0 == OReg(R0);
+    @t1 == OReg(R2);
+    @t2 == OReg(GetReg(if Even(i) then 12 else 3));
+    @t3 == OReg(GetReg(if Even(i) then  3 else 12));
+    @t4 == OReg(R1);
+    @a  == OReg(GetReg(4+ApplyPerm(0, perm)));
+    @b  == OReg(GetReg(4+ApplyPerm(1, perm)));
+    @c  == OReg(GetReg(4+ApplyPerm(2, perm)));
+    @d  == OReg(GetReg(4+ApplyPerm(3, perm)));
+    @e  == OReg(GetReg(4+ApplyPerm(4, perm)));
+    @f  == OReg(GetReg(4+ApplyPerm(5, perm)));
+    @g  == OReg(GetReg(4+ApplyPerm(6, perm)));
+    @h  == OReg(GetReg(4+ApplyPerm(7, perm)));
+
+requires
+    i >= SHA_BLOCKSIZE;
+    input_slot == CheapMod16(i)*WORDSIZE;
+    input_slot_9 == CheapMod16(i+9)*WORDSIZE;
+    ValidMem(sp + input_slot);
+    ValidMem(sp + input_slot_9); 
+    ValidAddrMemStateOpaque(mem);
+
+    // K table adjusted properly
+    SaneShaGlobal(globals);
+    lr == AddressOfGlobal(K_SHA256s()) + i*WORDSIZE;
+    //ValidGlobalAddr(K_SHA256s(), lr);
+
+    SeqLength(input) == SHA_BLOCKSIZE;
+
+    ValidMem(sp + CheapMod16(i +  2)*WORDSIZE);
+    ValidMem(sp + CheapMod16(i + 15)*WORDSIZE);
+
+    t3 == BitwiseXor(b, c);
+
+    // SHA semantics
+    SeqLength(trace_in.H) > 0;
+    IsSHA256TraceReadyForStep(trace_in, i);
+    last(last(trace_in.atoh)) == atoh_c(BitwiseAdd32(a, t2), b, c, d, e, f, g, h);
+
+    // The first 16 values in W are the byte-swapped version of the input words
+    forall j :: 0 <= j < 16 ==> last(trace_in.W)[j] == bswap32(input[j]);
+
+    // All previous Ws are in memory where we expect them
+    16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(trace_in.W)[j] == AddrMemContents(mem, sp + CheapMod16(j)*WORDSIZE));
+
+    // t1 and t4 should already hold previous W values
+    t1 == AddrMemContents(mem, sp + CheapMod16(i+1)*WORDSIZE);
+    t4 == AddrMemContents(mem, sp + CheapMod16(i+14)*WORDSIZE);
+ensures 
+    ValidAddrMemStateOpaque(mem);
+    t2 == BitwiseXor(a, b);
+    lr == old(lr) + 4;
+    t4 == AddrMemContents(mem, sp+CheapMod16(i + 15)*WORDSIZE);
+
+    AddrMemContents(mem, sp+17*WORDSIZE) == AddrMemContents(old(mem), sp+17*WORDSIZE);         // We preserved the input ptr on the stack
+
+    // Memory framing: We only touch the stack
+    AddrMemPreservingExcept(old(mem), mem, sp, sp + SHA_STACKSIZE * WORDSIZE);
+    AddrMemContents(mem, sp + 16*WORDSIZE) == AddrMemContents(old(mem), sp + 16*WORDSIZE);
+    AddrMemContents(mem, sp + 18*WORDSIZE) == AddrMemContents(old(mem), sp + 18*WORDSIZE);
+
+    exists trace_out:SHA256Trace ::
+        IsSHA256TraceReadyForStep(trace_out, i+1)
+     && trace_out.M == trace_in.M
+     && trace_out.H == trace_in.H
+     && trace_out.W == trace_in.W
+     // t1 holds the next value of W
+     && t1 == (if i + 1 <= 64 then AddrMemContents(mem, sp + CheapMod16(i + 2)*WORDSIZE) else t1) 
+
+     // Remaining Ws are laid out in memory
+     && (i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> ValidMem(sp + CheapMod16(j)*WORDSIZE) && last(trace_out.W)[j] == AddrMemContents(mem, sp + CheapMod16(j)*WORDSIZE)))
+
+     // The atohs almost match the outgoing variables
+     //&& (let old_a := (if i == 0 || i >= 16 then old(a) else old(BitwiseAdd32(a, t2))) in
+     && last(last(trace_out.atoh)) == atoh_c(BitwiseAdd32(h, t3), a, b, c, d, e, f, g);
+{
+    MOVShift(t0, t1, RORShift(sigma0(0)));
+    ADDWrap(a, a, t2);  // h+=Maj(a,b,c) from the past
+    MOVShift(t2, t4, RORShift(sigma1(0)));
+    EORShift(t0,t0,t1,RORShift(sigma0(1)));
+    EORShift(t2,t2,t4,RORShift(sigma1(1)));
+    EORShift(t0,t0,t1,LSRShift(sigma0(2)));     // sigma0(X[i+1])
+    assert t0 == SSIG0(t1) by { reveal SSIG0; }
+
+    LDR(t1, sp, input_slot);
+    EORShift(t2,t2,t4, LSRShift(sigma1(2)));     // sigma1(X[i+14])
+    assert t2 == SSIG1(t4) by { reveal SSIG1; }
+    LDR(t4, sp, input_slot_9);
+
+    ADDWrap(t2,t2,t0);
+    EORShift(t0,e,e,RORShift(Sigma1(1)-Sigma1(0)));    // from BODY_00_15
+    ADDWrap(t1,t1,t2);
+    EORShift(t0,t0,e,RORShift(Sigma1(2)-Sigma1(0)));  // Sigma1(e)  BP: Almost
+
+    // Prove that we computed Sigma1(e) correctly:
+    forall :: RotateRight(t0, Sigma1(0)) == BSIG1(e)
+    {
+        reveal BSIG1;
+        lemma_BSIGOptimization(e, 6, 11, 25);
+    }
+
+    ADDWrap(t1,t1,t4);      // X[i]
+
+    // From the spec (and PartialSHA256TraceHasCorrectWs):
+    ghost var W := last(trace_in.W);
+    assert TStep(i);
+    assert W[i] == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(SSIG1(W[i-2]), W[i-7]), SSIG0(W[i-15])), W[i-16]);
+    assert t1 == W[i] by {
+        lemma_BitwiseAdd32Associates4(SSIG1(W[i-2]), W[i-7], SSIG0(W[i-15]), W[i-16], t1);
+    }
+
+    ghost var mid_a := a;
+    ghost var mid_t2 := t2;
+    ghost var dummy_input_ptr:word;  // Body_00_15 only cares about the value for i < 16
+    ghost var trace_out:SHA256Trace;
+    trace_out := Body_00_15(i, perm, input_slot, CheapMod16(i + 2)*WORDSIZE, CheapMod16(i + 15)*WORDSIZE, 
+                            dummy_input_ptr, trace_in, input,
+                            t0, t1, t2, t3, t4, 
+                            a, b, c, d, e, f, g, h);
+    assert a == mid_a;
+    assert {:split_here}{:refined} true;
+}
+
+#verbatim
+
+predicate {:opaque} Body_16_XXLoopStateInvariantBreakdown(
+    orig_mem:memmap,
+    mem:memmap,
+    orig_trace:SHA256Trace,
+    current_trace:SHA256Trace,
+    i:int,
+    sp:word,
+    globals:globalsmap,
+    lr:word,
+    t1:word,
+    t2:word,
+    t3:word,
+    t4:word,
+    input:seq<word>,
+    a:word, b:word, c:word, d:word, e:word, f:word, g:word, h:word
+    )
+{
+    16 <= i <= 64
+ && ValidMemRange(sp, sp + SHA_STACKSIZE * WORDSIZE)
+ && ValidMem(sp + CheapMod16(i)*WORDSIZE)
+ && ValidMem(sp + CheapMod16(i+9)*WORDSIZE)
+ && ValidAddrMemStateOpaque(mem)
+ && ValidAddrMemStateOpaque(orig_mem)
+
+    // K table adjusted properly
+ && SaneShaGlobal(globals)
+ && lr == AddressOfGlobal(K_SHA256s()) + i*WORDSIZE
+
+ && SeqLength(input) == SHA_BLOCKSIZE
+
+ && ValidMem(sp + CheapMod16(i +  2)*WORDSIZE)
+ && ValidMem(sp + CheapMod16(i + 15)*WORDSIZE)
+
+ && t3 == BitwiseXor(b, c)
+
+    // Memory framing: We only touch the stack
+ && AddrMemPreservingExcept(orig_mem, mem, sp, sp + 16*WORDSIZE)
+
+    // SHA semantics
+ && SeqLength(current_trace.H) > 0
+ && IsSHA256TraceReadyForStep(current_trace, i)
+ && current_trace.M == orig_trace.M
+ && current_trace.H == orig_trace.H
+ && current_trace.W == orig_trace.W
+ && last(last(current_trace.atoh)) == atoh_c(BitwiseAdd32(a, t2), b, c, d, e, f, g, h)
+
+    // The first 16 values in W are the byte-swapped version of the input words
+ && (forall j :: 0 <= j < 16 ==> last(current_trace.W)[j] == bswap32(input[j]))
+
+    // All previous Ws are in memory where we expect them
+ && (16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(current_trace.W)[j] == AddrMemContents(mem, sp + CheapMod16(j)*WORDSIZE)))
+
+    // t1 and t4 should already hold previous W values
+ && (i < 64 ==> t1 == AddrMemContents(mem, sp + CheapMod16(i+1)*WORDSIZE))
+ && t4 == AddrMemContents(mem, sp + CheapMod16(i+14)*WORDSIZE)
+}
+
+#endverbatim
+
+procedure {:refined} Body_16_XXWrap(
+    inline i:SHA_step,
+    inline perm:perm_index,
+    inline input_slot:word,
+    inline input_slot_9:word,
+    ghost orig_mem:memmap,
+    ghost orig_trace:SHA256Trace,
+    ghost trace_in:SHA256Trace,
+    ghost input:seq(word),
+    inout operand t0:word,
+    inout operand t1:word,
+    inout operand t2:word,
+    inout operand t3:word,
+    inout operand t4:word,
+    //inout operand inp:word,
+    inout operand a:word,
+          operand b:word,
+          operand c:word,
+    inout operand d:word,
+          operand e:word,
+          operand f:word,
+          operand g:word,
+    inout operand h:word)
+    returns (ghost trace_out:SHA256Trace)
+    reads
+        sp; globals;
+    modifies
+        mem; lr;
+    requires {:refined false}
+        !interrupts_enabled(this);
+        @t0 == OReg(R0);
+        @t1 == OReg(R2);
+        @t2 == OReg(GetReg(if Even(i) then 12 else 3));
+        @t3 == OReg(GetReg(if Even(i) then  3 else 12));
+        @t4 == OReg(R1);
+        //@inp == OReg(R1);
+        @a  == OReg(GetReg(4+ApplyPerm(0, perm)));
+        @b  == OReg(GetReg(4+ApplyPerm(1, perm)));
+        @c  == OReg(GetReg(4+ApplyPerm(2, perm)));
+        @d  == OReg(GetReg(4+ApplyPerm(3, perm)));
+        @e  == OReg(GetReg(4+ApplyPerm(4, perm)));
+        @f  == OReg(GetReg(4+ApplyPerm(5, perm)));
+        @g  == OReg(GetReg(4+ApplyPerm(6, perm)));
+        @h  == OReg(GetReg(4+ApplyPerm(7, perm)));
+    requires
+        input_slot == CheapMod16(i)*WORDSIZE;
+        input_slot_9 == CheapMod16(i+9)*WORDSIZE;
+    requires Body_16_XXLoopStateInvariantBreakdown(orig_mem, mem, orig_trace, trace_in, i, sp, globals, lr,
+                                                   t1, t2, t3, t4, input,
+                                                   a, b, c, d, e, f, g, h);
+    ensures  Body_16_XXLoopStateInvariantBreakdown(orig_mem, mem, orig_trace, trace_out, i + 1, sp, globals, lr,
+                                                   t1, t3, t2, t4, input,
+                                                   h, a, b, c, d, e, f, g);
+{
+    reveal Body_16_XXLoopStateInvariantBreakdown;
+
+    Body_16_XX(i, perm, input_slot, input_slot_9, trace_in, input,
+        t0, t1, t2, t3, t4, a, b, c, d, e, f, g, h);
+
+    exists trace_out_tmp:SHA256Trace ::
+            IsSHA256TraceReadyForStep(trace_out_tmp, i+1)
+         && trace_out_tmp.M == trace_in.M
+         && trace_out_tmp.H == trace_in.H
+         && trace_out_tmp.W == trace_in.W
+         && t1 == (if i + 1 <= 64 then AddrMemContents(mem, sp + CheapMod16(i + 2)*WORDSIZE) else t1)
+         && (i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out_tmp.W)[j] == AddrMemContents(mem, sp + CheapMod16(j)*WORDSIZE)))
+         && last(last(trace_out_tmp.atoh)) == atoh_c(BitwiseAdd32(h, t3), a, b, c, d, e, f, g);
+
+    trace_out := trace_out_tmp;
+    assert Body_16_XXLoopStateInvariantBreakdown(old(mem), mem, trace_in, trace_out, i + 1, sp, globals, lr,
+                                                       t1, t3, t2, t4, input,
+                                                       h, a, b, c, d, e, f, g);
+}
+
+procedure {:refined}{:recursive}{:timeLimitMultiplier 2} Body_16_XXUnroller(
+    inline n:nat,
+    inline i:int,
+    inline perm:perm_index,
+    inline input_slot:word,
+    inline input_slot_9:word,
+    ghost orig_mem:memmap,
+    ghost orig_trace:SHA256Trace,
+    ghost trace_in:SHA256Trace,
+    ghost input:seq(word),
+    inout operand t0:word,
+    inout operand t1:word,
+    inout operand t2:word,
+    inout operand t3:word,
+    inout operand t4:word,
+    inout operand a:word,
+    inout operand b:word,
+    inout operand c:word,
+    inout operand d:word,
+    inout operand e:word,
+    inout operand f:word,
+    inout operand g:word,
+    inout operand h:word)
+    returns (ghost trace_out:SHA256Trace)
+    reads
+        sp; globals;
+    modifies
+        mem; lr;
+    requires {:refined false}
+        !interrupts_enabled(this);
+        @t0 == OReg(R0);
+        @t1 == OReg(R2);
+        @t2 == OReg(GetReg(if Even(i) then 12 else 3));
+        @t3 == OReg(GetReg(if Even(i) then  3 else 12));
+        @t4 == OReg(R1);
+        @a  == OReg(GetReg(4+ApplyPerm(0, perm)));
+        @b  == OReg(GetReg(4+ApplyPerm(1, perm)));
+        @c  == OReg(GetReg(4+ApplyPerm(2, perm)));
+        @d  == OReg(GetReg(4+ApplyPerm(3, perm)));
+        @e  == OReg(GetReg(4+ApplyPerm(4, perm)));
+        @f  == OReg(GetReg(4+ApplyPerm(5, perm)));
+        @g  == OReg(GetReg(4+ApplyPerm(6, perm)));
+        @h  == OReg(GetReg(4+ApplyPerm(7, perm)));
+        0 <= i <= 64;
+        n == 64 - i;
+    requires
+        0 <= i <= 64;
+        n == 64 - i;
+        perm == OpaqueMod(i, 8);
+        input_slot == CheapMod16(i)*WORDSIZE;
+        input_slot_9 == CheapMod16(i+9)*WORDSIZE;
+        Body_16_XXLoopStateInvariantBreakdown(orig_mem, mem, orig_trace, trace_in, i, sp, globals, lr,
+            t1, t2, t3, t4, input, a, b, c, d, e, f, g, h);
+    ensures
+        let arr := seq8(a, b, c, d, e, f, g, h) in
+            Body_16_XXLoopStateInvariantBreakdown(orig_mem, mem, orig_trace, trace_out, 64, sp, globals, lr,
+                t1, if Even(i) then t2 else t3, if Even(i) then t3 else t2, t4, input,
+                SelectPerm(arr, 0, perm), SelectPerm(arr, 1, perm), SelectPerm(arr, 2, perm), SelectPerm(arr, 3, perm),
+                SelectPerm(arr, 4, perm), SelectPerm(arr, 5, perm), SelectPerm(arr, 6, perm), SelectPerm(arr, 7, perm));
+{
+    inline if (n > 0 && 0 <= i < 64) {
+        assert OpaqueMod(i + 1, 8) == (if perm == 7 then 0 else perm + 1) by { reveal OpaqueMod; }
+        trace_out := Body_16_XXWrap(i, perm, input_slot, input_slot_9, orig_mem, orig_trace, trace_in, input,
+            t0, t1, t2, t3, t4, a, b, c, d, e, f, g, h);
+        trace_out := Body_16_XXUnroller(n - 1, i + 1, if perm == 7 then 0 else perm + 1, CheapMod16(i + 1) * 4, CheapMod16(i + 10) * 4,
+            orig_mem, orig_trace, trace_out, input,
+            t0, t1, t3, t2, t4, h, a, b, c, d, e, f, g);
+    } else {
+        assert OpaqueMod(i, 8) == 0 by { reveal OpaqueMod; }
+        trace_out := trace_in;
+    }
+}
+
+procedure {:refined} Body_16_XXLoopUnrolled(
+    ghost trace_in:SHA256Trace,
+    ghost input:seq(word)
+    )
+    requires Body_16_XXLoopStateInvariantBreakdown(mem, mem, trace_in, trace_in, 16, sp, globals, lr,
+                                                   r2, r12, r3, r1, input,
+                                                   r4, r5, r6, r7, r8, r9, r10, r11);
+    requires {:refined false} !interrupts_enabled(this);
+    reads  sp; globals;
+    modifies mem; lr; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12;
+    ensures  exists trace_out ::
+             Body_16_XXLoopStateInvariantBreakdown(old(mem), mem, trace_in, trace_out, 64, sp, globals, lr,
+                                                   r2, r12, r3, r1, input,
+                                                   r4, r5, r6, r7, r8, r9, r10, r11);
+{
+    assert OpaqueMod(16, 8) == 0 by { reveal OpaqueMod; }
+    ghost var trace_out;
+    ghost var orig_mem := mem;
+    trace_out := Body_16_XXUnroller(48, 16, 0, CheapMod16(16) * 4, CheapMod16(16 + 9) * 4,
+        orig_mem, trace_in, trace_in, input,
+        r0, r2, r12, r3, r1, r4, r5, r6, r7, r8, r9, r10, r11);
+}
+
