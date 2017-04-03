@@ -3,6 +3,7 @@
 
 include "sha256.s.dfy"
 include "Seqs.s.dfy"
+include "../words_and_bytes.i.dfy"
 
 datatype SHA256_state = SHA256_state_c(H:seq<word>, W:seq<word>, atoh:atoh_Type)
 
@@ -580,95 +581,21 @@ lemma lemma_SHA256FinalHelper1(
     }
 }
 
-lemma {:fuel BEUintToSeqByte, 5} WordToBytes_zero()
-    ensures WordToBytes(0) == [0, 0, 0, 0];
-{
-    reveal_WordToBytes();
-}
-
-lemma BEByteSeqToInt_on_zero(s:seq<byte>)
-    requires forall i :: 0 <= i < |s| ==> s[i] == 0;
-    ensures BEByteSeqToInt(s) == 0;
-{
-    if |s| == 0 {
-    } else {
-        BEByteSeqToInt_on_zero(s[..|s|-1]);
-    }
-}
-
-lemma bswap32_seq_on_zero(s:seq<word>)
-    requires forall i :: 0 <= i < |s| ==> s[i] == 0;
-    ensures  bswap32_seq(s) == s;
-{
-    if |s| == 0 {
-        reveal_bswap32_seq();
-    } else {
-        calc {
-            bswap32_seq(s);
-                { reveal_bswap32_seq(); }
-            [bswap32(s[0])] + bswap32_seq(s[1..]);
-            [bswap32(0)] + bswap32_seq(s[1..]);
-                { WordToBytes_zero(); reveal_BytesToWord(); BEByteSeqToInt_on_zero([0,0,0,0]); }
-            [0] + bswap32_seq(s[1..]);
-                { bswap32_seq_on_zero(s[1..]); }
-            [0] + s[1..];
-            [s[0]] + s[1..];
-            s;
-        }
-    }
-}
-
-lemma RepeatByte_adds(b:byte, c:nat, c':nat)
-    ensures RepeatByte(b, c) + RepeatByte(b, c') == RepeatByte(b, c + c');
-{
-    if c' == 0 {
-    } else {
-        calc {
-            RepeatByte(b, c) + RepeatByte(b, c');
-            RepeatByte(b, c) + RepeatByte(b, c' - 1) + [b];
-                { RepeatByte_adds(b, c, c' - 1); }
-            RepeatByte(b, c + c' - 1) + [b];
-            RepeatByte(b, c + c');
-        }
-    }
-}
-
-lemma {:fuel RepeatByte, 5} WordSeqToBytes_on_zero(s:seq<word>)
-    requires forall i :: 0 <= i < |s| ==> s[i] == 0;
-    ensures  WordSeqToBytes(s) == RepeatByte(0, |s|*4);
-{
-    if |s| == 0 {
-    } else {
-        calc {
-            WordSeqToBytes(s);
-            WordToBytes(s[0]) + WordSeqToBytes(s[1..]);
-                { WordToBytes_zero(); }
-            [0, 0, 0, 0] + WordSeqToBytes(s[1..]);
-                { assert RepeatByte(0, 4) == [0, 0, 0, 0]; }
-            RepeatByte(0, 4) + WordSeqToBytes(s[1..]);
-                { WordSeqToBytes_on_zero(s[1..]); }
-            RepeatByte(0, 4) + RepeatByte(0, |s[1..]|*4);
-                { RepeatByte_adds(0, 4, |s[1..]|*4); }
-            RepeatByte(0, 4 + |s[1..]|*4);
-            RepeatByte(0, |s|*4);
-        }
-    }
-}
 
 // TODO
 // Note: This lemma already exists in words_and_bytes.i.dfy in Vale, 
 //       but it relies on math libraries that haven't been ported to Komodo yet
-lemma lemma_BytesToWord_WordToBytes_inverses(b0:byte, b1:byte, b2:byte, b3:byte)
-    ensures WordToBytes(BytesToWord(b0,b1,b2,b3)) == [b0,b1,b2,b3];
+//lemma lemma_BytesToWord_WordToBytes_inverses(b0:byte, b1:byte, b2:byte, b3:byte)
+//    ensures WordToBytes(BytesToWord(b0,b1,b2,b3)) == [b0,b1,b2,b3];
 
 // TODO
-lemma bswap32_on_byte(b:byte) 
-    ensures WordToBytes(b) == [0, 0, 0, b];
-/*    
-{
-    reveal_WordToBytes();
-}
-*/
+//lemma bswap32_on_byte(b:byte) 
+//    ensures WordToBytes(b) == [0, 0, 0, b];
+///*    
+//{
+//    reveal_WordToBytes();
+//}
+//*/
 
 lemma convert_0x80()
     ensures WordSeqToBytes([bswap32(0x80)]) == [0x80, 0, 0, 0];
@@ -684,14 +611,14 @@ lemma convert_0x80()
 }
 
 // TODO
-lemma length_to_bytes(length:word)
-    ensures WordSeqToBytes(bswap32_seq([0, length])) == Uint64ToBytes(length);
+//lemma length_to_bytes(length:word)
+//    ensures WordSeqToBytes(bswap32_seq([0, length])) == Uint64ToBytes(length);
 
 ghost method SHA_padding_words2bytes(words:seq<word>, length:word) returns (bytes:seq<byte>)
     requires |words| == 16;
     requires words[0] == 0x80;
     requires forall i :: 1 <= i < 15 ==> words[i] == 0;
-    requires words[15] == length;
+    requires words[15] == bswap32(length);
     ensures |bytes| == 64;
     ensures bytes[0] == 0x80;
     ensures bytes[1..56] == RepeatByte(0, 55);
@@ -723,7 +650,7 @@ ghost method SHA_padding_words2bytes(words:seq<word>, length:word) returns (byte
             { bswap32_seq_indexing(words, 14, |bswap32_seq(words)|); }
         WordToBytes(bswap32(0x80)) + RepeatByte(0, 52) + WordSeqToBytes(bswap32_seq(words[14..]));
         WordToBytes(bswap32(0x80)) + RepeatByte(0, 52) + WordSeqToBytes(bswap32_seq([words[14], words[15]]));
-        WordToBytes(bswap32(0x80)) + RepeatByte(0, 52) + WordSeqToBytes(bswap32_seq([0, length]));
+        WordToBytes(bswap32(0x80)) + RepeatByte(0, 52) + WordSeqToBytes(bswap32_seq([0, bswap32(length)]));
             { length_to_bytes(length); }
         WordToBytes(bswap32(0x80)) + RepeatByte(0, 52) + Uint64ToBytes(length);
         WordToBytes(bswap32(0x80)) + RepeatByte(0, 52) + bytes[56..64];
@@ -775,23 +702,6 @@ lemma lemma_ConcatenateSeqs_M_length<T>(M:seq<seq<T>>)
 //        }
 //    }
 //}
-
-lemma lemma_WordSeqToBytes_adds(s:seq<word>, s':seq<word>)
-    ensures WordSeqToBytes(s + s') == WordSeqToBytes(s) + WordSeqToBytes(s');
-{
-    if s == [] {
-    } else {
-        calc {
-            WordSeqToBytes(s + s');
-            WordToBytes((s + s')[0]) + WordSeqToBytes((s + s')[1..]);
-                { assert (s + s')[0] == s[0]; }
-            WordToBytes(s[0]) + WordSeqToBytes((s + s')[1..]);
-                { lemma_WordSeqToBytes_adds(s[1..], s'); assert s[1..] + s' == (s+s')[1..]; }
-            WordToBytes(s[0]) + WordSeqToBytes(s[1..]) + WordSeqToBytes(s');
-            WordSeqToBytes(s) + WordSeqToBytes(s');
-        }
-    }
-}
 
 lemma lemma_ConcatenateSeqs_Adds<T>(s:seq<seq<T>>, s':seq<seq<T>>)
     ensures ConcatenateSeqs(s + s') == ConcatenateSeqs(s) + ConcatenateSeqs(s'); 
@@ -900,51 +810,3 @@ ghost method ComputeWs(input:seq<word>) returns (W:seq<word>)
     }
 
 }
-
-function {:opaque} bswap32_seq(input:seq<word>) : seq<word>
-    ensures |bswap32_seq(input)| == |input|;
-    ensures forall i :: 0 <= i < |bswap32_seq(input)| ==> bswap32_seq(input)[i] == bswap32(input[i]);
-{
-    if input == [] then []
-    else [bswap32(input[0])] + bswap32_seq(input[1..])
-}
-
-lemma bswap32_seq_indexing(s:seq<word>, i:nat, j:nat)
-    requires 0 <= i < j <= |s|;
-    ensures bswap32_seq(s)[i..j] == bswap32_seq(s[i..j]);
-{
-    reveal_bswap32_seq();
-    if i == 0 {
-    } else {
-        
-    }
-}
-
-lemma bswap32_seq_adds(s:seq<word>, s':seq<word>) 
-    ensures bswap32_seq(s) + bswap32_seq(s') == bswap32_seq(s + s');
-{
-    if s == [] {
-    } else {
-        calc {
-            bswap32_seq(s) + bswap32_seq(s');
-                { reveal_bswap32_seq(); }
-            [bswap32(s[0])] + bswap32_seq(s[1..]) + bswap32_seq(s');
-                { bswap32_seq_adds(s[1..], s'); }
-            [bswap32(s[0])] + bswap32_seq(s[1..] + s');
-                { reveal_bswap32_seq(); }
-            bswap32_seq(s + s');
-        }
-    }
-}
-
-/*
-lemma bswap32_seq_commutes_WordSeqToBytes(s:seq<word>)
-    ensures WordSeqToBytes(bswap32_seq(s)) == bswap32_seq(WordSeqToBytes(s));
-{
-    if |s| == 0 {
-    } else {
-
-    }
-}
-*/
-

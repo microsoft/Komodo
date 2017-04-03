@@ -165,9 +165,10 @@ ensures
 
     // Store the length
     //STR(r2, sp, 60);
+    REV(r2, r2);  // bswap the length, so it'll be treated correctly when SHA bswaps it again
     STR(r2, sp, const(15*WORDSIZE));
 
-    assert AddrMemContents(mem, sp + 15*WORDSIZE) == length_in_bits;
+    assert AddrMemContents(mem, sp + 15*WORDSIZE) == bswap32(length_in_bits);
 
     // Parameters to sha256_block_data_order
     // r0 is already set to ctx
@@ -175,7 +176,7 @@ ensures
     MOV(r2, 1);     // num_blocks
 
     // Compute one last compression
-    ghost var last_block := seq(0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, length_in_bits);
+    ghost var last_block := seq(0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, bswap32(length_in_bits));
 
     assert ValidAddrMemStateOpaque(mem); 
     ghost var trace_out;

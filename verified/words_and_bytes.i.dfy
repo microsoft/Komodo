@@ -127,3 +127,124 @@ lemma length_to_bytes(length:word)
     lemma_bswap32_inverse(length);
     lemma_implode32_Uint64ToBytes(0, length);
 }
+
+lemma bswap32_seq_indexing(s:seq<word>, i:nat, j:nat)
+    requires 0 <= i < j <= |s|;
+    ensures bswap32_seq(s)[i..j] == bswap32_seq(s[i..j]);
+{
+    reveal_bswap32_seq();
+    if i == 0 {
+    } else {
+        
+    }
+}
+
+lemma bswap32_seq_adds(s:seq<word>, s':seq<word>) 
+    ensures bswap32_seq(s) + bswap32_seq(s') == bswap32_seq(s + s');
+{
+    if s == [] {
+    } else {
+        calc {
+            bswap32_seq(s) + bswap32_seq(s');
+                { reveal_bswap32_seq(); }
+            [bswap32(s[0])] + bswap32_seq(s[1..]) + bswap32_seq(s');
+                { bswap32_seq_adds(s[1..], s'); }
+            [bswap32(s[0])] + bswap32_seq(s[1..] + s');
+                { reveal_bswap32_seq(); }
+            bswap32_seq(s + s');
+        }
+    }
+}
+
+lemma {:fuel BEUintToSeqByte, 5} WordToBytes_zero()
+    ensures WordToBytes(0) == [0, 0, 0, 0];
+{
+    reveal_WordToBytes();
+}
+
+lemma BEByteSeqToInt_on_zero(s:seq<byte>)
+    requires forall i :: 0 <= i < |s| ==> s[i] == 0;
+    ensures BEByteSeqToInt(s) == 0;
+{
+    if |s| == 0 {
+    } else {
+        BEByteSeqToInt_on_zero(s[..|s|-1]);
+    }
+}
+
+lemma bswap32_seq_on_zero(s:seq<word>)
+    requires forall i :: 0 <= i < |s| ==> s[i] == 0;
+    ensures  bswap32_seq(s) == s;
+{
+    if |s| == 0 {
+        reveal_bswap32_seq();
+    } else {
+        calc {
+            bswap32_seq(s);
+                { reveal_bswap32_seq(); }
+            [bswap32(s[0])] + bswap32_seq(s[1..]);
+            [bswap32(0)] + bswap32_seq(s[1..]);
+                { WordToBytes_zero(); reveal_BytesToWord(); BEByteSeqToInt_on_zero([0,0,0,0]); }
+            [0] + bswap32_seq(s[1..]);
+                { bswap32_seq_on_zero(s[1..]); }
+            [0] + s[1..];
+            [s[0]] + s[1..];
+            s;
+        }
+    }
+}
+
+lemma RepeatByte_adds(b:byte, c:nat, c':nat)
+    ensures RepeatByte(b, c) + RepeatByte(b, c') == RepeatByte(b, c + c');
+{
+    if c' == 0 {
+    } else {
+        calc {
+            RepeatByte(b, c) + RepeatByte(b, c');
+            RepeatByte(b, c) + RepeatByte(b, c' - 1) + [b];
+                { RepeatByte_adds(b, c, c' - 1); }
+            RepeatByte(b, c + c' - 1) + [b];
+            RepeatByte(b, c + c');
+        }
+    }
+}
+
+lemma {:fuel RepeatByte, 5} WordSeqToBytes_on_zero(s:seq<word>)
+    requires forall i :: 0 <= i < |s| ==> s[i] == 0;
+    ensures  WordSeqToBytes(s) == RepeatByte(0, |s|*4);
+{
+    if |s| == 0 {
+    } else {
+        calc {
+            WordSeqToBytes(s);
+            WordToBytes(s[0]) + WordSeqToBytes(s[1..]);
+                { WordToBytes_zero(); }
+            [0, 0, 0, 0] + WordSeqToBytes(s[1..]);
+                { assert RepeatByte(0, 4) == [0, 0, 0, 0]; }
+            RepeatByte(0, 4) + WordSeqToBytes(s[1..]);
+                { WordSeqToBytes_on_zero(s[1..]); }
+            RepeatByte(0, 4) + RepeatByte(0, |s[1..]|*4);
+                { RepeatByte_adds(0, 4, |s[1..]|*4); }
+            RepeatByte(0, 4 + |s[1..]|*4);
+            RepeatByte(0, |s|*4);
+        }
+    }
+}
+
+lemma lemma_WordSeqToBytes_adds(s:seq<word>, s':seq<word>)
+    ensures WordSeqToBytes(s + s') == WordSeqToBytes(s) + WordSeqToBytes(s');
+{
+    if s == [] {
+    } else {
+        calc {
+            WordSeqToBytes(s + s');
+            WordToBytes((s + s')[0]) + WordSeqToBytes((s + s')[1..]);
+                { assert (s + s')[0] == s[0]; }
+            WordToBytes(s[0]) + WordSeqToBytes((s + s')[1..]);
+                { lemma_WordSeqToBytes_adds(s[1..], s'); assert s[1..] + s' == (s+s')[1..]; }
+            WordToBytes(s[0]) + WordSeqToBytes(s[1..]) + WordSeqToBytes(s');
+            WordSeqToBytes(s) + WordSeqToBytes(s');
+        }
+    }
+}
+
