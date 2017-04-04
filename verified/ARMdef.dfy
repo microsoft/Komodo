@@ -66,8 +66,7 @@ datatype state = State(regs:map<ARMReg, word>,
                        conf:config,
                        ok:bool,
                        steps:nat,
-                       nd_private:int,
-                       nd_public:int)
+                       nondet:int)
 
 // System mode is not modeled
 datatype mode = User | FIQ | IRQ | Supervisor | Abort | Undefined | Monitor
@@ -117,13 +116,46 @@ predicate interrupts_enabled(s:state)
 //-----------------------------------------------------------------------------
 
 function {:axiom} nondet_int(x:int, y:int): int
-function {:axiom} nondet_nat(x:int, y:int): nat
 function {:axiom} nondet_word(x:int, y:int): word
+function {:axiom} nondet_private_word(x:int, s:UserState, y:int): word
+function {:axiom} nondet_private_nat(x:int, s:UserState, y:int): nat
+function {:axiom} nondet_exception(x:int, s:UserState, maskf:bool, maski:bool): exception
+    ensures maskf ==> nondet_exception(x, s, maskf, maski) != ExFIQ
+    ensures maski ==> nondet_exception(x, s, maskf, maski) != ExIRQ
 
 function {:axiom} NONDET_GENERATOR():int
-function {:axiom} NONDET_INT():int
+function {:axiom} NONDET_PC():int
+function {:axiom} NONDET_EX():int
 function {:axiom} NONDET_REG(r:ARMReg):int
 function {:axiom} NONDET_STEPS():int
+
+// user-visible state
+datatype UserState = UserState(regs:map<ARMReg, word>, pc:word, addresses:memmap)
+
+function user_visible_state(s:state, initialpc:word, pt:AbsPTable): UserState
+    requires ValidState(s)
+    requires WellformedAbsPTable(pt)
+{
+    reveal_ValidRegState();
+    UserState(map r | r in user_regs() :: s.regs[r],
+        initialpc, user_mem(pt, s.m))
+}
+
+function user_regs(): set<ARMReg>
+{
+    {R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, SP(User), LR(User)}
+}
+
+function user_mem(pt:AbsPTable, m:memstate): memmap
+    requires WellformedAbsPTable(pt)
+    requires ValidMemState(m)
+{
+    reveal_ValidMemState();
+
+    // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
+    (map a:addr | ValidMem(a) && a in TheValidAddresses()
+        && BitwiseMaskHigh(a, 12) in AllPagesInTable(pt) :: m.addresses[a])
+}
 
 //-----------------------------------------------------------------------------
 // Configuration Register Decoding
@@ -479,9 +511,9 @@ function psr_of_exception(s:state, e:exception): word
     update_psr(s.sregs[cpsr], encode_mode(newmode), maskfiq, true)
 }
 
-predicate evalExceptionTaken(s:state, e:exception, r:state)
+predicate evalExceptionTaken(s:state, e:exception, pc:word, r:state)
     requires ValidState(s)
-    ensures evalExceptionTaken(s, e, r) ==> ValidState(r)
+    ensures evalExceptionTaken(s, e, pc, r) ==> ValidState(r)
     //ensures evalExceptionTaken(s, e, r) && s.ok ==> r.ok
 {
     reveal_ValidRegState();
@@ -493,11 +525,10 @@ predicate evalExceptionTaken(s:state, e:exception, r:state)
     ValidPsrWord(newpsr) && ValidState(r) &&
     // update mode, copy CPSR of oldmode to SPSR of newmode, havoc LR
     r == takestep(s).(conf := s.conf.(cpsr := decode_psr(newpsr),
-                            spsr := s.conf.spsr[newmode := s.conf.cpsr],
-                            ex := e, excount := s.conf.excount + 1, exstep := s.steps),
-            sregs := s.sregs[cpsr := newpsr][spsr(newmode) := s.sregs[cpsr]],
-            regs := s.regs[LR(newmode) := nondet_word(s.nd_private,
-                                                     NONDET_REG(LR(newmode)))])
+        spsr := s.conf.spsr[newmode := s.conf.cpsr],
+        ex := e, excount := s.conf.excount + 1, exstep := s.steps),
+        sregs := s.sregs[cpsr := newpsr][spsr(newmode) := s.sregs[cpsr]],
+        regs := s.regs[LR(newmode) := pc])
 }
 
 //-----------------------------------------------------------------------------
@@ -526,43 +557,46 @@ predicate evalMOVSPCLR(s:state, r:state)
     evalUpdate(takestep(s), OSReg(cpsr), spsr_val, r)
 }
 
-predicate {:opaque} evalUserspaceExecution(s:state, r:state)
-    requires ValidState(s)
-    ensures  evalUserspaceExecution(s, r) ==> ValidState(r)
-    //ensures  evalUserspaceExecution(s, r) && s.ok ==> r.ok
+function {:opaque} userspaceExecutionFn(s:state, pc:word): (state, word, exception)
+    requires ValidState(s) && mode_of_state(s) == User
+    requires ExtractAbsPageTable(s).Just?
+    ensures  ValidState(userspaceExecutionFn(s, pc).0)
 {
     reveal_ValidMemState();
     reveal_ValidRegState();
-    mode_of_state(s) == User &&
-    // if we can't extract a page table, we know nothing
-    var pt := ExtractAbsPageTable(s);
-    pt.Just? &&
-    var pages := WritablePagesInTable(fromJust(pt));
-    ValidState(r) &&
+    var pt := ExtractAbsPageTable(s).v;
+    var user_state := user_visible_state(s, pc, pt);
+    var pages := WritablePagesInTable(pt);
     // havoc writable pages and user regs, and take some steps
-    r == s.(m := s.m.(addresses := havocPages(pages, s)),
-            regs := havocUserRegs(s.nd_private, s.regs),
-            steps := s.steps + nondet_nat(s.nd_private, NONDET_STEPS()))
+    var rs := reseed_nondet_state(s).(
+        m := s.m.(addresses := havocPages(pages, s, user_state)),
+        regs := havocUserRegs(s.nondet, user_state, s.regs),
+        steps := s.steps + nondet_private_nat(s.nondet, user_state, NONDET_STEPS()));
+    // final PC and exception are functions of private nondeterminism
+    var rpc := nondet_private_word(s.nondet, user_state, NONDET_PC());
+    var rex := nondet_exception(s.nondet, user_state, s.conf.cpsr.f, s.conf.cpsr.i);
+    (rs, rpc, rex)
 }
 
-function havocPages(pages:set<addr>, s:state): memmap
+function havocPages(pages:set<addr>, s:state, us:UserState): memmap
     requires ValidState(s)
 {
     // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
     (map a:addr | ValidMem(a) && a in TheValidAddresses() ::
-     if BitwiseMaskHigh(a, 12) in pages then
-        nondet_word(if addrIsSecure(a) then s.nd_private else s.nd_public, a)
-     else MemContents(s.m, a))
+     if BitwiseMaskHigh(a, 12) in pages then (
+        if addrIsSecure(a) then nondet_private_word(s.nondet, us, a)
+        else nondet_word(s.nondet, a)
+     ) else MemContents(s.m, a))
 }
 
-function havocUserRegs(nondet:int, regs:map<ARMReg, word>): map<ARMReg, word>
+function havocUserRegs(nondet:int, us:UserState, regs:map<ARMReg, word>): map<ARMReg, word>
     requires ValidRegState(regs)
-    ensures ValidRegState(havocUserRegs(nondet, regs))
+    ensures ValidRegState(havocUserRegs(nondet, us, regs))
 {
     reveal_ValidRegState();
     map r | r in regs ::
-        if (r.SP? && r.spm != User) || (r.LR? && r.lrm != User) then regs[r]
-        else nondet_word(nondet, NONDET_REG(r))
+        if r in user_regs() then nondet_private_word(nondet, us, NONDET_REG(r))
+        else regs[r]
 }
 
 // To be defined/established by "application" code (i.e. komodo exception handlers)
@@ -646,6 +680,13 @@ function ExtractAbsPageTable(s:state): Maybe<AbsPTable>
         Just(ExtractAbsL1PTable(s.m, vbase))
     else
         Nothing
+}
+
+function AllPagesInTable(pt:AbsPTable): set<addr>
+    requires WellformedAbsPTable(pt)
+{
+    (set i, j | 0 <= i < |pt| && pt[i].Just? && 0 <= j < |pt[i].v|
+        && pt[i].v[j].Just? :: pt[i].v[j].v.phys + PhysBase())
 }
 
 function WritablePagesInTable(pt:AbsPTable): set<addr>
@@ -847,17 +888,16 @@ function GlobalWord(s:memstate, g:symbol, offset:word): word
     GlobalFullContents(s, g)[BytesToWords(offset)]
 }
 
-function {:opaque} nondet_reseed(x:int, steps:nat): int
+function {:opaque} nondet_reseeded(x:int, steps:nat): int
     decreases steps
 {
     if steps == 0 then x
-    else nondet_reseed(nondet_int(x, NONDET_GENERATOR()), steps - 1)
+    else nondet_reseeded(nondet_int(x, NONDET_GENERATOR()), steps - 1)
 }
 
 predicate nondet_preserved'(s:state, r:state, steps:nat)
 {
-    r.nd_private == nondet_reseed(s.nd_private, steps)
-    && r.nd_public == nondet_reseed(s.nd_public, steps)
+    r.nondet == nondet_reseeded(s.nondet, steps)
 }
 
 predicate nondet_preserved(s:state, r:state)
@@ -865,13 +905,16 @@ predicate nondet_preserved(s:state, r:state)
     exists steps:nat :: nondet_preserved'(s, r, steps)
 }
 
-function takestep(s:state): state
-    ensures nondet_preserved'(s, takestep(s), 1)
+function reseed_nondet_state(s:state): state
+    ensures nondet_preserved'(s, reseed_nondet_state(s), 1)
 {
-    reveal_nondet_reseed();
-    s.(steps := s.steps + 1,
-       nd_private := nondet_int(s.nd_private, NONDET_GENERATOR()),
-       nd_public := nondet_int(s.nd_public, NONDET_GENERATOR()))
+    reveal_nondet_reseeded();
+    s.(nondet := nondet_int(s.nondet, NONDET_GENERATOR()))
+}
+
+function takestep(s:state): state
+{
+    s.(steps := s.steps + 1)
 }
 
 predicate evalUpdate(s:state, o:operand, v:word, r:state)
@@ -1026,7 +1069,7 @@ predicate ValidInstruction(s:state, ins:ins)
 predicate handleInterrupt(s:state, ex:exception, r:state)
     requires ValidState(s)
 {
-    exists s1, s2 :: evalExceptionTaken(s, ex, s1)
+    exists s1, s2 :: evalExceptionTaken(s, ex, nondet_word(s.nondet, NONDET_PC()), s1)
         && InterruptContinuationInvariant(s1, s2)
         && evalMOVSPCLR(s2, r)
 }
@@ -1035,11 +1078,13 @@ predicate maybeHandleInterrupt(s:state, r:state)
     requires ValidState(s)
     ensures !interrupts_enabled(s) && maybeHandleInterrupt(s, r) ==> r == takestep(s)
 {
-    if !s.conf.cpsr.f && nondet_word(s.nd_private, NONDET_INT()) == 0
-        then handleInterrupt(s, ExFIQ, r)
-    else if !s.conf.cpsr.i && nondet_word(s.nd_private, NONDET_INT()) == 1
-        then handleInterrupt(s, ExIRQ, r)
-    else r == takestep(s)
+    if !interrupts_enabled(s)
+        then r == takestep(s)
+    else if !s.conf.cpsr.f && nondet_word(s.nondet, NONDET_EX()) == 0
+        then handleInterrupt(reseed_nondet_state(s), ExFIQ, r)
+    else if !s.conf.cpsr.i && nondet_word(s.nondet, NONDET_EX()) == 1
+        then handleInterrupt(reseed_nondet_state(s), ExIRQ, r)
+    else r == takestep(reseed_nondet_state(s))
 }
 
 predicate evalIns'(ins:ins, s:state, r:state)
@@ -1119,11 +1164,12 @@ predicate {:opaque} evalMOVSPCLRUC(s:state, r:state)
     requires ValidState(s)
     ensures evalMOVSPCLRUC(s, r) ==> ValidState(r)
 {
-    exists ex, s2, s3, s4 ::
+    ExtractAbsPageTable(s).Just?
+    && exists s2, s4 ::
         evalEnterUserspace(s, s2)
-        && evalUserspaceExecution(s2, s3)
-        && evalExceptionTaken(s3, ex, s4)
-        && UsermodeContinuationInvariant(s4, r)
+        && (var (s3, pc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
+        evalExceptionTaken(s3, ex, pc, s4)
+        && UsermodeContinuationInvariant(s4, r))
 }
 
 predicate evalBlock(block:codes, s:state, r:state)
