@@ -458,56 +458,48 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
     // avoid proving anything about nd sources...
     assert enc_conf_eq_entry(s12, s22, d11, d21, atkr) by
     {
-        assume s22.nd_private == s12.nd_private;
-        assume s22.nd_public  == s12.nd_public;
+        assume false;
+    }
+
+    // avoid proving anything about nd sources...
+    assert enc_conf_eq_entry(s14, s24, d14, d24, atkr) by
+    {
+        assume false;
     }
 
     lemma_userspaceExec_atkr_conf(s12, s13, d11, s22, s23, d21, dispPg, atkr);
 
-    // TODO proveme
-    assume isReturningSvc(s14) == isReturningSvc(s24);
-
-    if(isReturningSvc(s14)) {
+    if(retToEnclave) {
         assert rd1 == d14;
         assert rd2 == d24;
         assert enc_conf_eqpdb(rd1, rd2, atkr);
-        // avoid proving anything about nd sources...
+        // No idea how to prove anything about nd_*
         assume enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
     } else {
-        assume false; 
+        assume usr_regs_equiv(s14, s24);
+        lemma_exceptionHandled_atkr_conf(s14, d14, rd1, s24, d24, rd2, dispPg, atkr);
+        // No idea how to prove anything about nd_*
+        assume enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
     }
-
-
-    // Half-baked proof-sketch that will be split into a bunch of lemmas:
-    // if s13 ~ d11 && s23 ~ d21 &&
-    //      conf_eq(d11, d21) &&
-    //      s13.nd == s23.d 
-    // then:
-    //      forall s14, s24:
-    //      updatePagesFromState(s13, d11, s14) ==
-    //      updatePagesFromState(s23, d21, s24) 
-    //
-    // by:
-    //
-    // forall p :: pgSWrInAsp(d11, p, l1p) <==> pgSWrInAsp(d21, p, l1p)
-    // (should follow from conf_eq(d1, d2) and l1p is the attacker's)
-    //
-    // updateUserPage(s13, d11, p) == updateUserPage(s23, d21, p)
-    //          by:
-    //              - s13.nd == s23.nd
-    //              - (r1.nd == r2.nd && excpt(r1, r1') && excpt(r2, r2') ==>
-    //                  r1'.nd == r2'.nd)
-    //              - def of evalUserspace (esp. havoc)
-    //              - writable pages same
-    //                  by: s13 ~ d11 && s23 ~d21 &&
-    //                      conf_eq(d11, d21) &&
-    //                      l1p == atkr.l1p
-    //              - contents written same (by s13.nd == s23.nd)
-    //
-    //
-    assume false;
 }
 
+
+lemma lemma_exceptionHandled_atkr_conf(
+s1: state, d1: PageDb, d1': PageDb, s2: state, d2: PageDb, d2': PageDb,
+dispPg: PageNr, atkr: PageNr)
+    requires ValidState(s1) && ValidState(s2) &&
+             validPageDb(d1) && validPageDb(d2) && SaneConstants()
+    requires enc_conf_eq_entry(s1, s2, d1, d2, atkr);
+    requires d1' == exceptionHandled(s1, d1, dispPg).2
+    requires d2' == exceptionHandled(s2, d2, dispPg).2
+    requires atkr_entry(d1, d2, dispPg, atkr)
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    requires usr_regs_equiv(s1, s2)
+    ensures  enc_conf_eqpdb(d1', d2', atkr)
+    ensures  atkr_entry(d1', d2', dispPg, atkr)
+{
+    assume false;
+}
 
 lemma lemma_userspaceExec_atkr_conf(
 s12: state, s13:state, d1:PageDb,
@@ -528,7 +520,8 @@ dispPg: PageNr, atkr: PageNr)
         dataPagesCorrespond(s22.m, d2))
     ensures (var d14 := updateUserPagesFromState(s13, d1, dispPg);
         var d24 := updateUserPagesFromState(s23, d2, dispPg);
-        enc_conf_eqpdb(d14, d24, atkr)) 
+        enc_conf_eqpdb(d14, d24, atkr) &&
+        atkr_entry(d14, d24, dispPg, atkr)) 
 {
     // reveal_evalUserspaceExecution();
     reveal_enc_conf_eqpdb();
@@ -701,6 +694,12 @@ l1p:PageNr, atkr: PageNr)
             ensures mkAbsPTable'(d1, l1e) == mkAbsPTable'(d2, l1e)
         {
             assume false;
+
+            // roughly, by validPageDb I know that all the pages reachable from 
+            // l1e have the same addrspace as l1p. Since the addrspace of l1p 
+            // is the attacker, and since I know enc_conf_eqdb(d1, d2, atkr), 
+            // the entries of all those pages are the same.
+
             // reveal_validPageDb();
             // assert l1e.Just?;
             // assert d1[l1e.v].addrspace == d1[l1p].addrspace;

@@ -25,7 +25,7 @@ predicate pgInAddrSpc(d: PageDb, n: PageNr, a: PageNr)
     d[n].PageDbEntryTyped? && d[n].addrspace == a
 }
 
-predicate regs_equiv(s1:state, s2:state)
+predicate usr_regs_equiv(s1:state, s2:state)
     requires ValidState(s1) && ValidState(s2)
 {
     reveal_ValidRegState();
@@ -43,8 +43,8 @@ predicate regs_equiv(s1:state, s2:state)
     OperandContents(s1, OReg(R10)) == OperandContents(s2, OReg(R10)) &&
     OperandContents(s1, OReg(R11)) == OperandContents(s2, OReg(R11)) &&
     OperandContents(s1, OReg(R12)) == OperandContents(s2, OReg(R12)) &&
-    OperandContents(s1, OLR) == OperandContents(s2, OLR) &&
-    OperandContents(s1, OSP) == OperandContents(s2, OSP)
+    OperandContents(s1, OReg(LR(User))) == OperandContents(s2, OReg(LR(User))) &&
+    OperandContents(s1, OReg(SP(User))) == OperandContents(s2, OReg(SP(User)))
 }
 
 // TODO somehow this broke... put it back...
@@ -102,7 +102,7 @@ predicate {:opaque} enc_conf_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
 predicate enc_conf_eq_entry(s1:state, s2:state, d1:PageDb, d2:PageDb, 
     atkr:PageNr)
     requires ValidState(s1) && ValidState(s2)
-    requires validPageDb(d1) && validPageDb(d2)
+    //requires validPageDb(d1) && validPageDb(d2)
     // requires pageDbCorresponds(s1.m, d1) && pageDbCorresponds(s2.m, d2)
 {
     s1.nd_private == s2.nd_private &&
