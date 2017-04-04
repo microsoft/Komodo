@@ -2,7 +2,7 @@ include "smcapi.s.dfy"
 //include "pagedb.i.dfy"
 include "pagedb.s.dfy"
 // I need this until we figure out how to extract just the trusted parts
-include "ptables.i.dfy"
+// include "ptables.i.dfy"
 
 /* 
  * If I recall correctly these exist / existed elsewhere... dig later
@@ -73,7 +73,7 @@ function PagesInTable(pt:AbsPTable): set<addr>
 
 // Low-equivalence relation that relates two PageDbs that appear equivalent to 
 // an attacker that controls an enclave "atkr". 
-predicate enc_conf_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
+predicate {:opaque} enc_conf_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
     requires validPageDb(d1) && validPageDb(d2)
 {
     d1[atkr].PageDbEntryTyped? <==> d2[atkr].PageDbEntryTyped? &&
@@ -90,48 +90,23 @@ predicate enc_conf_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
         d1[n].entry == d2[n].entry)))
 }
 
-// Low-equivalence relation that relates two concrete states that appear 
-// equivalent to an attacker that controls an enclave "atkr". 
-// A malicous attacker cannot observe anything when it is not executing
+// This relation is used to describe two states from which attacker entry 
+// begins. It isused to set sources of nondeterminism equal so 
+// that we can reason about what the attacker observes during execution without 
+// needing to prove that this nondeterministic system is deterministic.
 
-// The plan is to only check low-equivalence of states on entry/exit of 
-// the enclave so this only needs to hold then. This equivalence relation need 
-// not hold for smc calls other than enter/resume.
+// The entry spec can pass around the value bad_enclave to each of the 
+// existentially reached states so that we can assume sources of nondeterminism 
+// for each state reached after the executions beginning from s1 and s2
+
 predicate enc_conf_eq_entry(s1:state, s2:state, d1:PageDb, d2:PageDb, 
     atkr:PageNr)
-    requires SaneState(s1) && SaneState(s2)
+    requires ValidState(s1) && ValidState(s2)
     requires validPageDb(d1) && validPageDb(d2)
-    requires pageDbCorresponds(s1.m, d1) && pageDbCorresponds(s2.m, d2)
+    // requires pageDbCorresponds(s1.m, d1) && pageDbCorresponds(s2.m, d2)
 {
-    valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
-    // valAddrPage(d1, d1[atkr].addrspace) && valAddrPage(d2, d2[atkr].addrspace) &&
-    (var l1p := d1[atkr].entry.l1ptnr; // same in both d1, d2 because of eqdb
-    nonStoppedL1(d1, l1p) <==> nonStoppedL1(d2, l1p) &&
-    nonStoppedL1(d1, l1p) ==>
-        (var atkr_pgs := WritablePagesInTable(mkAbsPTable(d1, l1p));
-        // The set of pages the enclave can observe is the same
-        // Note: I think the following is subsumed by eqdb.
-        (WritablePagesInTable(mkAbsPTable(d1, l1p)) == 
-            WritablePagesInTable(mkAbsPTable(d2, l1p))) &&
-        // The contents of those addresses is the same
-        (forall a | a in TheValidAddresses() && a in atkr_pgs ::
-            s1.m.addresses[a] == s2.m.addresses[a]))
-    ) 
-}
-
-// equivalent if enter/resume begin from s1 or s2
-predicate enc_start_equiv(s1: state, s2: state)
-    requires SaneState(s1) && SaneState(s2)
-{
-    forall r1:state, r2:state | entryTransition(s1, r1) && entryTransition(s2, r2) ::
-        (regs_equiv(r1, r2) && r1.sregs[cpsr] == r2.sregs[cpsr] && 
-        OperandContents(s1, OLR) == OperandContents(s2, OLR))
-}
-
-predicate insecure_mem_eq(s1: state, s2: state)
-    requires SaneState(s1) && SaneState(s2)
-{
-    forall a: addr | addr_insecure(a) :: s1.m.addresses[a] == s2.m.addresses[a]
+    s1.nd_private == s2.nd_private &&
+    s1.nd_public  == s2.nd_public
 }
 
 //-----------------------------------------------------------------------------
@@ -139,26 +114,64 @@ predicate insecure_mem_eq(s1: state, s2: state)
 //-----------------------------------------------------------------------------
 
 predicate os_conf_eq(s1: state, s2: state)
-    requires SaneState(s1) && SaneState(s2)
+    requires ValidState(s1) && ValidState(s2)
 {
     reveal_ValidMemState();
-    regs_equiv(s1, s2) && os_ctrl_eq(s1, s2) && insecure_mem_eq(s1, s2)
+    s1.nd_public == s2.nd_public && 
+    os_regs_equiv(s1, s2) &&
+    os_ctrl_eq(s1, s2) // &&
+    // InsecureMemInvariant(s1, s2)
 }
 
 predicate os_ctrl_eq(s1: state, s2: state)
-    requires SaneState(s1) && SaneState(s2)
+    requires ValidState(s1) && ValidState(s2)
 {
-    var spsr_ := OSReg(spsr(Supervisor));
-    var cpsr_ := OSReg(cpsr);
-    OperandContents(s1, spsr_) == OperandContents(s2, spsr_) &&
-    OperandContents(s1, cpsr_) == OperandContents(s2, cpsr_)
+    reveal_ValidSRegState();
+    var spsr_f  := spsr(FIQ);
+    var spsr_i  := spsr(IRQ);
+    var spsr_s  := spsr(Supervisor);
+    var spsr_a  := spsr(Abort);
+    var spsr_u  := spsr(Undefined);
+    var cpsr_   := cpsr;
+    s1.sregs[spsr_f] == s2.sregs[spsr_f] &&
+    s1.sregs[spsr_i] == s2.sregs[spsr_i] &&
+    s1.sregs[spsr_s] == s2.sregs[spsr_s] &&
+    s1.sregs[spsr_a] == s2.sregs[spsr_a] &&
+    s1.sregs[spsr_u] == s2.sregs[spsr_u] &&
+    s1.sregs[cpsr_]  == s2.sregs[cpsr_]
 
 }
 
-predicate addr_insecure(a: addr)
+predicate os_regs_equiv(s1: state, s2: state)
+    requires ValidState(s1) && ValidState(s2)
 {
-    a in TheValidAddresses() && !address_is_secure(a) &&
-        !(StackLimit() <= a < StackBase())
+   reveal_ValidRegState();
+   reveal_ValidSRegState();
+   s1.regs[R0]  == s2.regs[R0] &&
+   s1.regs[R1]  == s2.regs[R1] &&
+   s1.regs[R2]  == s2.regs[R2] &&
+   s1.regs[R3]  == s2.regs[R3] &&
+   s1.regs[R4]  == s2.regs[R4] &&
+   s1.regs[R5]  == s2.regs[R5] &&
+   s1.regs[R6]  == s2.regs[R6] &&
+   s1.regs[R7]  == s2.regs[R7] &&
+   s1.regs[R8]  == s2.regs[R8] &&
+   s1.regs[R9]  == s2.regs[R9] &&
+   s1.regs[R10] == s2.regs[R10] &&
+   s1.regs[R11] == s2.regs[R11] &&
+   s1.regs[R12] == s2.regs[R12] &&
+   s1.regs[LR(User)]       == s2.regs[LR(User)] &&
+   s1.regs[LR(FIQ)]        == s2.regs[LR(FIQ)] &&
+   s1.regs[LR(IRQ)]        == s2.regs[LR(IRQ)] &&
+   s1.regs[LR(Supervisor)] == s2.regs[LR(Supervisor)] &&
+   s1.regs[LR(Abort)]      == s2.regs[LR(Abort)] &&
+   s1.regs[LR(Undefined)]  == s2.regs[LR(Undefined)] &&
+   s1.regs[SP(User)]       == s2.regs[SP(User)] &&
+   s1.regs[SP(FIQ)]        == s2.regs[SP(FIQ)] &&
+   s1.regs[SP(IRQ)]        == s2.regs[SP(IRQ)] &&
+   s1.regs[SP(Supervisor)] == s2.regs[SP(Supervisor)] &&
+   s1.regs[SP(Abort)]      == s2.regs[SP(Abort)] &&
+   s1.regs[SP(Undefined)]  == s2.regs[SP(Undefined)]
 }
 
 //-----------------------------------------------------------------------------
@@ -181,12 +194,14 @@ predicate enc_integ_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
             d1[n].entry == d2[n].entry)
 }
 
+/*
 predicate enc_integ_eq(s1:state, s2:state, d1:PageDb, d2:PageDb, 
     atkr:PageNr)
     requires SaneState(s1) && SaneState(s2)
     requires validPageDb(d1) && validPageDb(d2)
     requires pageDbCorresponds(s1.m, d1) && pageDbCorresponds(s2.m, d2)
 {
+    s1.public == s2.public &&
     valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
     (var l1p := d1[atkr].entry.l1ptnr; // same in both d1, d2 because of eqdb
     nonStoppedL1(d1, l1p) <==> nonStoppedL1(d2, l1p) &&
@@ -200,4 +215,4 @@ predicate enc_integ_eq(s1:state, s2:state, d1:PageDb, d2:PageDb,
             s1.m.addresses[a] == s2.m.addresses[a])
     ))
 }
-
+*/
