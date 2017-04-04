@@ -16,10 +16,11 @@ const STACKSIZE_HMAC:int := 8 + STACKSIZE_SHA_ONE_SHOT;   // Make space to prese
 
 #endverbatim
 
-procedure {:refined} hmac() 
+procedure hmac() 
 requires/ensures
     ValidAddrMemStateOpaque(mem);
-requires {:refined false}
+    SaneState(this);
+requires 
     !interrupts_enabled(this);
     mode_of_state(this) == Monitor;
     StackBytesRemaining(this, 40);
@@ -54,6 +55,11 @@ requires
 
      // We aren't hashing too many bits
      && isUInt32((num_blocks + 1) * (SHA_BLOCKSIZE * WORDSIZE * 8))
+
+     // Non-refined requirements
+     && disjoint(tmp_ptr, tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE, StackBase(), StackLimit())
+     && (tmp_ptr >= StackBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
+     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
 
      // Anti-aliasing
      && disjoint(ctx, ctx + SHA_CTXSIZE*WORDSIZE, sp - STACKSIZE_HMAC * WORDSIZE, sp)                               // ctx != sp
@@ -105,7 +111,8 @@ ensures
 //                    AddrMemContents(mem, r0 + 7*WORDSIZE)) in
 //    IsSHA256(WordSeqToBytes(bswap32_seq(AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * old(r2)))), hash);
 {
-    ghost var s := stack_nonvolatiles(40);
+    ghost var s:int;
+    s := stack_nonvolatiles(40);
 
     // Copy key to the beginning of the tmp buffer
     MOV(r5, const(HMAC_KEYSIZE_BYTES)); 

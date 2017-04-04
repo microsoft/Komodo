@@ -254,7 +254,7 @@ const STACKSIZE_SHA_ONE_SHOT:int := 3 + STACKSIZE_SHA_FINALIZE;    // Need 3 mor
 #endverbatim
 
 
-procedure {:refined} sha256_one_shot() 
+procedure {:refined}{:bridge} sha256_one_shot() 
 requires/ensures
     ValidAddrMemStateOpaque(mem);
 requires {:refined false}
