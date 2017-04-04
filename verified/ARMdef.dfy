@@ -847,8 +847,28 @@ function GlobalWord(s:memstate, g:symbol, offset:word): word
     GlobalFullContents(s, g)[BytesToWords(offset)]
 }
 
-function takestep(s:state): state
+function {:opaque} nondet_reseed(x:int, steps:nat): int
+    decreases steps
 {
+    if steps == 0 then x
+    else nondet_reseed(nondet_int(x, NONDET_GENERATOR()), steps - 1)
+}
+
+predicate nondet_preserved'(s:state, r:state, steps:nat)
+{
+    r.nd_private == nondet_reseed(s.nd_private, steps)
+    && r.nd_public == nondet_reseed(s.nd_public, steps)
+}
+
+predicate nondet_preserved(s:state, r:state)
+{
+    exists steps:nat :: nondet_preserved'(s, r, steps)
+}
+
+function takestep(s:state): state
+    ensures nondet_preserved'(s, takestep(s), 1)
+{
+    reveal_nondet_reseed();
     s.(steps := s.steps + 1,
        nd_private := nondet_int(s.nd_private, NONDET_GENERATOR()),
        nd_public := nondet_int(s.nd_public, NONDET_GENERATOR()))

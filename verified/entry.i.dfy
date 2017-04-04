@@ -529,14 +529,61 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     }
 }
 
+lemma lemma_nondet_reseed_accumulates(x:int, steps1:nat, steps2:nat)
+    ensures nondet_reseed(nondet_reseed(x, steps1), steps2)
+        == nondet_reseed(x, steps1 + steps2)
+    decreases steps1
+{
+    reveal_nondet_reseed();
+    if steps1 != 0 {
+        lemma_nondet_reseed_accumulates(nondet_int(x, NONDET_GENERATOR()),
+                                        steps1 - 1, steps2);
+    }
+}
+
+lemma lemma_nondet_preserved'(s0:state, s1:state, steps1:nat, s2:state, steps2:nat)
+    requires nondet_preserved'(s0, s1, steps1) && nondet_preserved'(s1, s2, steps2)
+    ensures nondet_preserved'(s0, s2, steps1 + steps2)
+{
+    lemma_nondet_reseed_accumulates(s0.nd_private, steps1, steps2);
+    lemma_nondet_reseed_accumulates(s0.nd_public, steps1, steps2);
+}
+
+lemma lemma_nondet_preserved(s0:state, s1:state, s2:state)
+    requires nondet_preserved(s0, s1) && nondet_preserved(s1, s2)
+    ensures nondet_preserved(s0, s2)
+{
+    var steps1:nat :| nondet_preserved'(s0, s1, steps1);
+    var steps2:nat :| nondet_preserved'(s1, s2, steps2);
+    lemma_nondet_preserved'(s0, s1, steps1, s2, steps2);
+}
+
 lemma lemma_ValidEntryPre(s0:state, s1:state, sd:PageDb, r:state, rd:PageDb, dp:word,
                            a1:word, a2:word, a3:word)
     requires ValidState(s0) && ValidState(s1) && ValidState(r) && validPageDb(sd)
     requires SaneConstants()
+    requires nondet_preserved(s0, s1)
     ensures smc_enter(s1, sd, r, rd, dp, a1, a2, a3)
         ==> smc_enter(s0, sd, r, rd, dp, a1, a2, a3)
     ensures smc_resume(s1, sd, r, rd, dp) ==> smc_resume(s0, sd, r, rd, dp)
 {
+    if smc_enter(s1, sd, r, rd, dp, a1, a2, a3)
+        && smc_enter_err(sd, dp, false) == KOM_ERR_SUCCESS {
+        forall s | preEntryEnter(s1, s, sd, dp, a1, a2, a3)
+            ensures preEntryEnter(s0, s, sd, dp, a1, a2, a3)
+        {
+            lemma_nondet_preserved(s0, s1, s);
+        }
+    }
+
+    if smc_resume(s1, sd, r, rd, dp)
+        && smc_enter_err(sd, dp, true) == KOM_ERR_SUCCESS {
+        forall s | preEntryResume(s1, s, sd, dp)
+            ensures preEntryResume(s0, s, sd, dp)
+        {
+            lemma_nondet_preserved(s0, s1, s);
+        }
+    }
 }
 
 lemma lemma_evalExceptionTaken_Mode(s:state, e:exception, r:state)
@@ -611,13 +658,15 @@ lemma lemma_validEnclaveExecutionStepPrePost(s0:state, s1:state, d1:PageDb, r1:s
     ensures validEnclaveExecutionStep(s0, d1, r1, rd, dispPg, retToEnclave)
 {
     reveal_validEnclaveExecutionStep();
-    reveal_updateUserPagesFromState();
-    reveal_ValidRegState();
     var s2, s3, s4, d4 :|
         validEnclaveExecutionStep'(s1, d1, s2, s3, s4, d4, r1, rd, dispPg,
                                      retToEnclave);
+    assert entryTransition(s1, s2);
+    var s1' :| equivStates(s1, s1') && evalEnterUserspace(s1', s2)
+            && s2.steps == s1'.steps + 1;
     var l1p := l1pOfDispatcher(d1, dispPg);
     assert pageTableCorresponds(s0, d1, l1p) by { reveal_pageTableCorresponds(); }
+    lemma_nondet_preserved(s0, s1, s1');
     assert entryTransition(s0, s2);
     assert validEnclaveExecutionStep'(s0, d1, s2, s3, s4, d4, r1, rd, dispPg,
                                      retToEnclave);

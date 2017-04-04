@@ -178,7 +178,8 @@ predicate preEntryEnter(s:state,s':state,d:PageDb,
     assert addrspace.entry.state == FinalState;
     assert !hasStoppedAddrspace(d, l1p);
 
-    ValidState(s') && priv_of_state(s') == PL1 &&
+    ValidState(s') && nondet_preserved(s, s') &&
+    priv_of_state(s') == PL1 &&
     s'.conf.ttbr0.ptbase == page_paddr(l1p) &&
     s'.conf.scr.ns == Secure &&
     s'.regs[R0] == a1 && s'.regs[R1] == a2 && s'.regs[R2] == a3 &&
@@ -201,7 +202,8 @@ predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
     var disp := d[dispPage].entry;
     var l1p := l1pOfDispatcher(d, dispPage);
     
-    ValidState(s') && priv_of_state(s') == PL1 &&
+    ValidState(s') && nondet_preserved(s, s') &&
+    priv_of_state(s') == PL1 &&
     s'.conf.ttbr0.ptbase == page_paddr(l1p) &&
     s'.conf.scr.ns == Secure &&
 
@@ -249,7 +251,7 @@ predicate preEntryReturn(s:state,lr:word,regs:SvcReturnRegs)
 predicate equivStates(s1:state, s2:state)
 {
     s1.regs == s2.regs && s1.m == s2.m && s1.sregs == s2.sregs
-        && s1.conf == s2.conf && s1.ok == s2.ok
+        && s1.conf == s2.conf && s1.ok == s2.ok && nondet_preserved(s1, s2)
 }
 
 predicate entryTransition(s:state, r:state)
