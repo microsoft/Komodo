@@ -40,9 +40,9 @@ procedure init_addrspace_mem(
     requires/ensures
         SaneState(this);
     requires
-        @tmp != @addrspace_va && @tmp != @tmp2 && @tmp != @tmp3 && @tmp != OSP;
-        @tmp2 != @l1pt_page && @tmp2 != @addrspace_va && @tmp2 != @tmp3 && @tmp2 != OSP;
-        @tmp3 != @addrspace_va && @tmp3 != OSP;
+        @addrspace_page == OReg(R1) && @l1pt_page == OReg(R2)
+            && @addrspace_va == OReg(R6) && @tmp == OReg(R7) && @tmp2 == OReg(R8)
+            && @tmp3 == OReg(R9);
         validPageNr(addrspace_page);
         validPageNr(l1pt_page);
         addrspace_page != l1pt_page;
@@ -111,24 +111,20 @@ procedure init_addrspace_pagedb(
     inout operand addrspace_entry:reg, // r4
     inout operand l1pt_entry:reg, // r5
     out operand addrspace_va:reg, // r6
-    out operand tmp:reg) // r0
+    out operand tmp:reg) // r7
     requires/ensures
         SaneState(this);
     requires
+        @addrspace_page == OReg(R1)
+            && @pagedb_base == OReg(R12)
+            && @addrspace_entry == OReg(R4) && @l1pt_entry == OReg(R5)
+            && @addrspace_va == OReg(R6) && @tmp == OReg(R7);
         addrspace_page != l1pt_page;
         validPageNr(addrspace_page);
         validPageNr(l1pt_page);
         addrspace_entry == G_PAGEDB_ENTRY(addrspace_page);
         l1pt_entry == G_PAGEDB_ENTRY(l1pt_page);
         pagedb_base == AddressOfGlobal(PageDb());
-        @addrspace_va != @addrspace_page && @addrspace_va != @pagedb_base
-            && @addrspace_va != @addrspace_entry && @addrspace_va != @l1pt_entry
-            && @addrspace_va != @tmp && @addrspace_va != OSP;
-        @tmp != @addrspace_page && @tmp != @pagedb_base
-            && @tmp != @addrspace_entry && @tmp != @l1pt_entry && @tmp != OSP;
-        @addrspace_entry != @addrspace_page && @addrspace_entry != @pagedb_base
-            && @addrspace_entry != @l1pt_entry && @addrspace_entry != OSP;
-        @l1pt_entry != @pagedb_base && @l1pt_entry != @addrspace_page && @l1pt_entry != OSP;
     modifies
         globals;
     ensures
@@ -176,18 +172,11 @@ procedure init_addrspace(
     requires/ensures
         SaneState(this);
     requires
-        @addrspace_entry == OReg(R4) && @l1pt_entry == OReg(R5)
+        @addrspace_page == OReg(R1) && @l1pt_page == OReg(R2)
+            && @pagedb_base == OReg(R12)
+            && @addrspace_entry == OReg(R4) && @l1pt_entry == OReg(R5)
             && @tmp1 == OReg(R6) && @tmp2 == OReg(R7) && @tmp3 == OReg(R8)
             && @tmp4 == OReg(R9);
-        @addrspace_page != @addrspace_entry && @addrspace_page != @l1pt_entry
-            && @addrspace_page != @tmp1 && @addrspace_page != @tmp2
-            && @addrspace_page != @tmp3 && @addrspace_page != @tmp4;
-        @l1pt_page != @addrspace_entry && @l1pt_page != @l1pt_entry
-            && @l1pt_page != @tmp1 && @l1pt_page != @tmp2 && @l1pt_page != @tmp3
-            && @l1pt_page != @tmp4;
-        @pagedb_base != @addrspace_entry && @pagedb_base != @l1pt_entry
-            && @pagedb_base != @tmp1 && @pagedb_base != @tmp2
-            && @pagedb_base != @tmp3 && @pagedb_base != @tmp4;
         addrspace_page != l1pt_page;
         validPageNr(addrspace_page);
         validPageNr(l1pt_page);
