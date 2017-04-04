@@ -450,6 +450,22 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
 */
 }
 
+lemma lemma_pageDbCorrespondsForSpec(s:state, d:PageDb, l1:PageNr)
+    requires SaneState(s) && validPageDb(d) && pageDbCorresponds(s.m, d)
+    requires nonStoppedL1(d, l1)
+    requires s.conf.ttbr0.ptbase == page_paddr(l1)
+    ensures pageTableCorresponds(s, d, l1) && dataPagesCorrespond(s.m, d)
+{
+    forall p:PageNr | d[p].PageDbEntryTyped? && d[p].entry.DataPage?
+        ensures pageDbDataCorresponds(p, d[p].entry, extractPage(s.m, p))
+    {
+        reveal_pageContentsCorresponds();
+    }
+
+    lemma_ptablesmatch(s.m, d, l1);
+    reveal_pageTableCorresponds();
+}
+
 lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     returns (rd:PageDb, retToEnclave:bool)
     requires SaneState(s)
@@ -507,6 +523,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
 
     assert validEnclaveExecutionStep(s, sd, r, rd, dispPg, retToEnclave) by {
         reveal_validEnclaveExecutionStep();
+        lemma_pageDbCorrespondsForSpec(s, sd, l1pOfDispatcher(sd, dispPg));
         assert validEnclaveExecutionStep'(s, sd, s2, s3, s4, d4, r, rd,
                                           dispPg, retToEnclave);
     }
@@ -599,7 +616,8 @@ lemma lemma_validEnclaveExecutionStepPrePost(s0:state, s1:state, d1:PageDb, r1:s
     var s2, s3, s4, d4 :|
         validEnclaveExecutionStep'(s1, d1, s2, s3, s4, d4, r1, rd, dispPg,
                                      retToEnclave);
-
+    var l1p := l1pOfDispatcher(d1, dispPg);
+    assert pageTableCorresponds(s0, d1, l1p) by { reveal_pageTableCorresponds(); }
     assert entryTransition(s0, s2);
     assert validEnclaveExecutionStep'(s0, d1, s2, s3, s4, d4, r1, rd, dispPg,
                                      retToEnclave);

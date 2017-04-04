@@ -70,24 +70,6 @@ const KOM_ADDRSPACE_STOPPED:int := 2;
 //
 //-----------------------------------------------------------------------------
 
-predicate memContainsPage(page: memmap, p:PageNr)
-{
-    forall m:addr :: addrInPage(m,p) ==> m in page
-}
-
-function extractPage(s:memstate, p:PageNr): memmap
-    requires SaneMem(s)
-    ensures memContainsPage(extractPage(s,p), p)
-{
-    reveal_ValidMemState();
-    // XXX: expanded addrInPage() to help Dafny see a bounded set
-    var res := (map m:addr {:trigger addrInPage(m, p)} {:trigger MemContents(s, m)}
-        | page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE
-        :: MemContents(s, m));
-    res
-}
-
-
 function extractPageDbEntry(s:memstate, p:PageNr): seq<word>
     requires SaneMem(s)
     ensures |extractPageDbEntry(s,p)| == BytesToWords(PAGEDB_ENTRY_SIZE)
@@ -153,17 +135,6 @@ predicate {:opaque} pageDbEntryCorresponds(e:PageDbEntry, entryWords:seq<word>)
             entryWords[BytesToWords(PAGEDB_ENTRY_ADDRSPACE)]
                 == page_monvaddr(addrspace)
     }
-}
-
-predicate {:opaque} pageDbDataCorresponds(p: PageNr, e: PageDbEntryTyped, page:memmap)
-    requires memContainsPage(page, p)
-    requires e.DataPage?
-    requires wellFormedPageDbEntryTyped(e)
-{
-    var base := page_monvaddr(p);
-    forall i | 0 <= i < PAGESIZE / WORDSIZE ::
-        (assert base + i*4 in page;
-        e.contents[i] == page[base + i*4])
 }
 
 predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:memmap)
