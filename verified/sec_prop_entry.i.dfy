@@ -464,15 +464,12 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
 
     lemma_userspaceExec_atkr_conf(s12, s13, d11, s22, s23, d21, dispPg, atkr);
 
-    assert d14 == d24;
-
     // TODO proveme
     assume isReturningSvc(s14) == isReturningSvc(s24);
 
     if(isReturningSvc(s14)) {
         assert rd1 == d14;
         assert rd2 == d24;
-        reveal_enc_conf_eqpdb();
         assert rd1 == rd2;
         assert enc_conf_eqpdb(rd1, rd2, atkr);
         // avoid proving anything about nd sources...
@@ -531,13 +528,81 @@ dispPg: PageNr, atkr: PageNr)
         dataPagesCorrespond(s22.m, d2))
     ensures (var d14 := updateUserPagesFromState(s13, d1, dispPg);
         var d24 := updateUserPagesFromState(s23, d2, dispPg);
-        d14 == d24 && d14[atkr].PageDbEntryTyped? &&
-            d24[atkr].PageDbEntryTyped? &&
-            valAddrPage(d14, atkr) && valAddrPage(d24, atkr))
+        enc_conf_eqpdb(d14, d24, atkr)) 
 {
-   assume false;
+    // reveal_evalUserspaceExecution();
+    reveal_enc_conf_eqpdb();
 
+    var l1p := l1pOfDispatcher(d1, dispPg);
+    
+    var d14 := updateUserPagesFromState(s13, d1, dispPg);
+    var d24 := updateUserPagesFromState(s23, d2, dispPg);
 
+    assert validPageDb(d14) && validPageDb(d24);
+
+    forall(n : PageNr) 
+        ensures pgInAddrSpc(d14, n, atkr) <==> pgInAddrSpc(d1, n, atkr)
+        ensures d14[n].PageDbEntryTyped? <==> d1[n].PageDbEntryTyped?
+        ensures d14[atkr].entry == d1[atkr].entry;
+        { reveal_updateUserPagesFromState(); }
+
+    forall( n : PageNr) 
+        ensures pgInAddrSpc(d24, n, atkr) <==> pgInAddrSpc(d2, n, atkr)
+        ensures d24[n].PageDbEntryTyped? <==> d2[n].PageDbEntryTyped?
+        ensures d24[atkr].entry == d2[atkr].entry;
+        { reveal_updateUserPagesFromState(); }
+
+    assert forall n : PageNr :: pgInAddrSpc(d14, n, atkr) <==>
+        pgInAddrSpc(d24, n, atkr);
+
+    assert forall n : PageNr :: pageSWrInAddrspace(d1, l1p, n) <==>
+        pageSWrInAddrspace(d2, l1p, n);
+    
+    forall( n : PageNr | pgInAddrSpc(d14, n, atkr))
+        ensures contentsOfPage(s13, n) ==
+            contentsOfPage(s23, n)
+    {
+        reveal_evalUserspaceExecution();
+        var base := page_monvaddr(n);
+        var pt1 := ExtractAbsPageTable(s12);
+        var pt2 := ExtractAbsPageTable(s22);
+        var pages1 := WritablePagesInTable(fromJust(pt1));
+        var pages2 := WritablePagesInTable(fromJust(pt2));
+        assert pt1.Just? && pt2.Just?;
+        
+        // assume pages1 == pages2;
+        // TODO need to prove this with a precond about how the page tables 
+        // were set up prior to entry.
+        forall( a : addr | a in addrsInPage(n, base) )
+            ensures BitwiseMaskHigh(a, 12) in pages1
+            ensures BitwiseMaskHigh(a, 12) in pages2
+        { assume false; }
+
+        assume s12.nd_private == s22.nd_private;
+        assume s12.nd_public == s22.nd_public;
+    }
+    
+    forall( n : PageNr | pgInAddrSpc(d14, n, atkr))
+        ensures d14[n].entry == d24[n].entry
+    {
+        reveal_updateUserPagesFromState();
+        if(pageSWrInAddrspace(d14, l1p, n)) {
+            assert d1[n].entry == d2[n].entry;
+            assert d14[n] == d1[n].(entry := d1[n].entry.(
+                contents := contentsOfPage(s13, n)));
+            assert d24[n] == d2[n].(entry := d2[n].entry.(
+                contents := contentsOfPage(s23, n)));
+            assert d14[n].entry == d24[n].entry;
+        } else {
+            assert d14[n].entry == d1[n].entry;
+            assert d24[n].entry == d2[n].entry;
+            assert d1[n].entry == d2[n].entry;
+            assert d14[n].entry == d24[n].entry;
+        }
+    }
+
+    reveal_enc_conf_eqpdb();
+    assert enc_conf_eqpdb(d14, d24, atkr);
 }
 
 
