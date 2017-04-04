@@ -470,7 +470,6 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
     if(isReturningSvc(s14)) {
         assert rd1 == d14;
         assert rd2 == d24;
-        assert rd1 == rd2;
         assert enc_conf_eqpdb(rd1, rd2, atkr);
         // avoid proving anything about nd sources...
         assume enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
@@ -506,22 +505,6 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
     //              - contents written same (by s13.nd == s23.nd)
     //
     //
-    assume false;
-}
-
-lemma lemma_data_page_eqdb_to_addrs( d1:PageDb, d2:PageDb, s1: state, s2: state,
-n:PageNr, a:addr, atkr:PageNr)
-    requires validPageDb(d1) && validPageDb(d2)
-    requires ValidState(s1) && ValidState(s2) && SaneConstants()
-    requires d1[n].PageDbEntryTyped? && d1[n].entry.DataPage?
-    requires d2[n].PageDbEntryTyped? && d2[n].entry.DataPage?
-    requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
-    requires d1[n].addrspace == atkr && d2[n].addrspace == atkr
-    requires enc_conf_eqpdb(d1, d2, atkr)
-    requires a in addrsInPage(n, page_monvaddr(n))
-    requires dataPagesCorrespond(s1.m, d1) && dataPagesCorrespond(s2.m, d2)
-    ensures s1.m.addresses[a] == s2.m.addresses[a]
-{
     assume false;
 }
 
@@ -576,40 +559,44 @@ dispPg: PageNr, atkr: PageNr)
         pageSWrInAddrspace(d2, l1p, n);
 
 
-    forall( n : PageNr | pgInAddrSpc(d14, n, atkr))
+    forall( n : PageNr | pageSWrInAddrspace(d1, l1p, n))
         ensures contentsOfPage(s13, n) ==
             contentsOfPage(s23, n)
     {
-        assume d1[n].PageDbEntryTyped?;
-        assume d2[n].PageDbEntryTyped?;
-        assume d1[n].entry.DataPage?;
-        assume d2[n].entry.DataPage?;
-        /*
-        reveal_evalUserspaceExecution();
-        var pt1 := ExtractAbsPageTable(s12);
-        var pt2 := ExtractAbsPageTable(s22);
-        var pages1 := WritablePagesInTable(fromJust(pt1));
-        var pages2 := WritablePagesInTable(fromJust(pt2));
-        assert pt1.Just? && pt2.Just?;
-        */
+        assert d1[n].PageDbEntryTyped?;
+        assert d2[n].PageDbEntryTyped?;
+        assert d1[n].entry.DataPage?;
+        assert d2[n].entry.DataPage?;
         
-        // assume pages1 == pages2;
-        // TODO need to prove this with a precond about how the page tables 
-        // were set up prior to entry.
         var base := page_monvaddr(n);
         forall( a : addr | a in addrsInPage(n, base) )
             ensures s13.m.addresses[a] == s23.m.addresses[a]
         {
             reveal_evalUserspaceExecution();
+            assert ExtractAbsPageTable(s12) == ExtractAbsPageTable(s22) by
+            {
+                lemma_eqpdb_pt_coresp(d1, d2, s12, s22, l1p, atkr);
+            }
+            var pt := ExtractAbsPageTable(s12);
+            assert pt.Just?;
+            var pages := WritablePagesInTable(fromJust(pt));
+
+            /*
             var pt1 := ExtractAbsPageTable(s12);
             var pt2 := ExtractAbsPageTable(s22);
             var pages1 := WritablePagesInTable(fromJust(pt1));
             var pages2 := WritablePagesInTable(fromJust(pt2));
             assert pt1.Just? && pt2.Just?;
-            assume pages1 == pages2;
-            assume s12.nd_private == s22.nd_private;
-            assume s12.nd_public == s22.nd_public;
-            if( BitwiseMaskHigh(a, 12) in pages1 ){
+            */
+            
+           // assume pages1 == pages2;
+            // assert BitwiseMaskHigh(a, 12) in pages1 <==>
+            //     BitwiseMaskHigh(a, 12) in pages2 by {
+            //     lemma_WritablePagesFlipped(d1, l1p, base);
+            //     lemma_WritablePagesFlipped(d2, l1p, base);
+            // }
+            
+            if( BitwiseMaskHigh(a, 12) in pages ){
                 // havoced the same
                 assert s13.m.addresses[a] ==s23.m.addresses[a];
             } else {
@@ -623,14 +610,13 @@ dispPg: PageNr, atkr: PageNr)
             }
         }
 
-        // assume s12.nd_private == s22.nd_private;
     }
     
     forall( n : PageNr | pgInAddrSpc(d14, n, atkr))
         ensures d14[n].entry == d24[n].entry
     {
         reveal_updateUserPagesFromState();
-        if(pageSWrInAddrspace(d14, l1p, n)) {
+        if(pageSWrInAddrspace(d1, l1p, n)) {
             assert d1[n].entry == d2[n].entry;
             assert d14[n] == d1[n].(entry := d1[n].entry.(
                 contents := contentsOfPage(s13, n)));
@@ -649,16 +635,113 @@ dispPg: PageNr, atkr: PageNr)
     assert enc_conf_eqpdb(d14, d24, atkr);
 }
 
-lemma lemma_WritablePagesFlipped(d:PageDb, l1p:PageNr, pagebase:addr)
-    requires PhysBase() == KOM_DIRECTMAP_VBASE
-    requires validPageDb(d)
-    requires nonStoppedL1(d, l1p)
-    requires PageAligned(pagebase) && address_is_secure(pagebase)
-    requires pageSWrInAddrspace(d, l1p, monvaddr_page(pagebase))
-    ensures pagebase in WritablePagesInTable(mkAbsPTable(d, l1p))
+lemma lemma_data_page_eqdb_to_addrs( d1:PageDb, d2:PageDb, s1: state, s2: state,
+n:PageNr, a:addr, atkr:PageNr)
+    requires validPageDb(d1) && validPageDb(d2)
+    requires ValidState(s1) && ValidState(s2) && SaneConstants()
+    requires d1[n].PageDbEntryTyped? && d1[n].entry.DataPage?
+    requires d2[n].PageDbEntryTyped? && d2[n].entry.DataPage?
+    requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+    requires d1[n].addrspace == atkr && d2[n].addrspace == atkr
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    requires a in addrsInPage(n, page_monvaddr(n))
+    requires dataPagesCorrespond(s1.m, d1) && dataPagesCorrespond(s2.m, d2)
+    ensures s1.m.addresses[a] == s2.m.addresses[a]
 {
+	reveal_enc_conf_eqpdb();
+	reveal_pageDbDataCorresponds();
 	assume false;
 }
+
+lemma lemma_eqpdb_pt_coresp(d1: PageDb, d2: PageDb, s1: state, s2: state,
+l1p:PageNr, atkr: PageNr)
+    requires validPageDb(d1) && validPageDb(d2)
+    requires ValidState(s1) && ValidState(s2)
+    requires ValidState(s1) && ValidState(s2) && SaneConstants()
+    requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+    requires !stoppedAddrspace(d1[atkr]) && !stoppedAddrspace(d2[atkr])
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    requires nonStoppedL1(d1, l1p) && nonStoppedL1(d2, l1p)
+    requires pageTableCorresponds(s1, d1, l1p)
+    requires pageTableCorresponds(s2, d2, l1p)
+    requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+        && d1[atkr].entry.l1ptnr == d2[atkr].entry.l1ptnr == l1p
+    requires pgInAddrSpc(d1, l1p, atkr) && pgInAddrSpc(d2, l1p, atkr)
+    ensures  ExtractAbsPageTable(s1) == ExtractAbsPageTable(s2)
+{
+    reveal_pageTableCorresponds();
+    assert s1.conf.ttbr0.ptbase == page_paddr(l1p);
+    assert s2.conf.ttbr0.ptbase == page_paddr(l1p);
+    var vbase := s1.conf.ttbr0.ptbase + PhysBase();
+    assert ValidAbsL1PTable(s1.m, page_monvaddr(l1p));
+    assert ValidAbsL1PTable(s2.m, page_monvaddr(l1p));
+    assert ExtractAbsPageTable(s1) ==
+        Just(ExtractAbsL1PTable(s1.m, vbase));
+    assert ExtractAbsPageTable(s2) ==
+        Just(ExtractAbsL1PTable(s2.m, vbase));
+    assert ExtractAbsL1PTable(s1.m, page_monvaddr(l1p)) ==
+        mkAbsPTable(d1, l1p);
+    assert ExtractAbsL1PTable(s2.m, page_monvaddr(l1p)) ==
+        mkAbsPTable(d2, l1p);
+        
+    assert mkAbsPTable(d1, l1p) == mkAbsPTable(d2, l1p) by {
+        reveal_enc_conf_eqpdb();
+        var l1pt1 := d1[l1p].entry.l1pt;
+        var l1pt2 := d2[l1p].entry.l1pt;
+        // assert l1pt1 == l1pt2;
+        // var fn1 := imap l1e:Maybe<PageNr> | l1e in l1pt1 :: mkAbsPTable'(d1, l1e);
+        // var fn2 := imap l1e:Maybe<PageNr> | l1e in l1pt2 :: mkAbsPTable'(d2, l1e);
+        // assert fn1 == fn2;
+        assert l1pt1 == l1pt2 by {
+            assert pgInAddrSpc(d1, l1p, atkr);
+            assert pgInAddrSpc(d2, l1p, atkr);
+            assert d1[l1p].entry == d2[l1p].entry;
+        }
+        forall( l1e | l1e in l1pt1 )
+            ensures mkAbsPTable'(d1, l1e) == mkAbsPTable'(d2, l1e)
+        {
+            assume false;
+            // reveal_validPageDb();
+            // assert l1e.Just?;
+            // assert d1[l1e.v].addrspace == d1[l1p].addrspace;
+            // assert d2[l1e.v].addrspace == d2[l1p].addrspace;
+            // assert pgInAddrSpc(d1, l1e.v, atkr);
+            // assert pgInAddrSpc(d2, l1e.v, atkr);
+            // assert d1[l1e.v].entry == d2[l1e.v].entry;
+
+            // This seems close... assume false here proves line 687... but 
+            // trying to do anything here takes that away
+            // assert (l1e.Just? &&
+            // pgInAddrSpc(d1, l1e.v, atkr) &&
+            // pgInAddrSpc(d2, l1e.v, atkr)) by  {
+            //     reveal_validPageDb();
+            //     assert l1e.Just?;
+            //     assert d1[l1e.v].addrspace == d1[l1p].addrspace;
+            //     assert d2[l1e.v].addrspace == d2[l1p].addrspace;
+            // }
+            //lemma_mkabspt_enc_conf_eqpdb(d1, d2, l1e, atkr);
+            //assert d1[l1ep].entry == d2[l1ep].entry;
+        }
+        reveal_mkAbsPTable();
+    }
+}
+
+/*
+lemma lemma_mkabspt_enc_conf_eqpdb(d1: PageDb, d2: PageDb, l1p: PageNr, 
+    l1pt:seq<Maybe<PageNr>>, atkr: PageNr)
+    requires validPageDb(d1) && validPageDb(d2) && SaneConstants()
+    requires !stoppedAddrSpace(atkr)
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    ensures mkAbsPTable'(d1, l1e) == mkAbsPTable'(d2, l1e)
+{
+    reveal_enc_conf_eqpdb();
+    reveal_validPageDb();
+
+    assert d1[l1e.v].entry == d2[l1e.v].entry;
+}
+*/
+
+
 
 //-----------------------------------------------------------------------------
 // Resume
