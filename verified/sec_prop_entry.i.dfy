@@ -509,6 +509,23 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
     assume false;
 }
 
+lemma lemma_data_page_eqdb_to_addrs( d1:PageDb, d2:PageDb, s1: state, s2: state,
+n:PageNr, a:addr, atkr:PageNr)
+    requires validPageDb(d1) && validPageDb(d2)
+    requires ValidState(s1) && ValidState(s2) && SaneConstants()
+    requires d1[n].PageDbEntryTyped? && d1[n].entry.DataPage?
+    requires d2[n].PageDbEntryTyped? && d2[n].entry.DataPage?
+    requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+    requires d1[n].addrspace == atkr && d2[n].addrspace == atkr
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    requires a in addrsInPage(n, page_monvaddr(n))
+    requires dataPagesCorrespond(s1.m, d1) && dataPagesCorrespond(s2.m, d2)
+    ensures s1.m.addresses[a] == s2.m.addresses[a]
+{
+    assume false;
+}
+
+
 lemma lemma_userspaceExec_atkr_conf(
 s12: state, s13:state, d1:PageDb,
 s22: state, s23:state, d2:PageDb,
@@ -557,29 +574,56 @@ dispPg: PageNr, atkr: PageNr)
 
     assert forall n : PageNr :: pageSWrInAddrspace(d1, l1p, n) <==>
         pageSWrInAddrspace(d2, l1p, n);
-    
+
+
     forall( n : PageNr | pgInAddrSpc(d14, n, atkr))
         ensures contentsOfPage(s13, n) ==
             contentsOfPage(s23, n)
     {
+        assume d1[n].PageDbEntryTyped?;
+        assume d2[n].PageDbEntryTyped?;
+        assume d1[n].entry.DataPage?;
+        assume d2[n].entry.DataPage?;
+        /*
         reveal_evalUserspaceExecution();
-        var base := page_monvaddr(n);
         var pt1 := ExtractAbsPageTable(s12);
         var pt2 := ExtractAbsPageTable(s22);
         var pages1 := WritablePagesInTable(fromJust(pt1));
         var pages2 := WritablePagesInTable(fromJust(pt2));
         assert pt1.Just? && pt2.Just?;
+        */
         
         // assume pages1 == pages2;
         // TODO need to prove this with a precond about how the page tables 
         // were set up prior to entry.
+        var base := page_monvaddr(n);
         forall( a : addr | a in addrsInPage(n, base) )
-            ensures BitwiseMaskHigh(a, 12) in pages1
-            ensures BitwiseMaskHigh(a, 12) in pages2
-        { assume false; }
+            ensures s13.m.addresses[a] == s23.m.addresses[a]
+        {
+            reveal_evalUserspaceExecution();
+            var pt1 := ExtractAbsPageTable(s12);
+            var pt2 := ExtractAbsPageTable(s22);
+            var pages1 := WritablePagesInTable(fromJust(pt1));
+            var pages2 := WritablePagesInTable(fromJust(pt2));
+            assert pt1.Just? && pt2.Just?;
+            assume pages1 == pages2;
+            assume s12.nd_private == s22.nd_private;
+            assume s12.nd_public == s22.nd_public;
+            if( BitwiseMaskHigh(a, 12) in pages1 ){
+                // havoced the same
+                assert s13.m.addresses[a] ==s23.m.addresses[a];
+            } else {
+                assert s13.m.addresses[a] == s12.m.addresses[a];
+                assert s23.m.addresses[a] == s22.m.addresses[a];
+                assert dataPagesCorrespond(s12.m, d1);
+                assert dataPagesCorrespond(s22.m, d2);
+                lemma_data_page_eqdb_to_addrs(d1, d2, s12, s22, n, a, atkr);
+                assert s12.m.addresses[a] == s22.m.addresses[a];
+                assert s13.m.addresses[a] == s23.m.addresses[a];
+            }
+        }
 
-        assume s12.nd_private == s22.nd_private;
-        assume s12.nd_public == s22.nd_public;
+        // assume s12.nd_private == s22.nd_private;
     }
     
     forall( n : PageNr | pgInAddrSpc(d14, n, atkr))
@@ -605,6 +649,16 @@ dispPg: PageNr, atkr: PageNr)
     assert enc_conf_eqpdb(d14, d24, atkr);
 }
 
+lemma lemma_WritablePagesFlipped(d:PageDb, l1p:PageNr, pagebase:addr)
+    requires PhysBase() == KOM_DIRECTMAP_VBASE
+    requires validPageDb(d)
+    requires nonStoppedL1(d, l1p)
+    requires PageAligned(pagebase) && address_is_secure(pagebase)
+    requires pageSWrInAddrspace(d, l1p, monvaddr_page(pagebase))
+    ensures pagebase in WritablePagesInTable(mkAbsPTable(d, l1p))
+{
+	assume false;
+}
 
 //-----------------------------------------------------------------------------
 // Resume
