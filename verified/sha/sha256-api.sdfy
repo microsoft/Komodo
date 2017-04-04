@@ -83,6 +83,12 @@ ensures
     assert {:split_here}{:refined} true;    // Split right before we try to prove the preconditions for the abstract lemma
 }
 
+#verbatim
+
+const STACKSIZE_SHA_FINALIZE:int := 16 + STACKSIZE_SHA_UPDATE;    // Need 16 more words to store the padding block
+
+#endverbatim
+
 procedure {:refined} sha256_finalize(
         ghost trace_in:SHA256Trace
     ) 
@@ -100,8 +106,8 @@ requires
     SHA256TraceIsCorrect(trace_in);
 
     // Stack is accessible
-    sp >= ((29 + 16) * WORDSIZE);   // Add some stack for storing the last block
-    ValidMemRange(sp - ((29 + 16) * WORDSIZE), sp);
+    sp >= (STACKSIZE_SHA_FINALIZE * WORDSIZE);   // Add some stack for storing the last block
+    ValidMemRange(sp -  STACKSIZE_SHA_FINALIZE * WORDSIZE, sp);
 
     // K table is valid
     SaneShaGlobal(globals);
@@ -126,7 +132,7 @@ requires
      //&& SeqLength(WordSeqToBytes(ConcatenateSeqs(trace_in.M)))*8 < 0x1_0000_0000_0000_0000
 
      // Anti-aliasing
-     && (ctx + SHA_CTXSIZE*WORDSIZE < sp - ((29 + 16) * WORDSIZE) || ctx > sp)                              // ctx != sp
+     && (ctx + SHA_CTXSIZE*WORDSIZE < sp - STACKSIZE_SHA_FINALIZE * WORDSIZE || ctx > sp)                              // ctx != sp
     ;
 ensures
     // Framing
@@ -135,7 +141,7 @@ ensures
 
     // Memory framing:  We only touch the stack and 8 words pointed to by ctx_ptr
     AddrMemPreservingExcept2(old(mem), mem, 
-                             sp - ((29 + 16) * WORDSIZE), sp, 
+                             sp - STACKSIZE_SHA_FINALIZE * WORDSIZE, sp, 
                              old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE);
 
     // Calling convention
@@ -244,6 +250,7 @@ lemma lemma_mul_associates_very_specific(x:int)
 {
 }
 
+const STACKSIZE_SHA_ONE_SHOT:int := 3 + STACKSIZE_SHA_FINALIZE;    // Need 3 more words to preserve registers
 #endverbatim
 
 
@@ -255,8 +262,8 @@ requires {:refined false}
     mode_of_state(this) == Monitor;
 requires
     // Stack is accessible
-    sp >= ((3 + 29 + 16) * WORDSIZE);   // Add 3 extra slots for preserving registers
-    ValidMemRange(sp - ((3 + 29 + 16) * WORDSIZE), sp);
+    sp >= STACKSIZE_SHA_ONE_SHOT * WORDSIZE;
+    ValidMemRange(sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE, sp);
 
     // K table is valid
     SaneShaGlobal(globals);
@@ -278,8 +285,8 @@ requires
 
      // Anti-aliasing
      && (ctx + SHA_CTXSIZE*WORDSIZE < input_ptr || ctx > input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE)    // input_ptr != ctx
-     && (ctx + SHA_CTXSIZE*WORDSIZE < sp - ((3 + 29 + 16) * WORDSIZE) || ctx >= sp)                            // ctx != sp
-     && (input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE < sp - ((3 + 29 + 16) * WORDSIZE) || input_ptr >= sp);  // input_ptr != sp
+     && (ctx + SHA_CTXSIZE*WORDSIZE < sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE || ctx >= sp)                            // ctx != sp
+     && (input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE < sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE || input_ptr >= sp);  // input_ptr != sp
 reads
     globals;
 modifies
@@ -291,7 +298,7 @@ ensures
 
     // Memory framing:  We only touch the stack and 8 words pointed to by ctx_ptr
     AddrMemPreservingExcept2(old(mem), mem, 
-                             sp - ((3 + 29 + 16) * WORDSIZE), sp, 
+                             sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE, sp, 
                              old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE);
 
     // Calling convention
@@ -352,7 +359,7 @@ ensures
 
   // Prove that input still accurate in memory
   assert input == AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * old(r2)) by { 
-    lemma_AddrMemContentsSeq_framing(input_mem, mem, input_ptr, SHA_BLOCKSIZE*num_blocks, sp - 116, sp,
+    lemma_AddrMemContentsSeq_framing(input_mem, mem, input_ptr, SHA_BLOCKSIZE*num_blocks, sp - STACKSIZE_SHA_UPDATE*WORDSIZE, sp,
                                      old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE); 
   }
 
@@ -372,7 +379,7 @@ ensures
    
   // Prove that input still accurate in memory
   assert input == AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * old(r2)) by { 
-    lemma_AddrMemContentsSeq_framing(input_mem, mem, input_ptr, SHA_BLOCKSIZE*num_blocks, sp - ((29 + 16) * WORDSIZE), sp,
+    lemma_AddrMemContentsSeq_framing(input_mem, mem, input_ptr, SHA_BLOCKSIZE*num_blocks, sp - STACKSIZE_SHA_FINALIZE * WORDSIZE, sp,
                                      old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE); 
   }
   
