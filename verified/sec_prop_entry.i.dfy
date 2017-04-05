@@ -477,51 +477,12 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         assume enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
     } else {
         lemma_userExecAndExcp_atkr_regs(s12, s13, s14, s22, s23, s24);
+        assume s14.conf.ex == s24.conf.ex; // TODO provme
         lemma_exceptionHandled_atkr_conf(s14, d14, rd1, s24, d24, rd2, dispPg, atkr);
         // No idea how to prove anything about nd_*
         assume enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
     }
 }
-
-/*
-function havocUserRegsUnrolled(nondet:int, regs:map<ARMReg, word>): map<ARMReg, word>
-    requires ValidRegState(regs)
-    ensures ValidRegState(havocUserRegs(nondet, regs))
-    ensures havocUserRegsUnrolled(nondet, regs) ==
-        havocUserRegs(nondet, regs)
-{
-    reveal_ValidRegState();
-    map[ 
-        R0  := nondet_word(nondet, NONDET_REG(R0)),
-        R1  := nondet_word(nondet, NONDET_REG(R1)),
-        R2  := nondet_word(nondet, NONDET_REG(R2)),
-        R3  := nondet_word(nondet, NONDET_REG(R3)),
-        R4  := nondet_word(nondet, NONDET_REG(R4)),
-        R5  := nondet_word(nondet, NONDET_REG(R5)),
-        R6  := nondet_word(nondet, NONDET_REG(R6)),
-        R7  := nondet_word(nondet, NONDET_REG(R7)),
-        R8  := nondet_word(nondet, NONDET_REG(R8)),
-        R9  := nondet_word(nondet, NONDET_REG(R9)),
-        R10 := nondet_word(nondet, NONDET_REG(R10)),
-        R11 := nondet_word(nondet, NONDET_REG(R11)),
-        R12 := nondet_word(nondet, NONDET_REG(R12)),
-        LR(User) := nondet_word(nondet, NONDET_REG(LR(User))),
-        SP(User) := nondet_word(nondet, NONDET_REG(SP(User))),
-        LR(FIQ)  := regs[LR(FIQ)],
-        SP(FIQ)  := regs[SP(FIQ)],
-        LR(IRQ)  := regs[LR(IRQ)],
-        SP(IRQ)  := regs[SP(IRQ)],
-        LR(Supervisor)  := regs[LR(Supervisor)],
-        SP(Supervisor)  := regs[SP(Supervisor)],
-        LR(Abort)  := regs[LR(Abort)],
-        SP(Abort)  := regs[SP(Abort)],
-        LR(Undefined)  := regs[LR(Undefined)],
-        SP(Undefined)  := regs[SP(Undefined)],
-        LR(Monitor)  := regs[LR(Monitor)],
-        SP(Monitor)  := regs[SP(Monitor)]
-    ]
-}
-*/
 
 lemma lemma_userExec_atkr_regs(s1:state, s1':state,s2:state, s2':state)
     requires ValidState(s1) && ValidState(s1') 
@@ -545,6 +506,10 @@ lemma lemma_userExecAndExcp_atkr_regs(
     requires userspaceExecutionAndException(s2, s2', r2)
     requires s1.nd_private == s2.nd_private;
     ensures  usr_regs_equiv(r1, r2)
+    ensures r1.conf.ex == r2.conf.ex
+    ensures mode_of_state(r1) == mode_of_state(r2)
+    ensures r1.regs[LR(mode_of_state(r1))] == r2.regs[LR(mode_of_state(r2))]
+    ensures r1.sregs[spsr(mode_of_state(r1))] == r2.sregs[spsr(mode_of_state(r2))]
 {
     assert usr_regs_equiv(s1', s2') by {
         lemma_userExec_atkr_regs(s1, s1', s2, s2');
@@ -552,6 +517,7 @@ lemma lemma_userExecAndExcp_atkr_regs(
 
     var ex1 :| evalExceptionTaken(s1', ex1, r1);
     var ex2 :| evalExceptionTaken(s2', ex2, r2);
+    assume ex1 == ex2; // XXX there is no way to prove this from spec
     var newmode1 := mode_of_exception(s1'.conf, ex1);
     var newmode2 := mode_of_exception(s2'.conf, ex2);
     assert newmode2 != User;
@@ -570,16 +536,57 @@ dispPg: PageNr, atkr: PageNr)
              validPageDb(d1) && validPageDb(d2) && SaneConstants()
     requires enc_conf_eq_entry(s1, s2, d1, d2, atkr);
     requires mode_of_state(s1) != User && mode_of_state(s2) != User
+    requires mode_of_state(s1) == mode_of_state(s2)
+    requires s1.regs[LR(mode_of_state(s1))] == s2.regs[LR(mode_of_state(s2))]
+    requires s1.sregs[spsr(mode_of_state(s1))] == s2.sregs[spsr(mode_of_state(s2))]
     requires validDispatcherPage(d1, dispPg) && validDispatcherPage(d2, dispPg)
     requires d1' == exceptionHandled(s1, d1, dispPg).2
     requires d2' == exceptionHandled(s2, d2, dispPg).2
     requires atkr_entry(d1, d2, dispPg, atkr)
     requires enc_conf_eqpdb(d1, d2, atkr)
     requires usr_regs_equiv(s1, s2)
+    requires s1.conf.ex == s2.conf.ex
     ensures  enc_conf_eqpdb(d1', d2', atkr)
     ensures  atkr_entry(d1', d2', dispPg, atkr)
 {
-    assume false;
+    reveal_enc_conf_eqpdb();
+    var ex := s1.conf.ex;
+    forall (n : PageNr |  n != dispPg)
+        ensures d1'[n] == d1[n];
+        ensures d2'[n] == d2[n];
+        ensures pgInAddrSpc(d1, n, atkr) <==>
+            pgInAddrSpc(d1', n, atkr)
+        ensures pgInAddrSpc(d2, n, atkr) <==>
+            pgInAddrSpc(d2', n, atkr)
+    {
+    }
+
+    assert forall n : PageNr :: pgInAddrSpc(d1, n, atkr) <==>
+        pgInAddrSpc(d2, n, atkr);
+
+    forall( n : PageNr | n != dispPg &&
+        pgInAddrSpc(d1, n, atkr) )
+    ensures d1'[n] == d2'[n]
+    {
+    }
+
+    if( ex.ExSVC? || ex.ExAbt? || ex.ExUnd? ) {
+        assert d1'[dispPg].entry == d2'[dispPg].entry;
+    } else {
+        var pc1 := TruncateWord(OperandContents(s1, OLR) - 4);
+        var pc2 := TruncateWord(OperandContents(s2, OLR) - 4);
+        assert pc1 == pc2;
+        reveal_ValidSRegState();
+        var psr1 := s1.sregs[spsr(mode_of_state(s1))];
+        var psr2 := s2.sregs[spsr(mode_of_state(s2))];
+        assert psr1 == psr2;
+        var ctxt1' := DispatcherContext(take_user_regs(s1.regs), pc1, psr1);
+        var ctxt2' := DispatcherContext(take_user_regs(s2.regs), pc2, psr2);
+        assert usr_regs_equiv(s1, s2);
+        assert take_user_regs(s1.regs) == take_user_regs(s2.regs);
+        assert ctxt1' == ctxt2';
+        assert d1'[dispPg].entry == d2'[dispPg].entry;
+    }
 }
 
 lemma lemma_userspaceExec_atkr_conf(

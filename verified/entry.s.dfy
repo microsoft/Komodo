@@ -295,6 +295,15 @@ function svcHandled(s:state, d:PageDb, dispPg:PageNr): SvcReturnRegs
     (KOM_ERR_INVALID, dummy, dummy, dummy, dummy, dummy, dummy, dummy, dummy)
 }
 
+function take_user_regs(regs:map<ARMReg, word>): map<ARMReg, word>
+    requires ValidRegState(regs)
+{
+    reveal_ValidRegState();
+    map r | r in regs &&
+        (r.SP? ==> r.spm == User) &&
+        (r.LR? ==> r.lrm == User) :: regs[r]
+}
+
 function exceptionHandled(s:state, d:PageDb, dispPg:PageNr): (word, word, PageDb)
     requires validPageDb(d) && validDispatcherPage(d, dispPg)
     requires ValidState(s) && mode_of_state(s) != User
@@ -319,7 +328,7 @@ function exceptionHandled(s:state, d:PageDb, dispPg:PageNr): (word, word, PageDb
         // ARM spec B1.8.3 "Link values saved on exception entry"
         var pc := TruncateWord(OperandContents(s, OLR) - 4);
         var psr := s.sregs[spsr(mode_of_state(s))];
-        var ctxt' := DispatcherContext(s.regs, pc, psr);
+        var ctxt' := DispatcherContext(take_user_regs(s.regs), pc, psr);
         var disp' := d[p].entry.(entered:=true, ctxt:=ctxt');
         var d' := d[ p := d[p].(entry := disp') ];
         (KOM_ERR_INTERRUPTED, 0, d')
