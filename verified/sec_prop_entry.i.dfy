@@ -729,9 +729,12 @@ n:PageNr, a:addr, atkr:PageNr)
     requires dataPagesCorrespond(s1.m, d1) && dataPagesCorrespond(s2.m, d2)
     ensures s1.m.addresses[a] == s2.m.addresses[a]
 {
-	reveal_enc_conf_eqpdb();
-	reveal_pageDbDataCorresponds();
-	assume false;
+    reveal enc_conf_eqpdb();
+    reveal pageDbDataCorresponds();
+
+    // trigger i in pageDbDataCorresponds:
+    var i := (a - page_monvaddr(n)) / WORDSIZE;
+    assert d1[n].entry.contents[i] == d2[n].entry.contents[i];
 }
 
 lemma lemma_eqpdb_pt_coresp(d1: PageDb, d2: PageDb, s1: state, s2: state,
@@ -750,66 +753,11 @@ l1p:PageNr, atkr: PageNr)
     requires pgInAddrSpc(d1, l1p, atkr) && pgInAddrSpc(d2, l1p, atkr)
     ensures  ExtractAbsPageTable(s1) == ExtractAbsPageTable(s2)
 {
-    reveal_pageTableCorresponds();
-    assert s1.conf.ttbr0.ptbase == page_paddr(l1p);
-    assert s2.conf.ttbr0.ptbase == page_paddr(l1p);
-    var vbase := s1.conf.ttbr0.ptbase + PhysBase();
-    assert ValidAbsL1PTable(s1.m, page_monvaddr(l1p));
-    assert ValidAbsL1PTable(s2.m, page_monvaddr(l1p));
-    assert ExtractAbsPageTable(s1) ==
-        Just(ExtractAbsL1PTable(s1.m, vbase));
-    assert ExtractAbsPageTable(s2) ==
-        Just(ExtractAbsL1PTable(s2.m, vbase));
-    assert ExtractAbsL1PTable(s1.m, page_monvaddr(l1p)) ==
-        mkAbsPTable(d1, l1p);
-    assert ExtractAbsL1PTable(s2.m, page_monvaddr(l1p)) ==
-        mkAbsPTable(d2, l1p);
-        
+    reveal pageTableCorresponds();
     assert mkAbsPTable(d1, l1p) == mkAbsPTable(d2, l1p) by {
-        reveal_enc_conf_eqpdb();
-        var l1pt1 := d1[l1p].entry.l1pt;
-        var l1pt2 := d2[l1p].entry.l1pt;
-        // assert l1pt1 == l1pt2;
-        // var fn1 := imap l1e:Maybe<PageNr> | l1e in l1pt1 :: mkAbsPTable'(d1, l1e);
-        // var fn2 := imap l1e:Maybe<PageNr> | l1e in l1pt2 :: mkAbsPTable'(d2, l1e);
-        // assert fn1 == fn2;
-        assert l1pt1 == l1pt2 by {
-            assert pgInAddrSpc(d1, l1p, atkr);
-            assert pgInAddrSpc(d2, l1p, atkr);
-            assert d1[l1p].entry == d2[l1p].entry;
-        }
-        forall( l1e | l1e in l1pt1 )
-            ensures mkAbsPTable'(d1, l1e) == mkAbsPTable'(d2, l1e)
-        {
-            assume false;
-
-            // roughly, by validPageDb I know that all the pages reachable from 
-            // l1e have the same addrspace as l1p. Since the addrspace of l1p 
-            // is the attacker, and since I know enc_conf_eqdb(d1, d2, atkr), 
-            // the entries of all those pages are the same.
-
-            // reveal_validPageDb();
-            // assert l1e.Just?;
-            // assert d1[l1e.v].addrspace == d1[l1p].addrspace;
-            // assert d2[l1e.v].addrspace == d2[l1p].addrspace;
-            // assert pgInAddrSpc(d1, l1e.v, atkr);
-            // assert pgInAddrSpc(d2, l1e.v, atkr);
-            // assert d1[l1e.v].entry == d2[l1e.v].entry;
-
-            // This seems close... assume false here proves line 687... but 
-            // trying to do anything here takes that away
-            // assert (l1e.Just? &&
-            // pgInAddrSpc(d1, l1e.v, atkr) &&
-            // pgInAddrSpc(d2, l1e.v, atkr)) by  {
-            //     reveal_validPageDb();
-            //     assert l1e.Just?;
-            //     assert d1[l1e.v].addrspace == d1[l1p].addrspace;
-            //     assert d2[l1e.v].addrspace == d2[l1p].addrspace;
-            // }
-            //lemma_mkabspt_enc_conf_eqpdb(d1, d2, l1e, atkr);
-            //assert d1[l1ep].entry == d2[l1ep].entry;
-        }
-        reveal_mkAbsPTable();
+        reveal enc_conf_eqpdb();
+        reveal validPageDb();
+        reveal mkAbsPTable();
     }
 }
 
