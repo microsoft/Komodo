@@ -136,14 +136,19 @@ function user_visible_state(s:state, initialpc:word, pt:AbsPTable): UserState
     requires ValidState(s)
     requires WellformedAbsPTable(pt)
 {
-    reveal_ValidRegState();
-    UserState(map r | r in user_regs() :: s.regs[r],
-        initialpc, user_mem(pt, s.m))
+    UserState(user_regs(s.regs), initialpc, user_mem(pt, s.m))
 }
 
-function user_regs(): set<ARMReg>
+function USER_REGS(): set<ARMReg>
 {
     {R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, SP(User), LR(User)}
+}
+
+function user_regs(regs:map<ARMReg, word>): map<ARMReg, word>
+    requires ValidRegState(regs)
+{
+    reveal_ValidRegState();
+    map r | r in USER_REGS() :: regs[r]
 }
 
 function user_mem(pt:AbsPTable, m:memstate): memmap
@@ -595,7 +600,7 @@ function havocUserRegs(nondet:int, us:UserState, regs:map<ARMReg, word>): map<AR
 {
     reveal_ValidRegState();
     map r | r in regs ::
-        if r in user_regs() then nondet_private_word(nondet, us, NONDET_REG(r))
+        if r in USER_REGS() then nondet_private_word(nondet, us, NONDET_REG(r))
         else regs[r]
 }
 
@@ -888,25 +893,20 @@ function GlobalWord(s:memstate, g:symbol, offset:word): word
     GlobalFullContents(s, g)[BytesToWords(offset)]
 }
 
-function {:opaque} nondet_reseeded(x:int, steps:nat): int
-    decreases steps
+function {:opaque} nondet_reseeded(x:int, reseeds:nat): int
+    decreases reseeds
 {
-    if steps == 0 then x
-    else nondet_reseeded(nondet_int(x, NONDET_GENERATOR()), steps - 1)
+    if reseeds == 0 then x
+    else nondet_reseeded(nondet_int(x, NONDET_GENERATOR()), reseeds - 1)
 }
 
-predicate nondet_preserved'(s:state, r:state, steps:nat)
+predicate nondet_preserved(s:state, r:state, reseeds:nat)
 {
-    r.nondet == nondet_reseeded(s.nondet, steps)
-}
-
-predicate nondet_preserved(s:state, r:state)
-{
-    exists steps:nat :: nondet_preserved'(s, r, steps)
+    r.nondet == nondet_reseeded(s.nondet, reseeds)
 }
 
 function reseed_nondet_state(s:state): state
-    ensures nondet_preserved'(s, reseed_nondet_state(s), 1)
+    ensures nondet_preserved(s, reseed_nondet_state(s), 1)
 {
     reveal_nondet_reseeded();
     s.(nondet := nondet_int(s.nondet, NONDET_GENERATOR()))

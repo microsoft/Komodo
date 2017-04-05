@@ -124,10 +124,7 @@ lemma validPageDbImpliesWellFormed(d:PageDb)
 
 predicate wellformedDispatcherContext(dc:DispatcherContext)
 {
-    R0 in dc.regs && R1 in dc.regs && R2 in dc.regs && R3 in dc.regs
-    && R4  in dc.regs && R5  in dc.regs && R6  in dc.regs && R7  in dc.regs
-    && R8  in dc.regs && R9  in dc.regs && R10 in dc.regs && R11 in dc.regs
-    && R12 in dc.regs && LR(User) in dc.regs && SP(User) in dc.regs
+    forall r :: r in USER_REGS() <==> r in dc.regs
 }
 
 predicate validDispatcherContext(dc:DispatcherContext)

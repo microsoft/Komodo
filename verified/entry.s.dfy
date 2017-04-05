@@ -80,19 +80,20 @@ function {:opaque} updateUserPagesFromState(s:state, d:PageDb, dispPg:PageNr): P
 }
 
 predicate validEnclaveExecutionStep'(s1:state, d1:PageDb,
-    s2:state, s3:state, s4:state, d4:PageDb,
+    s2:state, s4:state, d4:PageDb,
     rs:state, rd:PageDb, dispPg:PageNr, retToEnclave:bool)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
     requires nonStoppedDispatcher(d1, dispPg)
 {
+    assert ValidOperand(OLR); // XXX: dafny gets lost on this below; NFI why
     var l1p := l1pOfDispatcher(d1, dispPg);
     assert nonStoppedL1(d1, l1p) by { reveal_validPageDb(); }
 
     pageTableCorresponds(s1, d1, l1p)
         && dataPagesCorrespond(s1.m, d1)
         && entryTransition(s1, s2)
-        && userspaceExecutionAndException(s2, s3, s4)
-        && d4 == updateUserPagesFromState(s3, d1, dispPg)
+        && userspaceExecutionAndException(s2, s4)
+        && d4 == updateUserPagesFromState(s4, d1, dispPg)
         && validExceptionTransition(s4, d4, rs, rd, dispPg)
         && isReturningSvc(s4) == retToEnclave
         && (if retToEnclave then
@@ -108,8 +109,8 @@ predicate {:opaque} validEnclaveExecutionStep(s1:state, d1:PageDb,
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
     requires nonStoppedDispatcher(d1, dispPg)
 {
-    exists s2, s3, s4, d4
-        :: validEnclaveExecutionStep'(s1, d1, s2, s3, s4, d4, rs, rd, dispPg,
+    exists s2, s4, d4
+        :: validEnclaveExecutionStep'(s1, d1, s2, s4, d4, rs, rd, dispPg,
                                      retToEnclave)
 }
 
@@ -158,6 +159,15 @@ predicate smc_resume(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb,
             && validEnclaveExecution(s1, pageDbIn, s', pageDbOut, dispPg, steps)
 }
 
+predicate preEntryCommon(s:state, d:PageDb, dispPage:PageNr)
+    //requires smc_enter_err(d, dispPage, false) == KOM_ERR_SUCCESS
+{
+    ValidState(s) && validPageDb(d) && nonStoppedDispatcher(d, dispPage)
+        && priv_of_state(s) == PL1
+        && s.conf.scr.ns == Secure
+        && s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(d, dispPage))
+}
+
 predicate preEntryEnter(s:state,s':state,d:PageDb,
     dispPage:PageNr,a1:word,a2:word,a3:word)
     requires ValidState(s)
@@ -171,21 +181,12 @@ predicate preEntryEnter(s:state,s':state,d:PageDb,
 {
     reveal_validPageDb();
     reveal_ValidRegState();
-    var addrspace := d[d[dispPage].addrspace];
-    assert isAddrspace(d, d[dispPage].addrspace);
-    var l1p := addrspace.entry.l1ptnr; // l1pOfDispatcher(s.d, dispPage);
-    assert d[l1p].addrspace == d[dispPage].addrspace;
-    assert addrspace.entry.state == FinalState;
-    assert !hasStoppedAddrspace(d, l1p);
 
-    ValidState(s') && nondet_preserved(s, s') &&
-    priv_of_state(s') == PL1 &&
-    s'.conf.ttbr0.ptbase == page_paddr(l1p) &&
-    s'.conf.scr.ns == Secure &&
-    s'.regs[R0] == a1 && s'.regs[R1] == a2 && s'.regs[R2] == a3 &&
-    OperandContents(s', OLR) == d[dispPage].entry.entrypoint &&
-    (reveal_ValidSRegState();
-    s'.sregs[spsr(mode_of_state(s'))] == encode_mode(User))
+    nondet_preserved(s, s', 0) && preEntryCommon(s', d, dispPage)
+    && s'.regs[R0] == a1 && s'.regs[R1] == a2 && s'.regs[R2] == a3
+    && OperandContents(s', OLR) == d[dispPage].entry.entrypoint
+    && (reveal_ValidSRegState();
+        s'.sregs[spsr(mode_of_state(s'))] == encode_mode(User))
 }
 
 predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
@@ -202,12 +203,8 @@ predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
     var disp := d[dispPage].entry;
     var l1p := l1pOfDispatcher(d, dispPage);
     
-    ValidState(s') && nondet_preserved(s, s') &&
-    priv_of_state(s') == PL1 &&
-    s'.conf.ttbr0.ptbase == page_paddr(l1p) &&
-    s'.conf.scr.ns == Secure &&
-
-    (reveal_ValidRegState(); 
+    nondet_preserved(s, s', 0) && preEntryCommon(s', d, dispPage)
+    && (reveal_ValidRegState(); 
     s'.regs[R0] == disp.ctxt.regs[R0] &&
     s'.regs[R1] == disp.ctxt.regs[R1] &&
     s'.regs[R2] == disp.ctxt.regs[R2] &&
@@ -251,7 +248,7 @@ predicate preEntryReturn(s:state,lr:word,regs:SvcReturnRegs)
 predicate equivStates(s1:state, s2:state)
 {
     s1.regs == s2.regs && s1.m == s2.m && s1.sregs == s2.sregs
-        && s1.conf == s2.conf && s1.ok == s2.ok && nondet_preserved(s1, s2)
+        && s1.conf == s2.conf && s1.ok == s2.ok && nondet_preserved(s1, s2, 0)
 }
 
 predicate entryTransition(s:state, r:state)
@@ -262,16 +259,17 @@ predicate entryTransition(s:state, r:state)
     exists s' :: equivStates(s, s') && evalEnterUserspace(s', r) && r.steps == s'.steps + 1
 }
 
-predicate userspaceExecutionAndException(s:state, s':state, r:state)
+predicate userspaceExecutionAndException(s:state, r:state)
     requires ValidState(s) && mode_of_state(s) == User
-    ensures userspaceExecutionAndException(s, s', r) ==> mode_of_state(r) != User
+    ensures userspaceExecutionAndException(s, r)
+        ==> ValidState(r) && mode_of_state(r) != User
 {
-    exists ex ::
-    evalUserspaceExecution(s, s')
-    && evalExceptionTaken(s', ex, r)
+    ExtractAbsPageTable(s).Just?
+    && (var (s', pc, ex) := userspaceExecutionFn(s, OperandContents(s, OLR));
+    evalExceptionTaken(s', ex, pc, r)
     && mode_of_state(r) != User // known, but we need a lemma to prove it
     && s.conf.excount + 1 == r.conf.excount
-    && r.conf.exstep == s'.steps
+    && r.conf.exstep == s'.steps)
 }
 
 //-----------------------------------------------------------------------------
@@ -321,7 +319,7 @@ function exceptionHandled(s:state, d:PageDb, dispPg:PageNr): (word, word, PageDb
         // ARM spec B1.8.3 "Link values saved on exception entry"
         var pc := TruncateWord(OperandContents(s, OLR) - 4);
         var psr := s.sregs[spsr(mode_of_state(s))];
-        var ctxt' := DispatcherContext(s.regs, pc, psr);
+        var ctxt' := DispatcherContext(user_regs(s.regs), pc, psr);
         var disp' := d[p].entry.(entered:=true, ctxt:=ctxt');
         var d' := d[ p := d[p].(entry := disp') ];
         (KOM_ERR_INTERRUPTED, 0, d')
