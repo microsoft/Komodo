@@ -153,7 +153,7 @@ function user_mem(pt:AbsPTable, m:memstate): memmap
     reveal_ValidMemState();
 
     // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
-    (map a:addr | ValidMem(a) && a in TheValidAddresses()
+    (map a:addr | ValidMem(a) && a in TheValidAddresses() && addrIsSecure(a)
         && BitwiseMaskHigh(a, 12) in AllPagesInTable(pt) :: m.addresses[a])
 }
 
