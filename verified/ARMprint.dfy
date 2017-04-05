@@ -250,6 +250,8 @@ method printIns(ins:ins)
         case STR(rd, base, ofs) => printInsLdStr("STR", rd, base, ofs);
         case STR_global(rd, global, base, ofs) => printInsLdStr("STR", rd, base, ofs);
         case MOV(dst, src) => printIns2Op("MOV", dst, src);
+        case MOVW(dst, src) => printIns2Op("MOVW", dst, src);
+        case MOVT(dst, src) => printIns2Op("MOVT", dst, src);
         case MRS(dst, src) => printIns2Op("MRS", dst, src);
         case MSR(dst, src) => printIns2Op("MSR", dst, src);
         case MRC(dst, src) => printMcr("MRC", src, dst);

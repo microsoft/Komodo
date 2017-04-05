@@ -230,16 +230,6 @@ lemma lemma_RightShift12(x: word)
     assert x''' == RightShift(x, 12);
 }
 
-function {:opaque} BitwiseMaskLow(i:word, bitpos:int): word
-    requires 0 <= bitpos < 32;
-    ensures BitwiseMaskLow(i, bitpos) == i % pow2(bitpos)
-    ensures pow2_properties(bitpos)
-{
-    lemma_BitmaskAsWord(i, bitpos);
-    lemma_pow2_properties(bitpos);
-    BitsAsWord(BitAnd(WordAsBits(i), BitmaskLow(bitpos)))
-}
-
 lemma lemma_Bitmask12()
     ensures BitmaskLow(12) == 0xfff
     ensures BitmaskHigh(12) == 0xfffff000

@@ -236,6 +236,8 @@ datatype ins =
     | LSR(dstLSR:operand, src1LSR:operand, src2LSR:operand)
     | REV(dstREV:operand, srcREV:operand)
     | MOV(dstMOV:operand, srcMOV:operand)
+    | MOVW(dstMOVW:operand, srcMOVW:operand)
+    | MOVT(dstMOVT:operand, srcMOVT:operand)
     | MVN(dstMVN:operand, srcMVN:operand)
     | LDR(rdLDR:operand,  baseLDR:operand, ofsLDR:operand)
     | LDR_global(rdLDR_global:operand, globalLDR:symbol,
@@ -753,9 +755,14 @@ function RightShift(x:word, amount:word): word
     requires 0 <= amount < 32;
     { BitsAsWord(BitShiftRight(WordAsBits(x), amount)) }
 
-function RotateRight(x:word, amount:shift_amount) : word
+function RotateRight(x:word, amount:shift_amount): word
     requires 0 <= amount < 32;
     { BitsAsWord(BitRotateRight(WordAsBits(x), amount)) }
+
+function {:opaque} UpdateTopBits(origval:word, newval:word): word
+{
+    BitwiseOr(LeftShift(newval, 16), BitwiseMaskLow(origval, 16))
+}
 
 //-----------------------------------------------------------------------------
 // Evaluation
@@ -940,8 +947,9 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidRegOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
             ValidGlobalAddr(global, OperandContents(s, base) + OperandContents(s, ofs))
-        case MOV(dst, src) => ValidRegOperand(dst) &&
-            ValidSecondOperand(src)
+        case MOV(dst, src) => ValidRegOperand(dst) && ValidSecondOperand(src)
+        case MOVW(dst, src) => ValidRegOperand(dst) && src.OConst?
+        case MOVT(dst, src) => ValidRegOperand(dst) && src.OConst?
         case MRS(dst, src) =>
             ValidRegOperand(dst) && ValidMrsMsrOperand(s,src)
         case MSR(dst, src) =>
@@ -1026,6 +1034,9 @@ predicate evalIns'(ins:ins, s:state, r:state)
                 + OperandContents(s, ofs) - AddressOfGlobal(global),
                 OperandContents(s, rd), r)
         case MOV(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
+        case MOVW(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
+        case MOVT(dst, src) => evalUpdate(s, dst,
+                UpdateTopBits(OperandContents(s, dst), OperandContents(s, src)), r)
         case MRS(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
         case MSR(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
         case MRC(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)

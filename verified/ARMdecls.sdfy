@@ -279,6 +279,30 @@ MOVShift(out operand dst:word, operand src:snd, inline shift:Shift)
     this := MaybeUpdateOk(old(this), this);
 }
 
+procedure {:bridge} {:refined} {:instruction Ins(MOVW(dst, src))}
+MOVW(out operand dst:word, operand src:constop)
+    requires {:refined false}
+        !interrupts_enabled(this);
+    ensures
+        dst == old(src);
+{
+    reveal va_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
+}
+
+procedure {:bridge} {:refined} {:instruction Ins(MOVT(dst, src))}
+MOVT(inout operand dst:word, operand src:constop)
+    requires {:refined false}
+        !interrupts_enabled(this);
+    ensures
+        dst == UpdateTopBits(old(dst), old(src));
+{
+    reveal va_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
+}
+
 procedure {:bridge} {:refined} {:instruction Ins(LDR(dst, base, ofs))}
 LDR(out operand dst:word, operand base:word, operand ofs:word)
     reads
