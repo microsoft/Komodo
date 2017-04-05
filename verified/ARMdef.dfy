@@ -30,7 +30,7 @@ datatype ARMReg = R0|R1|R2|R3|R4|R5|R6|R7|R8|R9|R10|R11|R12| SP(spm:mode) | LR(l
 
 // Special register instruction operands
 // TODO (style nit): uppercase constructors
-datatype SReg = cpsr | spsr(m:mode) | SCR | ttbr0
+datatype SReg = cpsr | spsr(m:mode) | SCR | VBAR | MVBAR | ttbr0
 
 // A model of the relevant configuration register state. References refer to armv7a spec
 // **NOTE** The configuration registers are stored in the state in two places:
@@ -168,9 +168,16 @@ function user_mem(pt:AbsPTable, m:memstate): memmap
 
 // In real life these are more complicated. Add more as needed!
 
+const ARM_PSR_MODE_MASK:word    := 0x1f;
+const ARM_PSR_FIQ:word          := 0x40; // FIQ masked
+const ARM_PSR_IRQ:word          := 0x80; // IRQ masked
+const ARM_SCR_NS:word           := 1; // non-secure bit
+const ARM_SCR_IRQ:word          := 2; // IRQ handler monitor mode
+const ARM_SCR_FIQ:word          := 4; // FIQ handler monitor mode
+
 function psr_mask_mode(v:word): word
 {
-    BitwiseAnd(v, 0x1f)
+    BitwiseAnd(v, ARM_PSR_MODE_MASK)
 }
 
 predicate ValidPsrWord(v:word)
@@ -183,8 +190,8 @@ function decode_psr(v:word) : PSR
     requires ValidPsrWord(v)
 {
     PSR(decode_mode(psr_mask_mode(v)),
-        BitwiseAnd(v, 0x40) != 0, // FIQ mask bit
-        BitwiseAnd(v, 0x80) != 0  // IRQ mask bit
+        BitwiseAnd(v, ARM_PSR_FIQ) != 0,
+        BitwiseAnd(v, ARM_PSR_IRQ) != 0
         )
 }
 
@@ -192,9 +199,9 @@ function decode_psr(v:word) : PSR
 function decode_scr(v:word) : SCR
 {
     SCRT(
-        if BitwiseAnd(v, 1) != 0 then NotSecure else Secure,
-        BitwiseAnd(v, 2) != 0, // IRQ bit
-        BitwiseAnd(v, 4) != 0 // FIQ bit
+        if BitwiseAnd(v, ARM_SCR_NS) != 0 then NotSecure else Secure,
+        BitwiseAnd(v, ARM_SCR_IRQ) != 0,
+        BitwiseAnd(v, ARM_SCR_FIQ) != 0
         )
 }
 
@@ -202,7 +209,7 @@ function decode_ttbr(v:word): TTBR
     ensures PageAligned(decode_ttbr(v).ptbase)
     // assuming 4k alignment, n == 2 / x == 12
 {
-    var ptbase := BitwiseMaskHigh(v, 12);
+    var ptbase := BitwiseMaskHigh(v, PAGEBITS);
     reveal_PageAligned();
     TTBR(ptbase)
 }
@@ -225,6 +232,8 @@ function update_config_from_sreg(s:state, sr:SReg, v:word): config
             var spsr' := s.conf.spsr[ m := decode_psr(v) ];
             s.conf.(spsr := spsr') 
         case SCR => s.conf.(scr := decode_scr(v))
+        case VBAR => s.conf
+        case MVBAR => s.conf
 }
 
 //-----------------------------------------------------------------------------
@@ -288,6 +297,8 @@ datatype ins =
     | LSR(dstLSR:operand, src1LSR:operand, src2LSR:operand)
     | REV(dstREV:operand, srcREV:operand)
     | MOV(dstMOV:operand, srcMOV:operand)
+    | MOVW(dstMOVW:operand, srcMOVW:operand)
+    | MOVT(dstMOVT:operand, srcMOVT:operand)
     | MVN(dstMVN:operand, srcMVN:operand)
     | LDR(rdLDR:operand,  baseLDR:operand, ofsLDR:operand)
     | LDR_global(rdLDR_global:operand, globalLDR:symbol,
@@ -337,13 +348,14 @@ predicate {:opaque} ValidRegState(regs:map<ARMReg, word>)
 
 predicate {:opaque} ValidSRegState(sregs:map<SReg, word>, c:config)
 {
-    cpsr in sregs
+    assert ValidSReg(cpsr);
+    (forall sr | ValidSReg(sr) :: sr in sregs)
     && ValidPsrWord(sregs[cpsr]) && c.cpsr == decode_psr(sregs[cpsr])
     && (forall m:mode :: (m != User) == (spsr(m) in sregs) == (m in c.spsr))
     && (forall m:mode :: m != User ==>
         ValidPsrWord(sregs[spsr(m)]) && c.spsr[m] == decode_psr(sregs[spsr(m)]))
-    && ttbr0 in sregs && c.ttbr0 == decode_ttbr(sregs[ttbr0])
-    && SCR in sregs && c.scr == decode_scr(sregs[SCR])
+    && c.ttbr0 == decode_ttbr(sregs[ttbr0])
+    && c.scr == decode_scr(sregs[SCR])
 }
 
 // All valid states have the same memory address domain, but we don't care what 
@@ -371,13 +383,7 @@ predicate ValidGlobalState(globals: globalsmap)
 // XXX: ValidOperand is just the subset used in "normal" integer instructions
 predicate ValidOperand(o:operand)
 {
-    match o
-        case OConst(n) => true
-        case OReg(r) => !(r.SP? || r.LR?) // not used directly
-        case OShift(_,_) => false
-        case OSP => true
-        case OLR => true
-        case OSReg(sr) => false
+    ValidRegOperand(o) || o.OConst?
 }
 
 predicate ValidSecondOperand(o:operand)
@@ -410,7 +416,7 @@ predicate ValidMcrMrcOperand(s:state,o:operand)
 {
     // to simplify the spec, we only consider secure PL1 modes
     o.OSReg? && priv_of_state(s) == PL1 && world_of_state(s) == Secure
-    && (o.sr.SCR? || o.sr.ttbr0?)
+    && !(o.sr.cpsr? || o.sr.spsr?)
 }
 
 predicate ValidAnySrcOperand(s:state, o:operand)
@@ -435,7 +441,7 @@ predicate ValidShiftOperand(s:state, o:operand)
     { ValidOperand(o) && OperandContents(s, o) < 32 }
 
 predicate ValidRegOperand(o:operand)
-    { !o.OConst? && !o.OShift? && ValidOperand(o) }
+    { o.OSP? || o.OLR? || (o.OReg? && !(o.r.SP? || o.r.LR?)) }
 
 //-----------------------------------------------------------------------------
 // Globals
@@ -588,7 +594,7 @@ function havocPages(pages:set<addr>, s:state, us:UserState): memmap
 {
     // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
     (map a:addr | ValidMem(a) && a in TheValidAddresses() ::
-     if BitwiseMaskHigh(a, 12) in pages then (
+     if BitwiseMaskHigh(a, PAGEBITS) in pages then (
         if addrIsSecure(a) then nondet_private_word(s.nondet, us, a)
         else nondet_word(s.nondet, a)
      ) else MemContents(s.m, a))
@@ -631,6 +637,7 @@ predicate {:axiom} InterruptContinuationInvariant(s:state, r:state)
 //-----------------------------------------------------------------------------
 
 const PAGESIZE:int := 0x1000;
+const PAGEBITS:int := 12;
 
 predicate {:opaque} PageAligned(addr:int)
     ensures PageAligned(addr) ==> WordAligned(addr)
@@ -785,7 +792,7 @@ predicate ValidAbsL2PTEWord(pteword:word)
     var pte := WordAsBits(pteword);
     var typebits := BitAnd(pte, 0x3);
     var lowbits := BitAnd(pte, 0xdfc);
-    var pagebase := BitwiseMaskHigh(pteword, 12);
+    var pagebase := BitwiseMaskHigh(pteword, PAGEBITS);
     typebits == 0 || (typebits != 1 && lowbits == ARM_L2PTE_CONST_BITS && isUInt32(pagebase + PhysBase()))
 }
 
@@ -797,7 +804,7 @@ function ExtractAbsL2PTE(pteword:word): Maybe<AbsPTE>
     var typebits := BitAnd(pte, 0x3);
     var exec := BitAnd(pte, ARM_L2PTE_NX_BIT) == 0;
     var write := BitAnd(pte, ARM_L2PTE_RO_BIT) == 0;
-    var pagebase := BitwiseMaskHigh(pteword, 12); // BitwiseAnd(pteword, 0xfffff000);
+    var pagebase := BitwiseMaskHigh(pteword, PAGEBITS);
     assert PageAligned(pagebase) by { reveal_PageAligned(); }
     // if the type is zero, it's an invalid entry, which is fine (maps nothing)
     if typebits == 0 then Nothing else Just(AbsPTE(pagebase, write, exec))
@@ -827,17 +834,13 @@ function RightShift(x:word, amount:word): word
     requires 0 <= amount < 32;
     { BitsAsWord(BitShiftRight(WordAsBits(x), amount)) }
 
-function RotateRight(x:word, amount:shift_amount) : word
+function RotateRight(x:word, amount:shift_amount): word
     requires 0 <= amount < 32;
     { BitsAsWord(BitRotateRight(WordAsBits(x), amount)) }
 
-//-----------------------------------------------------------------------------
-// Functions for bytewise operations
-//-----------------------------------------------------------------------------
-
-function bswap32(x:word) : word { 
-    var bytes := WordToBytes(x);
-    BytesToWord(bytes[3], bytes[2], bytes[1], bytes[0])
+function {:opaque} UpdateTopBits(origval:word, newval:word): word
+{
+    BitwiseOr(LeftShift(newval, 16), BitwiseMaskLow(origval, 16))
 }
 
 //-----------------------------------------------------------------------------
@@ -1044,8 +1047,9 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidRegOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
             ValidGlobalAddr(global, OperandContents(s, base) + OperandContents(s, ofs))
-        case MOV(dst, src) => ValidRegOperand(dst) &&
-            ValidSecondOperand(src)
+        case MOV(dst, src) => ValidRegOperand(dst) && ValidSecondOperand(src)
+        case MOVW(dst, src) => ValidRegOperand(dst) && src.OConst?
+        case MOVT(dst, src) => ValidRegOperand(dst) && src.OConst?
         case MRS(dst, src) =>
             ValidRegOperand(dst) && ValidMrsMsrOperand(s,src)
         case MSR(dst, src) =>
@@ -1130,6 +1134,9 @@ predicate evalIns'(ins:ins, s:state, r:state)
                 + OperandContents(s, ofs) - AddressOfGlobal(global),
                 OperandContents(s, rd), r)
         case MOV(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
+        case MOVW(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
+        case MOVT(dst, src) => evalUpdate(s, dst,
+                UpdateTopBits(OperandContents(s, dst), OperandContents(s, src)), r)
         case MRS(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
         case MSR(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
         case MRC(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)

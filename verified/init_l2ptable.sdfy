@@ -56,16 +56,7 @@ procedure install_l1ptes'(
     requires/ensures
         SaneState(this);
     requires
-        //DistinctRegOperands(set(@l1base, @l2base, @l1index), 3);
-        ValidRegOperand(@l1base);
-        ValidRegOperand(@l2base);
-        ValidRegOperand(@l1index);
-        @l1base != @l2base;
-        @l1base != @l1index;
-        @l2base != @l1index;
-        @l1base != OSP;
-        @l2base != OSP;
-        @l1index != OSP;
+        @l1base == OReg(R7) && @l2base == OReg(R4) && @l1index == OReg(R5);
         PageAligned(l1base) && address_is_secure(l1base);
         validPageNr(l2pg) && l2base == page_paddr(l2pg);
         0 <= l1index < NR_L1PTES;
@@ -132,8 +123,8 @@ procedure install_l1ptes(
     requires/ensures
         SaneState(this);
     requires
-        @l1pt_va != OSP && @l2_pg != OSP && @l1index != OSP && @tmp != OSP;
-        DistinctRegOperands(set(@l1pt_va, @l2_pg, @l1index, @tmp), 4);
+        @l1pt_va == OReg(R7) && @l2_pg == OReg(R4) && @l1index == OReg(R5)
+            && @tmp == OReg(R8);
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         validAddrspacePage(pagedb_in, as_pg) && !stoppedAddrspace(pagedb_in[as_pg]);
