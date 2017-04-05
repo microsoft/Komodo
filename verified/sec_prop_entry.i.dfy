@@ -722,9 +722,12 @@ n:PageNr, a:addr, atkr:PageNr)
     requires dataPagesCorrespond(s1.m, d1) && dataPagesCorrespond(s2.m, d2)
     ensures s1.m.addresses[a] == s2.m.addresses[a]
 {
-	reveal_enc_conf_eqpdb();
-	reveal_pageDbDataCorresponds();
-	assume false;
+    reveal enc_conf_eqpdb();
+    reveal pageDbDataCorresponds();
+
+    // trigger i in pageDbDataCorresponds:
+    var i := (a - page_monvaddr(n)) / WORDSIZE;
+    assert d1[n].entry.contents[i] == d2[n].entry.contents[i];
 }
 
 lemma lemma_eqpdb_pt_coresp(d1: PageDb, d2: PageDb, s1: state, s2: state,
