@@ -508,8 +508,7 @@ lemma lemma_userExecAndExcp_atkr_regs(
     ensures  usr_regs_equiv(r1, r2)
     ensures r1.conf.ex == r2.conf.ex
     ensures mode_of_state(r1) == mode_of_state(r2)
-    ensures r1.regs[LR(mode_of_state(r1))] == r2.regs[LR(mode_of_state(r2))]
-    ensures r1.sregs[spsr(mode_of_state(r1))] == r2.sregs[spsr(mode_of_state(r2))]
+    ensures lr_spsr_same(r1, r2);
 {
     assert usr_regs_equiv(s1', s2') by {
         lemma_userExec_atkr_regs(s1, s1', s2, s2');
@@ -526,6 +525,19 @@ lemma lemma_userExecAndExcp_atkr_regs(
         nondet_word(s1'.nd_private, NONDET_REG(LR(newmode1)))];
     assert r2.regs == s2'.regs[LR(newmode2) :=
         nondet_word(s2'.nd_private, NONDET_REG(LR(newmode2)))];
+    reveal_ValidRegState();
+    reveal_ValidSRegState();
+}
+
+// This is just for the reveal
+predicate lr_spsr_same(s1:state, s2:state)
+    requires ValidState(s1) && ValidState(s2)
+    requires mode_of_state(s1) != User && mode_of_state(s2) != User
+{
+    reveal_ValidRegState();
+    reveal_ValidSRegState();
+    s1.regs[LR(mode_of_state(s1))] == s2.regs[LR(mode_of_state(s2))] &&
+    s1.sregs[spsr(mode_of_state(s1))] == s2.sregs[spsr(mode_of_state(s2))]
 }
 
 lemma lemma_exceptionHandled_atkr_conf(
@@ -537,8 +549,7 @@ dispPg: PageNr, atkr: PageNr)
     requires enc_conf_eq_entry(s1, s2, d1, d2, atkr);
     requires mode_of_state(s1) != User && mode_of_state(s2) != User
     requires mode_of_state(s1) == mode_of_state(s2)
-    requires s1.regs[LR(mode_of_state(s1))] == s2.regs[LR(mode_of_state(s2))]
-    requires s1.sregs[spsr(mode_of_state(s1))] == s2.sregs[spsr(mode_of_state(s2))]
+    requires lr_spsr_same(s1, s2)
     requires validDispatcherPage(d1, dispPg) && validDispatcherPage(d2, dispPg)
     requires d1' == exceptionHandled(s1, d1, dispPg).2
     requires d2' == exceptionHandled(s2, d2, dispPg).2
@@ -662,21 +673,6 @@ dispPg: PageNr, atkr: PageNr)
             assert pt.Just?;
             var pages := WritablePagesInTable(fromJust(pt));
 
-            /*
-            var pt1 := ExtractAbsPageTable(s12);
-            var pt2 := ExtractAbsPageTable(s22);
-            var pages1 := WritablePagesInTable(fromJust(pt1));
-            var pages2 := WritablePagesInTable(fromJust(pt2));
-            assert pt1.Just? && pt2.Just?;
-            */
-            
-           // assume pages1 == pages2;
-            // assert BitwiseMaskHigh(a, 12) in pages1 <==>
-            //     BitwiseMaskHigh(a, 12) in pages2 by {
-            //     lemma_WritablePagesFlipped(d1, l1p, base);
-            //     lemma_WritablePagesFlipped(d2, l1p, base);
-            // }
-            
             if( BitwiseMaskHigh(a, 12) in pages ){
                 // havoced the same
                 assert s13.m.addresses[a] ==s23.m.addresses[a];
@@ -760,23 +756,6 @@ l1p:PageNr, atkr: PageNr)
         reveal mkAbsPTable();
     }
 }
-
-/*
-lemma lemma_mkabspt_enc_conf_eqpdb(d1: PageDb, d2: PageDb, l1p: PageNr, 
-    l1pt:seq<Maybe<PageNr>>, atkr: PageNr)
-    requires validPageDb(d1) && validPageDb(d2) && SaneConstants()
-    requires !stoppedAddrSpace(atkr)
-    requires enc_conf_eqpdb(d1, d2, atkr)
-    ensures mkAbsPTable'(d1, l1e) == mkAbsPTable'(d2, l1e)
-{
-    reveal_enc_conf_eqpdb();
-    reveal_validPageDb();
-
-    assert d1[l1e.v].entry == d2[l1e.v].entry;
-}
-*/
-
-
 
 //-----------------------------------------------------------------------------
 // Resume
