@@ -357,7 +357,7 @@ function maybeContentsOfPhysPage(s: state, physPage: word) : Maybe<seq<word>>
 //=============================================================================
 // Behavioral Specification of SMC Handler
 //=============================================================================
-predicate smchandler(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb)
+predicate smchandlerRelation(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb)
     requires ValidState(s) && validPageDb(pageDbIn) && SaneConstants()
 {
     ValidState(s') && (reveal_ValidRegState();
@@ -395,7 +395,7 @@ predicate smchandler(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb)
 }
 
 // non-volatile regs preserved
-predicate nonvolatileRegInvariant(s:state, s':state)
+predicate smcNonvolatileRegInvariant(s:state, s':state)
     requires ValidState(s)
 {
     reveal_ValidRegState();
@@ -405,8 +405,6 @@ predicate nonvolatileRegInvariant(s:state, s':state)
         && s.regs[R8] == s'.regs[R8] && s.regs[R9] == s'.regs[R9]
         && s.regs[R10] == s'.regs[R10] && s.regs[R11] == s'.regs[R11]
         && s.regs[R12] == s'.regs[R12]
-    && OperandContents(s, OSP) == OperandContents(s', OSP)
-    && OperandContents(s, OLR) == OperandContents(s', OLR)
 }
 
 /* Overall invariant across SMC handler state */
@@ -415,15 +413,23 @@ predicate smchandlerInvariant(s:state, s':state)
 {
     reveal_ValidRegState();
     reveal_ValidSRegState();
-    nonvolatileRegInvariant(s, s')
-        // all banked regs, including SPSR and LR (our return target) are preserved
-        // TODO: we may need to weaken this to reason about IRQ/FIQ injection.
-        && forall m :: ((m == User || s.sregs[spsr(m)] == s'.sregs[spsr(m)]) // (no User SPSR)
-                && s.regs[LR(m)] == s'.regs[LR(m)]
-                && s.regs[SP(m)] == s'.regs[SP(m)])
+    smcNonvolatileRegInvariant(s, s')
         // return in non-secure world, in same (i.e., monitor) mode
-        && mode_of_state(s') == mode_of_state(s)
+        && mode_of_state(s') == mode_of_state(s) == Monitor
         && s'.conf.scr.ns == NotSecure
+        // return to a non-monitor mode (so we leave secure world)
+        && decode_mode(psr_mask_mode(s.sregs[spsr(Monitor)])) != Monitor
+        // most banked regs are preserved -- carve-outs for IRQ/FIQ injection 
+        && (forall m | m !in {Monitor, IRQ, FIQ} ::
+            (m != User ==> s.sregs[spsr(m)] == s'.sregs[spsr(m)])
+            && s.regs[LR(m)] == s'.regs[LR(m)])
+        && (forall m :: s.regs[SP(m)] == s'.regs[SP(m)])
+}
+
+predicate smchandler(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb)
+    requires ValidState(s) && validPageDb(pageDbIn) && SaneConstants()
+{
+    smchandlerRelation(s, pageDbIn, s', pageDbOut) && smchandlerInvariant(s, s')
 }
 
 // lemma for allocatePage; FIXME: not trusted, should not be in a .s.dfy file

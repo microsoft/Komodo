@@ -508,7 +508,11 @@ procedure {:frame false} interrupt_handler(
 
     // store pending interrupt
     LDRglobaladdr(r0, PendingInterruptOp());
-    MOV(r1, 1);
+    inline if (ex == ExFIQ) {
+        MOV(r1, const(7*WORDSIZE)); // exception table FIQ vector offset
+    } else {
+        MOV(r1, const(6*WORDSIZE)); // exception table IRQ vector offset
+    }
     STRglobal(r1, PendingInterruptOp(), r0, 0);
 
     // figure out where we came from

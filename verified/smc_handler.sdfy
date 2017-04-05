@@ -1,6 +1,7 @@
 include {:verbatim} "kom_common.i.dfy"
 include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
+include {:verbatim} "psrbits.i.dfy"
 
 include "ARMdecls.sdfy"
 include "kom_utils.sdfy"
@@ -13,6 +14,122 @@ include "entry.sdfy"
 include "finalise.sdfy"
 include "stop.sdfy"
 include "remove.sdfy"
+
+procedure stack_nonvolatiles(ghost stack_bytes:int)
+    returns (ghost stack_bytes_ret:int)
+    reads
+        r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
+    modifies
+        sp; mem;
+    requires/ensures
+        SaneState(this);
+    requires
+        stack_bytes >= 40;
+        StackBytesRemaining(this,stack_bytes);
+    ensures
+        sp == old(sp-40);
+
+        //preserves registers
+        //RegPreservingExcept(old(this), this, set(@sp));
+
+        // pushes r4-r11, sp, lr
+        MemContents(this.m, sp)    == old(r12);
+        MemContents(this.m, sp+4)  == old(r11);
+        MemContents(this.m, sp+8)  == old(r10);
+        MemContents(this.m, sp+12) == old(r9);
+        MemContents(this.m, sp+16) == old(r8);
+        MemContents(this.m, sp+20) == old(r7);
+        MemContents(this.m, sp+24) == old(r6);
+        MemContents(this.m, sp+28) == old(r5);
+        MemContents(this.m, sp+32) == old(r4);
+        MemContents(this.m, sp+36) == old(lr);
+
+        //GlobalsInvariant(old(this),this);
+        //BankedRegsInvariant(old(this),this);
+        //SRegsInvariant(old(this),this);
+        NonStackMemPreserving(old(this),this);
+        ParentStackPreserving(old(this),this);
+
+        stack_bytes_ret == stack_bytes-40;
+        StackBytesRemaining(this,stack_bytes_ret);
+{
+    SUB(sp, sp, 40);
+
+    STR(lr,  sp, 36);
+    STR(r4,  sp, 32);
+    STR(r5,  sp, 28);
+    STR(r6,  sp, 24);
+    STR(r7,  sp, 20);
+    STR(r8,  sp, 16);
+    STR(r9,  sp, 12);
+    STR(r10, sp, 8);
+    STR(r11, sp, 4);
+    STR(r12, sp, 0);
+
+    stack_bytes_ret := stack_bytes - 40;
+}
+
+procedure unstack_lr()
+    reads
+        mem; sp;
+    modifies
+        lr;
+    requires/ensures
+        SaneState(this);
+    requires
+        isUInt32(sp + 40);
+        sp + 40 <= StackBase();
+    ensures
+        lr  == old(MemContents(this.m, sp+36));
+{
+    LDR(lr, sp, 36);
+}
+
+procedure unstack_nonvolatiles_except_lr(ghost stack_bytes:int)
+    returns (ghost stack_bytes_ret:int)
+    reads
+        mem;
+    modifies
+        r4; r5; r6; r7; r8; r9; r10; r11; r12; sp;
+    requires/ensures
+        SaneState(this);
+    requires
+        isUInt32(sp + 40);
+        sp + 40 <= StackBase();
+        StackBytesRemaining(this, stack_bytes);
+    ensures
+        sp == old(sp+40);
+
+        // pop r4-r11 from stack.
+        //lr  == old(MemContents(this.m, sp+36));
+        r4  == old(MemContents(this.m, sp+32));
+        r5  == old(MemContents(this.m, sp+28));
+        r6  == old(MemContents(this.m, sp+24));
+        r7  == old(MemContents(this.m, sp+20));
+        r8  == old(MemContents(this.m, sp+16));
+        r9  == old(MemContents(this.m, sp+12));
+        r10 == old(MemContents(this.m, sp+8));
+        r11 == old(MemContents(this.m, sp+4));
+        r12 == old(MemContents(this.m, sp));
+
+        stack_bytes_ret == stack_bytes + 40;
+        StackBytesRemaining(this, stack_bytes_ret);
+{
+    //pop r12 down to r4 from stack
+    LDR(r12, sp, 0);
+    LDR(r11, sp, 4);
+    LDR(r10, sp, 8);
+    LDR(r9,  sp, 12);
+    LDR(r8,  sp, 16);
+    LDR(r7,  sp, 20);
+    LDR(r6,  sp, 24);
+    LDR(r5,  sp, 28);
+    LDR(r4,  sp, 32);
+    //LDR(lr, sp, 36);
+    ADD(sp, sp, 40);
+
+    stack_bytes_ret := stack_bytes + 40;
+}
 
 //=============================================================================
 // Top-level SMC handler
@@ -48,17 +165,17 @@ procedure {:frame false} smc_handler_inner(
         SpsrsInvariant(old(this), this);
         mode_of_state(this) == mode_of_state(old(this));
         this.conf.scr.ns == old(this).conf.scr.ns;
-        smchandler(old(this), pagedb_in, this, pagedb);
+        smchandlerRelation(old(this), pagedb_in, this, pagedb);
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
     // is this an enter/resume call?
     ghost var entry := callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME;
-    r5 := 0;
+    MOV(r5, 0);
     if (callno == const(KOM_SMC_ENTER)) {
-        r5 := 1;
+        MOV(r5, 1);
     } else if (callno == const(KOM_SMC_RESUME)) {
-        r5 := 1;
+        MOV(r5, 1);
     }
     assert if entry then r5 == 1 else r5 == 0;
 
@@ -68,35 +185,35 @@ procedure {:frame false} smc_handler_inner(
                                       pagedb_in, stack_bytes);
         lemma_ValidEntryPre(old(this), s0, pagedb_in, this, pagedb,
                             old(arg1), old(arg2), old(arg3), old(arg4));
-        assert smchandler(old(this), pagedb_in, this, pagedb);
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb);
     } else if (callno == const(KOM_SMC_QUERY)) {
         pagedb := pagedb_in;
-        retval := 0;
-        err := 0x4b000000;
+        MOV(retval, 0);
+        MOVW(err, 0x646f);
+        // TODO: use MOVT
+        ADD(err, err, 0x4b000000);
         ADD(err, err, 0x6d0000);
-        ADD(err, err, 0x6400);
-        ADD(err, err, 0x6f);
         assert err == KOM_MAGIC; // 0x4b6d646f
-        assert smchandler(old(this), pagedb_in, this, pagedb);
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb);
     } else if (callno == const(KOM_SMC_GETPHYSPAGES)) {
         pagedb := pagedb_in;
-        retval := const(KOM_SECURE_NPAGES);
-        err := const(KOM_ERR_SUCCESS);
-        assert smchandler(old(this), pagedb_in, this, pagedb);
+        MOV(retval, const(KOM_SECURE_NPAGES));
+        MOV(err, const(KOM_ERR_SUCCESS));
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb);
     } else if (callno == const(KOM_SMC_INIT_ADDRSPACE)) {
         pagedb := kom_smc_init_addrspace(arg1, arg2, r12, err, pagedb_in);
-        retval := 0;
-        assert smchandler(old(this), pagedb_in, this, pagedb)
+        MOV(retval, 0);
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
             by { reveal_smc_initAddrspace_premium(); }
     } else if (callno == const(KOM_SMC_INIT_DISPATCHER)) {
         pagedb := kom_smc_init_dispatcher(arg1, arg2, arg3, r12, err, r4, r5, pagedb_in);
-        retval := 0;
-        assert smchandler(old(this), pagedb_in, this, pagedb)
+        MOV(retval, 0);
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
             by { reveal_smc_initDispatcher_premium(); }
     } else if (callno == const(KOM_SMC_INIT_L2PTABLE)) {
         pagedb := kom_smc_init_l2ptable(arg1, arg2, arg3, r12, err, pagedb_in);
-        retval := 0;
-        assert smchandler(old(this), pagedb_in, this, pagedb)
+        MOV(retval, 0);
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
             by { reveal_smc_initL2PTable_premium(); }
     } else if (callno == const(KOM_SMC_MAP_SECURE)) {
         ghost if (!(arg4 == 0 || !physPageIsInsecureRam(arg4))) {
@@ -104,34 +221,123 @@ procedure {:frame false} smc_handler_inner(
                 by { assert InsecureMemInvariant(old(this), this); }
         }
         pagedb := kom_smc_map_secure(arg1, arg2, arg3, arg4, r12, err, pagedb_in);
-        retval := 0;
-        assert smchandler(old(this), pagedb_in, this, pagedb)
+        MOV(retval, 0);
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
             by { reveal_smc_mapSecure_premium(); }
     } else if (callno == const(KOM_SMC_MAP_INSECURE)) {
         pagedb := kom_smc_map_insecure(arg1, arg2, arg3, r12, err, pagedb_in);
-        retval := 0;
-        assert smchandler(old(this), pagedb_in, this, pagedb)
+        MOV(retval, 0);
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
             by { reveal_smc_mapInsecure_premium(); }
     } else if (callno == const(KOM_SMC_REMOVE)) {
         pagedb := kom_smc_remove(arg1, r12, err, pagedb_in);
-        retval := 0;
-        assert smchandler(old(this), pagedb_in, this, pagedb)
+        MOV(retval, 0);
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
             by { reveal_smc_remove_premium(); }
     } else if (callno == const(KOM_SMC_FINALISE)) {
         pagedb := kom_smc_finalise(arg1, r12, err, pagedb_in);
-        retval := 0;
-        assert smchandler(old(this), pagedb_in, this, pagedb)
+        MOV(retval, 0);
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
             by { reveal_smc_finalise_premium(); }
     } else if (callno == const(KOM_SMC_STOP)) {
         pagedb := kom_smc_stop(arg1, r12, err, pagedb_in);
-        retval := 0;
-        assert smchandler(old(this), pagedb_in, this, pagedb)
+        MOV(retval, 0);
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
             by { reveal_smc_stop_premium(); }
     } else {
         pagedb := pagedb_in;
-        err := const(KOM_ERR_INVALID);
-        retval := 0;
-        assert smchandler(old(this), pagedb_in, this, pagedb);
+        MOV(err, const(KOM_ERR_INVALID));
+        MOV(retval, 0);
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb);
+    }
+}
+
+#verbatim
+const ARM_SCR_V:word := 0x2000; // SCR vectors bit (1 = "hivecs" setting)
+
+predicate maybe_inject_interrupt_invariants(s:state, r:state)
+    requires ValidState(s) && ValidState(r)
+{
+    reveal_ValidRegState();
+    reveal_ValidSRegState();
+
+    (forall m :: m !in {Monitor, IRQ, FIQ}
+        ==> (m != User ==> s.sregs[spsr(m)] == r.sregs[spsr(m)])
+                && s.regs[LR(m)] == r.regs[LR(m)])
+    && forall m :: s.regs[SP(m)] == r.regs[SP(m)]
+}
+#endverbatim
+
+procedure {:frame false} maybe_inject_interrupt(out operand tmp1:reg,
+                                    out operand tmp2:reg, out operand tmp3:reg)
+    requires/ensures
+        SaneState(this);
+    requires
+        @tmp1 == OReg(R2) && @tmp2 == OReg(R3) && @tmp3 == OReg(R4);
+    reads
+        mem; scr; vbar;
+    modifies
+        // FIXME: vale-generated framing seems to be broken for updates to sregs
+        globals; lr; spsr_mon; lr_fiq; lr_irq;
+    ensures
+        GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp()));
+        AddrMemInvariant(old(this), this);
+        CoreRegPreservingExcept(old(this), this, set(@tmp1, @tmp2, @tmp3, OLR));
+        maybe_inject_interrupt_invariants(old(this), this);
+        this.conf.scr == old(this).conf.scr;
+        spsr_mon == old(spsr_mon)
+            || (ValidPsrWord(spsr_mon) && decode_mode(psr_mask_mode(spsr_mon)) != Monitor);
+{
+    LDRglobaladdr(tmp1, PendingInterruptOp());
+    LDRglobal(tmp2, PendingInterruptOp(), tmp1, 0);
+    if (tmp2 != 0) {
+        // clear pending flag
+        MOV(tmp3, 0);
+        STRglobal(tmp3, PendingInterruptOp(), tmp1, 0);
+
+        // load target CPSR and clear the mode bits
+        MRS(tmp3, spsr_mon);
+        assert ValidPsrWord(tmp3) by { reveal ValidSRegState; }
+        LSR(tmp1, tmp3, 5);
+        LSL(tmp1, tmp1, 5);
+
+        // LR += 4 for ARM IRQ shenanigans
+        ADDWrap(lr, lr, 4);
+
+        // are we injecting an IRQ or a FIQ?
+        if (tmp2 == const(7*WORDSIZE)) { // FIQ
+            // update target to FIQ mode, with IRQ and FIQ both masked
+            MSR(lr_fiq, lr);
+            MSR(spsr_fiq, tmp3);
+            //assert 0xd1 == BitwiseOr(encode_mode(FIQ),
+            //                         BitwiseOr(ARM_PSR_FIQ, ARM_PSR_IRQ));
+            ORR(tmp1, tmp1, 0xd1);
+            lemma_psr_still_valid(spsr_mon, tmp1, 0xd1);
+        } else { // IRQ
+            // update target to IRQ mode, with IRQ masked
+            MSR(lr_irq, lr);
+            MSR(spsr_irq, tmp3);
+            //assert 0x92 == BitwiseOr(encode_mode(IRQ), ARM_PSR_IRQ);
+            ORR(tmp1, tmp1, 0x92);
+            lemma_psr_still_valid(spsr_mon, tmp1, 0x92);
+        }
+
+        // update target CPSR
+        MSR(spsr_mon, tmp1);
+
+        // compute vector base in LR
+        MRC(lr, scr); // read SCR
+        if (tst_ne(lr, const(ARM_SCR_V))) {
+           // if the HIVECS bit is set, vectors are at 0xffff0000
+           MOVW(lr, 0);
+           MOVT(lr, 0xffff);
+       } else {
+           // no HIVECS, read VBAR
+           MRC(lr, vbar);
+       }
+
+        // add vector offset to determine return address
+        ADDWrap(lr, lr, tmp2);
     }
 }
 
@@ -148,9 +354,9 @@ procedure {:frame false} smc_handler(
         pageDbCorresponds(this.m, pagedb_in);
         AUCIdef(); // FIXME
         this.conf.scr.ns == NotSecure; // FIXME: cleanup
+        ValidPsrWord(spsr_mon) && decode_psr(spsr_mon).m != Monitor;
     ensures
         smchandler(old(this), pagedb_in, this, pagedb);
-        smchandlerInvariant(old(this), this);
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
@@ -179,22 +385,21 @@ procedure {:frame false} smc_handler(
     ghost var prePopRet := r1;
     ghost var prePopThis := this;
 
-    stack_bytes_local := unstack_nonvolatiles(stack_bytes_local);
+    unstack_lr();
+    maybe_inject_interrupt(r2, r3, r4);
+
+    stack_bytes_local := unstack_nonvolatiles_except_lr(stack_bytes_local);
     assert stack_bytes_local == stack_bytes;
     lemma_SameMemAndGlobalsPreservesPageDb(prePopThis, this, pagedb);
 
     // zero other volatiles to prevent information leakage
-    r2 := 0;
-    r3 := 0;
+    MOV(r2, 0);
+    MOV(r3, 0);
 
     assert prePopErr == r0;
     assert prePopRet == r1;
 
-    assert smchandlerInvariant(old(this), this) by {
-        assert nonvolatileRegInvariant(old(this), this);
-        assert BankedRegsInvariant(old(this), this);
-        assert SpsrsInvariant(old(this), this);
-    }
+    assert smchandlerInvariant(old(this), this);
 
     ghost if (old(r0 == KOM_SMC_ENTER || r0 == KOM_SMC_RESUME)) {
         assert validExceptionTransition(prePopThis, pagedb,

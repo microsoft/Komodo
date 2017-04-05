@@ -377,12 +377,13 @@ lemma lemma_SameMemAndGlobalsPreservesPageDb(s:state, s':state, pagedb:PageDb)
     requires validPageDb(pagedb)
     requires pageDbCorresponds(s.m, pagedb)
     requires NonStackMemPreserving(s,s')
-    requires GlobalsInvariant(s,s')
+    requires GlobalFullContents(s.m, PageDb()) == GlobalFullContents(s'.m, PageDb())
     ensures pageDbCorresponds(s'.m, pagedb)
 {
-    lemma_SameMemAndGlobalsPreservesPageDb'(s,s',pagedb);
+    assert forall p :: validPageNr(p) ==> extractPage(s.m, p) == extractPage(s'.m, p);
 }
 
+// TODO: delete this alias
 lemma lemma_SameMemAndGlobalsPreservesPageDb'(s:state, s':state, pagedb:PageDb)
     requires ValidState(s) && SaneMem(s.m) && ValidState(s') && SaneMem(s'.m)
     requires validPageDb(pagedb)
@@ -391,5 +392,5 @@ lemma lemma_SameMemAndGlobalsPreservesPageDb'(s:state, s':state, pagedb:PageDb)
     requires GlobalFullContents(s.m, PageDb()) == GlobalFullContents(s'.m, PageDb())
     ensures pageDbCorresponds(s'.m, pagedb)
 {
-    assert forall p :: validPageNr(p) ==> extractPage(s.m, p) == extractPage(s'.m, p);
+    lemma_SameMemAndGlobalsPreservesPageDb(s, s', pagedb);
 }
