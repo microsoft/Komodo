@@ -820,6 +820,9 @@ lemma lemma_InputHelper(M:seq<seq<word>>, input:seq<word>)
     reveal_bswap32_seq();
     if input == [] {
     } else {
-        lemma_InputHelper(M[1..], input[16..]);
+        var M', input' := M[1..], input[16..];
+        assert |M'| == |M| - 1 && |input'| == |input| - 16;
+        assert forall i :: 0 <= i < |M'| ==> M'[i] == bswap32_seq(input'[i*16..(i+1)*16]);
+        lemma_InputHelper(M', input');
     }
 }
