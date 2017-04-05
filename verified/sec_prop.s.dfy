@@ -30,21 +30,21 @@ predicate usr_regs_equiv(s1:state, s2:state)
 {
     reveal_ValidRegState();
     reveal_ValidSRegState();
-    OperandContents(s1, OReg(R0))  == OperandContents(s2, OReg(R0)) &&
-    OperandContents(s1, OReg(R1))  == OperandContents(s2, OReg(R1)) &&
-    OperandContents(s1, OReg(R2))  == OperandContents(s2, OReg(R2)) &&
-    OperandContents(s1, OReg(R3))  == OperandContents(s2, OReg(R3)) &&
-    OperandContents(s1, OReg(R4))  == OperandContents(s2, OReg(R4)) &&
-    OperandContents(s1, OReg(R5))  == OperandContents(s2, OReg(R5)) &&
-    OperandContents(s1, OReg(R6))  == OperandContents(s2, OReg(R6)) &&
-    OperandContents(s1, OReg(R7))  == OperandContents(s2, OReg(R7)) &&
-    OperandContents(s1, OReg(R8))  == OperandContents(s2, OReg(R8)) &&
-    OperandContents(s1, OReg(R9))  == OperandContents(s2, OReg(R9)) &&
-    OperandContents(s1, OReg(R10)) == OperandContents(s2, OReg(R10)) &&
-    OperandContents(s1, OReg(R11)) == OperandContents(s2, OReg(R11)) &&
-    OperandContents(s1, OReg(R12)) == OperandContents(s2, OReg(R12)) &&
-    OperandContents(s1, OReg(LR(User))) == OperandContents(s2, OReg(LR(User))) &&
-    OperandContents(s1, OReg(SP(User))) == OperandContents(s2, OReg(SP(User)))
+    s1.regs[R0]  == s2.regs[R0] &&
+    s1.regs[R1]  == s2.regs[R1] &&
+    s1.regs[R2]  == s2.regs[R2] &&
+    s1.regs[R3]  == s2.regs[R3] &&
+    s1.regs[R4]  == s2.regs[R4] &&
+    s1.regs[R5]  == s2.regs[R5] &&
+    s1.regs[R6]  == s2.regs[R6] &&
+    s1.regs[R7]  == s2.regs[R7] &&
+    s1.regs[R8]  == s2.regs[R8] &&
+    s1.regs[R9]  == s2.regs[R9] &&
+    s1.regs[R10] == s2.regs[R10] &&
+    s1.regs[R11] == s2.regs[R11] &&
+    s1.regs[R12] == s2.regs[R12] &&
+    s1.regs[SP(User)] == s2.regs[SP(User)] &&
+    s1.regs[LR(User)] == s2.regs[LR(User)]
 }
 
 // TODO somehow this broke... put it back...

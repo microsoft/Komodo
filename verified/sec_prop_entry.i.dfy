@@ -476,20 +476,101 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         // No idea how to prove anything about nd_*
         assume enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
     } else {
-        assume usr_regs_equiv(s14, s24);
+        lemma_userExecAndExcp_atkr_regs(s12, s13, s14, s22, s23, s24);
         lemma_exceptionHandled_atkr_conf(s14, d14, rd1, s24, d24, rd2, dispPg, atkr);
         // No idea how to prove anything about nd_*
         assume enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
     }
 }
 
+/*
+function havocUserRegsUnrolled(nondet:int, regs:map<ARMReg, word>): map<ARMReg, word>
+    requires ValidRegState(regs)
+    ensures ValidRegState(havocUserRegs(nondet, regs))
+    ensures havocUserRegsUnrolled(nondet, regs) ==
+        havocUserRegs(nondet, regs)
+{
+    reveal_ValidRegState();
+    map[ 
+        R0  := nondet_word(nondet, NONDET_REG(R0)),
+        R1  := nondet_word(nondet, NONDET_REG(R1)),
+        R2  := nondet_word(nondet, NONDET_REG(R2)),
+        R3  := nondet_word(nondet, NONDET_REG(R3)),
+        R4  := nondet_word(nondet, NONDET_REG(R4)),
+        R5  := nondet_word(nondet, NONDET_REG(R5)),
+        R6  := nondet_word(nondet, NONDET_REG(R6)),
+        R7  := nondet_word(nondet, NONDET_REG(R7)),
+        R8  := nondet_word(nondet, NONDET_REG(R8)),
+        R9  := nondet_word(nondet, NONDET_REG(R9)),
+        R10 := nondet_word(nondet, NONDET_REG(R10)),
+        R11 := nondet_word(nondet, NONDET_REG(R11)),
+        R12 := nondet_word(nondet, NONDET_REG(R12)),
+        LR(User) := nondet_word(nondet, NONDET_REG(LR(User))),
+        SP(User) := nondet_word(nondet, NONDET_REG(SP(User))),
+        LR(FIQ)  := regs[LR(FIQ)],
+        SP(FIQ)  := regs[SP(FIQ)],
+        LR(IRQ)  := regs[LR(IRQ)],
+        SP(IRQ)  := regs[SP(IRQ)],
+        LR(Supervisor)  := regs[LR(Supervisor)],
+        SP(Supervisor)  := regs[SP(Supervisor)],
+        LR(Abort)  := regs[LR(Abort)],
+        SP(Abort)  := regs[SP(Abort)],
+        LR(Undefined)  := regs[LR(Undefined)],
+        SP(Undefined)  := regs[SP(Undefined)],
+        LR(Monitor)  := regs[LR(Monitor)],
+        SP(Monitor)  := regs[SP(Monitor)]
+    ]
+}
+*/
+
+lemma lemma_userExec_atkr_regs(s1:state, s1':state,s2:state, s2':state)
+    requires ValidState(s1) && ValidState(s1') 
+    requires ValidState(s2) && ValidState(s2') 
+    requires evalUserspaceExecution(s1, s1')
+    requires evalUserspaceExecution(s2, s2')
+    requires s1.nd_private == s2.nd_private
+    ensures  usr_regs_equiv(s1', s2')
+{
+   reveal_evalUserspaceExecution(); 
+}
+
+lemma lemma_userExecAndExcp_atkr_regs(
+    s1:state, s1':state, r1:state,
+    s2:state, s2':state, r2:state)
+    requires ValidState(s1) && ValidState(s1') && ValidState(r1)
+    requires ValidState(s2) && ValidState(s2') && ValidState(r2)
+    requires mode_of_state(s1) == User
+    requires mode_of_state(s2) == User
+    requires userspaceExecutionAndException(s1, s1', r1)
+    requires userspaceExecutionAndException(s2, s2', r2)
+    requires s1.nd_private == s2.nd_private;
+    ensures  usr_regs_equiv(r1, r2)
+{
+    assert usr_regs_equiv(s1', s2') by {
+        lemma_userExec_atkr_regs(s1, s1', s2, s2');
+    }
+
+    var ex1 :| evalExceptionTaken(s1', ex1, r1);
+    var ex2 :| evalExceptionTaken(s2', ex2, r2);
+    var newmode1 := mode_of_exception(s1'.conf, ex1);
+    var newmode2 := mode_of_exception(s2'.conf, ex2);
+    assert newmode2 != User;
+    assert newmode2 != User;
+    assert r1.regs == s1'.regs[LR(newmode1) :=
+        nondet_word(s1'.nd_private, NONDET_REG(LR(newmode1)))];
+    assert r2.regs == s2'.regs[LR(newmode2) :=
+        nondet_word(s2'.nd_private, NONDET_REG(LR(newmode2)))];
+}
 
 lemma lemma_exceptionHandled_atkr_conf(
 s1: state, d1: PageDb, d1': PageDb, s2: state, d2: PageDb, d2': PageDb,
 dispPg: PageNr, atkr: PageNr)
     requires ValidState(s1) && ValidState(s2) &&
+             validPageDb(d1') && validPageDb(d2') &&
              validPageDb(d1) && validPageDb(d2) && SaneConstants()
     requires enc_conf_eq_entry(s1, s2, d1, d2, atkr);
+    requires mode_of_state(s1) != User && mode_of_state(s2) != User
+    requires validDispatcherPage(d1, dispPg) && validDispatcherPage(d2, dispPg)
     requires d1' == exceptionHandled(s1, d1, dispPg).2
     requires d2' == exceptionHandled(s2, d2, dispPg).2
     requires atkr_entry(d1, d2, dispPg, atkr)
