@@ -130,10 +130,12 @@ method printOperand(o:operand)
         case OReg(r) => { printReg(r); }
         case OShift(r, s) => { printReg(r); print(","); printShift(s); }
         case OSReg(r)   => {match r
-           case ttbr0   => print("ttbr0");
-           case SCR     => print("scr");
            case cpsr    => print("cpsr");
-           case spsr(m)    => print("spsr");
+           case spsr(m) => print("spsr");
+           case ttbr0   => print("XXX-invalid: TTBR0");
+           case SCR     => print("XXX-invalid: SCR");
+           case VBAR    => print("XXX-invalid: VBAR");
+           case MVBAR   => print("XXX-invalid: MVBAR");
         }
         case OSP => print("sp");
         case OLR => print("lr");
@@ -202,10 +204,14 @@ method printMcr(instr:string, sro:operand, op:operand)
         var sr := sro.sr;
         print(" p15, 0, ");
         printOperand(op);
-        if (sr.SCR?) {
-            print(", c1, c1, 0");
-        } else if (sr.ttbr0?) {
-            print(", c2, c0, 0");
+        match sr
+        {
+            case cpsr => print("XXX-invalid: CPSR in MCR");
+            case spsr(m) => print("XXX invalid: SPSR in MCR");
+            case SCR => print(", c1, c1, 0");
+            case VBAR => print(", c12, c0, 0");
+            case MVBAR => print(", c12, c0, 1");
+            case ttbr0 => print(", c2, c0, 0");
         }
     } else {
         print("XXX-invalid-sreg");

@@ -45,6 +45,7 @@ var{:state sreg(spsr(Monitor))}    spsr_mon:int;
 var{:state sreg(cpsr)}             cpsr:int;
 var{:state sreg(SCR)}              scr:word;
 var{:state sreg(ttbr0)}            ttbr0:word;
+var{:state sreg(VBAR)}             vbar:word;
 
 #verbatim
 function MaybeUpdateOk(s:va_state, r:va_state) : va_state
