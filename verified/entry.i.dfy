@@ -50,7 +50,6 @@ lemma lemma_userExecutionModel_validity(s:state, r:state)
     reveal_evalMOVSPCLRUC();
 }
 
-
 lemma lemma_userExecutionModel_sufficiency(s:state, r:state)
     requires userExecutionPreconditions(s)
     requires r == userExecutionModel(s)

@@ -7,20 +7,63 @@ include {:verbatim} "entrybits.i.dfy"
 include "ARMdecls.sdfy"
 include "kom_utils.sdfy"
 
+#verbatim
+lemma lemma_userspaceExecutionFn_ok(s:state, pc:word)
+    requires ValidState(s) && s.ok && mode_of_state(s) == User
+    requires ExtractAbsPageTable(s).Just?
+    ensures userspaceExecutionFn(s, pc).0.ok
+{
+    reveal_userspaceExecutionFn();
+}
+
+lemma lemma_evalEnterUserspace_preservesAbsPageTable(s:state, r:state)
+    requires ValidState(s) && evalEnterUserspace(s, r)
+    ensures ExtractAbsPageTable(s) == ExtractAbsPageTable(r)
+{
+    assert s.m == r.m;
+    assert s.conf.ttbr0 == r.conf.ttbr0;
+}
+
+lemma lemma_evalMOVSPCLRUC_ok(s:state, r:state)
+    requires ValidInstruction(s, MOVS_PCLR_TO_USERMODE_AND_CONTINUE()) && s.ok
+    requires evalMOVSPCLRUC(s, r)
+    ensures r.ok
+{
+    var pc := OperandContents(s, OLR);
+    reveal_evalMOVSPCLRUC();
+    assert ExtractAbsPageTable(s).Just?;
+    var s2, s4 :|
+        evalEnterUserspace(s, s2)
+        && (lemma_evalEnterUserspace_preservesAbsPageTable(s, s2);
+        var (s3, pc, ex) := userspaceExecutionFn(s2, pc);
+        evalExceptionTaken(s3, ex, pc, s4)
+        && UsermodeContinuationInvariant(s4, r));
+    assert s2.ok;
+    lemma_userspaceExecutionFn_ok(s2, pc);
+    assert s4.ok;
+}
+#endverbatim
+
 procedure {:frame false} {:instruction Ins(MOVS_PCLR_TO_USERMODE_AND_CONTINUE)}
 MOVS_PCLR_TO_USERMODE_AND_CONTINUE()
     requires/ensures
         this.ok;
     requires
+        !interrupts_enabled(this);
         ValidModeChange'(this, User);
         spsr_of_state(this).m == User;
-        !interrupts_enabled(this);
+        //ExtractAbsPageTable(this) is Just;
     ensures
         evalMOVSPCLRUC(takestep(old(this)), this);
 {
-    reveal va_eval;
-    reveal evalMOVSPCLRUC;
-    reveal evalUserspaceExecution;
+    assert ValidInstruction(old(this), MOVS_PCLR_TO_USERMODE_AND_CONTINUE());
+    assert evalIns(MOVS_PCLR_TO_USERMODE_AND_CONTINUE(), old(this), this)
+        by { reveal va_eval; }
+    ghost var s1 := takestep(old(this));
+    assert evalIns'(MOVS_PCLR_TO_USERMODE_AND_CONTINUE(), s1, this);
+    assert ValidInstruction(s1, MOVS_PCLR_TO_USERMODE_AND_CONTINUE());
+    assert evalMOVSPCLRUC(s1, this) by { reveal va_eval; }
+    lemma_evalMOVSPCLRUC_ok(s1, this);
 }
 
 #verbatim
@@ -389,6 +432,16 @@ procedure smc_enter_err(
     }
 }
 
+#verbatim
+lemma lemma_PageAligned_PageBase_trivial(x:word)
+    requires PageAligned(x)
+    ensures PageBase(x) == x
+{
+    assert PageBase(x) == x / PAGESIZE * PAGESIZE by { reveal_PageBase(); }
+    reveal_PageAligned();
+}
+#endverbatim
+
 procedure switch_addrspace(
     operand pagenr:reg,
     operand pagedb_base:reg,
@@ -466,9 +519,11 @@ procedure switch_addrspace(
     }
 
     assert r10 == page_paddr(l1p);
-    assert PageAligned(r10);
     MCR(ttbr0, r10);
-    assert this.conf.ttbr0.ptbase == page_paddr(l1p);
+    assert this.conf.ttbr0.ptbase == page_paddr(l1p) by {
+        assert this.conf.ttbr0.ptbase == PageBase(r10) == PageBase(page_paddr(l1p));
+        lemma_PageAligned_PageBase_trivial(page_paddr(l1p));
+    }
 }
 
 procedure leave_secure_world(out operand tmp:reg)
@@ -751,7 +806,7 @@ procedure {:frame false} enclaveexecution_loop(
     requires
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
-        AUCIdef();
+        UsermodeContinuationInvariantDef();
         nonStoppedDispatcher(pagedb_in, dispPg);
         spsr_of_state(this).m == User;
         this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb_in, dispPg));
@@ -888,7 +943,7 @@ procedure {:frame false} {:timeLimitMultiplier 2} smc_enterresume_success(
         stack_bytes >= BANKED_FRAMESIZE;
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
-        AUCIdef();
+        UsermodeContinuationInvariantDef();
         callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME;
         smc_enter_err(pagedb_in, pagenr, callno == KOM_SMC_RESUME) == KOM_ERR_SUCCESS;
     modifies // XXX: all saved and restored; not in fact "modified" on return!
@@ -976,7 +1031,7 @@ procedure {:frame false} kom_smc_enterresume(
         stack_bytes >= BANKED_FRAMESIZE;
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
-        AUCIdef();
+        UsermodeContinuationInvariantDef();
         this.conf.scr.ns == NotSecure; // FIXME: cleanup
         callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME;
     modifies // XXX: all saved and restored; not in fact "modified" on return!

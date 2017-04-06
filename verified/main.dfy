@@ -136,7 +136,7 @@ method Main()
         && validPageDb(p1)
         && pageDbCorresponds(s1.m, p1)
         && evalCode(smc_handler(), s1, s2)
-        && AUCIdef() // XXX
+        && UsermodeContinuationInvariantDef() // XXX
         ensures exists p2:PageDb :: smchandler(s1, p1, s2, p2)
             && validPageDb(p2) && pageDbCorresponds(s2.m, p2)
     {

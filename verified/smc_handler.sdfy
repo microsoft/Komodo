@@ -157,7 +157,7 @@ procedure {:frame false} smc_handler_inner(
         stack_bytes >= 80;
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
-        AUCIdef(); // FIXME
+        UsermodeContinuationInvariantDef(); // FIXME
         this.conf.scr.ns == NotSecure; // FIXME: cleanup
     ensures
         StackPreserving(old(this), this);
@@ -352,7 +352,7 @@ procedure {:frame false} smc_handler(
         stack_bytes >= 120;
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
-        AUCIdef(); // FIXME
+        UsermodeContinuationInvariantDef(); // FIXME
         this.conf.scr.ns == NotSecure; // FIXME: cleanup
         ValidPsrWord(spsr_mon) && decode_psr(spsr_mon).m != Monitor;
     ensures
