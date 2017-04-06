@@ -1,7 +1,7 @@
 
 include "sha256-api.sdfy"
 include "../memset.sdfy"
-include "../kom_utils.sdfy"
+include "../smc_handler.sdfy"
 
 #verbatim
 
@@ -19,8 +19,9 @@ const STACKSIZE_HMAC:int := 8 + STACKSIZE_SHA_ONE_SHOT;   // Make space to prese
 procedure apply_one_opad(inline offset:word)
 requires/ensures
     ValidAddrMemStateOpaque(mem);
-requires
     ValidMem(r1 + offset);
+requires {:refined false}
+    !interrupts_enabled(this);
 reads 
     r1;
 modifies
@@ -37,8 +38,9 @@ ensures
 procedure apply_opad()
 requires/ensures
     ValidAddrMemStateOpaque(mem);
-requires
     ValidMemRange(r1, r1 + HMAC_KEYSIZE_BYTES);
+requires {:refined false}
+    !interrupts_enabled(this);
 reads 
     r1;
 modifies
@@ -48,9 +50,13 @@ ensures
     forall a :: r1 <= a < r1 + HMAC_KEYSIZE_BYTES && WordAligned(a) 
         ==> AddrMemContents(mem, a) == BitwiseXor(old(AddrMemContents(mem, a)) , 0x5c5c5c5c);
 {
+    assert WordAligned(r1);
     apply_one_opad(0);
+    assert WordAligned(r1 + 4);
     apply_one_opad(4);
+    assert WordAligned(r1 + 8);
     apply_one_opad(8);
+    assert WordAligned(r1 + 12);
     apply_one_opad(12);
     apply_one_opad(16);
     apply_one_opad(20);
@@ -202,5 +208,5 @@ ensures
     MOV(r2, 2);
     sha256_one_shot();
 
-    s := unstack_nonvolatiles(0);
+    s := unstack_nonvolatiles_except_lr(0);
 }
