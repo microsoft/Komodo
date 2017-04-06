@@ -16,6 +16,57 @@ const STACKSIZE_HMAC:int := 8 + STACKSIZE_SHA_ONE_SHOT;   // Make space to prese
 
 #endverbatim
 
+procedure apply_one_opad(inline offset:word)
+requires/ensures
+    ValidAddrMemStateOpaque(mem);
+requires
+    ValidMem(r1 + offset);
+reads 
+    r1;
+modifies
+    mem; r10;
+ensures
+    AddrMemPreservingExcept(old(mem), mem, r1 + offset, r1 + offset + 4);
+    AddrMemContents(mem, r1 + offset) == BitwiseXor(old(AddrMemContents(mem, r1 + offset)) , 0x5c5c5c5c);
+{
+    LDR(r10, r1, offset);
+    EOR(r10, r10, 0x5c5c5c5c);
+    STR(r10, r1, offset);
+}
+
+procedure apply_opad()
+requires/ensures
+    ValidAddrMemStateOpaque(mem);
+requires
+    ValidMemRange(r1, r1 + HMAC_KEYSIZE_BYTES);
+reads 
+    r1;
+modifies
+    mem; r10;
+ensures
+    AddrMemPreservingExcept(old(mem), mem, r1, r1 + HMAC_KEYSIZE_BYTES);
+    forall a :: r1 <= a < r1 + HMAC_KEYSIZE_BYTES && WordAligned(a) 
+        ==> AddrMemContents(mem, a) == BitwiseXor(old(AddrMemContents(mem, a)) , 0x5c5c5c5c);
+{
+    apply_one_opad(0);
+    apply_one_opad(4);
+    apply_one_opad(8);
+    apply_one_opad(12);
+    apply_one_opad(16);
+    apply_one_opad(20);
+    apply_one_opad(24);
+    apply_one_opad(28);
+    apply_one_opad(32);
+    apply_one_opad(36);
+    apply_one_opad(40);
+    apply_one_opad(44);
+    apply_one_opad(48);
+    apply_one_opad(52);
+    apply_one_opad(56);
+    apply_one_opad(60);
+}
+
+
 procedure hmac() 
 requires/ensures
     ValidAddrMemStateOpaque(mem);
