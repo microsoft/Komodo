@@ -194,6 +194,13 @@ ensures
     assert {:split_here}{:refined} true;
 }
 
+#verbatim
+
+const STACKSIZE_SHA_UPDATE:int := 10 + SHA_STACKSIZE;
+
+#endverbatim
+
+
 // Wrapper around the inner version that conforms to the calling convention
 procedure {:refined} {:timeLimitMultiplier 3} sha256_block_data_order(
     ghost trace_in:SHA256Trace,
@@ -210,8 +217,8 @@ requires
     SHA256TraceIsCorrect(trace_in);
 
     // Stack is accessible
-    sp >= 116;
-    ValidMemRange(sp-116, sp);
+    sp >= STACKSIZE_SHA_UPDATE*WORDSIZE;
+    ValidMemRange(sp-STACKSIZE_SHA_UPDATE*WORDSIZE, sp);
 
     // K table is valid
     SaneShaGlobal(globals);
@@ -241,8 +248,8 @@ requires
 
      // Anti-aliasing
      && (ctx + SHA_CTXSIZE*WORDSIZE < input_ptr || ctx > input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE)    // input_ptr != ctx
-     && (ctx + SHA_CTXSIZE*WORDSIZE < sp - 116 || ctx >= sp)                              // ctx != sp
-     && (input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE < sp - 116 || input_ptr >= sp);   // input_ptr != sp
+     && (ctx + SHA_CTXSIZE*WORDSIZE < sp - STACKSIZE_SHA_UPDATE*WORDSIZE || ctx >= sp)                              // ctx != sp
+     && (input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE < sp - STACKSIZE_SHA_UPDATE*WORDSIZE || input_ptr >= sp);   // input_ptr != sp
 
 reads
     globals;
@@ -262,7 +269,7 @@ ensures
     lr == old(lr);
 
     // Memory framing:  We only touch the stack and 8 bytes pointed to by ctx_ptr
-    AddrMemPreservingExcept2(old(mem), mem, sp - 116, sp, old(r0),
+    AddrMemPreservingExcept2(old(mem), mem, sp - STACKSIZE_SHA_UPDATE*WORDSIZE, sp, old(r0),
                             old(r0) + SHA_CTXSIZE * WORDSIZE);
 
     // SHA results

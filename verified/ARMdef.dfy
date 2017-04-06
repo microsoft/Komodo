@@ -30,7 +30,7 @@ datatype ARMReg = R0|R1|R2|R3|R4|R5|R6|R7|R8|R9|R10|R11|R12| SP(spm:mode) | LR(l
 
 // Special register instruction operands
 // TODO (style nit): uppercase constructors
-datatype SReg = cpsr | spsr(m:mode) | SCR | ttbr0
+datatype SReg = cpsr | spsr(m:mode) | SCR | VBAR | MVBAR | ttbr0
 
 // A model of the relevant configuration register state. References refer to armv7a spec
 // **NOTE** The configuration registers are stored in the state in two places:
@@ -66,8 +66,7 @@ datatype state = State(regs:map<ARMReg, word>,
                        conf:config,
                        ok:bool,
                        steps:nat,
-                       nd_private:int,
-                       nd_public:int)
+                       nondet:int)
 
 // System mode is not modeled
 datatype mode = User | FIQ | IRQ | Supervisor | Abort | Undefined | Monitor
@@ -117,13 +116,51 @@ predicate interrupts_enabled(s:state)
 //-----------------------------------------------------------------------------
 
 function {:axiom} nondet_int(x:int, y:int): int
-function {:axiom} nondet_nat(x:int, y:int): nat
 function {:axiom} nondet_word(x:int, y:int): word
+function {:axiom} nondet_private_word(x:int, s:UserState, y:int): word
+function {:axiom} nondet_private_nat(x:int, s:UserState, y:int): nat
+function {:axiom} nondet_exception(x:int, s:UserState, maskf:bool, maski:bool): exception
+    ensures maskf ==> nondet_exception(x, s, maskf, maski) != ExFIQ
+    ensures maski ==> nondet_exception(x, s, maskf, maski) != ExIRQ
 
 function {:axiom} NONDET_GENERATOR():int
-function {:axiom} NONDET_INT():int
+function {:axiom} NONDET_PC():int
+function {:axiom} NONDET_EX():int
 function {:axiom} NONDET_REG(r:ARMReg):int
 function {:axiom} NONDET_STEPS():int
+
+// user-visible state
+datatype UserState = UserState(regs:map<ARMReg, word>, pc:word, addresses:memmap)
+
+function user_visible_state(s:state, initialpc:word, pt:AbsPTable): UserState
+    requires ValidState(s)
+    requires WellformedAbsPTable(pt)
+{
+    UserState(user_regs(s.regs), initialpc, user_mem(pt, s.m))
+}
+
+function USER_REGS(): set<ARMReg>
+{
+    {R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, SP(User), LR(User)}
+}
+
+function user_regs(regs:map<ARMReg, word>): map<ARMReg, word>
+    requires ValidRegState(regs)
+{
+    reveal_ValidRegState();
+    map r | r in USER_REGS() :: regs[r]
+}
+
+function user_mem(pt:AbsPTable, m:memstate): memmap
+    requires WellformedAbsPTable(pt)
+    requires ValidMemState(m)
+{
+    reveal_ValidMemState();
+
+    // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
+    (map a:addr | ValidMem(a) && a in TheValidAddresses() && addrIsSecure(a)
+        && PageBase(a) in AllPagesInTable(pt) :: m.addresses[a])
+}
 
 //-----------------------------------------------------------------------------
 // Configuration Register Decoding
@@ -131,9 +168,16 @@ function {:axiom} NONDET_STEPS():int
 
 // In real life these are more complicated. Add more as needed!
 
+const ARM_PSR_MODE_MASK:word    := 0x1f;
+const ARM_PSR_FIQ:word          := 0x40; // FIQ masked
+const ARM_PSR_IRQ:word          := 0x80; // IRQ masked
+const ARM_SCR_NS:word           := 1; // non-secure bit
+const ARM_SCR_IRQ:word          := 2; // IRQ handler monitor mode
+const ARM_SCR_FIQ:word          := 4; // FIQ handler monitor mode
+
 function psr_mask_mode(v:word): word
 {
-    BitwiseAnd(v, 0x1f)
+    BitwiseAnd(v, ARM_PSR_MODE_MASK)
 }
 
 predicate ValidPsrWord(v:word)
@@ -146,8 +190,8 @@ function decode_psr(v:word) : PSR
     requires ValidPsrWord(v)
 {
     PSR(decode_mode(psr_mask_mode(v)),
-        BitwiseAnd(v, 0x40) != 0, // FIQ mask bit
-        BitwiseAnd(v, 0x80) != 0  // IRQ mask bit
+        BitwiseAnd(v, ARM_PSR_FIQ) != 0,
+        BitwiseAnd(v, ARM_PSR_IRQ) != 0
         )
 }
 
@@ -155,9 +199,9 @@ function decode_psr(v:word) : PSR
 function decode_scr(v:word) : SCR
 {
     SCRT(
-        if BitwiseAnd(v, 1) != 0 then NotSecure else Secure,
-        BitwiseAnd(v, 2) != 0, // IRQ bit
-        BitwiseAnd(v, 4) != 0 // FIQ bit
+        if BitwiseAnd(v, ARM_SCR_NS) != 0 then NotSecure else Secure,
+        BitwiseAnd(v, ARM_SCR_IRQ) != 0,
+        BitwiseAnd(v, ARM_SCR_FIQ) != 0
         )
 }
 
@@ -165,9 +209,7 @@ function decode_ttbr(v:word): TTBR
     ensures PageAligned(decode_ttbr(v).ptbase)
     // assuming 4k alignment, n == 2 / x == 12
 {
-    var ptbase := BitwiseMaskHigh(v, 12);
-    reveal_PageAligned();
-    TTBR(ptbase)
+    TTBR(PageBase(v))
 }
 
 predicate ValidSReg(sr:SReg)
@@ -188,6 +230,8 @@ function update_config_from_sreg(s:state, sr:SReg, v:word): config
             var spsr' := s.conf.spsr[ m := decode_psr(v) ];
             s.conf.(spsr := spsr') 
         case SCR => s.conf.(scr := decode_scr(v))
+        case VBAR => s.conf
+        case MVBAR => s.conf
 }
 
 //-----------------------------------------------------------------------------
@@ -251,6 +295,8 @@ datatype ins =
     | LSR(dstLSR:operand, src1LSR:operand, src2LSR:operand)
     | REV(dstREV:operand, srcREV:operand)
     | MOV(dstMOV:operand, srcMOV:operand)
+    | MOVW(dstMOVW:operand, srcMOVW:operand)
+    | MOVT(dstMOVT:operand, srcMOVT:operand)
     | MVN(dstMVN:operand, srcMVN:operand)
     | LDR(rdLDR:operand,  baseLDR:operand, ofsLDR:operand)
     | LDR_global(rdLDR_global:operand, globalLDR:symbol,
@@ -300,13 +346,14 @@ predicate {:opaque} ValidRegState(regs:map<ARMReg, word>)
 
 predicate {:opaque} ValidSRegState(sregs:map<SReg, word>, c:config)
 {
-    cpsr in sregs
+    assert ValidSReg(cpsr);
+    (forall sr | ValidSReg(sr) :: sr in sregs)
     && ValidPsrWord(sregs[cpsr]) && c.cpsr == decode_psr(sregs[cpsr])
     && (forall m:mode :: (m != User) == (spsr(m) in sregs) == (m in c.spsr))
     && (forall m:mode :: m != User ==>
         ValidPsrWord(sregs[spsr(m)]) && c.spsr[m] == decode_psr(sregs[spsr(m)]))
-    && ttbr0 in sregs && c.ttbr0 == decode_ttbr(sregs[ttbr0])
-    && SCR in sregs && c.scr == decode_scr(sregs[SCR])
+    && c.ttbr0 == decode_ttbr(sregs[ttbr0])
+    && c.scr == decode_scr(sregs[SCR])
 }
 
 // All valid states have the same memory address domain, but we don't care what 
@@ -334,13 +381,7 @@ predicate ValidGlobalState(globals: globalsmap)
 // XXX: ValidOperand is just the subset used in "normal" integer instructions
 predicate ValidOperand(o:operand)
 {
-    match o
-        case OConst(n) => true
-        case OReg(r) => !(r.SP? || r.LR?) // not used directly
-        case OShift(_,_) => false
-        case OSP => true
-        case OLR => true
-        case OSReg(sr) => false
+    ValidRegOperand(o) || o.OConst?
 }
 
 predicate ValidSecondOperand(o:operand)
@@ -373,7 +414,7 @@ predicate ValidMcrMrcOperand(s:state,o:operand)
 {
     // to simplify the spec, we only consider secure PL1 modes
     o.OSReg? && priv_of_state(s) == PL1 && world_of_state(s) == Secure
-    && (o.sr.SCR? || o.sr.ttbr0?)
+    && !(o.sr.cpsr? || o.sr.spsr?)
 }
 
 predicate ValidAnySrcOperand(s:state, o:operand)
@@ -398,7 +439,7 @@ predicate ValidShiftOperand(s:state, o:operand)
     { ValidOperand(o) && OperandContents(s, o) < 32 }
 
 predicate ValidRegOperand(o:operand)
-    { !o.OConst? && !o.OShift? && ValidOperand(o) }
+    { o.OSP? || o.OLR? || (o.OReg? && !(o.r.SP? || o.r.LR?)) }
 
 //-----------------------------------------------------------------------------
 // Globals
@@ -479,10 +520,9 @@ function psr_of_exception(s:state, e:exception): word
     update_psr(s.sregs[cpsr], encode_mode(newmode), maskfiq, true)
 }
 
-predicate evalExceptionTaken(s:state, e:exception, r:state)
-    requires ValidState(s)
-    ensures evalExceptionTaken(s, e, r) ==> ValidState(r)
-    //ensures evalExceptionTaken(s, e, r) && s.ok ==> r.ok
+function exceptionTakenFn(s:state, e:exception, pc:word): state
+    requires ValidState(s) && ValidPsrWord(psr_of_exception(s, e))
+    ensures ValidState(exceptionTakenFn(s, e, pc))
 {
     reveal_ValidRegState();
     reveal_ValidSRegState();
@@ -490,14 +530,20 @@ predicate evalExceptionTaken(s:state, e:exception, r:state)
     var newmode := mode_of_exception(s.conf, e);
     // this does not model all of the CPSR update, since we don't model all the bits
     var newpsr := psr_of_exception(s, e);
-    ValidPsrWord(newpsr) && ValidState(r) &&
     // update mode, copy CPSR of oldmode to SPSR of newmode, havoc LR
-    r == takestep(s).(conf := s.conf.(cpsr := decode_psr(newpsr),
-                            spsr := s.conf.spsr[newmode := s.conf.cpsr],
-                            ex := e, excount := s.conf.excount + 1, exstep := s.steps),
-            sregs := s.sregs[cpsr := newpsr][spsr(newmode) := s.sregs[cpsr]],
-            regs := s.regs[LR(newmode) := nondet_word(s.nd_private,
-                                                     NONDET_REG(LR(newmode)))])
+    takestep(s).(conf := s.conf.(cpsr := decode_psr(newpsr),
+        spsr := s.conf.spsr[newmode := s.conf.cpsr],
+        ex := e, excount := s.conf.excount + 1, exstep := s.steps),
+        sregs := s.sregs[cpsr := newpsr][spsr(newmode) := s.sregs[cpsr]],
+        regs := s.regs[LR(newmode) := pc])
+}
+
+predicate evalExceptionTaken(s:state, e:exception, pc:word, r:state)
+    requires ValidState(s)
+    ensures evalExceptionTaken(s, e, pc, r) ==> ValidState(r)
+    //ensures evalExceptionTaken(s, e, r) && s.ok ==> r.ok
+{
+    ValidPsrWord(psr_of_exception(s, e)) && r == exceptionTakenFn(s, e, pc)
 }
 
 //-----------------------------------------------------------------------------
@@ -526,43 +572,46 @@ predicate evalMOVSPCLR(s:state, r:state)
     evalUpdate(takestep(s), OSReg(cpsr), spsr_val, r)
 }
 
-predicate {:opaque} evalUserspaceExecution(s:state, r:state)
-    requires ValidState(s)
-    ensures  evalUserspaceExecution(s, r) ==> ValidState(r)
-    //ensures  evalUserspaceExecution(s, r) && s.ok ==> r.ok
+function {:opaque} userspaceExecutionFn(s:state, pc:word): (state, word, exception)
+    requires ValidState(s) && mode_of_state(s) == User
+    requires ExtractAbsPageTable(s).Just?
+    ensures  ValidState(userspaceExecutionFn(s, pc).0)
 {
     reveal_ValidMemState();
     reveal_ValidRegState();
-    mode_of_state(s) == User &&
-    // if we can't extract a page table, we know nothing
-    var pt := ExtractAbsPageTable(s);
-    pt.Just? &&
-    var pages := WritablePagesInTable(fromJust(pt));
-    ValidState(r) &&
+    var pt := ExtractAbsPageTable(s).v;
+    var user_state := user_visible_state(s, pc, pt);
+    var pages := WritablePagesInTable(pt);
     // havoc writable pages and user regs, and take some steps
-    r == s.(m := s.m.(addresses := havocPages(pages, s)),
-            regs := havocUserRegs(s.nd_private, s.regs),
-            steps := s.steps + nondet_nat(s.nd_private, NONDET_STEPS()))
+    var rs := reseed_nondet_state(s).(
+        m := s.m.(addresses := havocPages(pages, s, user_state)),
+        regs := havocUserRegs(s.nondet, user_state, s.regs),
+        steps := s.steps + nondet_private_nat(s.nondet, user_state, NONDET_STEPS()));
+    // final PC and exception are functions of private nondeterminism
+    var rpc := nondet_private_word(s.nondet, user_state, NONDET_PC());
+    var rex := nondet_exception(s.nondet, user_state, s.conf.cpsr.f, s.conf.cpsr.i);
+    (rs, rpc, rex)
 }
 
-function havocPages(pages:set<addr>, s:state): memmap
+function havocPages(pages:set<addr>, s:state, us:UserState): memmap
     requires ValidState(s)
 {
     // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
     (map a:addr | ValidMem(a) && a in TheValidAddresses() ::
-     if BitwiseMaskHigh(a, 12) in pages then
-        nondet_word(if addrIsSecure(a) then s.nd_private else s.nd_public, a)
-     else MemContents(s.m, a))
+     if PageBase(a) in pages then (
+        if addrIsSecure(a) then nondet_private_word(s.nondet, us, a)
+        else nondet_word(s.nondet, a)
+     ) else MemContents(s.m, a))
 }
 
-function havocUserRegs(nondet:int, regs:map<ARMReg, word>): map<ARMReg, word>
+function havocUserRegs(nondet:int, us:UserState, regs:map<ARMReg, word>): map<ARMReg, word>
     requires ValidRegState(regs)
-    ensures ValidRegState(havocUserRegs(nondet, regs))
+    ensures ValidRegState(havocUserRegs(nondet, us, regs))
 {
     reveal_ValidRegState();
     map r | r in regs ::
-        if (r.SP? && r.spm != User) || (r.LR? && r.lrm != User) then regs[r]
-        else nondet_word(nondet, NONDET_REG(r))
+        if r in USER_REGS() then nondet_private_word(nondet, us, NONDET_REG(r))
+        else regs[r]
 }
 
 // To be defined/established by "application" code (i.e. komodo exception handlers)
@@ -592,12 +641,20 @@ predicate {:axiom} InterruptContinuationInvariant(s:state, r:state)
 //-----------------------------------------------------------------------------
 
 const PAGESIZE:int := 0x1000;
+const PAGEBITS:int := 12;
 
 predicate {:opaque} PageAligned(addr:int)
     ensures PageAligned(addr) ==> WordAligned(addr)
 {
     lemma_PageAlignedImpliesWordAligned(addr);
     addr % PAGESIZE == 0
+}
+
+function {:opaque} PageBase(addr:word): word
+    ensures PageAligned(PageBase(addr))
+{
+    reveal_PageAligned();
+    BitwiseMaskHigh(addr, PAGEBITS)
 }
 
 // We model a trivial memory map (for our own code and page tables)
@@ -646,6 +703,13 @@ function ExtractAbsPageTable(s:state): Maybe<AbsPTable>
         Just(ExtractAbsL1PTable(s.m, vbase))
     else
         Nothing
+}
+
+function AllPagesInTable(pt:AbsPTable): set<addr>
+    requires WellformedAbsPTable(pt)
+{
+    (set i, j | 0 <= i < |pt| && pt[i].Just? && 0 <= j < |pt[i].v|
+        && pt[i].v[j].Just? :: pt[i].v[j].v.phys + PhysBase())
 }
 
 function WritablePagesInTable(pt:AbsPTable): set<addr>
@@ -739,7 +803,7 @@ predicate ValidAbsL2PTEWord(pteword:word)
     var pte := WordAsBits(pteword);
     var typebits := BitAnd(pte, 0x3);
     var lowbits := BitAnd(pte, 0xdfc);
-    var pagebase := BitwiseMaskHigh(pteword, 12);
+    var pagebase := PageBase(pteword);
     typebits == 0 || (typebits != 1 && lowbits == ARM_L2PTE_CONST_BITS && isUInt32(pagebase + PhysBase()))
 }
 
@@ -751,7 +815,7 @@ function ExtractAbsL2PTE(pteword:word): Maybe<AbsPTE>
     var typebits := BitAnd(pte, 0x3);
     var exec := BitAnd(pte, ARM_L2PTE_NX_BIT) == 0;
     var write := BitAnd(pte, ARM_L2PTE_RO_BIT) == 0;
-    var pagebase := BitwiseMaskHigh(pteword, 12); // BitwiseAnd(pteword, 0xfffff000);
+    var pagebase := PageBase(pteword);
     assert PageAligned(pagebase) by { reveal_PageAligned(); }
     // if the type is zero, it's an invalid entry, which is fine (maps nothing)
     if typebits == 0 then Nothing else Just(AbsPTE(pagebase, write, exec))
@@ -781,17 +845,13 @@ function RightShift(x:word, amount:word): word
     requires 0 <= amount < 32;
     { BitsAsWord(BitShiftRight(WordAsBits(x), amount)) }
 
-function RotateRight(x:word, amount:shift_amount) : word
+function RotateRight(x:word, amount:shift_amount): word
     requires 0 <= amount < 32;
     { BitsAsWord(BitRotateRight(WordAsBits(x), amount)) }
 
-//-----------------------------------------------------------------------------
-// Functions for bytewise operations
-//-----------------------------------------------------------------------------
-
-function bswap32(x:word) : word { 
-    var bytes := WordToBytes(x);
-    BytesToWord(bytes[3], bytes[2], bytes[1], bytes[0])
+function {:opaque} UpdateTopBits(origval:word, newval:word): word
+{
+    BitwiseOr(LeftShift(newval, 16), BitwiseMaskLow(origval, 16))
 }
 
 //-----------------------------------------------------------------------------
@@ -847,11 +907,14 @@ function GlobalWord(s:memstate, g:symbol, offset:word): word
     GlobalFullContents(s, g)[BytesToWords(offset)]
 }
 
+function reseed_nondet_state(s:state): state
+{
+    s.(nondet := nondet_int(s.nondet, NONDET_GENERATOR()))
+}
+
 function takestep(s:state): state
 {
-    s.(steps := s.steps + 1,
-       nd_private := nondet_int(s.nd_private, NONDET_GENERATOR()),
-       nd_public := nondet_int(s.nd_public, NONDET_GENERATOR()))
+    s.(steps := s.steps + 1)
 }
 
 predicate evalUpdate(s:state, o:operand, v:word, r:state)
@@ -981,8 +1044,9 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidRegOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
             ValidGlobalAddr(global, OperandContents(s, base) + OperandContents(s, ofs))
-        case MOV(dst, src) => ValidRegOperand(dst) &&
-            ValidSecondOperand(src)
+        case MOV(dst, src) => ValidRegOperand(dst) && ValidSecondOperand(src)
+        case MOVW(dst, src) => ValidRegOperand(dst) && src.OConst?
+        case MOVT(dst, src) => ValidRegOperand(dst) && src.OConst?
         case MRS(dst, src) =>
             ValidRegOperand(dst) && ValidMrsMsrOperand(s,src)
         case MSR(dst, src) =>
@@ -1006,7 +1070,7 @@ predicate ValidInstruction(s:state, ins:ins)
 predicate handleInterrupt(s:state, ex:exception, r:state)
     requires ValidState(s)
 {
-    exists s1, s2 :: evalExceptionTaken(s, ex, s1)
+    exists s1, s2 :: evalExceptionTaken(s, ex, nondet_word(s.nondet, NONDET_PC()), s1)
         && InterruptContinuationInvariant(s1, s2)
         && evalMOVSPCLR(s2, r)
 }
@@ -1015,11 +1079,13 @@ predicate maybeHandleInterrupt(s:state, r:state)
     requires ValidState(s)
     ensures !interrupts_enabled(s) && maybeHandleInterrupt(s, r) ==> r == takestep(s)
 {
-    if !s.conf.cpsr.f && nondet_word(s.nd_private, NONDET_INT()) == 0
-        then handleInterrupt(s, ExFIQ, r)
-    else if !s.conf.cpsr.i && nondet_word(s.nd_private, NONDET_INT()) == 1
-        then handleInterrupt(s, ExIRQ, r)
-    else r == takestep(s)
+    if !interrupts_enabled(s)
+        then r == takestep(s)
+    else if !s.conf.cpsr.f && nondet_word(s.nondet, NONDET_EX()) == 0
+        then handleInterrupt(reseed_nondet_state(s), ExFIQ, r)
+    else if !s.conf.cpsr.i && nondet_word(s.nondet, NONDET_EX()) == 1
+        then handleInterrupt(reseed_nondet_state(s), ExIRQ, r)
+    else r == takestep(reseed_nondet_state(s))
 }
 
 predicate evalIns'(ins:ins, s:state, r:state)
@@ -1065,6 +1131,9 @@ predicate evalIns'(ins:ins, s:state, r:state)
                 + OperandContents(s, ofs) - AddressOfGlobal(global),
                 OperandContents(s, rd), r)
         case MOV(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
+        case MOVW(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
+        case MOVT(dst, src) => evalUpdate(s, dst,
+                UpdateTopBits(OperandContents(s, dst), OperandContents(s, src)), r)
         case MRS(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
         case MSR(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
         case MRC(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
@@ -1099,11 +1168,12 @@ predicate {:opaque} evalMOVSPCLRUC(s:state, r:state)
     requires ValidState(s)
     ensures evalMOVSPCLRUC(s, r) ==> ValidState(r)
 {
-    exists ex, s2, s3, s4 ::
+    ExtractAbsPageTable(s).Just?
+    && exists s2, s4 ::
         evalEnterUserspace(s, s2)
-        && evalUserspaceExecution(s2, s3)
-        && evalExceptionTaken(s3, ex, s4)
-        && UsermodeContinuationInvariant(s4, r)
+        && (var (s3, pc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
+        evalExceptionTaken(s3, ex, pc, s4)
+        && UsermodeContinuationInvariant(s4, r))
 }
 
 predicate evalBlock(block:codes, s:state, r:state)

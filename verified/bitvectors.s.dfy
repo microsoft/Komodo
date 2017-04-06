@@ -262,3 +262,13 @@ function {:opaque} BitwiseMaskHigh(i:word, bitpos:int): word
     lemma_pow2_properties(bitpos);
     BitsAsWord(BitAnd(WordAsBits(i), BitmaskHigh(bitpos)))
 }
+
+function {:opaque} BitwiseMaskLow(i:word, bitpos:int): word
+    requires 0 <= bitpos < 32;
+    ensures BitwiseMaskLow(i, bitpos) == i % pow2(bitpos)
+    ensures pow2_properties(bitpos)
+{
+    lemma_BitmaskAsWord(i, bitpos);
+    lemma_pow2_properties(bitpos);
+    BitsAsWord(BitAnd(WordAsBits(i), BitmaskLow(bitpos)))
+}

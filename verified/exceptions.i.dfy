@@ -81,20 +81,25 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
             && m != mode_of_exception(s.conf, ExFIQ)
             ==> s.regs[LR(m)] == r.regs[LR(m)]
 {
-    var nondet := nondet_word(s.nd_private, NONDET_INT());
-    if (!s.conf.cpsr.f && nondet == 0) || (!s.conf.cpsr.i && nondet == 1) {
-        ghost var ex := if nondet == 0 then ExFIQ else ExIRQ;
-        assert handleInterrupt(s, ex, r);
-        var s1, s2 :| evalExceptionTaken(s, ex, s1)
+    var nondet := nondet_word(s.nondet, NONDET_EX());
+    if !interrupts_enabled(s) {
+        assert r == takestep(s);
+    } else if (!s.conf.cpsr.f && nondet == 0) || (!s.conf.cpsr.i && nondet == 1) {
+        var ex := if nondet == 0 then ExFIQ else ExIRQ;
+        var s' := reseed_nondet_state(s);
+        assert handleInterrupt(s', ex, r);
+        var expc := nondet_word(s'.nondet, NONDET_PC());
+        var s1, s2 :| evalExceptionTaken(s', ex, expc, s1)
             && InterruptContinuationInvariant(s1, s2)
             && evalMOVSPCLR(s2, r);
-        lemma_evalExceptionTaken_Mode(s, ex, s1);
+        lemma_evalExceptionTaken_Mode(s', ex, expc, s1);
         lemma_InterruptContinuationInvariantDef(s1, s2);
-        forall m | m != mode_of_exception(s.conf, ex)
+        forall m | m != mode_of_exception(s'.conf, ex)
             ensures s.regs[LR(m)] == r.regs[LR(m)]
         {
             calc {
                 s.regs[LR(m)];
+                s'.regs[LR(m)];
                 s1.regs[LR(m)];
                 s2.regs[LR(m)];
                 r.regs[LR(m)];
@@ -102,6 +107,7 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
         }
         calc {
             s.regs[SP(Monitor)];
+            s'.regs[SP(Monitor)];
             s1.regs[SP(Monitor)];
             { if mode_of_state(s1) == Monitor {
                 assert CoreRegPreservingExcept(s1, s2, {OLR});
@@ -113,6 +119,6 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
             r.regs[SP(Monitor)];
         }
     } else {
-        assert r == takestep(s);
+        assert r == takestep(reseed_nondet_state(s));
     }
 }

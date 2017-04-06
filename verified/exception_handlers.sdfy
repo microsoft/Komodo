@@ -94,7 +94,6 @@ procedure {:frame false} switch_to_monitor(inline oldmode:mode)
 
 procedure fault_exit(
     inline ex: exception,
-    ghost user_state: state,
     ghost exstate: state,
     ghost pagedb_in: PageDb,
     ghost dispPg: PageNr) returns (ghost pagedb: PageDb)
@@ -105,9 +104,8 @@ procedure fault_exit(
     requires/ensures
         SaneState(this);
     requires
-        ValidState(user_state) && mode_of_state(user_state) == User;
-        evalExceptionTaken(user_state, ex, exstate);
-        ValidState(exstate) && mode_of_state(exstate) != User;
+        ValidState(exstate);
+        mode_of_state(exstate) != User && spsr_of_state(exstate).m == User;
         exstate.conf.ex == ex && set(ExSVC, ExAbt, ExUnd) ?[ex];
         r1 == OperandContents(exstate, OReg(R1));
         //this.conf.scr.ns == Secure;
@@ -153,7 +151,7 @@ procedure fault_exit(
 
     pagedb := pagedb_in[dispPg := pagedb_in[dispPg].(entry := dispEntry)];
     assert pagedb == exPageDb(exceptionHandled(exstate, pagedb_in, dispPg));
-    exceptionHandledValidPageDb(user_state, ex, exstate, pagedb_in, dispPg);
+    lemma_exceptionHandled_validPageDb(exstate, pagedb_in, dispPg);
 
     assert GlobalsInvariant(old(this), this);
     assert pageDbCorrespondsOnly(this.m, pagedb, dispPg)
@@ -218,10 +216,8 @@ predicate handler_requires(s: state, stack_bytes: int)
 #endverbatim
 
 procedure {:frame false} svc_handler(
-    ghost user_state: state,
     ghost stack_bytes: int,
-    ghost pagedb0: PageDb,
-    ghost pagedb1: PageDb,
+    ghost pagedb_in: PageDb,
     ghost dispPg: PageNr) returns (ghost pagedb: PageDb)
     reads
         globals; /* spsr_svc; spsr_abt; spsr_und; */ lr_svc; lr_abt; lr_und;
@@ -229,45 +225,39 @@ procedure {:frame false} svc_handler(
         mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; cpsr; lr; spsr_mon;
     requires
         handler_requires(this, stack_bytes);
-        ValidState(user_state) && mode_of_state(user_state) == User;
-        evalExceptionTaken(user_state, ExSVC, this);
-        validPageDb(pagedb0) && validPageDb(pagedb1);
-        nonStoppedDispatcher(pagedb0, dispPg);
-        pagedb1 == updateUserPagesFromState(user_state, pagedb0, dispPg);
-        pageDbCorresponds(this.m, pagedb1);
+        mode_of_state(this) == Supervisor && spsr_of_state(this).m == User;
+        this.conf.ex == ExSVC;
+        validPageDb(pagedb_in) && nonStoppedDispatcher(pagedb_in, dispPg);
+        pageDbCorresponds(this.m, pagedb_in);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
-        KomExceptionHandlerInvariant(old(this), pagedb1, this, dispPg);
+        KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
-    assert mode_of_state(this) == Supervisor
-        by { lemma_evalExceptionTaken_Mode(user_state, ExSVC, this); }
     switch_to_monitor(Supervisor);
-    lemma_SameMemAndGlobalsPreservesPageDb'(old(this), this, pagedb1);
+    lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb_in);
 
     if (r0 == const(KOM_SVC_EXIT)) {
         assert !isReturningSvc(old(this));
-        pagedb := fault_exit(ExSVC, user_state, old(this), pagedb1, dispPg);
+        pagedb := fault_exit(ExSVC, old(this), pagedb_in, dispPg);
         ORR(sp, sp, 1); // report that we're done
     } else {
         assert isReturningSvc(old(this));
-        pagedb := pagedb1;
+        pagedb := pagedb_in;
         svc_returning(old(this), stack_bytes, pagedb, dispPg);
         assert preEntryReturn(this, OperandContents(old(this), OLR),
                               svcHandled(old(this), pagedb, dispPg));
     }
 
-    assert validExceptionTransition(old(this), pagedb1, this, pagedb, dispPg)
+    assert validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg)
         by { reveal validExceptionTransition; }
 }
 
 procedure {:frame false} abort_handler(
     inline ex: exception,
-    ghost user_state: state,
     ghost stack_bytes: int,
-    ghost pagedb0: PageDb,
-    ghost pagedb1: PageDb,
+    ghost pagedb_in: PageDb,
     ghost dispPg: PageNr) returns (ghost pagedb: PageDb)
     reads
         globals; /* spsr_svc; spsr_abt; spsr_und; */ lr_svc; lr_abt; lr_und;
@@ -275,29 +265,24 @@ procedure {:frame false} abort_handler(
         mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; cpsr; lr; spsr_mon;
     requires
         handler_requires(this, stack_bytes);
-        ValidState(user_state) && mode_of_state(user_state) == User;
-        ex == ExAbt || ex == ExUnd;
-        evalExceptionTaken(user_state, ex, this);
-        validPageDb(pagedb0) && validPageDb(pagedb1);
-        nonStoppedDispatcher(pagedb0, dispPg);
-        pagedb1 == updateUserPagesFromState(user_state, pagedb0, dispPg);
-        pageDbCorresponds(this.m, pagedb1);
+        this.conf.ex == ex && (ex == ExAbt || ex == ExUnd);
+        mode_of_state(this) == (if ex == ExAbt then Abort else Undefined);
+        spsr_of_state(this).m == User;
+        validPageDb(pagedb_in) && nonStoppedDispatcher(pagedb_in, dispPg);
+        pageDbCorresponds(this.m, pagedb_in);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
-        KomExceptionHandlerInvariant(old(this), pagedb1, this, dispPg);
+        KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
-    ghost var m := if ex == ExAbt then Abort else Undefined;
-    assert mode_of_state(this) == m
-        by { lemma_evalExceptionTaken_Mode(user_state, ex, this); }
     switch_to_monitor(if ex == ExAbt then Abort else Undefined);
-    lemma_SameMemAndGlobalsPreservesPageDb'(old(this), this, pagedb1);
+    lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb_in);
 
-    pagedb := fault_exit(ex, user_state, old(this), pagedb1, dispPg);
+    pagedb := fault_exit(ex, old(this), pagedb_in, dispPg);
     ORR(sp, sp, 1); // report that we're done
 
-    assert validExceptionTransition(old(this), pagedb1, this, pagedb, dispPg)
+    assert validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg)
         by { reveal_validExceptionTransition(); }
 }
 
@@ -351,7 +336,7 @@ procedure save_disp_context_helper(operand base:reg, ghost dispPg:PageNr)
     MRS_STR(spsr_mon, base, const(DISP_CTXT_PSR), r1);
 }
 
-procedure save_disp_context(inout operand base: reg, ghost ustate:state,
+procedure save_disp_context(inout operand base: reg,
                             ghost ex:exception, ghost exstate:state,
                             ghost dispPg:PageNr, ghost pagedb_in:PageDb)
                         returns  (ghost pagedb:PageDb)
@@ -363,9 +348,9 @@ procedure save_disp_context(inout operand base: reg, ghost ustate:state,
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         validDispatcherPage(pagedb_in, dispPg);
-        ValidState(ustate) && mode_of_state(ustate) == User;
         ex == exstate.conf.ex && (ex == ExFIQ || ex == ExIRQ);
-        evalExceptionTaken(ustate, ex, exstate) && mode_of_state(exstate) == Monitor;
+        ValidState(exstate) && mode_of_state(exstate) == Monitor
+            && spsr_of_state(exstate).m == User;
         CoreRegPreservingExcept(exstate, this, set(OReg(R0), OSP, OLR));
         forall o :: set(OSReg(spsr(Monitor)), OReg(LR(User)), OReg(SP(User))) ?[o]
             ==> OperandContents(exstate, o) == OperandContents(this, o);
@@ -403,7 +388,7 @@ procedure save_disp_context(inout operand base: reg, ghost ustate:state,
     STR(r1, base, const(DISPATCHER_ENTERED));
 
     pagedb := exPageDb(exceptionHandled(exstate, pagedb_in, dispPg));
-    exceptionHandledValidPageDb(ustate, ex, exstate, pagedb_in, dispPg);
+    lemma_exceptionHandled_validPageDb(exstate, pagedb_in, dispPg);
     ghost var disp := pagedb[dispPg].entry;
     ghost var ctxt := disp.ctxt;
     ghost var pg := extractPage(this.m, dispPg);
@@ -421,7 +406,8 @@ procedure save_disp_context(inout operand base: reg, ghost ustate:state,
         assert pg[pgbase + DISP_CTXT_PSR] == old(spsr_mon)
             == OperandContents(exstate, OSReg(spsr(Monitor)))
             == exstate.sregs[spsr(mode_of_state(exstate))];
-        assert ctxt == DispatcherContext(exstate.regs, old(lr), old(spsr_mon));
+        assert ctxt == DispatcherContext(user_regs(exstate.regs), old(lr),
+                                         old(spsr_mon));
         assert pg[pgbase + DISP_CTXT_R0] == gr0 == ctxt.regs[R0];
         assert forall a:addr :: pg?[a] && a != pgbase + DISP_CTXT_R0
                 && a != pgbase + DISPATCHER_ENTERED
@@ -464,10 +450,10 @@ procedure save_disp_context(inout operand base: reg, ghost ustate:state,
 
 procedure {:frame false} interrupt_handler(
     inline ex: exception,
+    ghost expc: word,
     ghost prior_state: state,
     ghost stack_bytes: int,
-    ghost pagedb0: PageDb,
-    ghost pagedb1: PageDb,
+    ghost pagedb_in: PageDb,
     ghost dispPg: PageNr) returns (ghost pagedb: PageDb)
     reads
         globals; /* spsr_svc; spsr_abt; spsr_und; */ lr_svc; lr_abt; lr_und;
@@ -478,21 +464,17 @@ procedure {:frame false} interrupt_handler(
         stack_bytes >= 2*WORDSIZE;
         ValidState(prior_state);
         ex == ExFIQ || ex == ExIRQ;
-        evalExceptionTaken(prior_state, ex, this);
-        validPageDb(pagedb0) && validPageDb(pagedb1);
-        nonStoppedDispatcher(pagedb0, dispPg);
-        if mode_of_state(prior_state) == User
-            then pagedb1 == updateUserPagesFromState(prior_state, pagedb0, dispPg)
-            else pagedb1 == pagedb0;
-        pageDbCorresponds(this.m, pagedb1);
+        evalExceptionTaken(prior_state, ex, expc, this);
+        validPageDb(pagedb_in) && nonStoppedDispatcher(pagedb_in, dispPg);
+        pageDbCorresponds(this.m, pagedb_in);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
-        KomInterruptHandlerInvariant(old(this), pagedb1, this, dispPg);
+        KomInterruptHandlerInvariant(old(this), pagedb_in, this, dispPg);
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
     assert mode_of_state(this) == Monitor
-        by { lemma_evalExceptionTaken_Mode(prior_state, ex, this); }
+        by { lemma_evalExceptionTaken_Mode(prior_state, ex, expc, this); }
     lemma_update_psr(cpsr_of_state(prior_state), encode_mode(Monitor), true, true);
     assert !interrupts_enabled(this);
 
@@ -508,7 +490,11 @@ procedure {:frame false} interrupt_handler(
 
     // store pending interrupt
     LDRglobaladdr(r0, PendingInterruptOp());
-    MOV(r1, 1);
+    inline if (ex == ExFIQ) {
+        MOV(r1, const(7*WORDSIZE)); // exception table FIQ vector offset
+    } else {
+        MOV(r1, const(6*WORDSIZE)); // exception table IRQ vector offset
+    }
     STRglobal(r1, PendingInterruptOp(), r0, 0);
 
     // figure out where we came from
@@ -524,9 +510,9 @@ procedure {:frame false} interrupt_handler(
         LDRglobal(r0, CurDispatcherOp(), r0, 0);
         LDR(r1, sp, const(WORDSIZE));
         assert r1 == old(r1);
-        lemma_SameMemAndGlobalsPreservesPageDb'(old(this), this, pagedb1);
-        pagedb := save_disp_context(r0, prior_state, ex, old(this), dispPg, pagedb1);
-        assert tuple(r0, r1, pagedb) == exceptionHandled(old(this), pagedb1, dispPg);
+        lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb_in);
+        pagedb := save_disp_context(r0, ex, old(this), dispPg, pagedb_in);
+        assert tuple(r0, r1, pagedb) == exceptionHandled(old(this), pagedb_in, dispPg);
 
         ADD(sp, sp, const(2 * WORDSIZE));
         assert sp == old(sp);
@@ -541,10 +527,10 @@ procedure {:frame false} interrupt_handler(
         ADD(sp, sp, const(2 * WORDSIZE));
         assert r0 == old(r0) && r1 == old(r1) && sp == old(sp);
 
-        pagedb := pagedb1;
-        lemma_SameMemAndGlobalsPreservesPageDb'(old(this), this, pagedb);
+        pagedb := pagedb_in;
+        lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
     }
 
-    assert validExceptionTransition(old(this), pagedb1, this, pagedb, dispPg)
+    assert validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg)
         by { reveal_validExceptionTransition(); }
 }

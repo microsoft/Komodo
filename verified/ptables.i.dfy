@@ -226,6 +226,13 @@ lemma lemma_WritablePages(d:PageDb, l1p:PageNr, pagebase:addr)
     assert pte.SecureMapping? && pte.write;
 }
 
+predicate evalUserspaceExecution(s:state, s':state)
+    requires ValidState(s)
+{
+    mode_of_state(s) == User && ExtractAbsPageTable(s).Just?
+    && exists pc:word :: s' == userspaceExecutionFn(s, pc).0
+}
+
 lemma UserExecutionMemInvariant(s:state, s':state, d:PageDb, l1:PageNr)
     requires ValidState(s) && SaneMem(s.m)
     requires evalUserspaceExecution(s, s')
@@ -242,49 +249,54 @@ lemma UserExecutionMemInvariant(s:state, s':state, d:PageDb, l1:PageNr)
         ensures memSWrInAddrspace(d, l1, a)
             || MemContents(s.m, a) == MemContents(s'.m, a)
     {
-        var pagebase := BitwiseMaskHigh(a, 12);
+        var pagebase := PageBase(a);
         if pagebase !in WritablePagesInTable(abspt) {
             assert MemContents(s'.m, a) == MemContents(s.m, a)
-                by { reveal_evalUserspaceExecution(); }
+                by { reveal_userspaceExecutionFn(); }
         } else {
-            var page := lemma_secure_addrInPage(a, pagebase);
+            var page := lemma_secure_addrInPage(a);
             lemma_WritablePages(d, l1, pagebase);
             assert memSWrInAddrspace(d, l1, a);
         }
     }
 }
 
-lemma lemma_secure_addrInPage(a:addr, pagebase:addr) returns (p:PageNr)
+lemma lemma_secure_addrInPage(a:addr) returns (p:PageNr)
     requires address_is_secure(a)
-    requires pagebase == BitwiseMaskHigh(a, 12)
-    ensures address_is_secure(pagebase)
+    ensures address_is_secure(PageBase(a))
+    ensures p == monvaddr_page(PageBase(a))
     ensures addrInPage(a, p)
-    ensures p == monvaddr_page(pagebase)
 {
-    var pagebase := BitwiseMaskHigh(a, 12);
+    var pagebase := PageBase(a);
     var dummy:PageNr;
-    lemma_bitMaskAddrInPage(a, pagebase, dummy);
+    lemma_bitMaskAddrInPage(a, dummy);
     p := monvaddr_page(pagebase);
-    lemma_bitMaskAddrInPage(a, pagebase, p);
+    lemma_bitMaskAddrInPage(a, p);
     assert addrInPage(a, p);
 }
 
-lemma lemma_bitMaskAddrInPage(a:addr, pagebase:addr, p:PageNr)
+lemma lemma_bitMaskAddrInPage(a:addr, p:PageNr)
     requires address_is_secure(a);
-    requires pagebase == BitwiseMaskHigh(a, 12);
-    ensures addrInPage(a, p) <==> addrInPage(pagebase, p);
-    ensures PageAligned(pagebase) && address_is_secure(pagebase)
+    ensures addrInPage(a, p) <==> addrInPage(PageBase(a), p);
+    ensures PageAligned(PageBase(a)) && address_is_secure(PageBase(a))
 {
+    var pagebase := BitwiseMaskHigh(a, 12);
+    assert pagebase == PageBase(a) by { reveal_PageBase(); }
+
     // sigh. there's a surprising amount of cruft here to prove
     // that the page base is secure and on the same page as 'a'
-    var pagebase := BitwiseMaskHigh(a, 12);
     var securebase := KOM_DIRECTMAP_VBASE + SecurePhysBase();
     assert PageAligned(pagebase) by { reveal_PageAligned(); }
     assert PageAligned(KOM_DIRECTMAP_VBASE) by { reveal_PageAligned(); }
     lemma_PageAlignedAdd(KOM_DIRECTMAP_VBASE, SecurePhysBase());
     assert PageAligned(securebase);
-    assert pagebase == a / PAGESIZE * PAGESIZE by { reveal_PageAligned(); }
-    assert pagebase == a - a % PAGESIZE;
+
+    calc {
+        pagebase;
+        { reveal_PageAligned(); }
+        a / PAGESIZE * PAGESIZE;
+    }
+
     if (a / PAGESIZE == securebase / PAGESIZE) {
         assert pagebase / PAGESIZE == securebase / PAGESIZE;
     }

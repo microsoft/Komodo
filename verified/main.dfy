@@ -117,14 +117,15 @@ method printAll()
 predicate InitialState(s:state)
 {
     reveal_ValidRegState();
+    reveal_ValidSRegState();
 
-    SaneConstants()
-        && ValidState(s) && s.ok
+    ValidState(s) && s.ok
+        && SaneMem(s.m)
         && mode_of_state(s) == Monitor
         && s.conf.scr.ns == NotSecure
-        && s.regs[SP(Monitor)] == StackBase()
-        && SaneMem(s.m)
         && !interrupts_enabled(s)
+        && s.regs[SP(Monitor)] == StackBase()
+        && decode_psr(s.sregs[spsr(Monitor)]).m != Monitor
 }
 
 method Main()
@@ -135,8 +136,7 @@ method Main()
         && validPageDb(p1)
         && pageDbCorresponds(s1.m, p1)
         && evalCode(smc_handler(), s1, s2)
-        && AUCIdef() // XXX
-        ensures smchandlerInvariant(s1, s2)
+        && UsermodeContinuationInvariantDef() // XXX
         ensures exists p2:PageDb :: smchandler(s1, p1, s2, p2)
             && validPageDb(p2) && pageDbCorresponds(s2.m, p2)
     {

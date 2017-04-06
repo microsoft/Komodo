@@ -45,6 +45,7 @@ var{:state sreg(spsr(Monitor))}    spsr_mon:int;
 var{:state sreg(cpsr)}             cpsr:int;
 var{:state sreg(SCR)}              scr:word;
 var{:state sreg(ttbr0)}            ttbr0:word;
+var{:state sreg(VBAR)}             vbar:word;
 
 #verbatim
 function MaybeUpdateOk(s:va_state, r:va_state) : va_state
@@ -273,6 +274,30 @@ MOVShift(out operand dst:word, operand src:snd, inline shift:Shift)
         !interrupts_enabled(this);
     ensures
         dst == old(EvalShift(old(src), shift));
+{
+    reveal va_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
+}
+
+procedure {:bridge} {:refined} {:instruction Ins(MOVW(dst, src))}
+MOVW(out operand dst:word, operand src:constop)
+    requires {:refined false}
+        !interrupts_enabled(this);
+    ensures
+        dst == old(src);
+{
+    reveal va_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
+}
+
+procedure {:bridge} {:refined} {:instruction Ins(MOVT(dst, src))}
+MOVT(inout operand dst:word, operand src:constop)
+    requires {:refined false}
+        !interrupts_enabled(this);
+    ensures
+        dst == UpdateTopBits(old(dst), old(src));
 {
     reveal va_eval;
     reveal ValidRegState;

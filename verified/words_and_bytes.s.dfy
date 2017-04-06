@@ -25,9 +25,8 @@ function BEUintToSeqByte(v:int, width:int) : seq<byte>
 
 function {:opaque} BytesToWord(b0:byte, b1:byte, b2:byte, b3:byte) : word
 {
-    var w := BEByteSeqToInt([b0, b1, b2, b3]);
-    if 0 <= w < 0x1_0000_0000 then (w as word) else 42
-    // We defer the proof that BEByteSeqToInt is in bounds to the verified implementation
+    assert{:fuel BEByteSeqToInt, 4} 0 <= BEByteSeqToInt([b0, b1, b2, b3]) < 0x1_0000_0000;
+    BEByteSeqToInt([b0, b1, b2, b3])
 }
 
 function{:opaque} WordToBytes(w:word) : seq<byte>
@@ -43,14 +42,15 @@ function{:opaque} WordToBytes(w:word) : seq<byte>
 function {:opaque} Uint64ToBytes(u:uint64) : seq<byte>
     ensures |Uint64ToBytes(u)| == 8;
 {
-    [ ( u/ 0x100000000000000) as byte,
-      ((u/   0x1000000000000) % 0x100) as byte,
-      ((u/     0x10000000000) % 0x100) as byte,
-      ((u/       0x100000000) % 0x100) as byte,
-      ((u/         0x1000000) % 0x100) as byte,
-      ((u/           0x10000) % 0x100) as byte,
-      ((u/             0x100) % 0x100) as byte,
-      ((u                   ) % 0x100) as byte]
+    BEUintToSeqByte(u as int, 8)
+//    [ ( u/ 0x100000000000000) as byte,
+//      ((u/   0x1000000000000) % 0x100) as byte,
+//      ((u/     0x10000000000) % 0x100) as byte,
+//      ((u/       0x100000000) % 0x100) as byte,
+//      ((u/         0x1000000) % 0x100) as byte,
+//      ((u/           0x10000) % 0x100) as byte,
+//      ((u/             0x100) % 0x100) as byte,
+//      ((u                   ) % 0x100) as byte]
 }
 
 function WordSeqToBytes(ws:seq<word>) : seq<byte>
@@ -80,3 +80,10 @@ function ConcatenateSeqs<T>(ss:seq<seq<T>>) : seq<T>
 {
     if |ss| == 0 then [] else ss[0] + ConcatenateSeqs(ss[1..])
 }
+
+function bswap32(x:word) : word
+{
+    var bytes := WordToBytes(x);
+    BytesToWord(bytes[3], bytes[2], bytes[1], bytes[0])
+}
+
