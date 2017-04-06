@@ -249,19 +249,26 @@ predicate equivStates(s1:state, s2:state)
         && s1.conf == s2.conf && s1.ok == s2.ok && s1.nondet == s2.nondet
 }
 
+
+predicate userspaceExecutionAndException'(s:state, s1:state, s2:state, r:state)
+    requires ValidState(s)
+{
+    ExtractAbsPageTable(s).Just?
+    // we've entered userland, and didn't change anything before/after doing so
+    && equivStates(s, s1) && evalEnterUserspace(s1, s2) && s2.steps == s1.steps + 1
+    && (var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
+    evalExceptionTaken(s3, ex, expc, r)
+    && r.conf.exstep == s3.steps)
+    && mode_of_state(r) != User // known, but we need a lemma to prove it
+    && s.conf.excount + 1 == r.conf.excount
+}
+
 predicate {:opaque} userspaceExecutionAndException(s:state, r:state)
     requires ValidState(s)
     ensures userspaceExecutionAndException(s, r)
         ==> ValidState(r) && mode_of_state(r) != User
 {
-    ExtractAbsPageTable(s).Just?
-    // we've entered userland, and didn't change anything before/after doing so
-    && (exists s', s2 :: equivStates(s, s') && evalEnterUserspace(s', s2) && s2.steps == s'.steps + 1
-    && (var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
-    evalExceptionTaken(s3, ex, expc, r)
-    && r.conf.exstep == s3.steps))
-    && mode_of_state(r) != User // known, but we need a lemma to prove it
-    && s.conf.excount + 1 == r.conf.excount
+    exists s1, s2 :: userspaceExecutionAndException'(s, s1, s2, r)
 }
 
 //-----------------------------------------------------------------------------
