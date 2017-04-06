@@ -159,7 +159,7 @@ function user_mem(pt:AbsPTable, m:memstate): memmap
 
     // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
     (map a:addr | ValidMem(a) && a in TheValidAddresses() && addrIsSecure(a)
-        && BitwiseMaskHigh(a, 12) in AllPagesInTable(pt) :: m.addresses[a])
+        && PageBase(a) in AllPagesInTable(pt) :: m.addresses[a])
 }
 
 //-----------------------------------------------------------------------------
@@ -209,9 +209,7 @@ function decode_ttbr(v:word): TTBR
     ensures PageAligned(decode_ttbr(v).ptbase)
     // assuming 4k alignment, n == 2 / x == 12
 {
-    var ptbase := BitwiseMaskHigh(v, PAGEBITS);
-    reveal_PageAligned();
-    TTBR(ptbase)
+    TTBR(PageBase(v))
 }
 
 predicate ValidSReg(sr:SReg)
@@ -522,10 +520,9 @@ function psr_of_exception(s:state, e:exception): word
     update_psr(s.sregs[cpsr], encode_mode(newmode), maskfiq, true)
 }
 
-predicate evalExceptionTaken(s:state, e:exception, pc:word, r:state)
-    requires ValidState(s)
-    ensures evalExceptionTaken(s, e, pc, r) ==> ValidState(r)
-    //ensures evalExceptionTaken(s, e, r) && s.ok ==> r.ok
+function exceptionTakenFn(s:state, e:exception, pc:word): state
+    requires ValidState(s) && ValidPsrWord(psr_of_exception(s, e))
+    ensures ValidState(exceptionTakenFn(s, e, pc))
 {
     reveal_ValidRegState();
     reveal_ValidSRegState();
@@ -533,13 +530,20 @@ predicate evalExceptionTaken(s:state, e:exception, pc:word, r:state)
     var newmode := mode_of_exception(s.conf, e);
     // this does not model all of the CPSR update, since we don't model all the bits
     var newpsr := psr_of_exception(s, e);
-    ValidPsrWord(newpsr) && ValidState(r) &&
     // update mode, copy CPSR of oldmode to SPSR of newmode, havoc LR
-    r == takestep(s).(conf := s.conf.(cpsr := decode_psr(newpsr),
+    takestep(s).(conf := s.conf.(cpsr := decode_psr(newpsr),
         spsr := s.conf.spsr[newmode := s.conf.cpsr],
         ex := e, excount := s.conf.excount + 1, exstep := s.steps),
         sregs := s.sregs[cpsr := newpsr][spsr(newmode) := s.sregs[cpsr]],
         regs := s.regs[LR(newmode) := pc])
+}
+
+predicate evalExceptionTaken(s:state, e:exception, pc:word, r:state)
+    requires ValidState(s)
+    ensures evalExceptionTaken(s, e, pc, r) ==> ValidState(r)
+    //ensures evalExceptionTaken(s, e, r) && s.ok ==> r.ok
+{
+    ValidPsrWord(psr_of_exception(s, e)) && r == exceptionTakenFn(s, e, pc)
 }
 
 //-----------------------------------------------------------------------------
@@ -594,7 +598,7 @@ function havocPages(pages:set<addr>, s:state, us:UserState): memmap
 {
     // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
     (map a:addr | ValidMem(a) && a in TheValidAddresses() ::
-     if BitwiseMaskHigh(a, PAGEBITS) in pages then (
+     if PageBase(a) in pages then (
         if addrIsSecure(a) then nondet_private_word(s.nondet, us, a)
         else nondet_word(s.nondet, a)
      ) else MemContents(s.m, a))
@@ -644,6 +648,13 @@ predicate {:opaque} PageAligned(addr:int)
 {
     lemma_PageAlignedImpliesWordAligned(addr);
     addr % PAGESIZE == 0
+}
+
+function {:opaque} PageBase(addr:word): word
+    ensures PageAligned(PageBase(addr))
+{
+    reveal_PageAligned();
+    BitwiseMaskHigh(addr, PAGEBITS)
 }
 
 // We model a trivial memory map (for our own code and page tables)
@@ -792,7 +803,7 @@ predicate ValidAbsL2PTEWord(pteword:word)
     var pte := WordAsBits(pteword);
     var typebits := BitAnd(pte, 0x3);
     var lowbits := BitAnd(pte, 0xdfc);
-    var pagebase := BitwiseMaskHigh(pteword, PAGEBITS);
+    var pagebase := PageBase(pteword);
     typebits == 0 || (typebits != 1 && lowbits == ARM_L2PTE_CONST_BITS && isUInt32(pagebase + PhysBase()))
 }
 
@@ -804,7 +815,7 @@ function ExtractAbsL2PTE(pteword:word): Maybe<AbsPTE>
     var typebits := BitAnd(pte, 0x3);
     var exec := BitAnd(pte, ARM_L2PTE_NX_BIT) == 0;
     var write := BitAnd(pte, ARM_L2PTE_RO_BIT) == 0;
-    var pagebase := BitwiseMaskHigh(pteword, PAGEBITS);
+    var pagebase := PageBase(pteword);
     assert PageAligned(pagebase) by { reveal_PageAligned(); }
     // if the type is zero, it's an invalid entry, which is fine (maps nothing)
     if typebits == 0 then Nothing else Just(AbsPTE(pagebase, write, exec))

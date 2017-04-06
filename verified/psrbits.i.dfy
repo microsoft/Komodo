@@ -145,6 +145,19 @@ lemma lemma_update_psr(oldpsr:word, newmode:word, f:bool, i:bool)
     }
 }
 
+lemma lemma_psr_of_exception(s:state, ex:exception)
+    requires ValidState(s)
+    ensures ValidPsrWord(psr_of_exception(s, ex))
+{
+    reveal_ValidSRegState();
+    var oldpsr := s.sregs[cpsr];
+    var newmode := mode_of_exception(s.conf, ex);
+    assert ValidPsrWord(oldpsr);
+    assert ValidModeEncoding(encode_mode(newmode));
+    lemma_update_psr(oldpsr, encode_mode(newmode),
+                     ex == ExFIQ || newmode == Monitor, true);
+}
+
 lemma lemma_psr_still_valid(oldpsr:word, newpsr:word, newbits:word)
     requires ValidPsrWord(oldpsr)
     requires newpsr == BitwiseOr(LeftShift(RightShift(oldpsr, 5), 5), newbits)

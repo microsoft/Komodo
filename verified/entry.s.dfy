@@ -80,8 +80,7 @@ function {:opaque} updateUserPagesFromState(s:state, d:PageDb, dispPg:PageNr): P
 }
 
 predicate validEnclaveExecutionStep'(s1:state, d1:PageDb,
-    s2:state, s4:state, d4:PageDb,
-    rs:state, rd:PageDb, dispPg:PageNr, retToEnclave:bool)
+    s4:state, d4:PageDb, rs:state, rd:PageDb, dispPg:PageNr, retToEnclave:bool)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
     requires nonStoppedDispatcher(d1, dispPg)
 {
@@ -91,8 +90,7 @@ predicate validEnclaveExecutionStep'(s1:state, d1:PageDb,
 
     pageTableCorresponds(s1, d1, l1p)
         && dataPagesCorrespond(s1.m, d1)
-        && entryTransition(s1, s2)
-        && userspaceExecutionAndException(s2, s4)
+        && userspaceExecutionAndException(s1, s4)
         && d4 == updateUserPagesFromState(s4, d1, dispPg)
         && validExceptionTransition(s4, d4, rs, rd, dispPg)
         && isReturningSvc(s4) == retToEnclave
@@ -109,8 +107,8 @@ predicate {:opaque} validEnclaveExecutionStep(s1:state, d1:PageDb,
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
     requires nonStoppedDispatcher(d1, dispPg)
 {
-    exists s2, s4, d4
-        :: validEnclaveExecutionStep'(s1, d1, s2, s4, d4, rs, rd, dispPg,
+    exists s4, d4
+        :: validEnclaveExecutionStep'(s1, d1, s4, d4, rs, rd, dispPg,
                                      retToEnclave)
 }
 
@@ -259,17 +257,18 @@ predicate entryTransition(s:state, r:state)
     exists s' :: equivStates(s, s') && evalEnterUserspace(s', r) && r.steps == s'.steps + 1
 }
 
-predicate userspaceExecutionAndException(s:state, r:state)
-    requires ValidState(s) && mode_of_state(s) == User
+predicate {:opaque} userspaceExecutionAndException(s:state, r:state)
+    requires ValidState(s)
     ensures userspaceExecutionAndException(s, r)
         ==> ValidState(r) && mode_of_state(r) != User
 {
     ExtractAbsPageTable(s).Just?
-    && (var (s', pc, ex) := userspaceExecutionFn(s, OperandContents(s, OLR));
-    evalExceptionTaken(s', ex, pc, r)
+    && exists s2 :: entryTransition(s, s2)
+    && (var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
+    evalExceptionTaken(s3, ex, expc, r)
     && mode_of_state(r) != User // known, but we need a lemma to prove it
     && s.conf.excount + 1 == r.conf.excount
-    && r.conf.exstep == s'.steps)
+    && r.conf.exstep == s3.steps)
 }
 
 //-----------------------------------------------------------------------------

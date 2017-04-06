@@ -46,6 +46,8 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
     }
 
     calc {
+        PageBase(ptew);
+        { reveal_PageBase(); }
         BitwiseMaskHigh(ptew, 12);
         { reveal_BitwiseMaskHigh(); }
         BitsAsWord(BitAnd(WordAsBits(ptew), BitmaskHigh(12)));

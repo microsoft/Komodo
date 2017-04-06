@@ -81,11 +81,11 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
             && m != mode_of_exception(s.conf, ExFIQ)
             ==> s.regs[LR(m)] == r.regs[LR(m)]
 {
-    var nondet := nondet_word(s.nd_private, NONDET_INT());
+    var nondet := nondet_word(s.nondet, NONDET_EX());
     if (!s.conf.cpsr.f && nondet == 0) || (!s.conf.cpsr.i && nondet == 1) {
         ghost var ex := if nondet == 0 then ExFIQ else ExIRQ;
         assert handleInterrupt(s, ex, r);
-        var s1, s2 :| evalExceptionTaken(s, ex, s1)
+        var s1, s2 :| evalExceptionTaken(s, ex, nondet_word(s.nondet, NONDET_PC()), s1)
             && InterruptContinuationInvariant(s1, s2)
             && evalMOVSPCLR(s2, r);
         lemma_evalExceptionTaken_Mode(s, ex, s1);
