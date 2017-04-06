@@ -72,6 +72,7 @@ lemma lemma_userExecutionModel_sufficiency(s:state, r:state)
     lemma_evalExceptionTaken_Mode(s3, ex, expc, s4);
     assert mode_of_state(s4) != User;
     assert s4 == r by { reveal_userExecutionModel(); }
+    assert userspaceExecutionAndException'(s, s, s2, r);
     reveal_userspaceExecutionAndException();
 }
 
@@ -548,13 +549,7 @@ lemma lemma_userspaceExecutionAndException_pre(s0:state, s1:state, r:state)
     assert s1lr == OperandContents(s0, OLR);
     reveal_userspaceExecutionAndException();
     assert ExtractAbsPageTable(s1).Just?;
-    var s', s2 :| equivStates(s1, s')
-        && evalEnterUserspace(s', s2) && s2.steps == s'.steps + 1
-        && (assert ExtractAbsPageTable(s').Just?;
-        lemma_evalEnterUserspace_preservesAbsPageTable(s', s2);
-        var (s3, expc, ex) := userspaceExecutionFn(s2, s1lr);
-        evalExceptionTaken(s3, ex, expc, r)
-        && r.conf.exstep == s3.steps);
+    var s', s2 :| userspaceExecutionAndException'(s1, s', s2, r);
     assert equivStates(s0, s');
     assert evalEnterUserspace(s', s2) && s2.steps == s'.steps + 1;
     lemma_evalEnterUserspace_preservesAbsPageTable(s', s2);
@@ -563,6 +558,7 @@ lemma lemma_userspaceExecutionAndException_pre(s0:state, s1:state, r:state)
     assert r.conf.exstep == s3.steps;
     assert mode_of_state(r) != User;
     assert s0.conf.excount + 1 == s1.conf.excount + 1 == r.conf.excount;
+    assert userspaceExecutionAndException'(s0, s', s2, r);
     assert userspaceExecutionAndException(s0, r);
 }
 
