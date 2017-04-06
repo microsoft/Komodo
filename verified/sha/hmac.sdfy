@@ -1,7 +1,8 @@
 
 include "sha256-api.sdfy"
+include {:verbatim} "hmac-helpers.i.dfy"
 include "../memset.sdfy"
-include "../smc_handler.sdfy"
+include "../kom_utils.sdfy"
 
 #verbatim
 
@@ -49,14 +50,12 @@ ensures
     AddrMemPreservingExcept(old(mem), mem, r1, r1 + HMAC_KEYSIZE_BYTES);
     forall a :: r1 <= a < r1 + HMAC_KEYSIZE_BYTES && WordAligned(a) 
         ==> AddrMemContents(mem, a) == BitwiseXor(old(AddrMemContents(mem, a)) , 0x5c5c5c5c);
+    AddrMemContentsSeq(mem, r1, 16) == 
+      SeqXor(AddrMemContentsSeq(old(mem), r1, 16), Opad(16));
 {
-    assert WordAligned(r1);
     apply_one_opad(0);
-    assert WordAligned(r1 + 4);
     apply_one_opad(4);
-    assert WordAligned(r1 + 8);
     apply_one_opad(8);
-    assert WordAligned(r1 + 12);
     apply_one_opad(12);
     apply_one_opad(16);
     apply_one_opad(20);
@@ -70,6 +69,64 @@ ensures
     apply_one_opad(52);
     apply_one_opad(56);
     apply_one_opad(60);
+
+    lemma_apply_opad_complete(old(mem), mem, r1, 16);
+}
+
+procedure apply_one_ipad(inline offset:word)
+requires/ensures
+    ValidAddrMemStateOpaque(mem);
+    ValidMem(r1 + offset);
+requires {:refined false}
+    !interrupts_enabled(this);
+reads 
+    r1;
+modifies
+    mem; r10;
+ensures
+    AddrMemPreservingExcept(old(mem), mem, r1 + offset, r1 + offset + 4);
+    AddrMemContents(mem, r1 + offset) == BitwiseXor(old(AddrMemContents(mem, r1 + offset)) , 0x36363636);
+{
+    LDR(r10, r1, offset);
+    EOR(r10, r10, 0x36363636);
+    STR(r10, r1, offset);
+}
+
+procedure apply_ipad()
+requires/ensures
+    ValidAddrMemStateOpaque(mem);
+    ValidMemRange(r1, r1 + HMAC_KEYSIZE_BYTES);
+requires {:refined false}
+    !interrupts_enabled(this);
+reads 
+    r1;
+modifies
+    mem; r10;
+ensures
+    AddrMemPreservingExcept(old(mem), mem, r1, r1 + HMAC_KEYSIZE_BYTES);
+    forall a :: r1 <= a < r1 + HMAC_KEYSIZE_BYTES && WordAligned(a) 
+        ==> AddrMemContents(mem, a) == BitwiseXor(old(AddrMemContents(mem, a)) , 0x36363636);
+    AddrMemContentsSeq(mem, r1, 16) == 
+      SeqXor(AddrMemContentsSeq(old(mem), r1, 16), Ipad(16));
+{
+    apply_one_ipad(0);
+    apply_one_ipad(4);
+    apply_one_ipad(8);
+    apply_one_ipad(12);
+    apply_one_ipad(16);
+    apply_one_ipad(20);
+    apply_one_ipad(24);
+    apply_one_ipad(28);
+    apply_one_ipad(32);
+    apply_one_ipad(36);
+    apply_one_ipad(40);
+    apply_one_ipad(44);
+    apply_one_ipad(48);
+    apply_one_ipad(52);
+    apply_one_ipad(56);
+    apply_one_ipad(60);
+
+    lemma_apply_ipad_complete(old(mem), mem, r1, 16);
 }
 
 
@@ -175,7 +232,7 @@ ensures
     MOV(r5, const(HMAC_KEYSIZE_BYTES)); 
     memcpy(r1 /* tmp_ptr */, r4 /* key_ptr */, r5, r6);
 
-    // Apply the Ipad
+    apply_ipad();
 
 
     // Copy the input to the rest of the tmp buffer
@@ -194,7 +251,7 @@ ensures
     MOV(r5, const(HMAC_KEYSIZE_BYTES));
     memcpy(r1 /* tmp_ptr */, r4 /* key_ptr */, r5, r6);
 
-    // Apply the Opad
+    apply_opad();
 
     // Copy the inner hash over
     ADD(r7, r1, const(HMAC_KEYSIZE_BYTES));      // Skip the tmp_ptr past the key
