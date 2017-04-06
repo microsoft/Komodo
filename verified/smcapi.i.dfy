@@ -398,6 +398,22 @@ lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word)
     }
 }
 
+lemma lemma_userspaceExecutionAndException_spsr(s:state, r:state)
+    requires ValidState(s) && userspaceExecutionAndException(s, r)
+    ensures mode_of_state(r) != User && spsr_of_state(r).m == User
+{
+    assert ValidOperand(OLR);
+    reveal_userspaceExecutionAndException();
+    assert ExtractAbsPageTable(s).Just?;
+    var s', s2 :| equivStates(s, s')
+        && evalEnterUserspace(s', s2)
+        && (var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
+            evalExceptionTaken(s3, ex, expc, r));
+    var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
+    assert mode_of_state(s3) == User by { reveal_userspaceExecutionFn(); }
+    lemma_evalExceptionTaken_Mode(s3, ex, expc, r);
+}
+
 lemma lemma_validEnclaveExecutionStep_validPageDb(s1:state, d1:PageDb,
     rs:state, rd:PageDb, dispPg:PageNr, retToEnclave:bool)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
@@ -410,19 +426,14 @@ lemma lemma_validEnclaveExecutionStep_validPageDb(s1:state, d1:PageDb,
     reveal_updateUserPagesFromState();
 
     if retToEnclave {
-        var s2, s3, s4 :|
-            entryTransition(s1, s2)
-            && userspaceExecutionAndException(s2, s3, s4)
-            && rd == updateUserPagesFromState(s3, d1, dispPg);
+        var s4 :| userspaceExecutionAndException(s1, s4)
+            && rd == updateUserPagesFromState(s4, d1, dispPg);
     } else {
-        var s2, s3, s4, d4 :|
-            entryTransition(s1, s2)
-            && userspaceExecutionAndException(s2, s3, s4)
-            && d4 == updateUserPagesFromState(s3, d1, dispPg)
+        var s4, d4 :| userspaceExecutionAndException(s1, s4)
+            && d4 == updateUserPagesFromState(s4, d1, dispPg)
             && rd == exceptionHandled(s4, d4, dispPg).2;
-        userspaceExecutionPreservesPrivState(s2, s3);
-        var ex :| evalExceptionTaken(s3, ex, s4);
-        exceptionHandledValidPageDb(s3, ex, s4, d4, dispPg);
+        lemma_userspaceExecutionAndException_spsr(s1, s4);
+        lemma_exceptionHandled_validPageDb(s4, d4, dispPg);
         assert nonStoppedDispatcher(rd, dispPg);
     }
 }
