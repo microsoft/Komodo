@@ -238,6 +238,7 @@ ensures
     // Copy the input to the rest of the tmp buffer
     ADD(r7, r1, const(HMAC_KEYSIZE_BYTES));      // Skip the tmp_ptr past the key
     MOV(r5, const(SHA_BLOCKSIZE*WORDSIZE));
+    ADD(r5, r5, 1);   // Need to account for the key block at the beginning
     MUL(r6, r2, r5);  // Number of input bytes
     memcpy(r7 /* tmp_ptr + HMAC_KEYSIZE_BYTES */, r3 /* input_ptr */, r6, r5);
 
@@ -246,6 +247,9 @@ ensures
     // r2 == num_blocks
     sha256_one_shot();
 
+    // IsSHA256(WordSeqToBytes(bswap32_seq(AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * (num_blocks+1)))), hash);
+    // lemma_AddrMemContentsSeq_adds(mem, old(r1), SHA_BLOCKSIZE * (num_blocks+1), 1)
+    // IsSHA256(WordSeqToBytes(bswap32_seq(AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE) + AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * num_blocks)))), hash);
 
     // Copy key to the beginning of the tmp buffer
     MOV(r5, const(HMAC_KEYSIZE_BYTES));
