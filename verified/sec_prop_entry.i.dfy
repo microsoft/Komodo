@@ -519,14 +519,39 @@ lemma lemma_userExecAndExcp_atkr_regs(
     assume ex1 == ex2; // XXX there is no way to prove this from spec
     var newmode1 := mode_of_exception(s1'.conf, ex1);
     var newmode2 := mode_of_exception(s2'.conf, ex2);
+    assert newmode1 != User;
     assert newmode2 != User;
-    assert newmode2 != User;
+    // can't prove this. don't know scr.irq/fiq in s1', s2'
+    assume newmode1 == newmode2;
+    assert mode_of_state(r1) == newmode1 by 
+    {
+        // reveal update_psr(); 
+        var newpsr := psr_of_exception(s1', ex1);
+        // XXX this might be a bitvector thing.
+        assume decode_mode(psr_mask_mode(newpsr)) == newmode1;
+        assert r1.conf.cpsr == decode_psr(newpsr);
+    }
+    assert mode_of_state(r2) == newmode1 by
+    {
+        var newpsr := psr_of_exception(s2', ex2);
+        // XXX this might be a bitvector thing.
+        assume decode_mode(psr_mask_mode(newpsr)) == newmode2;
+        assert r2.conf.cpsr == decode_psr(newpsr);
+    }
+    assume s1'.nd_private == s2'.nd_private;
     assert r1.regs == s1'.regs[LR(newmode1) :=
         nondet_word(s1'.nd_private, NONDET_REG(LR(newmode1)))];
-    assert r2.regs == s2'.regs[LR(newmode2) :=
-        nondet_word(s2'.nd_private, NONDET_REG(LR(newmode2)))];
+    assert r2.regs == s2'.regs[LR(newmode1) :=
+        nondet_word(s2'.nd_private, NONDET_REG(LR(newmode1)))];
+    // This can't be proven from our spec... don't know the value of the cpsr 
+    // after evalUserspaceExecution
+    assume s1'.sregs[cpsr] == s2'.sregs[cpsr];
+    assert r1.sregs[spsr(newmode1)] == s1'.sregs[cpsr];
+    assert r2.sregs[spsr(newmode1)] == s2'.sregs[cpsr];
+    assert r1.regs[LR(newmode1)] == r2.regs[LR(newmode1)];
     reveal_ValidRegState();
     reveal_ValidSRegState();
+    assert lr_spsr_same(r1, r2);
 }
 
 // This is just for the reveal
