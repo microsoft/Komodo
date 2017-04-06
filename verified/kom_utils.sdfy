@@ -261,6 +261,8 @@ procedure update_pagedb_entry(
     assert entry == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_ADDRSPACE;
     STRglobal(as_va, PageDb(), pagedb_base, entry);
     assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(page)
+                      + PAGEDB_ENTRY_TYPE) == old(typeword);
+    assert GlobalWord(this.m, PageDb(), G_PAGEDB_ENTRY(page)
                       + PAGEDB_ENTRY_ADDRSPACE) == old(as_va);
 
     extractPageDbToAbstract(this.m, page);
