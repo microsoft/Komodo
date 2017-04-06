@@ -16,14 +16,6 @@ lemma lemma_userspaceExecutionFn_ok(s:state, pc:word)
     reveal_userspaceExecutionFn();
 }
 
-lemma lemma_evalEnterUserspace_preservesAbsPageTable(s:state, r:state)
-    requires ValidState(s) && evalEnterUserspace(s, r)
-    ensures ExtractAbsPageTable(s) == ExtractAbsPageTable(r)
-{
-    assert s.m == r.m;
-    assert s.conf.ttbr0 == r.conf.ttbr0;
-}
-
 lemma lemma_evalMOVSPCLRUC_ok(s:state, r:state)
     requires ValidInstruction(s, MOVS_PCLR_TO_USERMODE_AND_CONTINUE()) && s.ok
     requires evalMOVSPCLRUC(s, r)

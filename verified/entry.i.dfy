@@ -482,20 +482,40 @@ lemma lemma_pageDbCorrespondsForSpec(s:state, d:PageDb, l1:PageNr)
     reveal_pageTableCorresponds();
 }
 
+lemma lemma_evalEnterUserspace_preservesAbsPageTable(s:state, r:state)
+    requires ValidState(s) && evalEnterUserspace(s, r)
+    ensures ExtractAbsPageTable(s) == ExtractAbsPageTable(r)
+{
+    assert s.m == r.m;
+    assert s.conf.ttbr0 == r.conf.ttbr0;
+}
+
 lemma lemma_userspaceExecutionAndException_pre(s0:state, s1:state, r:state)
     requires ValidState(s1) && userspaceExecutionAndException(s1, r)
     requires equivStates(s0, s1)
     ensures userspaceExecutionAndException(s0, r)
 {
+    assert ExtractAbsPageTable(s1).Just? ==> ExtractAbsPageTable(s0).Just?;
+    var s1lr := OperandContents(s1, OLR);
+    assert s1lr == OperandContents(s0, OLR);
     reveal_userspaceExecutionAndException();
     assert ExtractAbsPageTable(s1).Just?;
-    assume false; // TODO!
     var s', s2 :| equivStates(s1, s')
         && evalEnterUserspace(s', s2) && s2.steps == s'.steps + 1
-        && (var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s1, OLR));
+        && (assert ExtractAbsPageTable(s').Just?;
+        lemma_evalEnterUserspace_preservesAbsPageTable(s', s2);
+        var (s3, expc, ex) := userspaceExecutionFn(s2, s1lr);
         evalExceptionTaken(s3, ex, expc, r)
         && r.conf.exstep == s3.steps);
     assert equivStates(s0, s');
+    assert evalEnterUserspace(s', s2) && s2.steps == s'.steps + 1;
+    lemma_evalEnterUserspace_preservesAbsPageTable(s', s2);
+    var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s1, OLR));
+    assert evalExceptionTaken(s3, ex, expc, r);
+    assert r.conf.exstep == s3.steps;
+    assert mode_of_state(r) != User;
+    assert s0.conf.excount + 1 == s1.conf.excount + 1 == r.conf.excount;
+    assert userspaceExecutionAndException(s0, r);
 }
 
 lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
