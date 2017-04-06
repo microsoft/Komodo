@@ -50,6 +50,32 @@ lemma lemma_userExecutionModel_validity(s:state, r:state)
     reveal_evalMOVSPCLRUC();
 }
 
+
+lemma lemma_userExecutionModel_sufficiency(s:state, r:state)
+    requires userExecutionPreconditions(s)
+    requires r == userExecutionModel(s)
+    ensures userspaceExecutionAndException(s, r)
+{
+    var (s2, s3, expc, ex, s4) := userExecutionModelSteps(s);
+    assert equivStates(s, s);
+    assert evalEnterUserspace(s, s2);
+    assert (s3, expc, ex) == userspaceExecutionFn(s2, OperandContents(s, OLR));
+    lemma_psr_of_exception(s3, ex);
+    assert evalExceptionTaken(s3, ex, expc, s4);
+    assert s4.conf.exstep == s3.steps;
+    calc {
+        s.conf.excount + 1;
+        s2.conf.excount + 1;
+        { reveal_userspaceExecutionFn(); }
+        s3.conf.excount + 1;
+        s4.conf.excount;
+    }
+    lemma_evalExceptionTaken_Mode(s3, ex, expc, s4);
+    assert mode_of_state(s4) != User;
+    assert s4 == r by { reveal_userExecutionModel(); }
+    reveal_userspaceExecutionAndException();
+}
+
 //-----------------------------------------------------------------------------
 // Exception handler invariants
 //-----------------------------------------------------------------------------
@@ -127,29 +153,24 @@ lemma lemma_UsermodeContinuationInvariantDef(s:state, r:state, d:PageDb, dp:Page
 }
 
 //-----------------------------------------------------------------------------
-// Proofs about usespace execution invariants
+// Proofs about userspace execution and related transitions
 //-----------------------------------------------------------------------------
-/*
 
-lemma exceptionHandledValidPageDb(us:state, ex:exception, expc:word, s:state, d:PageDb, dispPg:PageNr)
-    requires ValidState(us) && mode_of_state(us) == User
-    requires evalExceptionTaken(us, ex, expc, s)
+lemma lemma_exceptionHandled_validPageDb(s:state, d:PageDb, dispPg:PageNr)
+    requires ValidState(s) && mode_of_state(s) != User && spsr_of_state(s).m == User
     requires validPageDb(d) && validDispatcherPage(d, dispPg)
-    ensures validPageDb(lemma_evalExceptionTaken_NonUser(us, ex, s);exceptionHandled(s, d, dispPg).2)
+    ensures validPageDb(exceptionHandled(s, d, dispPg).2)
 {
     reveal_validPageDb();
-    reveal_ValidSRegState();
-    lemma_evalExceptionTaken_NonUser(us, ex, s);
-    var (r0,r1,d') := exceptionHandled(s, d, dispPg);
 
-    if (!(ex.ExSVC? || ex.ExAbt? || ex.ExUnd?)) {
+    var d' := exceptionHandled(s, d, dispPg).2;
+    var ex := s.conf.ex;
+
+    if !(ex.ExSVC? || ex.ExAbt? || ex.ExUnd?) {
+        reveal_ValidSRegState();
         var dc := d'[dispPg].entry.ctxt;
-        lemma_update_psr(us.sregs[cpsr], encode_mode(mode_of_exception(us.conf, ex)),
-            ex == ExFIQ || mode_of_exception(us.conf, ex) == Monitor, true);
-        assert mode_of_state(s) == mode_of_exception(us.conf, ex);
-        assert dc.cpsr == s.sregs[spsr(mode_of_state(s))] == us.sregs[cpsr];
-        assert us.conf.cpsr == decode_psr(us.sregs[cpsr]);
-        assert us.conf.cpsr.m == User;
+        assert dc.cpsr == s.sregs[spsr(mode_of_state(s))];
+        assert spsr_of_state(s).m == decode_psr(s.sregs[spsr(mode_of_state(s))]).m;
         assert decode_mode'(psr_mask_mode(dc.cpsr)) == Just(User);
         assert validDispatcherContext(dc);
     }
@@ -171,19 +192,6 @@ lemma exceptionHandledValidPageDb(us:state, ex:exception, expc:word, s:state, d:
     assert validPageDb(d');
 }
 
-lemma enterUserspacePreservesStuff(d:PageDb,s:state,s':state)
-    requires SaneMem(s.m) && SaneMem(s'.m) && validPageDb(d)
-        && ValidState(s) && ValidState(s')
-    requires evalEnterUserspace(s, s')
-    requires pageDbCorresponds(s.m, d)
-    ensures AllMemInvariant(s,s')
-    ensures pageDbCorresponds(s'.m, d)
-{
-    reveal_ValidMemState();
-    reveal_pageDbEntryCorresponds();
-    reveal_pageContentsCorresponds();
-}
-*/
 lemma lemma_nonWritablePagesAreSafeFromHavoc(m:addr,s:state,s':state)
     requires userExecutionPreconditions(s) && userExecutionModel(s) == s'
     requires ValidMem(m)
@@ -382,33 +390,20 @@ lemma lemma_userExecutionPreservesStack(d:PageDb,s:state,s':state, l1:PageNr)
     }
 }
 
-lemma lemma_userExecutionPreservesPrivState(s:state, s':state)
-    requires userExecutionPreconditions(s) && userExecutionModel(s) == s'
-    ensures GlobalsInvariant(s,s')
-    ensures (reveal_ValidRegState(); s.regs[SP(Monitor)] == s'.regs[SP(Monitor)])
-    //ensures mode_of_state(s) == mode_of_state(s')
+lemma lemma_userExecutionPreservesPrivState(s:state, r:state)
+    requires userExecutionPreconditions(s) && userExecutionModel(s) == r
+    ensures GlobalsInvariant(s,r)
+    ensures (reveal_ValidRegState(); s.regs[SP(Monitor)] == r.regs[SP(Monitor)])
+    ensures mode_of_state(r) != User && spsr_of_state(r).m == User
+    ensures r.conf.scr == s.conf.scr
+    ensures r.conf.ttbr0 == s.conf.ttbr0
 {
-    reveal_userExecutionModel();
+    var (s2, s3, expc, ex, s4) := userExecutionModelSteps(s);
+    assert s4 == r by { reveal_userExecutionModel(); }
+    lemma_evalExceptionTaken_Mode(s3, ex, expc, r);
     reveal_userspaceExecutionFn();
 }
 
-/*
-lemma exceptionTakenPreservesStuff(d:PageDb,s:state,ex:exception,s':state)
-    requires SaneMem(s.m) && SaneMem(s'.m) && validPageDb(d)
-        && ValidState(s) && ValidState(s')
-    requires evalExceptionTaken(s, ex, s')
-    requires pageDbCorresponds(s.m, d)
-    ensures AllMemInvariant(s,s')
-    ensures mode_of_state(s') != User
-    ensures (reveal_ValidRegState(); s.regs[SP(Monitor)] == s'.regs[SP(Monitor)])
-    ensures pageDbCorresponds(s'.m, d)
-{
-    reveal_ValidMemState();
-    reveal_pageDbEntryCorresponds();
-    reveal_pageContentsCorresponds();
-    lemma_evalExceptionTaken_NonUser(s, ex, s');
-}
-*/
 lemma lemma_sp_alignment(x:word)
     requires x % 2 == 0
     ensures x != BitwiseOr(x, 1)
@@ -435,29 +430,18 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
     ensures ParentStackPreserving(s, r)
     ensures GlobalsPreservingExcept(s, r, {PendingInterruptOp()})
     ensures userspaceExecutionAndException(s, s4)
-    ensures mode_of_state(s4) != User && SaneMem(s4.m)
+    ensures mode_of_state(s4) != User && spsr_of_state(s4).m == User
+    ensures SaneMem(s4.m)
+    ensures (reveal_ValidRegState(); s.regs[SP(Monitor)] == s4.regs[SP(Monitor)])
     ensures d4 == updateUserPagesFromState(s4, d, dp) && pageDbCorresponds(s4.m, d4)
     ensures KomExceptionHandlerInvariant(s4, d4, r, dp)
     ensures s.conf.ttbr0 == r.conf.ttbr0
 {
-    // XXX: prove some obvious things about OSP early
-    // before the reveal, to stop Z3 getting lost
-    assert ValidAnySrcOperand(s, OSP) && ValidAnySrcOperand(r, OSP) by {
-        assert ValidOperand(OSP);
-    }
+    // XXX: prove some obvious things about OSP early, to stop Z3 getting lost
+    assert ValidOperand(OSP);
     assert OperandContents(s, OSP) == s.regs[SP(Monitor)];
+    lemma_sp_alignment(OperandContents(s, OSP));
     assert ValidMemRange(StackLimit(), StackBase());
-
-    /*reveal_evalMOVSPCLRUC();
-    s2, s3, ex, s4 :| 
-        evalEnterUserspace(s, s2)
-        && evalUserspaceExecution(s2, s3)
-        && evalExceptionTaken(s3, ex, s4)
-        && UsermodeContinuationInvariant(s4, r);
-
-    enterUserspacePreservesStuff(d, s, s2);
-    exceptionTakenPreservesStuff(d4, s3, ex, s4);*/
-
 
     assert ValidPsrWord(OperandContents(s, OSReg(spsr(Monitor))))
         by { reveal_ValidSRegState(); }
@@ -466,50 +450,21 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
 
     lemma_userExecutionModel_validity(s, r);
     s4 := userExecutionModel(s);
+    lemma_userExecutionModel_sufficiency(s, s4);
     d4 := updateUserPagesFromState(s4, d, dp);
     lemma_userExecutionPreservesPrivState(s, s4);
     lemma_userExecutionUpdatesPageDb(d, s, s4, dp);
-    assert mode_of_state(s4) != User by { reveal_userExecutionModel(); }
+    assert pageDbCorresponds(s4.m, d4);
     lemma_UsermodeContinuationInvariantDef(s4, r, d4, dp);
-    assume false;
-
-    calc {
-        OperandContents(s, OSP);
-        s.regs[SP(Monitor)];
-        //s2.regs[SP(Monitor)];
-        //s3.regs[SP(Monitor)];
-        s4.regs[SP(Monitor)];
-    }
-
-    lemma_sp_alignment(OperandContents(s, OSP));
+    assert GlobalsInvariant(s, s4) && GlobalsPreservingExcept(s4, r, {PendingInterruptOp()});
 
     assert s4.regs[SP(Monitor)] == OperandContents(r, OSP)
         || BitwiseOr(s4.regs[SP(Monitor)], 1) == OperandContents(r, OSP);
 
     assert ParentStackPreserving(s, r) by {
-        //assert AllMemInvariant(s, s2);
         lemma_userExecutionPreservesStack(d, s, s4, l1pOfDispatcher(d, dp));
-        //assert AllMemInvariant(s3, s4);
         assert ParentStackPreserving(s4, r);
     }
-
-    calc {
-        s.conf.ttbr0;
-        { reveal_userExecutionModel(); reveal_userspaceExecutionFn(); }
-        s4.conf.ttbr0;
-        r.conf.ttbr0;
-    }
-/*
-    assert spsr_of_state(r).m == User by {
-        assert mode_of_state(s3) == User;
-        lemma_evalExceptionTaken_Mode(s3, ex, s4);
-        calc {
-            s3.conf.cpsr;
-            spsr_of_state(s4);
-            spsr_of_state(r);
-        }
-    }
-*/
 }
 
 lemma lemma_pageDbCorrespondsForSpec(s:state, d:PageDb, l1:PageNr)
@@ -527,10 +482,27 @@ lemma lemma_pageDbCorrespondsForSpec(s:state, d:PageDb, l1:PageNr)
     lemma_ptablesmatch(s.m, d, l1);
     reveal_pageTableCorresponds();
 }
-/*
+
+lemma lemma_userspaceExecutionAndException_pre(s0:state, s1:state, r:state)
+    requires ValidState(s1) && userspaceExecutionAndException(s1, r)
+    requires equivStates(s0, s1)
+    ensures userspaceExecutionAndException(s0, r)
+{
+    reveal_userspaceExecutionAndException();
+    assert ExtractAbsPageTable(s1).Just?;
+    assume false; // TODO!
+    var s', s2 :| equivStates(s1, s')
+        && evalEnterUserspace(s', s2) && s2.steps == s'.steps + 1
+        && (var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s1, OLR));
+        evalExceptionTaken(s3, ex, expc, r)
+        && r.conf.exstep == s3.steps);
+    assert equivStates(s0, s');
+}
+
 lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     returns (rd:PageDb, retToEnclave:bool)
     requires SaneState(s)
+    requires spsr_of_state(s).m == User
     requires validPageDb(sd) && pageDbCorresponds(s.m, sd)
     requires nonStoppedDispatcher(sd, dispPg)
     requires s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(sd, dispPg))
@@ -548,21 +520,12 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     ensures validEnclaveExecutionStep(s, sd, r, rd, dispPg, retToEnclave)
     ensures retToEnclave ==> spsr_of_state(r).m == User
 {
-    var s2, s3, ex, s4, d4 := lemma_evalMOVSPCLRUC_inner(takestep(s), r, sd, dispPg);
-
-    var initpc := OperandContents(s, OLR);
-    assert entryTransition(s, s2);
-    enterUserspacePreservesStuff(sd, takestep(s), s2);
-    assert userspaceExecutionAndException(s2, initpc, s4)
-        by { reveal_userspaceExecutionFn(); }
-    userspaceExecutionPreservesPrivState(s2, s3);
-    userspaceExecutionUpdatesPageDb(sd, s2, s3, dispPg);
+    var s4, d4 := lemma_evalMOVSPCLRUC_inner(takestep(s), r, sd, dispPg);
 
     var ssp, rsp := OperandContents(s, OSP), OperandContents(r, OSP);
     assert rsp == r.regs[SP(Monitor)];
 
     retToEnclave := isReturningSvc(s4);
-
     if retToEnclave {
         assert ssp == rsp;
         rd := d4;
@@ -581,51 +544,23 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
         assert rsp == BitwiseOr(ssp, 1);
         assert ssp != rsp;
         rd := exceptionHandled(s4, d4, dispPg).2;
-        exceptionHandledValidPageDb(s3, ex, s4, d4, dispPg);
+        lemma_exceptionHandled_validPageDb(s4, d4, dispPg);
     }
 
     assert validEnclaveExecutionStep(s, sd, r, rd, dispPg, retToEnclave) by {
         reveal_validEnclaveExecutionStep();
+        lemma_userspaceExecutionAndException_pre(s, takestep(s), s4);
         lemma_pageDbCorrespondsForSpec(s, sd, l1pOfDispatcher(sd, dispPg));
-        assert validEnclaveExecutionStep'(s, sd, s2, s3, s4, d4, r, rd,
+        assert validEnclaveExecutionStep'(s, sd, s4, d4, r, rd,
                                           dispPg, retToEnclave);
     }
-}
-
-lemma lemma_nondet_reseed_accumulates(x:int, steps1:nat, steps2:nat)
-    ensures nondet_reseed(nondet_reseed(x, steps1), steps2)
-        == nondet_reseed(x, steps1 + steps2)
-    decreases steps1
-{
-    reveal_nondet_reseed();
-    if steps1 != 0 {
-        lemma_nondet_reseed_accumulates(nondet_int(x, NONDET_GENERATOR()),
-                                        steps1 - 1, steps2);
-    }
-}
-
-lemma lemma_nondet_preserved'(s0:state, s1:state, steps1:nat, s2:state, steps2:nat)
-    requires nondet_preserved'(s0, s1, steps1) && nondet_preserved'(s1, s2, steps2)
-    ensures nondet_preserved'(s0, s2, steps1 + steps2)
-{
-    lemma_nondet_reseed_accumulates(s0.nd_private, steps1, steps2);
-    lemma_nondet_reseed_accumulates(s0.nd_public, steps1, steps2);
-}
-
-lemma lemma_nondet_preserved(s0:state, s1:state, s2:state)
-    requires nondet_preserved(s0, s1) && nondet_preserved(s1, s2)
-    ensures nondet_preserved(s0, s2)
-{
-    var steps1:nat :| nondet_preserved'(s0, s1, steps1);
-    var steps2:nat :| nondet_preserved'(s1, s2, steps2);
-    lemma_nondet_preserved'(s0, s1, steps1, s2, steps2);
 }
 
 lemma lemma_ValidEntryPre(s0:state, s1:state, sd:PageDb, r:state, rd:PageDb, dp:word,
                            a1:word, a2:word, a3:word)
     requires ValidState(s0) && ValidState(s1) && ValidState(r) && validPageDb(sd)
     requires SaneConstants()
-    requires nondet_preserved(s0, s1)
+    requires s0.nondet == s1.nondet
     ensures smc_enter(s1, sd, r, rd, dp, a1, a2, a3)
         ==> smc_enter(s0, sd, r, rd, dp, a1, a2, a3)
     ensures smc_resume(s1, sd, r, rd, dp) ==> smc_resume(s0, sd, r, rd, dp)
@@ -635,7 +570,6 @@ lemma lemma_ValidEntryPre(s0:state, s1:state, sd:PageDb, r:state, rd:PageDb, dp:
         forall s | preEntryEnter(s1, s, sd, dp, a1, a2, a3)
             ensures preEntryEnter(s0, s, sd, dp, a1, a2, a3)
         {
-            lemma_nondet_preserved(s0, s1, s);
         }
     }
 
@@ -644,13 +578,12 @@ lemma lemma_ValidEntryPre(s0:state, s1:state, sd:PageDb, r:state, rd:PageDb, dp:
         forall s | preEntryResume(s1, s, sd, dp)
             ensures preEntryResume(s0, s, sd, dp)
         {
-            lemma_nondet_preserved(s0, s1, s);
         }
     }
 }
 
-lemma lemma_evalExceptionTaken_Mode(s:state, e:exception, r:state)
-    requires ValidState(s) && evalExceptionTaken(s, e, r)
+lemma lemma_evalExceptionTaken_Mode(s:state, e:exception, expc:word, r:state)
+    requires ValidState(s) && evalExceptionTaken(s, e, expc, r)
     ensures mode_of_state(r) == mode_of_exception(s.conf, e)
     ensures spsr_of_state(r) == s.conf.cpsr
 {
@@ -669,12 +602,19 @@ lemma lemma_evalExceptionTaken_Mode(s:state, e:exception, r:state)
     }
 }
 
-lemma lemma_evalExceptionTaken_NonUser(s:state, e:exception, r:state)
-    requires ValidState(s) && evalExceptionTaken(s, e, r)
-    ensures mode_of_state(r) != User
+/*
+function {:opaque} nondet_reseeded(x:int, reseeds:nat): int
+    decreases reseeds
 {
-    lemma_evalExceptionTaken_Mode(s, e, r);
+    if reseeds == 0 then x
+    else nondet_reseeded(nondet_int(x, NONDET_GENERATOR()), reseeds - 1)
 }
+
+predicate nondet_preserved(s:state, r:state, reseeds:nat)
+{
+    r.nondet == nondet_reseeded(s.nondet, reseeds)
+}
+*/
 
 lemma lemma_validEnclaveExecutionStep_PageDb(s1:state, d1:PageDb, r1:state,
     rd:PageDb, dispPg:PageNr, retToEnclave:bool)
@@ -703,39 +643,31 @@ lemma lemma_validEnclaveExecutionStepPost(s1:state, d1:PageDb, r1:state,
     reveal_updateUserPagesFromState();
     reveal_ValidRegState();
 
-    var s2, s3, s4, d4 :|
-        validEnclaveExecutionStep'(s1, d1, s2, s3, s4, d4, r1, rd, dispPg, false);
+    var s4, d4 :|
+        validEnclaveExecutionStep'(s1, d1, s4, d4, r1, rd, dispPg, false);
 
     assert validExceptionTransition(s4, d4, r2, rd, dispPg)
         by { reveal_validExceptionTransition(); }
     assert (r2.regs[R0], r2.regs[R1], rd) == exceptionHandled(s4, d4, dispPg);
-    assert validEnclaveExecutionStep'(s1, d1, s2, s3, s4, d4, r2, rd, dispPg, false);
+    assert validEnclaveExecutionStep'(s1, d1, s4, d4, r2, rd, dispPg, false);
 }
 
-lemma lemma_validEnclaveExecutionStepPrePost(s0:state, s1:state, d1:PageDb, r1:state,
-                            rd:PageDb, r2:state, dispPg:PageNr, retToEnclave:bool)
-    requires ValidState(s1) && validPageDb(d1) && SaneConstants()
-    requires nonStoppedDispatcher(d1, dispPg)
-    requires validEnclaveExecutionStep(s1, d1, r1, rd, dispPg, retToEnclave)
-    requires equivStates(s0, s1) && equivStates(r1, r2)
-    ensures validEnclaveExecutionStep(s0, d1, r1, rd, dispPg, retToEnclave)
+lemma lemma_validEnclaveExecutionStepPre(s0:state, s1:state, sd:PageDb, r:state,
+                                    rd:PageDb, dispPg:PageNr, retToEnclave:bool)
+    requires ValidState(s1) && validPageDb(sd) && SaneConstants()
+    requires nonStoppedDispatcher(sd, dispPg)
+    requires validEnclaveExecutionStep(s1, sd, r, rd, dispPg, retToEnclave)
+    requires equivStates(s0, s1)
+    ensures validEnclaveExecutionStep(s0, sd, r, rd, dispPg, retToEnclave)
 {
+    var l1p := l1pOfDispatcher(sd, dispPg);
     reveal_validEnclaveExecutionStep();
-    var s2, s3, s4, d4 :|
-        validEnclaveExecutionStep'(s1, d1, s2, s3, s4, d4, r1, rd, dispPg,
-                                     retToEnclave);
-    assert entryTransition(s1, s2);
-    var s1' :| equivStates(s1, s1') && evalEnterUserspace(s1', s2)
-            && s2.steps == s1'.steps + 1;
-    var l1p := l1pOfDispatcher(d1, dispPg);
-    assert pageTableCorresponds(s0, d1, l1p) by { reveal_pageTableCorresponds(); }
-    lemma_nondet_preserved(s0, s1, s1');
-    assert entryTransition(s0, s2);
-    assert validEnclaveExecutionStep'(s0, d1, s2, s3, s4, d4, r1, rd, dispPg,
-                                     retToEnclave);
-    assert validExceptionTransition(s4, d4, r2, rd, dispPg)
-        by { reveal_validExceptionTransition(); }
-    assert r1.regs == r2.regs;
+    assert pageTableCorresponds(s0, sd, l1p) by { reveal_pageTableCorresponds(); }
+    var s4, d4 :|
+        validEnclaveExecutionStep'(s1, sd, s4, d4, r, rd, dispPg, retToEnclave);
+    assert userspaceExecutionAndException(s1, s4);
+    lemma_userspaceExecutionAndException_pre(s0, s1, s4);
+    assert validEnclaveExecutionStep'(s0, sd, s4, d4, r, rd, dispPg, retToEnclave);
 }
 
 lemma lemma_validEnclaveExecutionPost(s1:state, d1:PageDb, r1:state, rd:PageDb,
@@ -801,7 +733,6 @@ lemma lemma_validResumePost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, d
 
     lemma_validEnclaveExecutionPost(s1, sd, r1, rd, r2, dp, steps);
 }
-*/
 
 function exPageDb(t: (int, int, PageDb)): PageDb { t.2 }
 

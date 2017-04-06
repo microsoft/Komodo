@@ -810,7 +810,7 @@ procedure {:frame false} enclaveexecution_loop(
         lemma_validEnclaveExecutionStep_PageDb(loop0, loop_pagedb, this, pagedb,
                                                dispPg, retToEnclave);
 
-        lemma_validEnclaveExecutionStepPrePost(loop1, loop0, loop_pagedb, this, pagedb, this, dispPg, retToEnclave);
+        lemma_validEnclaveExecutionStepPre(loop1, loop0, loop_pagedb, this, pagedb, dispPg, retToEnclave);
 
         ghost if (retToEnclave) {
             ghost var states' := states;

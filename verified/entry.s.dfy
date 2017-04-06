@@ -180,7 +180,7 @@ predicate preEntryEnter(s:state,s':state,d:PageDb,
     reveal_validPageDb();
     reveal_ValidRegState();
 
-    nondet_preserved(s, s', 0) && preEntryCommon(s', d, dispPage)
+    s.nondet == s'.nondet && preEntryCommon(s', d, dispPage)
     && s'.regs[R0] == a1 && s'.regs[R1] == a2 && s'.regs[R2] == a3
     && OperandContents(s', OLR) == d[dispPage].entry.entrypoint
     && (reveal_ValidSRegState();
@@ -201,7 +201,7 @@ predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
     var disp := d[dispPage].entry;
     var l1p := l1pOfDispatcher(d, dispPage);
     
-    nondet_preserved(s, s', 0) && preEntryCommon(s', d, dispPage)
+    s.nondet == s'.nondet && preEntryCommon(s', d, dispPage)
     && (reveal_ValidRegState(); 
     s'.regs[R0] == disp.ctxt.regs[R0] &&
     s'.regs[R1] == disp.ctxt.regs[R1] &&
@@ -246,15 +246,7 @@ predicate preEntryReturn(s:state,lr:word,regs:SvcReturnRegs)
 predicate equivStates(s1:state, s2:state)
 {
     s1.regs == s2.regs && s1.m == s2.m && s1.sregs == s2.sregs
-        && s1.conf == s2.conf && s1.ok == s2.ok && nondet_preserved(s1, s2, 0)
-}
-
-predicate entryTransition(s:state, r:state)
-    requires ValidState(s)
-    ensures entryTransition(s, r) ==> ValidState(r)
-{
-    // we've entered userland, and didn't change anything before/after doing so
-    exists s' :: equivStates(s, s') && evalEnterUserspace(s', r) && r.steps == s'.steps + 1
+        && s1.conf == s2.conf && s1.ok == s2.ok && s1.nondet == s2.nondet
 }
 
 predicate {:opaque} userspaceExecutionAndException(s:state, r:state)
@@ -263,12 +255,13 @@ predicate {:opaque} userspaceExecutionAndException(s:state, r:state)
         ==> ValidState(r) && mode_of_state(r) != User
 {
     ExtractAbsPageTable(s).Just?
-    && exists s2 :: entryTransition(s, s2)
+    // we've entered userland, and didn't change anything before/after doing so
+    && (exists s', s2 :: equivStates(s, s') && evalEnterUserspace(s', s2) && s2.steps == s'.steps + 1
     && (var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
     evalExceptionTaken(s3, ex, expc, r)
+    && r.conf.exstep == s3.steps))
     && mode_of_state(r) != User // known, but we need a lemma to prove it
     && s.conf.excount + 1 == r.conf.excount
-    && r.conf.exstep == s3.steps)
 }
 
 //-----------------------------------------------------------------------------

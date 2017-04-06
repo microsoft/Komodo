@@ -907,22 +907,8 @@ function GlobalWord(s:memstate, g:symbol, offset:word): word
     GlobalFullContents(s, g)[BytesToWords(offset)]
 }
 
-function {:opaque} nondet_reseeded(x:int, reseeds:nat): int
-    decreases reseeds
-{
-    if reseeds == 0 then x
-    else nondet_reseeded(nondet_int(x, NONDET_GENERATOR()), reseeds - 1)
-}
-
-predicate nondet_preserved(s:state, r:state, reseeds:nat)
-{
-    r.nondet == nondet_reseeded(s.nondet, reseeds)
-}
-
 function reseed_nondet_state(s:state): state
-    ensures nondet_preserved(s, reseed_nondet_state(s), 1)
 {
-    reveal_nondet_reseeded();
     s.(nondet := nondet_int(s.nondet, NONDET_GENERATOR()))
 }
 
