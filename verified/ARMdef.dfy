@@ -122,6 +122,8 @@ function {:axiom} nondet_private_nat(x:int, s:UserState, y:int): nat
 function {:axiom} nondet_exception(x:int, s:UserState, maskf:bool, maski:bool): exception
     ensures maskf ==> nondet_exception(x, s, maskf, maski) != ExFIQ
     ensures maski ==> nondet_exception(x, s, maskf, maski) != ExIRQ
+function {:axiom} nondet_psr(x:int, s:UserState, p:PSR): word
+    ensures var v := nondet_psr(x, s, p); ValidPsrWord(v) && decode_psr(v) == p
 
 function {:axiom} NONDET_GENERATOR():int
 function {:axiom} NONDET_PC():int
@@ -579,6 +581,7 @@ function {:opaque} userspaceExecutionFn(s:state, pc:word): (state, word, excepti
 {
     reveal_ValidMemState();
     reveal_ValidRegState();
+    reveal_ValidSRegState();
     var pt := ExtractAbsPageTable(s).v;
     var user_state := user_visible_state(s, pc, pt);
     var pages := WritablePagesInTable(pt);
@@ -586,7 +589,9 @@ function {:opaque} userspaceExecutionFn(s:state, pc:word): (state, word, excepti
     var rs := reseed_nondet_state(s).(
         m := s.m.(addresses := havocPages(pages, s, user_state)),
         regs := havocUserRegs(s.nondet, user_state, s.regs),
+        sregs := s.sregs[cpsr := nondet_psr(s.nondet, user_state, s.conf.cpsr)],
         steps := s.steps + nondet_private_nat(s.nondet, user_state, NONDET_STEPS()));
+    assert rs.conf.cpsr == decode_psr(rs.sregs[cpsr]);
     // final PC and exception are functions of private nondeterminism
     var rpc := nondet_private_word(s.nondet, user_state, NONDET_PC());
     var rex := nondet_exception(s.nondet, user_state, s.conf.cpsr.f, s.conf.cpsr.i);
