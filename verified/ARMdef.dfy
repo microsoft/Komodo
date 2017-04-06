@@ -627,6 +627,9 @@ predicate EssentialContinuationInvariantProperties(s:state, r:state)
     (ValidState(s) ==> ValidState(r)) && (s.ok ==> r.ok)
 }
 
+predicate {:axiom} UsermodeContinuationPrecondition(s:state)
+    requires ValidState(s)
+
 predicate {:axiom} UsermodeContinuationInvariant(s:state, r:state)
     requires ValidState(s)
     ensures UsermodeContinuationInvariant(s, r)
@@ -1174,6 +1177,7 @@ predicate {:opaque} evalMOVSPCLRUC(s:state, r:state)
     ensures evalMOVSPCLRUC(s, r) ==> ValidState(r)
 {
     ExtractAbsPageTable(s).Just?
+    && UsermodeContinuationPrecondition(s)
     && exists s2, s4 ::
         evalEnterUserspace(s, s2)
         && (var (s3, pc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));

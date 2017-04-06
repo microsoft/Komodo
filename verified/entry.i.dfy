@@ -79,6 +79,53 @@ lemma lemma_userExecutionModel_sufficiency(s:state, r:state)
 // Exception handler invariants
 //-----------------------------------------------------------------------------
 
+const EXCEPTION_STACK_BYTES:int := 100*WORDSIZE;
+
+predicate KomUserEntryPrecondition(s:state, pagedb:PageDb)
+{
+    SaneConstants() && ValidState(s) && s.ok && SaneStack(s) && SaneMem(s.m)
+    && s.conf.scr == SCRT(Secure, true, true)
+    && StackBytesRemaining(s, EXCEPTION_STACK_BYTES)
+    && validPageDb(pagedb) && pageDbCorresponds(s.m, pagedb)
+    && var disp_va := GlobalWord(s.m, CurDispatcherOp(), 0);
+    PageAligned(disp_va) && address_is_secure(disp_va)
+    && var dispPg := monvaddr_page(disp_va); nonStoppedDispatcher(pagedb, dispPg)
+}
+
+predicate UsermodeContinuationPreconditionDefInner()
+{
+    forall s:state {:trigger UsermodeContinuationPrecondition(s)} ::
+        ValidState(s) && UsermodeContinuationPrecondition(s)
+        <==> (exists pagedb :: KomUserEntryPrecondition(s, pagedb))
+}
+
+// XXX: the charade of inner/outer def and lemmas here are workarounds
+// for an opaque/reveal bug in dafny
+predicate {:opaque} UsermodeContinuationPreconditionDef()
+{ UsermodeContinuationPreconditionDefInner() }
+
+lemma lemma_UsermodeContinuationPreconditionDefInner()
+    requires UsermodeContinuationPreconditionDef()
+    ensures UsermodeContinuationPreconditionDefInner()
+{ reveal UsermodeContinuationPreconditionDef(); }
+
+lemma lemma_UsermodeContinuationPreconditionDef(s:state) returns (pagedb:PageDb)
+    requires UsermodeContinuationPreconditionDef()
+    requires ValidState(s) && UsermodeContinuationPrecondition(s)
+    ensures KomUserEntryPrecondition(s, pagedb)
+{
+    lemma_UsermodeContinuationPreconditionDefInner();
+    pagedb :| KomUserEntryPrecondition(s, pagedb);
+}
+
+lemma lemma_Establish_UsermodeContinuationPrecondition(s:state, pagedb:PageDb)
+    requires UsermodeContinuationPreconditionDef()
+    requires KomUserEntryPrecondition(s, pagedb)
+    ensures UsermodeContinuationPrecondition(s)
+{
+    lemma_UsermodeContinuationPreconditionDefInner();
+}
+
 // SaneState, but not SaneStack
 predicate SaneStateAfterException(s:state)
 {
@@ -435,6 +482,7 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
     ensures d4 == updateUserPagesFromState(s4, d, dp) && pageDbCorresponds(s4.m, d4)
     ensures KomExceptionHandlerInvariant(s4, d4, r, dp)
     ensures s.conf.ttbr0 == r.conf.ttbr0
+    ensures s.conf.scr == r.conf.scr
 {
     // XXX: prove some obvious things about OSP early, to stop Z3 getting lost
     assert ValidOperand(OSP);
@@ -535,6 +583,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
             then OperandContents(r, OSP) == OperandContents(s, OSP)
             else OperandContents(r, OSP) == BitwiseOr(OperandContents(s, OSP), 1)
     ensures s.conf.ttbr0 == r.conf.ttbr0
+    ensures s.conf.scr == r.conf.scr
     ensures validPageDb(rd) && SaneMem(r.m) && pageDbCorresponds(r.m, rd)
     ensures validEnclaveExecutionStep(s, sd, r, rd, dispPg, retToEnclave)
     ensures retToEnclave ==> spsr_of_state(r).m == User

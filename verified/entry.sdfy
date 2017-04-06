@@ -18,6 +18,7 @@ lemma lemma_userspaceExecutionFn_ok(s:state, pc:word)
 
 lemma lemma_evalMOVSPCLRUC_ok(s:state, r:state)
     requires ValidInstruction(s, MOVS_PCLR_TO_USERMODE_AND_CONTINUE()) && s.ok
+    requires UsermodeContinuationPrecondition(s)
     requires evalMOVSPCLRUC(s, r)
     ensures r.ok
 {
@@ -44,7 +45,7 @@ MOVS_PCLR_TO_USERMODE_AND_CONTINUE()
         !interrupts_enabled(this);
         ValidModeChange'(this, User);
         spsr_of_state(this).m == User;
-        //ExtractAbsPageTable(this) is Just;
+        UsermodeContinuationPrecondition(takestep(this));
     ensures
         evalMOVSPCLRUC(takestep(old(this)), this);
 {
@@ -456,7 +457,7 @@ procedure switch_addrspace(
     ensures
         BankedRegsInvariant(old(this),this);
         this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, old(pagenr)));
-        this.conf.scr.ns == Secure && this.conf.scr.irq && this.conf.scr.fiq;
+        this.conf.scr == SCRT(Secure, true, true);
 {
     //-------------------------------------------------------------------------
     // update SCR
@@ -566,11 +567,13 @@ procedure pre_entry_enter(
         globals; scr; ttbr0; spsr_mon; r0; r1; r2; r10; r11; r12; lr;
     ensures
         GlobalsPreservingExcept(old(this), this, set(CurDispatcherOp()));
+        GlobalWord(this.m, CurDispatcherOp(), 0) == page_monvaddr(old(pagenr));
         pageDbCorresponds(this.m, pagedb);
         StackPreserving(old(this), this);
         //BankedRegsInvariant(old(this), this);
         preEntryEnter(old(this), this, pagedb, old(pagenr), old(arg1), old(arg2), old(arg3));
         spsr_of_state(this).m == User;
+        this.conf.scr == SCRT(Secure, true, true);
         //sp == old(sp);
 {
     assert validPageNr(pagenr);
@@ -720,10 +723,12 @@ procedure pre_entry_resume(
         r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr_usr; sp_usr; lr;
     ensures
         GlobalsPreservingExcept(old(this),this, set(CurDispatcherOp()));
+        GlobalWord(this.m, CurDispatcherOp(), 0) == page_monvaddr(old(pagenr));
         pageDbCorresponds(this.m, pagedb);
         StackPreserving(old(this), this);
         preEntryResume(old(this), this, pagedb, old(pagenr));
         spsr_of_state(this).m == User;
+        this.conf.scr == SCRT(Secure, true, true);
         //sp == old(sp);
 {
     ghost var dispPg := pagenr;
@@ -796,12 +801,15 @@ procedure {:frame false} enclaveexecution_loop(
     requires/ensures
         SaneState(this);
     requires
+        KomUserEntryPrecondition(this, pagedb_in);
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         UsermodeContinuationInvariantDef();
+        UsermodeContinuationPreconditionDef();
         nonStoppedDispatcher(pagedb_in, dispPg);
         spsr_of_state(this).m == User;
         this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb_in, dispPg));
+        GlobalWord(this.m, CurDispatcherOp(), 0) == page_monvaddr(dispPg);
     modifies
         sp; globals;
     ensures
@@ -828,6 +836,7 @@ procedure {:frame false} enclaveexecution_loop(
             GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp()));
             validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
             nonStoppedDispatcher(pagedb, dispPg);
+            this.conf.scr == old(this).conf.scr;
             this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, dispPg));
             retToEnclave ==> spsr_of_state(this).m == User;
             if retToEnclave then sp == old(sp) else sp == BitwiseOr(old(sp), 1);
@@ -851,6 +860,8 @@ procedure {:frame false} enclaveexecution_loop(
         }
         assert retToEnclave;
 
+        assert KomUserEntryPrecondition(takestep(this), pagedb);
+        lemma_Establish_UsermodeContinuationPrecondition(takestep(this), pagedb);
         MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
 
         pagedb, retToEnclave := lemma_evalMOVSPCLRUC(loop0, loop_pagedb, this, dispPg);
@@ -932,10 +943,11 @@ procedure {:frame false} {:timeLimitMultiplier 2} smc_enterresume_success(
         @pagenr == OReg(R1) && @arg1 == OReg(R2) && @arg2 == OReg(R3) && @arg3 == OReg(R4);
         @callno == OReg(R5) && @err == OReg(R0) && @val == OReg(R1);
         @pagedb_base == OReg(R12) && pagedb_base == AddressOfGlobal(PageDb());
-        stack_bytes >= BANKED_FRAMESIZE;
+        stack_bytes >= BANKED_FRAMESIZE + EXCEPTION_STACK_BYTES;
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         UsermodeContinuationInvariantDef();
+        UsermodeContinuationPreconditionDef();
         callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME;
         smc_enter_err(pagedb_in, pagenr, callno == KOM_SMC_RESUME) == KOM_ERR_SUCCESS;
     modifies // XXX: all saved and restored; not in fact "modified" on return!
@@ -976,6 +988,7 @@ procedure {:frame false} {:timeLimitMultiplier 2} smc_enterresume_success(
     }
 
     ghost var steps:nat;
+    assert KomUserEntryPrecondition(this, pagedb);
     pagedb, steps := enclaveexecution_loop(pagedb, dispPg);
 
     ghost var s6 := this;
@@ -1020,10 +1033,11 @@ procedure {:frame false} kom_smc_enterresume(
         @arg1 == OReg(R2) && @arg2 == OReg(R3) && @arg3 == OReg(R4);
         @err == OReg(R0) && @val == OReg(R1);
         @pagedb_base == OReg(R12) && pagedb_base == AddressOfGlobal(PageDb());
-        stack_bytes >= BANKED_FRAMESIZE;
+        stack_bytes >= BANKED_FRAMESIZE + EXCEPTION_STACK_BYTES;
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         UsermodeContinuationInvariantDef();
+        UsermodeContinuationPreconditionDef();
         this.conf.scr.ns == NotSecure; // FIXME: cleanup
         callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME;
     modifies // XXX: all saved and restored; not in fact "modified" on return!

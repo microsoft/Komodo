@@ -407,7 +407,8 @@ lemma lemma_userspaceExecutionAndException_spsr(s:state, r:state)
     assert ExtractAbsPageTable(s).Just?;
     var s', s2 :| equivStates(s, s')
         && evalEnterUserspace(s', s2)
-        && (var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
+        && (lemma_evalEnterUserspace_preservesAbsPageTable(s', s2);
+           var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
             evalExceptionTaken(s3, ex, expc, r));
     var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
     assert mode_of_state(s3) == User by { reveal_userspaceExecutionFn(); }
