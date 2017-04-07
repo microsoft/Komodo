@@ -257,14 +257,19 @@ ensures
     assert isUInt32(tmp_ptr + HMAC_KEYSIZE_BYTES);
     ADD(r7, r1, const(HMAC_KEYSIZE_BYTES));      // Skip the tmp_ptr past the key
     MOV(r5, const(SHA_BLOCKSIZE*WORDSIZE));
-    ADD(r5, r5, 1);   // Need to account for the key block at the beginning
+    assert r2 == num_blocks;
+    assert r5 == SHA_BLOCKSIZE*WORDSIZE;
+    assert isUInt32(input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE);
+    assert isUInt32(num_blocks * SHA_BLOCKSIZE * WORDSIZE);
     MUL(r6, r2, r5);  // Number of input bytes
     memcpy(r7 /* tmp_ptr + HMAC_KEYSIZE_BYTES */, r3 /* input_ptr */, r6, r5);
-
     assume false;
+
+    ADD(r2, r2, 1);   // Need to account for the key block at the beginning
+
     // r0 == ctx
     // r1 == SHA input ptr == tmp_ptr
-    // r2 == num_blocks
+    // r2 == num_blocks + 1
     sha256_one_shot();
     ghost var inner_hash := 
         seq(AddrMemContents(mem, r0 + 0*WORDSIZE),
