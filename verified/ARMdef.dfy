@@ -1172,17 +1172,22 @@ predicate evalCPSID_IAF(s:state, mod:word, r:state)
     && evalUpdate(s, OSReg(cpsr), newpsr, r)
 }
 
+predicate evalUserExecution(s:state, s2:state, s4:state)
+    requires ValidState(s) && ExtractAbsPageTable(s).Just?
+{
+    evalEnterUserspace(s, s2)
+    && var (s3, pc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
+       evalExceptionTaken(s3, ex, pc, s4)
+}
+
 predicate {:opaque} evalMOVSPCLRUC(s:state, r:state)
     requires ValidState(s)
     ensures evalMOVSPCLRUC(s, r) ==> ValidState(r)
 {
     ExtractAbsPageTable(s).Just?
     && UsermodeContinuationPrecondition(s)
-    && exists s2, s4 ::
-        evalEnterUserspace(s, s2)
-        && (var (s3, pc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
-        evalExceptionTaken(s3, ex, pc, s4)
-        && UsermodeContinuationInvariant(s4, r))
+    && exists s2, s4 :: evalUserExecution(s, s2, s4)
+    && UsermodeContinuationInvariant(s4, r)
 }
 
 predicate evalBlock(block:codes, s:state, r:state)
