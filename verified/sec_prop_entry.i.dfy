@@ -316,8 +316,7 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
         ensures enc_conf_eq_entry(s1', s2', d1', d2', atkr)
     {
         assume steps1 == steps2;
-        assume s11.nd_public == s21.nd_public;
-        assume s11.nd_private == s21.nd_private;
+        assume s11.nondet == s21.nondet;
         lemma_validEnclaveEx_enc_conf(s11, d1, s1', d1', s21, d2, s2', d2',
                                          dispPage, steps1, atkr);
     }
@@ -411,10 +410,8 @@ lemma lemma_validEnclaveStep_enc_conf(s1: state, d1: PageDb, s1':state, d1': Pag
 }
 
 lemma lemma_validEnclaveStepPrime_enc_conf(
-s11: state, d11: PageDb, s12:state, s13:state, s14:state, d14:PageDb,
-r1:state, rd1:PageDb,
-s21: state, d21: PageDb, s22:state, s23:state, s24:state, d24:PageDb,
-r2:state, rd2:PageDb,
+s11: state, d11: PageDb, s14:state, d14:PageDb, r1:state, rd1:PageDb,
+s21: state, d21: PageDb, s24:state, d24:PageDb, r2:state, rd2:PageDb,
 dispPg:PageNr, retToEnclave:bool, atkr: PageNr
 )
     requires ValidState(s11) && ValidState(s21) &&
@@ -422,8 +419,8 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
              validPageDb(d11) && validPageDb(d21) &&
              validPageDb(rd1) && validPageDb(rd2) && SaneConstants()
     requires atkr_entry(d11, d21, dispPg, atkr)
-    requires validEnclaveExecutionStep'(s11,d11,s12,s13,s14,d14,r1,rd1,dispPg,retToEnclave)
-    requires validEnclaveExecutionStep'(s21,d21,s22,s23,s24,d24,r2,rd2,dispPg,retToEnclave)
+    requires validEnclaveExecutionStep'(s11,d11,s14,d14,r1,rd1,dispPg,retToEnclave)
+    requires validEnclaveExecutionStep'(s21,d21,s24,d24,r2,rd2,dispPg,retToEnclave)
     requires enc_conf_eqpdb(d11, d21, atkr)
     requires enc_conf_eq_entry(s11, s21, d11, d21, atkr)
     ensures  atkr_entry(rd1, rd2, dispPg, atkr)
@@ -435,13 +432,43 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         { reveal_enc_conf_eqpdb(); }
     var l1p := l1pOfDispatcher(d11, dispPg);
 
-    assert s12.m == s11.m;
-    assert s22.m == s21.m;
     assert dataPagesCorrespond(s11.m, d11);
     assert dataPagesCorrespond(s21.m, d21);
     
-    assert userspaceExecutionAndException(s12, s13, s14);
-    assert userspaceExecutionAndException(s22, s23, s24);
+    assert userspaceExecutionAndException(s11, s14);
+    assert userspaceExecutionAndException(s21, s24);
+
+
+    // // avoid proving anything about nd sources...
+    // assert enc_conf_eq_entry(s12, s22, d11, d21, atkr) by
+    // {
+    //     assume false;
+    // }
+
+    // // avoid proving anything about nd sources...
+    // assert enc_conf_eq_entry(s14, s24, d14, d24, atkr) by
+    // {
+    //     assume false;
+    // }
+    // */
+    
+    // var (s12, s13, expc1, ex1, s14') := userExecutionModelSteps(s11);
+    // var (s22, s23, expc2, ex2, s24') := userExecutionModelSteps(s21);
+
+    reveal userspaceExecutionAndException();
+
+    var s1', s12 :| userspaceExecutionAndException'(s11, s1', s12, s14);
+    var s2', s22 :| userspaceExecutionAndException'(s21, s2', s22, s24);
+
+    var pc1 := OperandContents(s11, OLR);
+    var pc2 := OperandContents(s21, OLR);
+    
+    var (s13, expc1, ex1) := userspaceExecutionFn(s12, pc1);
+    var (s23, expc2, ex2) := userspaceExecutionFn(s22, pc2);
+
+
+    assert s12.m == s11.m;
+    assert s22.m == s21.m;
 
     assert pageTableCorresponds(s12, d11, l1p) by
     { 
@@ -455,205 +482,205 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         reveal pageTableCorresponds();
     }
 
-    // avoid proving anything about nd sources...
-    assert enc_conf_eq_entry(s12, s22, d11, d21, atkr) by
-    {
-        assume false;
-    }
-
-    // avoid proving anything about nd sources...
-    assert enc_conf_eq_entry(s14, s24, d14, d24, atkr) by
-    {
-        assume false;
-    }
-
-    lemma_userspaceExec_atkr_conf(s12, s13, d11, s22, s23, d21, dispPg, atkr);
+    lemma_userspaceExec_atkr_conf(
+        s11, s1', s12, s13, s14, d11, d14,
+        s21, s2', s22, s23, s24, d21, d24,
+        dispPg, atkr, l1p);
+    
+    
+    //lemma_userspaceExec_atkr_conf(s12, s13, d11, s22, s23, d21, dispPg, atkr);
 
     if(retToEnclave) {
-        assert rd1 == d14;
-        assert rd2 == d24;
-        assert enc_conf_eqpdb(rd1, rd2, atkr);
-        // No idea how to prove anything about nd_*
-        assume enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
+        assume false;
+        // assert rd1 == d14;
+        // assert rd2 == d24;
+        // assert enc_conf_eqpdb(rd1, rd2, atkr);
+        // // No idea how to prove anything about nd_*
+        // assume enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
     } else {
-        lemma_userExecAndExcp_atkr_regs(s12, s13, s14, s22, s23, s24);
-        assume s14.conf.ex == s24.conf.ex; // TODO provme
-        lemma_exceptionHandled_atkr_conf(s14, d14, rd1, s24, d24, rd2, dispPg, atkr);
-        // No idea how to prove anything about nd_*
-        assume enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
+        assume false;
+        // lemma_userExecAndExcp_atkr_regs(s12, s13, s14, s22, s23, s24);
+        // assume s14.conf.ex == s24.conf.ex; // TODO provme
+        // lemma_exceptionHandled_atkr_conf(s14, d14, rd1, s24, d24, rd2, dispPg, atkr);
+        // // No idea how to prove anything about nd_*
+        // assume enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
     }
 }
 
-lemma lemma_userExec_atkr_regs(s1:state, s1':state,s2:state, s2':state)
-    requires ValidState(s1) && ValidState(s1') 
-    requires ValidState(s2) && ValidState(s2') 
-    requires evalUserspaceExecution(s1, s1')
-    requires evalUserspaceExecution(s2, s2')
-    requires s1.nd_private == s2.nd_private
-    ensures  usr_regs_equiv(s1', s2')
-{
-   reveal_evalUserspaceExecution(); 
-}
-
-lemma lemma_userExecAndExcp_atkr_regs(
-    s1:state, s1':state, r1:state,
-    s2:state, s2':state, r2:state)
-    requires ValidState(s1) && ValidState(s1') && ValidState(r1)
-    requires ValidState(s2) && ValidState(s2') && ValidState(r2)
-    requires mode_of_state(s1) == User
-    requires mode_of_state(s2) == User
-    requires userspaceExecutionAndException(s1, s1', r1)
-    requires userspaceExecutionAndException(s2, s2', r2)
-    requires s1.nd_private == s2.nd_private;
-    ensures  usr_regs_equiv(r1, r2)
-    ensures r1.conf.ex == r2.conf.ex
-    ensures mode_of_state(r1) == mode_of_state(r2)
-    ensures lr_spsr_same(r1, r2);
-{
-    assert usr_regs_equiv(s1', s2') by {
-        lemma_userExec_atkr_regs(s1, s1', s2, s2');
-    }
-
-    var ex1 :| evalExceptionTaken(s1', ex1, r1);
-    var ex2 :| evalExceptionTaken(s2', ex2, r2);
-    assume ex1 == ex2; // XXX there is no way to prove this from spec
-    var newmode1 := mode_of_exception(s1'.conf, ex1);
-    var newmode2 := mode_of_exception(s2'.conf, ex2);
-    assert newmode1 != User;
-    assert newmode2 != User;
-    // can't prove this. don't know scr.irq/fiq in s1', s2'
-    assume newmode1 == newmode2;
-    assert mode_of_state(r1) == newmode1 by 
-    {
-        // reveal update_psr(); 
-        var newpsr := psr_of_exception(s1', ex1);
-        // XXX this might be a bitvector thing.
-        assume decode_mode(psr_mask_mode(newpsr)) == newmode1;
-        assert r1.conf.cpsr == decode_psr(newpsr);
-    }
-    assert mode_of_state(r2) == newmode1 by
-    {
-        var newpsr := psr_of_exception(s2', ex2);
-        // XXX this might be a bitvector thing.
-        assume decode_mode(psr_mask_mode(newpsr)) == newmode2;
-        assert r2.conf.cpsr == decode_psr(newpsr);
-    }
-    assume s1'.nd_private == s2'.nd_private;
-    assert r1.regs == s1'.regs[LR(newmode1) :=
-        nondet_word(s1'.nd_private, NONDET_REG(LR(newmode1)))];
-    assert r2.regs == s2'.regs[LR(newmode1) :=
-        nondet_word(s2'.nd_private, NONDET_REG(LR(newmode1)))];
-    // This can't be proven from our spec... don't know the value of the cpsr 
-    // after evalUserspaceExecution
-    assume s1'.sregs[cpsr] == s2'.sregs[cpsr];
-    assert r1.sregs[spsr(newmode1)] == s1'.sregs[cpsr];
-    assert r2.sregs[spsr(newmode1)] == s2'.sregs[cpsr];
-    assert r1.regs[LR(newmode1)] == r2.regs[LR(newmode1)];
-    reveal_ValidRegState();
-    reveal_ValidSRegState();
-    assert lr_spsr_same(r1, r2);
-}
-
-// This is just for the reveal
-predicate lr_spsr_same(s1:state, s2:state)
-    requires ValidState(s1) && ValidState(s2)
-    requires mode_of_state(s1) != User && mode_of_state(s2) != User
-{
-    reveal_ValidRegState();
-    reveal_ValidSRegState();
-    s1.regs[LR(mode_of_state(s1))] == s2.regs[LR(mode_of_state(s2))] &&
-    s1.sregs[spsr(mode_of_state(s1))] == s2.sregs[spsr(mode_of_state(s2))]
-}
-
-lemma lemma_exceptionHandled_atkr_conf(
-s1: state, d1: PageDb, d1': PageDb, s2: state, d2: PageDb, d2': PageDb,
-dispPg: PageNr, atkr: PageNr)
-    requires ValidState(s1) && ValidState(s2) &&
-             validPageDb(d1') && validPageDb(d2') &&
-             validPageDb(d1) && validPageDb(d2) && SaneConstants()
-    requires enc_conf_eq_entry(s1, s2, d1, d2, atkr);
-    requires mode_of_state(s1) != User && mode_of_state(s2) != User
-    requires mode_of_state(s1) == mode_of_state(s2)
-    requires lr_spsr_same(s1, s2)
-    requires validDispatcherPage(d1, dispPg) && validDispatcherPage(d2, dispPg)
-    requires d1' == exceptionHandled(s1, d1, dispPg).2
-    requires d2' == exceptionHandled(s2, d2, dispPg).2
-    requires atkr_entry(d1, d2, dispPg, atkr)
-    requires enc_conf_eqpdb(d1, d2, atkr)
-    requires usr_regs_equiv(s1, s2)
-    requires s1.conf.ex == s2.conf.ex
-    ensures  enc_conf_eqpdb(d1', d2', atkr)
-    ensures  atkr_entry(d1', d2', dispPg, atkr)
-{
-    reveal_enc_conf_eqpdb();
-    var ex := s1.conf.ex;
-    forall (n : PageNr |  n != dispPg)
-        ensures d1'[n] == d1[n];
-        ensures d2'[n] == d2[n];
-        ensures pgInAddrSpc(d1, n, atkr) <==>
-            pgInAddrSpc(d1', n, atkr)
-        ensures pgInAddrSpc(d2, n, atkr) <==>
-            pgInAddrSpc(d2', n, atkr)
-    {
-    }
-
-    assert forall n : PageNr :: pgInAddrSpc(d1, n, atkr) <==>
-        pgInAddrSpc(d2, n, atkr);
-
-    forall( n : PageNr | n != dispPg &&
-        pgInAddrSpc(d1, n, atkr) )
-    ensures d1'[n] == d2'[n]
-    {
-    }
-
-    if( ex.ExSVC? || ex.ExAbt? || ex.ExUnd? ) {
-        assert d1'[dispPg].entry == d2'[dispPg].entry;
-    } else {
-        var pc1 := TruncateWord(OperandContents(s1, OLR) - 4);
-        var pc2 := TruncateWord(OperandContents(s2, OLR) - 4);
-        assert pc1 == pc2;
-        reveal_ValidSRegState();
-        var psr1 := s1.sregs[spsr(mode_of_state(s1))];
-        var psr2 := s2.sregs[spsr(mode_of_state(s2))];
-        assert psr1 == psr2;
-        var ctxt1' := DispatcherContext(take_user_regs(s1.regs), pc1, psr1);
-        var ctxt2' := DispatcherContext(take_user_regs(s2.regs), pc2, psr2);
-        assert usr_regs_equiv(s1, s2);
-        assert take_user_regs(s1.regs) == take_user_regs(s2.regs);
-        assert ctxt1' == ctxt2';
-        assert d1'[dispPg].entry == d2'[dispPg].entry;
-    }
-}
+//     lemma lemma_userExec_atkr_regs(s1:state, s1':state,s2:state, s2':state)
+//         requires ValidState(s1) && ValidState(s1') 
+//         requires ValidState(s2) && ValidState(s2') 
+//         requires evalUserspaceExecution(s1, s1')
+//         requires evalUserspaceExecution(s2, s2')
+//         requires s1.nd_private == s2.nd_private
+//         ensures  usr_regs_equiv(s1', s2')
+//     {
+//        reveal_evalUserspaceExecution(); 
+//     }
+//     
+//     lemma lemma_userExecAndExcp_atkr_regs(
+//         s1:state, s1':state, r1:state,
+//         s2:state, s2':state, r2:state)
+//         requires ValidState(s1) && ValidState(s1') && ValidState(r1)
+//         requires ValidState(s2) && ValidState(s2') && ValidState(r2)
+//         requires mode_of_state(s1) == User
+//         requires mode_of_state(s2) == User
+//         requires userspaceExecutionAndException(s1, s1', r1)
+//         requires userspaceExecutionAndException(s2, s2', r2)
+//         requires s1.nd_private == s2.nd_private;
+//         ensures  usr_regs_equiv(r1, r2)
+//         ensures r1.conf.ex == r2.conf.ex
+//         ensures mode_of_state(r1) == mode_of_state(r2)
+//         ensures lr_spsr_same(r1, r2);
+//     {
+//         assert usr_regs_equiv(s1', s2') by {
+//             lemma_userExec_atkr_regs(s1, s1', s2, s2');
+//         }
+//     
+//         var ex1 :| evalExceptionTaken(s1', ex1, r1);
+//         var ex2 :| evalExceptionTaken(s2', ex2, r2);
+//         assume ex1 == ex2; // XXX there is no way to prove this from spec
+//         var newmode1 := mode_of_exception(s1'.conf, ex1);
+//         var newmode2 := mode_of_exception(s2'.conf, ex2);
+//         assert newmode1 != User;
+//         assert newmode2 != User;
+//         // can't prove this. don't know scr.irq/fiq in s1', s2'
+//         assume newmode1 == newmode2;
+//         assert mode_of_state(r1) == newmode1 by 
+//         {
+//             // reveal update_psr(); 
+//             var newpsr := psr_of_exception(s1', ex1);
+//             // XXX this might be a bitvector thing.
+//             assume decode_mode(psr_mask_mode(newpsr)) == newmode1;
+//             assert r1.conf.cpsr == decode_psr(newpsr);
+//         }
+//         assert mode_of_state(r2) == newmode1 by
+//         {
+//             var newpsr := psr_of_exception(s2', ex2);
+//             // XXX this might be a bitvector thing.
+//             assume decode_mode(psr_mask_mode(newpsr)) == newmode2;
+//             assert r2.conf.cpsr == decode_psr(newpsr);
+//         }
+//         assume s1'.nd_private == s2'.nd_private;
+//         assert r1.regs == s1'.regs[LR(newmode1) :=
+//             nondet_word(s1'.nd_private, NONDET_REG(LR(newmode1)))];
+//         assert r2.regs == s2'.regs[LR(newmode1) :=
+//             nondet_word(s2'.nd_private, NONDET_REG(LR(newmode1)))];
+//         // This can't be proven from our spec... don't know the value of the cpsr 
+//         // after evalUserspaceExecution
+//         assume s1'.sregs[cpsr] == s2'.sregs[cpsr];
+//         assert r1.sregs[spsr(newmode1)] == s1'.sregs[cpsr];
+//         assert r2.sregs[spsr(newmode1)] == s2'.sregs[cpsr];
+//         assert r1.regs[LR(newmode1)] == r2.regs[LR(newmode1)];
+//         reveal_ValidRegState();
+//         reveal_ValidSRegState();
+//         assert lr_spsr_same(r1, r2);
+//     }
+//     
+//     // This is just for the reveal
+//     predicate lr_spsr_same(s1:state, s2:state)
+//         requires ValidState(s1) && ValidState(s2)
+//         requires mode_of_state(s1) != User && mode_of_state(s2) != User
+//     {
+//         reveal_ValidRegState();
+//         reveal_ValidSRegState();
+//         s1.regs[LR(mode_of_state(s1))] == s2.regs[LR(mode_of_state(s2))] &&
+//         s1.sregs[spsr(mode_of_state(s1))] == s2.sregs[spsr(mode_of_state(s2))]
+//     }
+//     
+//     lemma lemma_exceptionHandled_atkr_conf(
+//     s1: state, d1: PageDb, d1': PageDb, s2: state, d2: PageDb, d2': PageDb,
+//     dispPg: PageNr, atkr: PageNr)
+//         requires ValidState(s1) && ValidState(s2) &&
+//                  validPageDb(d1') && validPageDb(d2') &&
+//                  validPageDb(d1) && validPageDb(d2) && SaneConstants()
+//         requires enc_conf_eq_entry(s1, s2, d1, d2, atkr);
+//         requires mode_of_state(s1) != User && mode_of_state(s2) != User
+//         requires mode_of_state(s1) == mode_of_state(s2)
+//         requires lr_spsr_same(s1, s2)
+//         requires validDispatcherPage(d1, dispPg) && validDispatcherPage(d2, dispPg)
+//         requires d1' == exceptionHandled(s1, d1, dispPg).2
+//         requires d2' == exceptionHandled(s2, d2, dispPg).2
+//         requires atkr_entry(d1, d2, dispPg, atkr)
+//         requires enc_conf_eqpdb(d1, d2, atkr)
+//         requires usr_regs_equiv(s1, s2)
+//         requires s1.conf.ex == s2.conf.ex
+//         ensures  enc_conf_eqpdb(d1', d2', atkr)
+//         ensures  atkr_entry(d1', d2', dispPg, atkr)
+//     {
+//         reveal_enc_conf_eqpdb();
+//         var ex := s1.conf.ex;
+//         forall (n : PageNr |  n != dispPg)
+//             ensures d1'[n] == d1[n];
+//             ensures d2'[n] == d2[n];
+//             ensures pgInAddrSpc(d1, n, atkr) <==>
+//                 pgInAddrSpc(d1', n, atkr)
+//             ensures pgInAddrSpc(d2, n, atkr) <==>
+//                 pgInAddrSpc(d2', n, atkr)
+//         {
+//         }
+//     
+//         assert forall n : PageNr :: pgInAddrSpc(d1, n, atkr) <==>
+//             pgInAddrSpc(d2, n, atkr);
+//     
+//         forall( n : PageNr | n != dispPg &&
+//             pgInAddrSpc(d1, n, atkr) )
+//         ensures d1'[n] == d2'[n]
+//         {
+//         }
+//     
+//         if( ex.ExSVC? || ex.ExAbt? || ex.ExUnd? ) {
+//             assert d1'[dispPg].entry == d2'[dispPg].entry;
+//         } else {
+//             var pc1 := TruncateWord(OperandContents(s1, OLR) - 4);
+//             var pc2 := TruncateWord(OperandContents(s2, OLR) - 4);
+//             assert pc1 == pc2;
+//             reveal_ValidSRegState();
+//             var psr1 := s1.sregs[spsr(mode_of_state(s1))];
+//             var psr2 := s2.sregs[spsr(mode_of_state(s2))];
+//             assert psr1 == psr2;
+//             var ctxt1' := DispatcherContext(take_user_regs(s1.regs), pc1, psr1);
+//             var ctxt2' := DispatcherContext(take_user_regs(s2.regs), pc2, psr2);
+//             assert usr_regs_equiv(s1, s2);
+//             assert take_user_regs(s1.regs) == take_user_regs(s2.regs);
+//             assert ctxt1' == ctxt2';
+//             assert d1'[dispPg].entry == d2'[dispPg].entry;
+//         }
+//     }
 
 lemma lemma_userspaceExec_atkr_conf(
-s12: state, s13:state, d1:PageDb,
-s22: state, s23:state, d2:PageDb,
-dispPg: PageNr, atkr: PageNr)
-    requires ValidState(s12) && ValidState(s22) &&
-             validPageDb(d1) && validPageDb(d2) && SaneConstants()
+s11: state, s1':state, s12: state, s13:state, s14: state, d1:PageDb, d14: PageDb,
+s21: state, s2':state, s22: state, s23:state, s24: state, d2:PageDb, d24: PageDb,
+dispPg: PageNr, atkr: PageNr, l1p: PageNr)
+    // requires ValidState(s12) && ValidState(s22) &&
+    //          validPageDb(d1) && validPageDb(d2) && SaneConstants()
+    requires ValidState(s11) && ValidState(s12) && ValidState(s13) && ValidState(s14)
+    requires ValidState(s21) && ValidState(s22) && ValidState(s23) && ValidState(s24)
+    requires validPageDb(d1) && validPageDb(d14)
+    requires validPageDb(d2) && validPageDb(d24)
+    requires SaneConstants()
     requires enc_conf_eq_entry(s12, s22, d1, d2, atkr);
-    requires evalUserspaceExecution(s12, s13)
-    requires evalUserspaceExecution(s22, s23)
+    requires userExecutionPreconditions(s11) &&
+        userExecutionPreconditions(s21)
+    requires userspaceExecutionAndException'(s11, s1', s12, s14)
+    requires userspaceExecutionAndException'(s21, s2', s22, s24)
+    requires s13 == userspaceExecutionFn(s12, OperandContents(s11, OLR)).0;
+    requires s23 == userspaceExecutionFn(s22, OperandContents(s12, OLR)).0;
     requires atkr_entry(d1, d2, dispPg, atkr)
     requires enc_conf_eqpdb(d1, d2, atkr)
-    requires l1pOfDispatcher(d1, dispPg) == l1pOfDispatcher(d2, dispPg);
-    requires (var l1p := l1pOfDispatcher(d1, dispPg);
+    requires l1pOfDispatcher(d1, dispPg) == l1pOfDispatcher(d2, dispPg) == l1p
+    requires 
         pageTableCorresponds(s12, d1, l1p) &&
         pageTableCorresponds(s22, d2, l1p) &&
         dataPagesCorrespond(s12.m, d1) &&
-        dataPagesCorrespond(s22.m, d2))
-    ensures (var d14 := updateUserPagesFromState(s13, d1, dispPg);
-        var d24 := updateUserPagesFromState(s23, d2, dispPg);
-        enc_conf_eqpdb(d14, d24, atkr) &&
-        atkr_entry(d14, d24, dispPg, atkr)) 
+        dataPagesCorrespond(s22.m, d2)
+    requires d14 == updateUserPagesFromState(s14, d1, dispPg);
+    requires d24 == updateUserPagesFromState(s24, d2, dispPg);
+    ensures enc_conf_eqpdb(d14, d24, atkr)
+    ensures atkr_entry(d14, d24, dispPg, atkr)
 {
     // reveal_evalUserspaceExecution();
     reveal_enc_conf_eqpdb();
-
-    var l1p := l1pOfDispatcher(d1, dispPg);
-    
-    var d14 := updateUserPagesFromState(s13, d1, dispPg);
-    var d24 := updateUserPagesFromState(s23, d2, dispPg);
 
     assert validPageDb(d14) && validPageDb(d24);
 
@@ -675,10 +702,29 @@ dispPg: PageNr, atkr: PageNr)
     assert forall n : PageNr :: pageSWrInAddrspace(d1, l1p, n) <==>
         pageSWrInAddrspace(d2, l1p, n);
 
+    //-----------------------------------------------------------------------------
+    //Factor this out into a separate lemma
+    //-----------------------------------------------------------------------------
+
+    assume OperandContents(s11, OLR) == OperandContents(s12, OLR);
+    var pc := OperandContents(s11, OLR);
+
+    assume ExtractAbsPageTable(s12).Just? && ExtractAbsPageTable(s22).Just?;
+
+    var pt1 := ExtractAbsPageTable(s12).v;
+    var pt2 := ExtractAbsPageTable(s22).v;
+    assert pt1 == pt2 by { 
+        assume false;
+    }
+
+    var user_state1 := user_visible_state(s12, pc, pt1);
+    var user_state2 := user_visible_state(s22, pc, pt2);
+    assume user_state1 == user_state2;
+    //-----------------------------------------------------------------------------
 
     forall( n : PageNr | pageSWrInAddrspace(d1, l1p, n))
-        ensures contentsOfPage(s13, n) ==
-            contentsOfPage(s23, n)
+        ensures contentsOfPage(s14, n) ==
+            contentsOfPage(s24, n)
     {
         assert d1[n].PageDbEntryTyped?;
         assert d2[n].PageDbEntryTyped?;
@@ -689,7 +735,7 @@ dispPg: PageNr, atkr: PageNr)
         forall( a : addr | a in addrsInPage(n, base) )
             ensures s13.m.addresses[a] == s23.m.addresses[a]
         {
-            reveal_evalUserspaceExecution();
+            reveal userspaceExecutionFn();
             assert ExtractAbsPageTable(s12) == ExtractAbsPageTable(s22) by
             {
                 lemma_eqpdb_pt_coresp(d1, d2, s12, s22, l1p, atkr);
@@ -711,7 +757,8 @@ dispPg: PageNr, atkr: PageNr)
                 assert s13.m.addresses[a] == s23.m.addresses[a];
             }
         }
-
+        assert s14.m == s13.m;
+        assert s24.m == s23.m;
     }
     
     forall( n : PageNr | pgInAddrSpc(d14, n, atkr))
@@ -721,9 +768,9 @@ dispPg: PageNr, atkr: PageNr)
         if(pageSWrInAddrspace(d1, l1p, n)) {
             assert d1[n].entry == d2[n].entry;
             assert d14[n] == d1[n].(entry := d1[n].entry.(
-                contents := contentsOfPage(s13, n)));
+                contents := contentsOfPage(s14, n)));
             assert d24[n] == d2[n].(entry := d2[n].entry.(
-                contents := contentsOfPage(s23, n)));
+                contents := contentsOfPage(s24, n)));
             assert d14[n].entry == d24[n].entry;
         } else {
             assert d14[n].entry == d1[n].entry;

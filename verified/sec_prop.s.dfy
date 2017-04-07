@@ -105,8 +105,7 @@ predicate enc_conf_eq_entry(s1:state, s2:state, d1:PageDb, d2:PageDb,
     //requires validPageDb(d1) && validPageDb(d2)
     // requires pageDbCorresponds(s1.m, d1) && pageDbCorresponds(s2.m, d2)
 {
-    s1.nd_private == s2.nd_private &&
-    s1.nd_public  == s2.nd_public
+    s1.nondet == s2.nondet
 }
 
 //-----------------------------------------------------------------------------
@@ -117,7 +116,7 @@ predicate os_conf_eq(s1: state, s2: state)
     requires ValidState(s1) && ValidState(s2)
 {
     reveal_ValidMemState();
-    s1.nd_public == s2.nd_public && 
+    s1.nondet == s2.nondet &&
     os_regs_equiv(s1, s2) &&
     os_ctrl_eq(s1, s2) // &&
     // InsecureMemInvariant(s1, s2)
