@@ -635,6 +635,9 @@ predicate {:axiom} UsermodeContinuationInvariant(s:state, r:state)
     ensures UsermodeContinuationInvariant(s, r)
         ==> EssentialContinuationInvariantProperties(s, r)
 
+predicate {:axiom} InterruptContinuationPrecondition(s:state)
+    requires ValidState(s)
+
 predicate {:axiom} InterruptContinuationInvariant(s:state, r:state)
     requires ValidState(s)
     ensures InterruptContinuationInvariant(s, r)
@@ -1078,7 +1081,8 @@ predicate ValidInstruction(s:state, ins:ins)
 predicate handleInterrupt(s:state, ex:exception, r:state)
     requires ValidState(s)
 {
-    exists s1, s2 :: evalExceptionTaken(s, ex, nondet_word(s.nondet, NONDET_PC()), s1)
+    InterruptContinuationPrecondition(s)
+    && exists s1, s2 :: evalExceptionTaken(s, ex, nondet_word(s.nondet, NONDET_PC()), s1)
         && InterruptContinuationInvariant(s1, s2)
         && evalMOVSPCLR(s2, r)
 }
@@ -1173,9 +1177,9 @@ predicate evalCPSID_IAF(s:state, mod:word, r:state)
 }
 
 predicate evalUserExecution(s:state, s2:state, s4:state)
-    requires ValidState(s) && ExtractAbsPageTable(s).Just?
+    requires ValidState(s)
 {
-    evalEnterUserspace(s, s2)
+    evalEnterUserspace(s, s2) && ExtractAbsPageTable(s2).Just?
     && var (s3, pc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
        evalExceptionTaken(s3, ex, pc, s4)
 }
@@ -1184,8 +1188,7 @@ predicate {:opaque} evalMOVSPCLRUC(s:state, r:state)
     requires ValidState(s)
     ensures evalMOVSPCLRUC(s, r) ==> ValidState(r)
 {
-    ExtractAbsPageTable(s).Just?
-    && UsermodeContinuationPrecondition(s)
+    UsermodeContinuationPrecondition(s)
     && exists s2, s4 :: evalUserExecution(s, s2, s4)
     && UsermodeContinuationInvariant(s4, r)
 }

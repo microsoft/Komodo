@@ -1,6 +1,43 @@
 include "kom_common.i.dfy"
 include "entry.i.dfy"
 
+predicate InterruptContinuationPreconditionDefInner()
+{
+    // for now, we only take interrupts at the beginning of another exception handler
+    // when the user-entry precondition still holds, so this is simplest...
+    forall s:state {:trigger InterruptContinuationPrecondition(s)} ::
+        ValidState(s) && InterruptContinuationPrecondition(s)
+        <==> (exists pagedb, dispPg:PageNr :: KomUserEntryPrecondition(s, pagedb, dispPg))
+}
+
+// XXX: the charade of inner/outer def and lemmas here are workarounds
+// for an opaque/reveal bug in dafny
+predicate {:opaque} InterruptContinuationPreconditionDef()
+{ InterruptContinuationPreconditionDefInner() }
+
+lemma lemma_InterruptContinuationPreconditionDefInner()
+    requires InterruptContinuationPreconditionDef()
+    ensures InterruptContinuationPreconditionDefInner()
+{ reveal InterruptContinuationPreconditionDef(); }
+
+lemma lemma_InterruptContinuationPreconditionDef(s:state)
+    returns (pagedb:PageDb, dispPg:PageNr)
+    requires InterruptContinuationPreconditionDef()
+    requires ValidState(s) && InterruptContinuationPrecondition(s)
+    ensures KomUserEntryPrecondition(s, pagedb, dispPg)
+{
+    lemma_InterruptContinuationPreconditionDefInner();
+    pagedb, dispPg :| KomUserEntryPrecondition(s, pagedb, dispPg);
+}
+
+lemma lemma_Establish_InterruptContinuationPrecondition(s:state, pagedb:PageDb, dispPg:PageNr)
+    requires InterruptContinuationPreconditionDef()
+    requires KomUserEntryPrecondition(s, pagedb, dispPg)
+    ensures InterruptContinuationPrecondition(s)
+{
+    lemma_InterruptContinuationPreconditionDefInner();
+}
+
 function {:opaque} dummyPageDb(): PageDb { imap[] }
 function {:opaque} dummyPageNr(): PageNr { 0 }
 

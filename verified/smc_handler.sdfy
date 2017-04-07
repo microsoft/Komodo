@@ -154,11 +154,12 @@ procedure {:frame false} smc_handler_inner(
             && @arg3 == OReg(R3) && @arg4 == OReg(R4);
         @err == OReg(R0) && @retval == OReg(R1);
         @pagedb_base == OReg(R12) && pagedb_base == AddressOfGlobal(PageDb());
-        stack_bytes >= 80;
+        stack_bytes >= BANKED_FRAMESIZE + EXCEPTION_STACK_BYTES;
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
-        UsermodeContinuationInvariantDef(); // FIXME
-        this.conf.scr.ns == NotSecure; // FIXME: cleanup
+        UsermodeContinuationInvariantDef();
+        UsermodeContinuationPreconditionDef();
+        this.conf.scr.ns == NotSecure;
     ensures
         StackPreserving(old(this), this);
         BankedRegsInvariant(old(this), this);
@@ -349,11 +350,12 @@ procedure {:frame false} smc_handler(
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
     requires
-        stack_bytes >= 120;
+        stack_bytes >= BANKED_FRAMESIZE + EXCEPTION_STACK_BYTES + 40;
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
-        UsermodeContinuationInvariantDef(); // FIXME
-        this.conf.scr.ns == NotSecure; // FIXME: cleanup
+        UsermodeContinuationInvariantDef();
+        UsermodeContinuationPreconditionDef();
+        this.conf.scr.ns == NotSecure;
         ValidPsrWord(spsr_mon) && decode_psr(spsr_mon).m != Monitor;
     ensures
         smchandler(old(this), pagedb_in, this, pagedb);

@@ -119,6 +119,7 @@ predicate GlobalAssumptions()
     SaneConstants()
         && UsermodeContinuationPreconditionDef()
         && UsermodeContinuationInvariantDef()
+        && InterruptContinuationPreconditionDef()
         && InterruptContinuationInvariantDef()
 }
 
@@ -156,11 +157,11 @@ lemma lemma_KomUserEntryPrecond_AbsPT(s:state, pagedb:PageDb, dispPg:PageNr)
 
 predicate ExceptionStateSideEffects(s:state)
 {
-    if s.conf.ex == ExFIQ || s.conf.ex == ExIRQ
+    ValidState(s) && mode_of_state(s) != User
+    && if s.conf.ex == ExFIQ || s.conf.ex == ExIRQ
         then mode_of_state(s) == Monitor && !interrupts_enabled(s)
     else
-        spsr_of_state(s).m == User
-        && mode_of_state(s) == (match s.conf.ex
+        mode_of_state(s) == (match s.conf.ex
             case ExAbt => Abort
             case ExUnd => Undefined
             case ExSVC => Supervisor)
@@ -170,8 +171,7 @@ lemma lemma_KomUserEntryPrecond_Preserved(s0:state, s2:state, r:state,
                                           pagedb0:PageDb, dispPg:PageNr)
                                           returns (pagedb: PageDb)
     requires KomUserEntryPrecondition(s0, pagedb0, dispPg)
-    requires (lemma_KomUserEntryPrecond_AbsPT(s0, pagedb0, dispPg);
-              evalUserExecution(s0, s2, r))
+    requires evalUserExecution(s0, s2, r)
     ensures pagedb == updateUserPagesFromState(r, pagedb0, dispPg)
     ensures KomUserEntryPrecondition(r, pagedb, dispPg)
 {
@@ -185,21 +185,21 @@ lemma lemma_KomUserEntryPrecond_Preserved(s0:state, s2:state, r:state,
         by { reveal updateUserPagesFromState(); }
 }
 
-lemma lemma_ExceptionStateSideEffects(s0:state, s2:state, r:state,
-                                      pagedb0:PageDb, dispPg:PageNr)
+lemma lemma_UserExceptionStateSideEffects(s0:state, s2:state, r:state,
+                                          pagedb0:PageDb, dispPg:PageNr)
     requires KomUserEntryPrecondition(s0, pagedb0, dispPg)
-    requires (lemma_KomUserEntryPrecond_AbsPT(s0, pagedb0, dispPg);
-              evalUserExecution(s0, s2, r))
-    ensures ExceptionStateSideEffects(r)
+    requires evalUserExecution(s0, s2, r)
+    ensures ExceptionStateSideEffects(r) && spsr_of_state(r).m == User
 {
     lemma_KomUserEntryPrecond_AbsPT(s0, pagedb0, dispPg);
     assert evalEnterUserspace(s0, s2);
     assert mode_of_state(s2) == User;
+    assert s2.conf.scr == s0.conf.scr == SCRT(Secure, true, true);
     lemma_evalEnterUserspace_preservesAbsPageTable(s0, s2);
 
     var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s0, OLR));
     assert mode_of_state(s3) == mode_of_state(s2) == User
-        && s3.conf.scr == s2.conf.scr == s0.conf.scr == SCRT(Secure, true, true)
+        && s3.conf.scr == s2.conf.scr
         by { reveal userspaceExecutionFn(); }
 
     assert evalExceptionTaken(s3, ex, expc, r);
@@ -213,6 +213,23 @@ lemma lemma_ExceptionStateSideEffects(s0:state, s2:state, r:state,
         assert !interrupts_enabled(r);
     }
     assert ExceptionStateSideEffects(r);
+}
+
+lemma lemma_PrivExceptionStateSideEffects(s:state, r:state, ex:exception,
+                                          pagedb:PageDb, dispPg:PageNr)
+    requires KomUserEntryPrecondition(s, pagedb, dispPg)
+    requires priv_of_state(s) == PL1 && interrupts_enabled(s)
+    requires ex == ExIRQ || ex == ExFIQ
+    requires evalExceptionTaken(s, ex, nondet_word(s.nondet, NONDET_PC()), r)
+    ensures ExceptionStateSideEffects(r) && spsr_of_state(r).m == mode_of_state(s)
+{
+    assert r.conf.ex == ex;
+    lemma_evalExceptionTaken_Mode(s, ex, nondet_word(s.nondet, NONDET_PC()), r);
+    assert spsr_of_state(r).m == mode_of_state(s);
+    assert mode_of_state(r) == Monitor;
+    mode_encodings_are_sane();
+    lemma_update_psr(cpsr_of_state(s), encode_mode(Monitor), true, true);
+    assert !interrupts_enabled(r);
 }
 
 lemma lemma_evalHandler(s:state, r:state, pagedb:PageDb, dispPg: PageNr)
@@ -234,26 +251,8 @@ lemma lemma_evalHandler(s:state, r:state, pagedb:PageDb, dispPg: PageNr)
     }
 }
 
-method Main()
+lemma lemma_SMCHandlerIsCorrect()
 {
-    // prove that whenever we take an exception from user mode, we can run the right
-    // handler and it will establish the invariants assumed in the SMC path
-    forall s0:state, s1:state, s3:state, r:state
-        | GlobalAssumptions() && ValidState(s0) && s0.ok
-        && UsermodeContinuationPrecondition(s0)
-        && evalUserExecution(s0, s1, s3)
-        && evalCode(exHandler(s3.conf.ex), s3, r)
-        ensures exists p2, dp :: KomExceptionHandlerInvariant(s3, p2, r, dp)
-    {
-        var pagedb, dispPg := lemma_UsermodeContinuationPreconditionDef(s0);
-        assert KomUserEntryPrecondition(s0, pagedb, dispPg);
-        pagedb := lemma_KomUserEntryPrecond_Preserved(s0, s1, s3, pagedb, dispPg);
-        lemma_ExceptionStateSideEffects(s0, s1, s3, pagedb, dispPg);
-        lemma_evalHandler(s3, r, pagedb, dispPg);
-    }
-
-    // TODO: prove something about interrupts from PL1 modes
-    
     // prove that the SMC handler is correct
     forall s1:state, p1:PageDb, s2:state
         | GlobalAssumptions() && InitialSMCState(s1)
@@ -271,6 +270,47 @@ method Main()
         assert smchandler(s1, p1, s2, p2');
         assert validPageDb(p2') && pageDbCorresponds(s2.m, p2');
     }
+}
 
+lemma lemma_ExceptionHandlersAreCorrect()
+{
+    // prove that whenever we take an exception from user mode, we can run the right
+    // handler and it will establish the invariants assumed in the SMC path
+    forall s0:state, s1:state, s3:state, r:state
+        | GlobalAssumptions() && ValidState(s0) && s0.ok
+        && UsermodeContinuationPrecondition(s0)
+        && evalUserExecution(s0, s1, s3)
+        && evalCode(exHandler(s3.conf.ex), s3, r)
+        ensures exists p2, dp :: KomExceptionHandlerInvariant(s3, p2, r, dp)
+    {
+        var pagedb, dispPg := lemma_UsermodeContinuationPreconditionDef(s0);
+        assert KomUserEntryPrecondition(s0, pagedb, dispPg);
+        lemma_UserExceptionStateSideEffects(s0, s1, s3, pagedb, dispPg);
+        var pagedb' := lemma_KomUserEntryPrecond_Preserved(s0, s1, s3, pagedb, dispPg);
+        lemma_evalHandler(s3, r, pagedb', dispPg);
+    }
+
+    // prove that interrupts taken from PL1 modes maintain the invariant
+    forall s0:state, ex:exception, s1:state, r:state
+        | GlobalAssumptions() && ValidState(s0) && s0.ok
+        && UsermodeContinuationPrecondition(s0)
+        && priv_of_state(s0) == PL1 && interrupts_enabled(s0)
+        && (ex == ExFIQ || ex == ExIRQ)
+        && evalExceptionTaken(s0, ex, nondet_word(s0.nondet, NONDET_PC()), s1)
+        && evalCode(exHandler(ex), s1, r)
+        ensures exists p0, dp :: KomInterruptHandlerInvariant(s1, p0, r, dp)
+    {
+        var pagedb, dispPg := lemma_UsermodeContinuationPreconditionDef(s0);
+        lemma_PrivExceptionStateSideEffects(s0, s1, ex, pagedb, dispPg);
+        reveal_va_eval();
+        var block := va_CCons(exHandler(ex), va_CNil());
+        assert va_eval(Block(block), s1, r) by { assert evalBlock(block, s1, r); }
+        var _, _, p := va_lemma_interrupt_handler(block, s1, r, ex, pagedb, dispPg);
+        assert KomInterruptHandlerInvariant(s1, pagedb, r, dispPg);
+    }
+}
+
+method Main()
+{
     printAll();
 }
