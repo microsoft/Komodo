@@ -223,7 +223,7 @@ ensures
 //                    AddrMemContents(mem, r0 + 5*WORDSIZE),
 //                    AddrMemContents(mem, r0 + 6*WORDSIZE),
 //                    AddrMemContents(mem, r0 + 7*WORDSIZE)) in
-//    IsSHA256(WordSeqToBytes(bswap32_seq(AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * old(r2)))), hash);
+//    IsSHA256(WordSeqToBytes(AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * old(r2))), hash);
 {
     ghost var s:int;
     s := stack_nonvolatiles(40);
@@ -247,9 +247,9 @@ ensures
     // r2 == num_blocks
     sha256_one_shot();
 
-    // IsSHA256(WordSeqToBytes(bswap32_seq(AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * (num_blocks+1)))), hash);
+    // IsSHA256(WordSeqToBytes(AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * (num_blocks+1))), hash);
     // lemma_AddrMemContentsSeq_adds(mem, old(r1), SHA_BLOCKSIZE * (num_blocks+1), 1)
-    // IsSHA256(WordSeqToBytes(bswap32_seq(AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE) + AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * num_blocks)))), hash);
+    // IsSHA256(WordSeqToBytes(AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE) + AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * num_blocks))), hash);
 
     // Copy key to the beginning of the tmp buffer
     MOV(r5, const(HMAC_KEYSIZE_BYTES));
