@@ -660,12 +660,10 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
     requires validPageDb(d2) && validPageDb(d24)
     requires SaneConstants()
     requires enc_conf_eq_entry(s12, s22, d1, d2, atkr);
-    requires userExecutionPreconditions(s11) &&
-        userExecutionPreconditions(s21)
     requires userspaceExecutionAndException'(s11, s1', s12, s14)
     requires userspaceExecutionAndException'(s21, s2', s22, s24)
     requires s13 == userspaceExecutionFn(s12, OperandContents(s11, OLR)).0;
-    requires s23 == userspaceExecutionFn(s22, OperandContents(s12, OLR)).0;
+    requires s23 == userspaceExecutionFn(s22, OperandContents(s21, OLR)).0;
     requires atkr_entry(d1, d2, dispPg, atkr)
     requires enc_conf_eqpdb(d1, d2, atkr)
     requires l1pOfDispatcher(d1, dispPg) == l1pOfDispatcher(d2, dispPg) == l1p
@@ -706,8 +704,9 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
     //Factor this out into a separate lemma
     //-----------------------------------------------------------------------------
 
-    assume OperandContents(s11, OLR) == OperandContents(s12, OLR);
-    var pc := OperandContents(s11, OLR);
+    var pc1 := OperandContents(s11, OLR);
+    var pc2 := OperandContents(s21, OLR);
+    assume pc1 == pc2;
 
     assume ExtractAbsPageTable(s12).Just? && ExtractAbsPageTable(s22).Just?;
 
@@ -717,9 +716,10 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
         assume false;
     }
 
-    var user_state1 := user_visible_state(s12, pc, pt1);
-    var user_state2 := user_visible_state(s22, pc, pt2);
+    var user_state1 := user_visible_state(s12, pc1, pt1);
+    var user_state2 := user_visible_state(s22, pc2, pt2);
     assume user_state1 == user_state2;
+    assume s12.nondet == s22.nondet;
     //-----------------------------------------------------------------------------
 
     forall( n : PageNr | pageSWrInAddrspace(d1, l1p, n))
@@ -740,21 +740,14 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
             {
                 lemma_eqpdb_pt_coresp(d1, d2, s12, s22, l1p, atkr);
             }
-            var pt := ExtractAbsPageTable(s12);
+            var pt := ExtractAbsPageTable(s22);
             assert pt.Just?;
             var pages := WritablePagesInTable(fromJust(pt));
-
-            if( BitwiseMaskHigh(a, 12) in pages ){
-                // havoced the same
+            
+            if( PageBase(a) in pages ){
                 assert s13.m.addresses[a] ==s23.m.addresses[a];
             } else {
-                assert s13.m.addresses[a] == s12.m.addresses[a];
-                assert s23.m.addresses[a] == s22.m.addresses[a];
-                assert dataPagesCorrespond(s12.m, d1);
-                assert dataPagesCorrespond(s22.m, d2);
                 lemma_data_page_eqdb_to_addrs(d1, d2, s12, s22, n, a, atkr);
-                assert s12.m.addresses[a] == s22.m.addresses[a];
-                assert s13.m.addresses[a] == s23.m.addresses[a];
             }
         }
         assert s14.m == s13.m;
@@ -775,8 +768,6 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
         } else {
             assert d14[n].entry == d1[n].entry;
             assert d24[n].entry == d2[n].entry;
-            assert d1[n].entry == d2[n].entry;
-            assert d14[n].entry == d24[n].entry;
         }
     }
 
