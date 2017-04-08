@@ -244,10 +244,12 @@ procedure LDR_MSR_spsr(
     requires/ensures
         SaneState(this);
     requires
-        ValidMem(base + ofs);
+        //ValidMem(base + ofs);
         //ValidMrsMsrOperand(this, @reg);
-        @reg is OSReg && @reg.sr is spsr && ValidPsrWord(MemContents(this.m, base + ofs));
+        @reg is OSReg && @reg.sr is spsr;// && ValidPsrWord(MemContents(this.m, base + ofs));
         @tmp != OSP && @tmp != @base && @tmp != @ofs;
+        ValidMem(base) && wellformed_banked_regs_stackframe(this.m, base);
+        WordAligned(ofs) && 12 <= BytesToWords(ofs) <= 17;
     reads
         mem;
     ensures
@@ -256,8 +258,12 @@ procedure LDR_MSR_spsr(
         BankedRegsInvariant(old(this),this);
         forall sr :: this.sregs?[sr] && old(this).sregs?[sr] && sr != @reg.sr
             ==> this.sregs[sr] == old(this).sregs[sr];
+        ValidMem(old(base + ofs));
         reg == MemContents(old(this.m), old(base+ofs));
 {
+    assert exists i :: ofs == i * WORDSIZE && 12 <= i <= 17; // trigger
+    assert ValidMem(base + ofs) && ValidPsrWord(MemContents(this.m, base + ofs))
+        by { reveal_wellformed_banked_regs_stackframe(); }
     LDR(tmp, base, ofs);
     MSR(reg, tmp);
 }
@@ -301,9 +307,7 @@ procedure unstack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
     LDR_MSR_banked(lr_abt, sp, const(10*WORDSIZE), tmp);
     LDR_MSR_banked(lr_und, sp, const(11*WORDSIZE), tmp);
 
-    reveal_wellformed_banked_regs_stackframe();
     assert this.m == old(this.m);
-    assert wellformed_banked_regs_stackframe(this.m, sp);
 
     LDR_MSR_spsr(spsr_fiq, sp, const(12*WORDSIZE), tmp);
     LDR_MSR_spsr(spsr_irq, sp, const(13*WORDSIZE), tmp);
@@ -312,10 +316,11 @@ procedure unstack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
     LDR_MSR_spsr(spsr_und, sp, const(16*WORDSIZE), tmp);
     LDR_MSR_spsr(spsr_mon, sp, const(17*WORDSIZE), tmp);
 
+    reveal_banked_regs_stackframe();
+    assert sp == old(sp) && banked_regs_stackframe(this, old(this.m), old(sp));
+
     ADD(sp, sp, const(BANKED_FRAMESIZE));
     stack_bytes := stack_bytes_in + BANKED_FRAMESIZE;
-
-    reveal_banked_regs_stackframe();
 }
 
 procedure smc_enter_err(
