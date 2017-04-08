@@ -417,11 +417,19 @@ lemma lemma_validEnclaveStep_enc_conf(s1: state, d1: PageDb, s1':state, d1': Pag
     ensures OperandContents(s1', OLR) == OperandContents(s2', OLR)
     ensures user_regs(s1'.regs) == user_regs(s2'.regs)
 {
-    assume false;
-    // use lemma below...
-    //
-    // I'm guessing that even with the lemma below, this will be just as 
-    // annoying as the above lemma
+    reveal validEnclaveExecutionStep();
+    var s14, d14 :|
+        validEnclaveExecutionStep'(s1, d1, s14, d14, s1', d1',
+            dispPage, ret);
+
+    var s24, d24 :|
+        validEnclaveExecutionStep'(s2, d2, s24, d24, s2', d2',
+            dispPage, ret);
+
+    lemma_validEnclaveStepPrime_enc_conf(
+        s1, d1, s14, d14, s1', d1',
+        s2, d2, s24, d24, s2', d2',
+        dispPage, ret, atkr);
 }
 
 lemma lemma_validEnclaveStepPrime_enc_conf(
