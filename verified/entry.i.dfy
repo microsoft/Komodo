@@ -37,17 +37,27 @@ function {:opaque} userExecutionModel(s:state): state
     userExecutionModelSteps(s).4
 }
 
-lemma lemma_userExecutionModel_validity(s:state, r:state)
-    requires ValidState(s) && evalMOVSPCLRUC(s, r)
-    requires userExecutionPreconditions(s)
-    ensures UsermodeContinuationInvariant(userExecutionModel(s), r)
+lemma lemma_userExecutionModel_validity(s:state, s2:state, r:state)
+    requires ValidState(s) && ExtractAbsPageTable(s).Just?
+    requires evalUserExecution(s, s2, r)
+    ensures userExecutionPreconditions(s) && r == userExecutionModel(s)
 {
     reveal_userExecutionModel();
     var (s2, s3, expc, ex, s4) := userExecutionModelSteps(s);
     assert evalEnterUserspace(s, s2);
     lemma_psr_of_exception(s3, ex);
     assert evalExceptionTaken(s3, ex, expc, s4);
+}
+
+lemma lemma_userExecutionModel_validity_cont(s:state, r:state)
+    requires ValidState(s) && evalMOVSPCLRUC(s, r)
+    ensures userExecutionPreconditions(s)
+    ensures UsermodeContinuationInvariant(userExecutionModel(s), r)
+{
     reveal_evalMOVSPCLRUC();
+    assert ExtractAbsPageTable(s).Just?;
+    var s2, s4 :| evalUserExecution(s, s2, s4) && UsermodeContinuationInvariant(s4, r);
+    lemma_userExecutionModel_validity(s, s2, s4);
 }
 
 lemma lemma_userExecutionModel_sufficiency(s:state, r:state)
@@ -82,22 +92,22 @@ lemma lemma_userExecutionModel_sufficiency(s:state, r:state)
 
 const EXCEPTION_STACK_BYTES:int := 100*WORDSIZE;
 
-predicate KomUserEntryPrecondition(s:state, pagedb:PageDb)
+predicate KomUserEntryPrecondition(s:state, pagedb:PageDb, dispPg:PageNr)
 {
     SaneConstants() && ValidState(s) && s.ok && SaneStack(s) && SaneMem(s.m)
     && s.conf.scr == SCRT(Secure, true, true)
     && StackBytesRemaining(s, EXCEPTION_STACK_BYTES)
     && validPageDb(pagedb) && pageDbCorresponds(s.m, pagedb)
-    && var disp_va := GlobalWord(s.m, CurDispatcherOp(), 0);
-    PageAligned(disp_va) && address_is_secure(disp_va)
-    && var dispPg := monvaddr_page(disp_va); nonStoppedDispatcher(pagedb, dispPg)
+    && nonStoppedDispatcher(pagedb, dispPg)
+    && GlobalWord(s.m, CurDispatcherOp(), 0) == page_monvaddr(dispPg)
+    && s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, dispPg))    
 }
 
 predicate UsermodeContinuationPreconditionDefInner()
 {
     forall s:state {:trigger UsermodeContinuationPrecondition(s)} ::
         ValidState(s) && UsermodeContinuationPrecondition(s)
-        <==> (exists pagedb :: KomUserEntryPrecondition(s, pagedb))
+        <==> (exists pagedb, dispPg:PageNr :: KomUserEntryPrecondition(s, pagedb, dispPg))
 }
 
 // XXX: the charade of inner/outer def and lemmas here are workarounds
@@ -110,18 +120,19 @@ lemma lemma_UsermodeContinuationPreconditionDefInner()
     ensures UsermodeContinuationPreconditionDefInner()
 { reveal UsermodeContinuationPreconditionDef(); }
 
-lemma lemma_UsermodeContinuationPreconditionDef(s:state) returns (pagedb:PageDb)
+lemma lemma_UsermodeContinuationPreconditionDef(s:state)
+    returns (pagedb:PageDb, dispPg:PageNr)
     requires UsermodeContinuationPreconditionDef()
     requires ValidState(s) && UsermodeContinuationPrecondition(s)
-    ensures KomUserEntryPrecondition(s, pagedb)
+    ensures KomUserEntryPrecondition(s, pagedb, dispPg)
 {
     lemma_UsermodeContinuationPreconditionDefInner();
-    pagedb :| KomUserEntryPrecondition(s, pagedb);
+    pagedb, dispPg :| KomUserEntryPrecondition(s, pagedb, dispPg);
 }
 
-lemma lemma_Establish_UsermodeContinuationPrecondition(s:state, pagedb:PageDb)
+lemma lemma_Establish_UsermodeContinuationPrecondition(s:state, pagedb:PageDb, dispPg:PageNr)
     requires UsermodeContinuationPreconditionDef()
-    requires KomUserEntryPrecondition(s, pagedb)
+    requires KomUserEntryPrecondition(s, pagedb, dispPg)
     ensures UsermodeContinuationPrecondition(s)
 {
     lemma_UsermodeContinuationPreconditionDefInner();
@@ -357,7 +368,7 @@ lemma lemma_monvaddr_ValidMem(p:PageNr, a:addr)
 {}
 
 lemma lemma_userExecutionUpdatesPageDb(d:PageDb, s:state, s':state, dispPg:PageNr)
-    requires validPageDb(d)  && nonStoppedDispatcher(d, dispPg)
+    requires validPageDb(d) && nonStoppedDispatcher(d, dispPg)
     requires userExecutionPreconditions(s) && userExecutionModel(s) == s'
     requires SaneMem(s.m) && pageDbCorresponds(s.m, d) && SaneMem(s'.m)
     requires s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(d, dispPg))
@@ -370,13 +381,15 @@ lemma lemma_userExecutionUpdatesPageDb(d:PageDb, s:state, s':state, dispPg:PageN
     forall ( p | validPageNr(p) )
         ensures pageDbEntryCorresponds(d'[p], extractPageDbEntry(s'.m, p))
     {
+        lemma_updateUserPagesFromState(s', d, d', dispPg, p);
         PageDbCorrespondsImpliesEntryCorresponds(s.m, d, p);
         assert pageDbEntryCorresponds(d[p], extractPageDbEntry(s.m, p));
         lemma_userExecutionPreservesPrivState(s, s');
         assert extractPageDbEntry(s.m, p) == extractPageDbEntry(s'.m, p);
         reveal_pageDbEntryCorresponds();
-        lemma_updateUserPagesFromState(s', d, d', dispPg, p);
     }
+
+    assert {:split_here} true;
 
     forall ( p | validPageNr(p) )
         ensures pageContentsCorresponds(p, d'[p], extractPage(s'.m, p));
@@ -444,6 +457,7 @@ lemma lemma_userExecutionPreservesPrivState(s:state, r:state)
     ensures mode_of_state(r) != User && spsr_of_state(r).m == User
     ensures r.conf.scr == s.conf.scr
     ensures r.conf.ttbr0 == s.conf.ttbr0
+    ensures r.ok == s.ok
 {
     var (s2, s3, expc, ex, s4) := userExecutionModelSteps(s);
     assert s4 == r by { reveal_userExecutionModel(); }
@@ -496,7 +510,7 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
     lemma_ptablesmatch(s.m, d, l1pOfDispatcher(d, dp));
     assert userExecutionPreconditions(s);
 
-    lemma_userExecutionModel_validity(s, r);
+    lemma_userExecutionModel_validity_cont(s, r);
     s4 := userExecutionModel(s);
     lemma_userExecutionModel_sufficiency(s, s4);
     d4 := updateUserPagesFromState(s4, d, dp);

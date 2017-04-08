@@ -801,7 +801,7 @@ procedure {:frame false} enclaveexecution_loop(
     requires/ensures
         SaneState(this);
     requires
-        KomUserEntryPrecondition(this, pagedb_in);
+        KomUserEntryPrecondition(this, pagedb_in, dispPg);
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         UsermodeContinuationInvariantDef();
@@ -860,8 +860,8 @@ procedure {:frame false} enclaveexecution_loop(
         }
         assert retToEnclave;
 
-        assert KomUserEntryPrecondition(takestep(this), pagedb);
-        lemma_Establish_UsermodeContinuationPrecondition(takestep(this), pagedb);
+        assert KomUserEntryPrecondition(takestep(this), pagedb, dispPg);
+        lemma_Establish_UsermodeContinuationPrecondition(takestep(this), pagedb, dispPg);
         MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
 
         pagedb, retToEnclave := lemma_evalMOVSPCLRUC(loop0, loop_pagedb, this, dispPg);
@@ -988,7 +988,7 @@ procedure {:frame false} {:timeLimitMultiplier 2} smc_enterresume_success(
     }
 
     ghost var steps:nat;
-    assert KomUserEntryPrecondition(this, pagedb);
+    assert KomUserEntryPrecondition(this, pagedb, dispPg);
     pagedb, steps := enclaveexecution_loop(pagedb, dispPg);
 
     ghost var s6 := this;
