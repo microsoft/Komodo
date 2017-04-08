@@ -413,7 +413,7 @@ predicate smchandlerInvariant(s:state, s':state)
 {
     reveal_ValidRegState();
     reveal_ValidSRegState();
-    smcNonvolatileRegInvariant(s, s')
+    smcNonvolatileRegInvariant(s, s') && s'.regs[R2] == s'.regs[R3] == 0
         // return in non-secure world, in same (i.e., monitor) mode
         && mode_of_state(s') == mode_of_state(s) == Monitor
         && s'.conf.scr.ns == NotSecure
