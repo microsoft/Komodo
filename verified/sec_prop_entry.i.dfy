@@ -317,6 +317,10 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
     {
         assume steps1 == steps2;
         assume s11.nondet == s21.nondet;
+
+        assume OperandContents(s11, OLR) == OperandContents(s21, OLR); //TODO proveme
+        // TODO entry.s spec needs to fix this:
+        assume user_regs(s11.regs) == user_regs(s21.regs);
         lemma_validEnclaveEx_enc_conf(s11, d1, s1', d1', s21, d2, s2', d2',
                                          dispPage, steps1, atkr);
     }
@@ -336,6 +340,8 @@ lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageD
     requires validEnclaveExecution(s2, d2, s2', d2', dispPg, steps);
     requires enc_conf_eqpdb(d1, d2, atkr)
     requires enc_conf_eq_entry(s1, s2, d1, d2, atkr)
+    requires OperandContents(s1, OLR) == OperandContents(s2, OLR)
+    requires user_regs(s1.regs) == user_regs(s2.regs)
     ensures  atkr_entry(d1', d2', dispPg, atkr)
     ensures  enc_conf_eqpdb(d1', d2', atkr)
     ensures  enc_conf_eq_entry(s1', s2', d1', d2', atkr)
@@ -384,6 +390,11 @@ lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageD
         assert enc_conf_eqpdb(d1', d2', atkr);
         assert enc_conf_eq_entry(s1', s2', d1', d2', atkr);
     }
+
+    // TODO need to figure out how to prove these...
+    assume OperandContents(s1', OLR) == OperandContents(s2', OLR);
+    assume user_regs(s1'.regs) == user_regs(s2'.regs);
+
 }
 
 lemma lemma_validEnclaveStep_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageDb,
@@ -398,9 +409,13 @@ lemma lemma_validEnclaveStep_enc_conf(s1: state, d1: PageDb, s1':state, d1': Pag
     requires validEnclaveExecutionStep(s2, d2, s2', d2', dispPage, ret);
     requires enc_conf_eqpdb(d1, d2, atkr)
     requires enc_conf_eq_entry(s1, s2, d1, d2, atkr)
+    requires OperandContents(s1, OLR) == OperandContents(s2, OLR)
+    requires user_regs(s1.regs) == user_regs(s2.regs)
     ensures  atkr_entry(d1', d2', dispPage, atkr)
     ensures  enc_conf_eqpdb(d1', d2', atkr)
     ensures  enc_conf_eq_entry(s1', s2', d1', d2', atkr)
+    ensures OperandContents(s1', OLR) == OperandContents(s2', OLR)
+    ensures user_regs(s1'.regs) == user_regs(s2'.regs)
 {
     assume false;
     // use lemma below...
@@ -421,11 +436,15 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
     requires atkr_entry(d11, d21, dispPg, atkr)
     requires validEnclaveExecutionStep'(s11,d11,s14,d14,r1,rd1,dispPg,retToEnclave)
     requires validEnclaveExecutionStep'(s21,d21,s24,d24,r2,rd2,dispPg,retToEnclave)
+    requires OperandContents(s11, OLR) == OperandContents(s21, OLR)
+    requires user_regs(s11.regs) == user_regs(s21.regs)
     requires enc_conf_eqpdb(d11, d21, atkr)
     requires enc_conf_eq_entry(s11, s21, d11, d21, atkr)
     ensures  atkr_entry(rd1, rd2, dispPg, atkr)
     ensures  enc_conf_eqpdb(rd1, rd2, atkr)
     ensures  enc_conf_eq_entry(r1, r2, rd1, rd2, atkr)
+    ensures OperandContents(r1, OLR) == OperandContents(r2, OLR)
+    ensures user_regs(r1.regs) == user_regs(r2.regs)
 {
 
     assert l1pOfDispatcher(d11, dispPg) == l1pOfDispatcher(d21, dispPg) by
@@ -505,6 +524,12 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         // // No idea how to prove anything about nd_*
         // assume enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
     }
+
+    // I think the OLR here is nonsensical and I'm not sure it makes sense to 
+    // use the PC value as part of the user state since we aren't really 
+    // modeling the PC...
+    assume OperandContents(r1, OLR) == OperandContents(r2, OLR);
+    assume user_regs(r1.regs) == user_regs(r2.regs);
 }
 
 //     lemma lemma_userExec_atkr_regs(s1:state, s1':state,s2:state, s2':state)
@@ -648,6 +673,106 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
 //         }
 //     }
 
+lemma lemma_userStatesEquiv_atkr_conf(
+s11: state, s1':state, s12: state, s14: state,
+pc1: word, pt1: Maybe<AbsPTable>, d1: PageDb,
+s21: state, s2':state, s22: state, s24: state,
+pc2: word, pt2: Maybe<AbsPTable>, d2: PageDb,
+dispPg: PageNr, atkr: PageNr, l1p: PageNr)
+    requires ValidState(s11) && ValidState(s12) && ValidState(s14)
+    requires ValidState(s21) && ValidState(s22) && ValidState(s24)
+    requires validPageDb(d1) && validPageDb(d2)
+    requires SaneConstants()
+    requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    requires enc_conf_eq_entry(s12, s22, d1, d2, atkr);
+    requires userspaceExecutionAndException'(s11, s1', s12, s14)
+    requires userspaceExecutionAndException'(s21, s2', s22, s24)
+    requires pc1 == OperandContents(s11, OLR) && pc2 == OperandContents(s21, OLR);
+    requires pt1 == ExtractAbsPageTable(s12) && pt2 == ExtractAbsPageTable(s22);
+    requires nonStoppedL1(d1, l1p) && nonStoppedL1(d2, l1p)
+    requires atkr_entry(d1, d2, dispPg, atkr)
+    requires l1pOfDispatcher(d1, dispPg) == l1pOfDispatcher(d2, dispPg) == l1p
+    requires !stoppedAddrspace(d1[atkr]) && !stoppedAddrspace(d2[atkr])
+    requires user_regs(s11.regs) == user_regs(s21.regs);
+    requires pc1 == pc2;
+    requires 
+        pageTableCorresponds(s12, d1, l1p) &&
+        pageTableCorresponds(s22, d2, l1p) &&
+        dataPagesCorrespond(s12.m, d1) &&
+        dataPagesCorrespond(s22.m, d2)
+    requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+        && d1[atkr].entry.l1ptnr == d2[atkr].entry.l1ptnr == l1p
+    requires pgInAddrSpc(d1, l1p, atkr) && pgInAddrSpc(d2, l1p, atkr)
+    ensures pt1.Just? && pt2.Just?
+    ensures  user_visible_state(s12, pc1, pt1.v) == user_visible_state(s22, pc2, pt2.v)
+{
+    assume false;
+    // assume user_regs(s12.regs) == user_regs(s22.regs);
+    // assume pc1 == pc2;
+    // assert pt1.Just? &&  pt2.Just? by
+    //     {  reveal userspaceExecutionFn(); }
+
+    // reveal userspaceExecutionFn();
+    // assert pt1.v == pt2.v by
+    // {  
+    //     lemma_eqpdb_pt_coresp(d1, d2, s12, s22, l1p, atkr);
+    // }
+
+    // assert AllPagesInTable(pt1.v) == AllPagesInTable(pt2.v);
+
+    assert user_mem(pt1.v, s12.m) == user_mem(pt2.v, s22.m) by {
+        assume false;
+        //  reveal pageTableCorresponds();
+        //  reveal enc_conf_eqpdb();
+        //  reveal validPageDb();
+        //  reveal mkAbsPTable();
+       
+        // This didn't even work.
+        // forall ( a: addr | ValidMem(a) && a in TheValidAddresses() &&
+        //     addrIsSecure(a) && PageBase(a) in AllPagesInTable(pt1.v))
+        //     ensures user_mem(pt1.v, s12.m)[a] == user_mem(pt2.v, s22.m)[a];
+        // {
+        //     assume false;
+        // }
+
+
+        // This didn't work anyway...
+        //// forall ( a: addr | ValidMem(a) && a in TheValidAddresses() &&
+        ////     addrIsSecure(a) && PageBase(a) in AllPagesInTable(pt1.v))
+        //// ensures s12.m.addresses[a] == s22.m.addresses[a]
+        //// {
+        ////     assume false;
+        ////     ///   reveal enc_conf_eqpdb();
+        ////     ///   reveal pageDbDataCorresponds();
+        ////     ///   
+        ////     ///   assume address_is_secure(PageBase(a));
+        ////     ///   var n := monvaddr_page(PageBase(a));
+
+        ////     ///   assert a in AllPagesInTable(mkAbsPTable(d1, l1p)) by {
+        ////     ///      assume false;
+        ////     ///   }
+        ////     ///   assert a in AllPagesInTable(mkAbsPTable(d2, l1p)) by {
+        ////     ///      assume false; 
+        ////     ///   }
+        ////     ///   lemma_PagesInTableAreDataPages(n,a,d1,l1p);
+        ////     ///   lemma_PagesInTableAreDataPages(n,a,d2,l1p);
+
+        ////     ///   // trigger i in pageDbDataCorresponds:
+        ////     ///   var i := (a - page_monvaddr(n)) / WORDSIZE;
+        ////     ///   assert d1[n].entry.contents[i] == d2[n].entry.contents[i];
+        //// }
+        // forall ( a: addr | ValidMem(a) && a in TheValidAddresses() &&
+        //     addrIsSecure(a) && PageBase(a) in AllPagesInTable(pt1.v))
+        // ensures user_mem(pt1.v, s12.m)[a] == s12.m.addresses[a];
+        // ensures user_mem(pt2.v, s22.m)[a] == s22.m.addresses[a];
+        // {
+        //     assume false;
+        // }
+    }
+
+}
+
 lemma lemma_userspaceExec_atkr_conf(
 s11: state, s1':state, s12: state, s13:state, s14: state, d1:PageDb, d14: PageDb,
 s21: state, s2':state, s22: state, s23:state, s24: state, d2:PageDb, d24: PageDb,
@@ -667,6 +792,8 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
     requires atkr_entry(d1, d2, dispPg, atkr)
     requires enc_conf_eqpdb(d1, d2, atkr)
     requires l1pOfDispatcher(d1, dispPg) == l1pOfDispatcher(d2, dispPg) == l1p
+    requires OperandContents(s11, OLR) == OperandContents(s21, OLR)
+    requires user_regs(s11.regs) == user_regs(s21.regs)
     requires 
         pageTableCorresponds(s12, d1, l1p) &&
         pageTableCorresponds(s22, d2, l1p) &&
@@ -706,20 +833,29 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
 
     var pc1 := OperandContents(s11, OLR);
     var pc2 := OperandContents(s21, OLR);
-    assume pc1 == pc2;
+    var pt1 := ExtractAbsPageTable(s12);
+    var pt2 := ExtractAbsPageTable(s22);
+    //assume pc1 == pc2;
 
-    assume ExtractAbsPageTable(s12).Just? && ExtractAbsPageTable(s22).Just?;
+    // assume ExtractAbsPageTable(s12).Just? && ExtractAbsPageTable(s22).Just?;
 
-    var pt1 := ExtractAbsPageTable(s12).v;
-    var pt2 := ExtractAbsPageTable(s22).v;
-    assert pt1 == pt2 by { 
-        assume false;
-    }
+    // var pt1 := ExtractAbsPageTable(s12).v;
+    // var pt2 := ExtractAbsPageTable(s22).v;
+    // assert pt1 == pt2 by { 
+    //     assume false;
+    // }
+    
+    lemma_userStatesEquiv_atkr_conf(
+        s11, s1', s12, s14, pc1, pt1, d1,
+        s21, s2', s22, s24, pc2, pt2, d2,
+        dispPg, atkr, l1p);
 
-    var user_state1 := user_visible_state(s12, pc1, pt1);
-    var user_state2 := user_visible_state(s22, pc2, pt2);
-    assume user_state1 == user_state2;
-    assume s12.nondet == s22.nondet;
+    
+    var user_state1 := user_visible_state(s12, pc1, pt1.v);
+    var user_state2 := user_visible_state(s22, pc2, pt2.v);
+    assert user_state1 == user_state2;
+    // assume user_state1 == user_state2;
+    // assume s12.nondet == s22.nondet;
     //-----------------------------------------------------------------------------
 
     forall( n : PageNr | pageSWrInAddrspace(d1, l1p, n))
