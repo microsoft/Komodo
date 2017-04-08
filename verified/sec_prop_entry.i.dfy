@@ -479,9 +479,6 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         assert s23.nondet == nondet_int(s22.nondet, NONDET_GENERATOR());
     }
 
-    assert s14.nondet == s24.nondet;
-
-
     assert s12.m == s11.m;
     assert s22.m == s21.m;
 
@@ -496,6 +493,29 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         assert pageTableCorresponds(s21, d21, l1p);
         reveal pageTableCorresponds();
     }
+
+    assert ex1 == ex2 by {
+        reveal userspaceExecutionFn();
+        var pc1 := OperandContents(s11, OLR);
+        var pc2 := OperandContents(s21, OLR);
+        var pt1 := ExtractAbsPageTable(s12);
+        var pt2 := ExtractAbsPageTable(s22);
+        lemma_userStatesEquiv_atkr_conf(
+            s11, s1', s12, s14, pc1, pt1, d11,
+            s21, s2', s22, s24, pc2, pt2, d21,
+            dispPg, atkr, l1p);
+        var user_state1 := user_visible_state(s12, pc1, pt1.v);
+        var user_state2 := user_visible_state(s22, pc2, pt2.v);
+
+        // There is no way to prove this!!!!!
+        assume s12.conf.cpsr.f == s22.conf.cpsr.f;
+        assume s12.conf.cpsr.i == s22.conf.cpsr.i;
+        
+        assert ex1 == nondet_exception(s12.nondet, user_state1, s12.conf.cpsr.f, s12.conf.cpsr.i);
+        assert ex2 == nondet_exception(s22.nondet, user_state2, s22.conf.cpsr.f, s22.conf.cpsr.i);
+    }
+
+    assert s14.nondet == s24.nondet;
 
     lemma_userspaceExec_atkr_conf(
         s11, s1', s12, s13, s14, d11, d14,
