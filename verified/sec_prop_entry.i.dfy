@@ -391,10 +391,6 @@ lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageD
         assert enc_conf_eq_entry(s1', s2', d1', d2', atkr);
     }
 
-    // TODO need to figure out how to prove these...
-    assume OperandContents(s1', OLR) == OperandContents(s2', OLR);
-    assume user_regs(s1'.regs) == user_regs(s2'.regs);
-
 }
 
 lemma lemma_validEnclaveStep_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageDb,
@@ -465,23 +461,6 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
     assert userspaceExecutionAndException(s11, s14);
     assert userspaceExecutionAndException(s21, s24);
 
-
-    // // avoid proving anything about nd sources...
-    // assert enc_conf_eq_entry(s12, s22, d11, d21, atkr) by
-    // {
-    //     assume false;
-    // }
-
-    // // avoid proving anything about nd sources...
-    // assert enc_conf_eq_entry(s14, s24, d14, d24, atkr) by
-    // {
-    //     assume false;
-    // }
-    // */
-    
-    // var (s12, s13, expc1, ex1, s14') := userExecutionModelSteps(s11);
-    // var (s22, s23, expc2, ex2, s24') := userExecutionModelSteps(s21);
-
     reveal userspaceExecutionAndException();
 
     var s1', s12 :| userspaceExecutionAndException'(s11, s1', s12, s14);
@@ -492,6 +471,15 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
     
     var (s13, expc1, ex1) := userspaceExecutionFn(s12, pc1);
     var (s23, expc2, ex2) := userspaceExecutionFn(s22, pc2);
+
+    assert s13.nondet == s23.nondet by
+    {
+        reveal userspaceExecutionFn();
+        assert s13.nondet == nondet_int(s12.nondet, NONDET_GENERATOR());
+        assert s23.nondet == nondet_int(s22.nondet, NONDET_GENERATOR());
+    }
+
+    assert s14.nondet == s24.nondet;
 
 
     assert s12.m == s11.m;
@@ -513,17 +501,15 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         s11, s1', s12, s13, s14, d11, d14,
         s21, s2', s22, s23, s24, d21, d24,
         dispPg, atkr, l1p);
-    
-    
-    //lemma_userspaceExec_atkr_conf(s12, s13, d11, s22, s23, d21, dispPg, atkr);
 
     if(retToEnclave) {
-        assume false;
-        // assert rd1 == d14;
-        // assert rd2 == d24;
-        // assert enc_conf_eqpdb(rd1, rd2, atkr);
-        // // No idea how to prove anything about nd_*
-        // assume enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
+        assert rd1 == d14;
+        assert rd2 == d24;
+        // XXX Can't prove this from entry.s:
+        assume r1.nondet == s14.nondet;
+        assume r2.nondet == s24.nondet;
+        assert enc_conf_eqpdb(rd1, rd2, atkr);
+        assert enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
     } else {
         assume false;
         // lemma_userExecAndExcp_atkr_regs(s12, s13, s14, s22, s23, s24);
