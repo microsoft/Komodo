@@ -39,7 +39,8 @@ CPSID_IAF(operand mod:word)
         CoreRegPreservingExcept(old(this), this, set(OSP, OLR)); // banked
         forall m :: m != mode_of_exception(old(this).conf, ExIRQ)
             && m != mode_of_exception(old(this).conf, ExFIQ)
-            ==> old(this).regs[LR(m)] == this.regs[LR(m)];
+            ==> old(this).regs[LR(m)] == this.regs[LR(m)]
+              && old(this).regs[SP(m)] == this.regs[SP(m)];
 {
     reveal va_eval;
     exists s' :: maybeHandleInterrupt(old(this), s') && evalIns'(CPSID_IAF(@mod), s', this);
@@ -55,6 +56,7 @@ procedure {:frame false} switch_to_monitor(inline oldmode:mode)
         cpsr; lr; /* spsr_mon; */
     reads
         /* spsr_svc; spsr_abt; spsr_und; */ lr_svc; lr_abt; lr_und;
+        lr_usr; sp_usr;
     requires
         InterruptContinuationPrecondition(this);
         InterruptContinuationInvariantDef();
@@ -70,6 +72,7 @@ procedure {:frame false} switch_to_monitor(inline oldmode:mode)
         NonStackMemPreserving(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp()));
         CoreRegPreservingExcept(old(this), this, set(OSP, OLR)); // banked
+        lr_usr == old(lr_usr) && sp_usr == old(sp_usr);
         //spsr_of_state(this) == spsr_of_state(old(this));
         lr == OperandContents(old(this), OLR);
         this.conf.ttbr0 == old(this).conf.ttbr0;
@@ -189,7 +192,7 @@ procedure svc_returning(
         lr == old(lr);
         StackPreserving(old(this), this);
         NonStackMemPreserving(old(this), this);
-        preEntryReturn(this, old(lr), svcHandled(exstate, pagedb, dispPg));
+        preEntryReturn(old(this), this, svcHandled(exstate, pagedb, dispPg));
 {
     assert svcHandled(exstate, pagedb, dispPg) == tuple(KOM_ERR_INVALID,0,0,0,0,0,0,0,0);
 
@@ -234,10 +237,17 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
         ORR(sp, sp, 1); // report that we're done
     } else {
         assert isReturningSvc(old(this));
+
+        // sigh. trigger OReg(x) to see CoreRegPreservingExcept
+        assert r9 == OperandContents(this, OReg(R9)) == old(r9);
+        assert r10 == OperandContents(this, OReg(R10)) == old(r10);
+        assert r11 == OperandContents(this, OReg(R11)) == old(r11);
+        assert r12 == OperandContents(this, OReg(R12)) == old(r12);
+        assert lr_usr == old(lr_usr) && sp_usr == old(sp_usr);
+
         pagedb := pagedb_in;
         svc_returning(old(this), EXCEPTION_STACK_BYTES, pagedb, dispPg);
-        assert preEntryReturn(this, OperandContents(old(this), OLR),
-                              svcHandled(old(this), pagedb, dispPg));
+        assert preEntryReturn(old(this), this, svcHandled(old(this), pagedb, dispPg));
     }
 
     assert validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg)

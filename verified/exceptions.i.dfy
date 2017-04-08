@@ -117,6 +117,7 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
     ensures forall m :: m != mode_of_exception(s.conf, ExIRQ)
             && m != mode_of_exception(s.conf, ExFIQ)
             ==> s.regs[LR(m)] == r.regs[LR(m)]
+                && s.regs[SP(m)] == r.regs[SP(m)]
 {
     var nondet := nondet_word(s.nondet, NONDET_EX());
     if !interrupts_enabled(s) {
@@ -133,6 +134,7 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
         lemma_InterruptContinuationInvariantDef(s1, s2);
         forall m | m != mode_of_exception(s'.conf, ex)
             ensures s.regs[LR(m)] == r.regs[LR(m)]
+            ensures s.regs[SP(m)] == r.regs[SP(m)]
         {
             calc {
                 s.regs[LR(m)];
@@ -140,6 +142,13 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
                 s1.regs[LR(m)];
                 s2.regs[LR(m)];
                 r.regs[LR(m)];
+            }
+            calc {
+                s.regs[SP(m)];
+                s'.regs[SP(m)];
+                s1.regs[SP(m)];
+                s2.regs[SP(m)];
+                r.regs[SP(m)];
             }
         }
         calc {

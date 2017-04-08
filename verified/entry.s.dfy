@@ -95,9 +95,8 @@ predicate validEnclaveExecutionStep'(s1:state, d1:PageDb,
         && validExceptionTransition(s4, d4, rs, rd, dispPg)
         && isReturningSvc(s4) == retToEnclave
         && (if retToEnclave then
-            var lr := OperandContents(s4, OLR);
             var retRegs := svcHandled(s4, d4, dispPg);
-            d4 == rd && preEntryReturn(rs, lr, retRegs)
+            d4 == rd && preEntryReturn(s4, rs, retRegs)
           else reveal_ValidRegState();
             (rs.regs[R0], rs.regs[R1], rd) == exceptionHandled(s4, d4, dispPg))
 }
@@ -182,6 +181,7 @@ predicate preEntryEnter(s:state,s':state,d:PageDb,
 
     s.nondet == s'.nondet && preEntryCommon(s', d, dispPage)
     && s'.regs[R0] == a1 && s'.regs[R1] == a2 && s'.regs[R2] == a3
+    && (forall r | r in (USER_REGS() - {R0, R1, R2}) :: s'.regs[r] == 0)
     && OperandContents(s', OLR) == d[dispPage].entry.entrypoint
     && (reveal_ValidSRegState();
         s'.sregs[spsr(mode_of_state(s'))] == encode_mode(User))
@@ -202,45 +202,39 @@ predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
     var l1p := l1pOfDispatcher(d, dispPage);
     
     s.nondet == s'.nondet && preEntryCommon(s', d, dispPage)
-    && (reveal_ValidRegState(); 
-    s'.regs[R0] == disp.ctxt.regs[R0] &&
-    s'.regs[R1] == disp.ctxt.regs[R1] &&
-    s'.regs[R2] == disp.ctxt.regs[R2] &&
-    s'.regs[R3] == disp.ctxt.regs[R3] &&
-    s'.regs[R4] == disp.ctxt.regs[R4] &&
-    s'.regs[R5] == disp.ctxt.regs[R5] &&
-    s'.regs[R6] == disp.ctxt.regs[R6] &&
-    s'.regs[R7] == disp.ctxt.regs[R7] &&
-    s'.regs[R8] == disp.ctxt.regs[R8] &&
-    s'.regs[R9] == disp.ctxt.regs[R9] &&
-    s'.regs[R10] == disp.ctxt.regs[R10] &&
-    s'.regs[R11] == disp.ctxt.regs[R11] &&
-    s'.regs[R12] == disp.ctxt.regs[R12] &&
-    s'.regs[LR(User)] == disp.ctxt.regs[LR(User)] &&
-    s'.regs[SP(User)] == disp.ctxt.regs[SP(User)]) &&
-    OperandContents(s', OLR) == disp.ctxt.pc &&
-
-    (reveal_ValidSRegState();
-    s'.sregs[spsr(Monitor)] == disp.ctxt.cpsr)
+    && (reveal_ValidRegState();
+        forall r | r in USER_REGS() :: s'.regs[r] == disp.ctxt.regs[r])
+    && OperandContents(s', OLR) == disp.ctxt.pc
+    && (reveal_ValidSRegState();
+        s'.sregs[spsr(Monitor)] == disp.ctxt.cpsr)
 }
 
-predicate preEntryReturn(s:state,lr:word,regs:SvcReturnRegs)
-    requires ValidState(s)
+predicate preEntryReturn(exs:state, s:state, retregs:SvcReturnRegs)
+    requires ValidState(exs) && ValidState(s)
 {
     reveal_ValidRegState();
     mode_of_state(s) == Monitor
-    && OperandContents(s, OLR) == lr
+    // returning to same PC
+    && OperandContents(s, OLR) == OperandContents(exs, OLR)
     && (reveal_ValidSRegState();
         s.sregs[spsr(mode_of_state(s))] == encode_mode(User))
-    && s.regs[R0] == regs.0
-    && s.regs[R1] == regs.1
-    && s.regs[R2] == regs.2
-    && s.regs[R3] == regs.3
-    && s.regs[R4] == regs.4
-    && s.regs[R5] == regs.5
-    && s.regs[R6] == regs.6
-    && s.regs[R7] == regs.7
-    && s.regs[R8] == regs.8
+    // R0-R8 return values
+    && s.regs[R0] == retregs.0
+    && s.regs[R1] == retregs.1
+    && s.regs[R2] == retregs.2
+    && s.regs[R3] == retregs.3
+    && s.regs[R4] == retregs.4
+    && s.regs[R5] == retregs.5
+    && s.regs[R6] == retregs.6
+    && s.regs[R7] == retregs.7
+    && s.regs[R8] == retregs.8
+    // other user regs preserved
+    && s.regs[R9] == exs.regs[R9]
+    && s.regs[R10] == exs.regs[R10]
+    && s.regs[R11] == exs.regs[R11]
+    && s.regs[R12] == exs.regs[R12]
+    && s.regs[LR(User)] == exs.regs[LR(User)]
+    && s.regs[SP(User)] == exs.regs[SP(User)]
 }
 
 predicate equivStates(s1:state, s2:state)

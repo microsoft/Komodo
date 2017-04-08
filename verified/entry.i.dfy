@@ -171,7 +171,7 @@ predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr)
     && pageDbCorresponds(r.m, rd)
     && (if retToEnclave
        then rsp == ssp
-        && preEntryReturn(r, OperandContents(s, OLR), svcHandled(s, sd, dp))
+        && preEntryReturn(s, r, svcHandled(s, sd, dp))
        else rsp == BitwiseOr(ssp, 1)
         && (r.regs[R0], r.regs[R1], rd) == exceptionHandled(s, sd, dp))
 }
@@ -608,7 +608,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
         assert ssp == rsp;
         rd := d4;
         assert spsr_of_state(r).m == User by {
-            assert preEntryReturn(r, OperandContents(s4, OLR), svcHandled(s4, d4, dispPg));
+            assert preEntryReturn(s4, r, svcHandled(s4, d4, dispPg));
             assert (reveal_ValidSRegState();
                         r.sregs[spsr(mode_of_state(r))] == encode_mode(User));
             assert decode_mode(psr_mask_mode(encode_mode(User))) == User by {

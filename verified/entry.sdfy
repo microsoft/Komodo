@@ -564,7 +564,8 @@ procedure pre_entry_enter(
     reads
         mem;
     modifies
-        globals; scr; ttbr0; spsr_mon; r0; r1; r2; r10; r11; r12; lr;
+        globals; scr; ttbr0; spsr_mon;
+        r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr; lr_usr; sp_usr;
     ensures
         GlobalsPreservingExcept(old(this), this, set(CurDispatcherOp()));
         GlobalWord(this.m, CurDispatcherOp(), 0) == page_monvaddr(old(pagenr));
@@ -626,12 +627,24 @@ procedure pre_entry_enter(
     STRglobal(r10, CurDispatcherOp(), r12, 0);
 
     //-------------------------------------------------------------------------
-    //  Move arguments to regs
+    //  Move arguments to regs, zero the rest
     //-------------------------------------------------------------------------
     r0 := arg1;
     r1 := arg2;
     r2 := arg3;
-    // XXX: TODO (also in spec): zero other regs!
+    r3 := 0;
+    r4 := 0;
+    r5 := 0;
+    r6 := 0;
+    r7 := 0;
+    r8 := 0;
+    r9 := 0;
+    r10 := 0;
+    r11 := 0;
+    r12 := 0;
+    MSR(sp_usr, r12);
+    MSR(lr_usr, r12);
+
     //-------------------------------------------------------------------------
     lemma_SameMemAndGlobalsPreservesPageDb'(old(this), this, pagedb);
 }
