@@ -171,7 +171,7 @@ ensures
     SUB(sp, sp, 64);      // Make room for the final 256-bit input buffer
 
     //STR(0x80, sp, 0);
-    MOV(r3, 0x80);
+    MOV(r3, 0x80000000);
     STR(r3, sp, const(0*WORDSIZE));
 
     // Fill sp buffer with 0s
@@ -193,10 +193,9 @@ ensures
 
     // Store the length
     //STR(r2, sp, 60);
-    REV(r2, r2);  // bswap the length, so it'll be treated correctly when SHA bswaps it again
     STR(r2, sp, const(15*WORDSIZE));
 
-    assert AddrMemContents(mem, sp + 15*WORDSIZE) == bswap32(length_in_bits);
+    assert AddrMemContents(mem, sp + 15*WORDSIZE) == length_in_bits;
 
     // Parameters to sha256_block_data_order
     // r0 is already set to ctx
@@ -204,7 +203,7 @@ ensures
     MOV(r2, 1);     // num_blocks
 
     // Compute one last compression
-    ghost var last_block := seq(0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, bswap32(length_in_bits));
+    ghost var last_block := seq(0x80000000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, length_in_bits);
 
     assert ValidAddrMemStateOpaque(mem); 
     ghost var trace_out;
@@ -214,9 +213,9 @@ ensures
     assert SeqSlice(trace_out.M, 0, SeqLength(trace_in.M)) == trace_in.M;
     assert SeqLength(trace_out.M) == 1 + SeqLength(trace_in.M);
 
-    assert trace_out.M[SeqLength(trace_in.M) + 0] == bswap32_seq(SeqSlice(last_block, 0*SHA_BLOCKSIZE, (0+1)*SHA_BLOCKSIZE));
-    assert trace_out.M[SeqLength(trace_in.M)] == bswap32_seq(SeqSlice(last_block, 0, SHA_BLOCKSIZE))
-                                              == bswap32_seq(last_block);
+    assert trace_out.M[SeqLength(trace_in.M) + 0] == SeqSlice(last_block, 0*SHA_BLOCKSIZE, (0+1)*SHA_BLOCKSIZE);
+    assert trace_out.M[SeqLength(trace_in.M)] == SeqSlice(last_block, 0, SHA_BLOCKSIZE)
+                                              == last_block;
 
     ghost var last_block_bytes := SHA_padding_words2bytes(last_block, length_in_bits);
     ghost var M_in_bytes := WordSeqToBytes(ConcatenateSeqs(trace_in.M));
@@ -254,7 +253,7 @@ const STACKSIZE_SHA_ONE_SHOT:int := 3 + STACKSIZE_SHA_FINALIZE;    // Need 3 mor
 #endverbatim
 
 
-procedure {:refined} sha256_one_shot() 
+procedure {:refined}{:bridge} sha256_one_shot() 
 requires/ensures
     ValidAddrMemStateOpaque(mem);
 requires {:refined false}
@@ -327,7 +326,7 @@ ensures
                     AddrMemContents(mem, r0 + 5*WORDSIZE),
                     AddrMemContents(mem, r0 + 6*WORDSIZE),
                     AddrMemContents(mem, r0 + 7*WORDSIZE)) in
-    IsSHA256(WordSeqToBytes(bswap32_seq(AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * old(r2)))), hash);
+    IsSHA256(WordSeqToBytes(AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * old(r2))), hash);
 {
   ghost var ctx := r0; 
   ghost var input_ptr := r1;
@@ -350,12 +349,12 @@ ensures
   trace := sha256_block_data_order(trace, input);
 
   // Annoying forall that shouldn't be necessary
-  forall i :| 0 <= i < SeqLength(trace.M) :: trace.M[i] == bswap32_seq(SeqSlice(input, i*16, (i+1)*16))
+  forall i :| 0 <= i < SeqLength(trace.M) :: trace.M[i] == SeqSlice(input, i*16, (i+1)*16)
   {
     assert trace.M[i] == trace.M[0 + i];
-    assert bswap32_seq(SeqSlice(input, i*16, (i+1)*16)) == bswap32_seq(SeqSlice(input, i*SHA_BLOCKSIZE, (i+1)*SHA_BLOCKSIZE));
+    assert SeqSlice(input, i*16, (i+1)*16) == SeqSlice(input, i*SHA_BLOCKSIZE, (i+1)*SHA_BLOCKSIZE);
   }
-  lemma_InputHelper(trace.M, input); // Proves: ConcatenateSeqs(trace.M) == bswap_seq(input);
+  lemma_InputHelper(trace.M, input); // Proves: ConcatenateSeqs(trace.M) == input;
 
   // Prove that input still accurate in memory
   assert input == AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * old(r2)) by { 
@@ -399,6 +398,6 @@ ensures
                     AddrMemContents(mem, r0 + 5*WORDSIZE),
                     AddrMemContents(mem, r0 + 6*WORDSIZE),
                     AddrMemContents(mem, r0 + 7*WORDSIZE));
-  assert IsSHA256(WordSeqToBytes(bswap32_seq(input)), hash);
+  assert IsSHA256(WordSeqToBytes(input), hash);
 }
 

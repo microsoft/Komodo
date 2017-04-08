@@ -115,7 +115,7 @@ ensures
     SeqLength(trace_out.M) == SeqLength(trace_in.M) + old(r2);
     trace_in.M == SeqSlice(trace_out.M, 0, SeqLength(trace_in.M));  // trace_in.M is a prefix of trace_out.M
     (forall i :: 0 <= i < old(r2)
-      ==> trace_out.M[SeqLength(trace_in.M) + i] == bswap32_seq(SeqSlice(input, i*16, (i+1)*16))) ;
+      ==> trace_out.M[SeqLength(trace_in.M) + i] == SeqSlice(input, i*16, (i+1)*16)) ;
     last(trace_out.H)[0] == AddrMemContents(mem, old(r0) + 0*WORDSIZE);
     last(trace_out.H)[1] == AddrMemContents(mem, old(r0) + 1*WORDSIZE);
     last(trace_out.H)[2] == AddrMemContents(mem, old(r0) + 2*WORDSIZE);
@@ -278,7 +278,7 @@ ensures
     SeqLength(trace_out.M) == SeqLength(trace_in.M) + old(r2);
     trace_in.M == SeqSlice(trace_out.M, 0, SeqLength(trace_in.M));  // trace_in.M is a prefix of trace_out.M
     (forall i :: 0 <= i < old(r2) 
-      ==> trace_out.M[SeqLength(trace_in.M) + i] == bswap32_seq(SeqSlice(input, i*SHA_BLOCKSIZE, (i+1)*SHA_BLOCKSIZE)));
+      ==> trace_out.M[SeqLength(trace_in.M) + i] == SeqSlice(input, i*SHA_BLOCKSIZE, (i+1)*SHA_BLOCKSIZE));
     last(trace_out.H)[0] == AddrMemContents(mem, old(r0) + 0*WORDSIZE);
     last(trace_out.H)[1] == AddrMemContents(mem, old(r0) + 1*WORDSIZE);
     last(trace_out.H)[2] == AddrMemContents(mem, old(r0) + 2*WORDSIZE);

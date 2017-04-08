@@ -74,7 +74,7 @@ predicate BlockInvariant(
  && old_trace.M == trace.M[0..|old_trace.M|]  // old_trace.M is a prefix of trace.M
  && |trace.M| == old_M_len + block
  && (forall i :: 0 <= i < block 
-             ==> trace.M[old_M_len + i] == bswap32_seq(input[i*16..(i+1)*16])) 
+             ==> trace.M[old_M_len + i] == input[i*16..(i+1)*16]) 
 
  // Globals properties
  && SaneShaGlobal(globals)

@@ -81,8 +81,8 @@ requires
     IsSHA256TraceReadyForStep(trace_in, i);
     last(last(trace_in.atoh)) == atoh_c(BitwiseAdd32(a, t2), b, c, d, e, f, g, h);
 
-    // The first 16 values in W are the byte-swapped version of the input words
-    forall j :: 0 <= j < 16 ==> last(trace_in.W)[j] == bswap32(input[j]);
+    // The first 16 values in W are the input words
+    forall j :: 0 <= j < 16 ==> last(trace_in.W)[j] == input[j];
 
     // All previous Ws are in memory where we expect them
     16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(trace_in.W)[j] == AddrMemContents(mem, sp + CheapMod16(j)*WORDSIZE));
@@ -213,8 +213,8 @@ predicate {:opaque} Body_16_XXLoopStateInvariantBreakdown(
  && current_trace.W == orig_trace.W
  && last(last(current_trace.atoh)) == atoh_c(BitwiseAdd32(a, t2), b, c, d, e, f, g, h)
 
-    // The first 16 values in W are the byte-swapped version of the input words
- && (forall j :: 0 <= j < 16 ==> last(current_trace.W)[j] == bswap32(input[j]))
+    // The first 16 values in W are the input words
+ && (forall j :: 0 <= j < 16 ==> last(current_trace.W)[j] == input[j])
 
     // All previous Ws are in memory where we expect them
  && (16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(current_trace.W)[j] == AddrMemContents(mem, sp + CheapMod16(j)*WORDSIZE)))

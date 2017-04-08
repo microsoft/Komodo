@@ -598,14 +598,12 @@ lemma lemma_SHA256FinalHelper1(
 //*/
 
 lemma convert_0x80()
-    ensures WordSeqToBytes([bswap32(0x80)]) == [0x80, 0, 0, 0];
+    ensures WordSeqToBytes([0x80000000]) == [0x80, 0, 0, 0];
 {
     calc { 
-        WordSeqToBytes([bswap32(0x80)]);
-        WordToBytes(bswap32(0x80));
-            { bswap32_on_byte(0x80); }
-        WordToBytes(BytesToWord(0x80, 0, 0, 0));
-            { lemma_BytesToWord_WordToBytes_inverses(0x80, 0, 0, 0); }
+        WordSeqToBytes([0x80000000]);
+        WordToBytes(0x80000000);
+            { lemma_implode8_WordToBytes(0x80, 0, 0, 0); }
         [0x80, 0, 0, 0];
     }
 }
@@ -614,46 +612,42 @@ lemma convert_0x80()
 //lemma length_to_bytes(length:word)
 //    ensures WordSeqToBytes(bswap32_seq([0, length])) == Uint64ToBytes(length);
 
+lemma length_to_bytes_simple(length:word)
+    ensures WordSeqToBytes([0, length]) == Uint64ToBytes(length);
+{
+    assert{:fuel WordSeqToBytes, 2} WordSeqToBytes([0, length]) == WordToBytes(0) + WordToBytes(length);
+    lemma_implode32_Uint64ToBytes(0, length);
+}
+
+
 ghost method SHA_padding_words2bytes(words:seq<word>, length:word) returns (bytes:seq<byte>)
     requires |words| == 16;
-    requires words[0] == 0x80;
+    requires words[0] == 0x80000000;
     requires forall i :: 1 <= i < 15 ==> words[i] == 0;
-    requires words[15] == bswap32(length);
+    requires words[15] == length;
     ensures |bytes| == 64;
     ensures bytes[0] == 0x80;
     ensures bytes[1..56] == RepeatByte(0, 55);
     ensures bytes[56..64] == Uint64ToBytes(length);
-    ensures WordSeqToBytes(bswap32_seq(words)) == bytes;
+    ensures WordSeqToBytes(words) == bytes;
 {
     bytes := [0x80] + RepeatByte(0, 55) + Uint64ToBytes(length);
     calc {
-        WordSeqToBytes(bswap32_seq(words));
-        WordToBytes(bswap32_seq(words)[0]) + WordSeqToBytes(bswap32_seq(words)[1..]);
-            calc {
-                bswap32_seq(words)[0];
-                    { reveal_bswap32_seq(); }
-                bswap32(words[0]);
-                bswap32(0x80);
-            }
-        WordToBytes(bswap32(0x80)) + WordSeqToBytes(bswap32_seq(words)[1..]);
-            { bswap32_seq_indexing(words, 1, |bswap32_seq(words)|); assert bswap32_seq(words)[1..] == bswap32_seq(words[1..]); }
-        WordToBytes(bswap32(0x80)) + WordSeqToBytes(bswap32_seq(words[1..]));
-            { bswap32_seq_adds(words[1..14], words[14..]); assert words[1..] == words[1..14] + words[14..]; }
-        WordToBytes(bswap32(0x80)) + WordSeqToBytes(bswap32_seq(words[1..14]) + bswap32_seq(words[14..]));
-            { lemma_WordSeqToBytes_adds(bswap32_seq(words[1..14]), bswap32_seq(words[14..])); }
-        WordToBytes(bswap32(0x80)) + WordSeqToBytes(bswap32_seq(words[1..14])) + WordSeqToBytes(bswap32_seq(words[14..]));
-            { bswap32_seq_on_zero(words[1..14]); }
-        WordToBytes(bswap32(0x80)) + WordSeqToBytes(words[1..14]) + WordSeqToBytes(bswap32_seq(words)[14..]);
+        WordSeqToBytes(words);
+        WordToBytes(words[0]) + WordSeqToBytes(words[1..]);
+        WordToBytes(0x80000000) + WordSeqToBytes(words[1..]);
+            { assert words[1..] == words[1..14] + words[14..]; }
+        WordToBytes(0x80000000) + WordSeqToBytes(words[1..14] + words[14..]);
+            { lemma_WordSeqToBytes_adds(words[1..14], words[14..]); }
+        WordToBytes(0x80000000) + WordSeqToBytes(words[1..14]) + WordSeqToBytes(words[14..]);
             { WordSeqToBytes_on_zero(words[1..14]); }
-        WordToBytes(bswap32(0x80)) + RepeatByte(0, 13*4) + WordSeqToBytes(bswap32_seq(words)[14..]);
-        WordToBytes(bswap32(0x80)) + RepeatByte(0, 52) + WordSeqToBytes(bswap32_seq(words)[14..]);
-            { bswap32_seq_indexing(words, 14, |bswap32_seq(words)|); }
-        WordToBytes(bswap32(0x80)) + RepeatByte(0, 52) + WordSeqToBytes(bswap32_seq(words[14..]));
-        WordToBytes(bswap32(0x80)) + RepeatByte(0, 52) + WordSeqToBytes(bswap32_seq([words[14], words[15]]));
-        WordToBytes(bswap32(0x80)) + RepeatByte(0, 52) + WordSeqToBytes(bswap32_seq([0, bswap32(length)]));
-            { length_to_bytes(length); }
-        WordToBytes(bswap32(0x80)) + RepeatByte(0, 52) + Uint64ToBytes(length);
-        WordToBytes(bswap32(0x80)) + RepeatByte(0, 52) + bytes[56..64];
+        WordToBytes(0x80000000) + RepeatByte(0, 13*4) + WordSeqToBytes(words[14..]);
+        WordToBytes(0x80000000) + RepeatByte(0, 52) + WordSeqToBytes(words[14..]);
+        WordToBytes(0x80000000) + RepeatByte(0, 52) + WordSeqToBytes([words[14], words[15]]);
+        WordToBytes(0x80000000) + RepeatByte(0, 52) + WordSeqToBytes([0, length]);
+            { length_to_bytes_simple(length); }
+        WordToBytes(0x80000000) + RepeatByte(0, 52) + Uint64ToBytes(length);
+        WordToBytes(0x80000000) + RepeatByte(0, 52) + bytes[56..64];
             { convert_0x80(); }
         [0x80, 0, 0, 0] + RepeatByte(0, 52) + bytes[56..64];
         [0x80] + [0, 0, 0] + RepeatByte(0, 52) + bytes[56..64];
@@ -724,21 +718,20 @@ lemma lemma_Trace_stitching(M:seq<seq<word>>, M':seq<seq<word>>, words:seq<word>
     requires forall i :: 0 <= i < |M| ==> |M[i]| == 16;
     requires |M'| == |M| + 1;
     requires M'[0..|M|] == M;
-    requires M'[|M|] == bswap32_seq(words);
-    requires bytes == WordSeqToBytes(bswap32_seq(words)); 
+    requires M'[|M|] == words;
+    requires bytes == WordSeqToBytes(words); 
     ensures  WordSeqToBytes(ConcatenateSeqs(M')) == WordSeqToBytes(ConcatenateSeqs(M)) + bytes;
 {
-    var swap_words := bswap32_seq(words);
     calc {
         WordSeqToBytes(ConcatenateSeqs(M'));
-            { assert M' == M + [swap_words]; }
-        WordSeqToBytes(ConcatenateSeqs(M + [swap_words]));
-            { lemma_ConcatenateSeqs_Adds(M, [swap_words]); }
-        WordSeqToBytes(ConcatenateSeqs(M) + ConcatenateSeqs([swap_words]));
-            { assert ConcatenateSeqs([swap_words]) == swap_words; }
-        WordSeqToBytes(ConcatenateSeqs(M) + swap_words);
-            { lemma_WordSeqToBytes_adds(ConcatenateSeqs(M), swap_words); }
-        WordSeqToBytes(ConcatenateSeqs(M)) + WordSeqToBytes(swap_words);
+            { assert M' == M + [words]; }
+        WordSeqToBytes(ConcatenateSeqs(M + [words]));
+            { lemma_ConcatenateSeqs_Adds(M, [words]); }
+        WordSeqToBytes(ConcatenateSeqs(M) + ConcatenateSeqs([words]));
+            { assert ConcatenateSeqs([words]) == words; }
+        WordSeqToBytes(ConcatenateSeqs(M) + words);
+            { lemma_WordSeqToBytes_adds(ConcatenateSeqs(M), words); }
+        WordSeqToBytes(ConcatenateSeqs(M)) + WordSeqToBytes(words);
         WordSeqToBytes(ConcatenateSeqs(M)) + bytes;
     }
 }
@@ -814,15 +807,14 @@ ghost method ComputeWs(input:seq<word>) returns (W:seq<word>)
 lemma lemma_InputHelper(M:seq<seq<word>>, input:seq<word>)
     requires forall i :: 0 <= i < |M| ==> |M[i]| == 16;
     requires |input| == |M| * 16;
-    requires forall i :: 0 <= i < |M| ==> M[i] == bswap32_seq(input[i*16..(i+1)*16]);
-    ensures  ConcatenateSeqs(M) == bswap32_seq(input);
+    requires forall i :: 0 <= i < |M| ==> M[i] == input[i*16..(i+1)*16];
+    ensures  ConcatenateSeqs(M) == input;
 {
-    reveal_bswap32_seq();
     if input == [] {
     } else {
         var M', input' := M[1..], input[16..];
         assert |M'| == |M| - 1 && |input'| == |input| - 16;
-        assert forall i :: 0 <= i < |M'| ==> M'[i] == bswap32_seq(input'[i*16..(i+1)*16]);
+        assert forall i :: 0 <= i < |M'| ==> M'[i] == input'[i*16..(i+1)*16];
         lemma_InputHelper(M', input');
     }
 }

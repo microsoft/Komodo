@@ -139,7 +139,7 @@ requires
     t1 == (if (i < SHA_BLOCKSIZE) then input[i] else last(trace_in.W)[i]);
 
     // The first 16 values in W are the byte-swapped version of the input words
-    forall j :: 0 <= j < SHA_BLOCKSIZE ==> last(trace_in.W)[j] == bswap32(input[j]);
+    forall j :: 0 <= j < SHA_BLOCKSIZE ==> last(trace_in.W)[j] == input[j];
 
     // All previous Ws are in memory where we expect them
     WsMatchMemory(trace_in, i, sp, mem);
@@ -193,7 +193,7 @@ ensures
             ADDWrap(a, a, t2);  // h += Maj(a,b,c) from the past?
         }
         EORShift(t0, t0, e, RORShift(Sigma1(2) - Sigma1(0)));   // Sigma1(e)
-        REV(t1, t1);
+        //REV(t1, t1);
     }
 
     assert if (i == SHA_BLOCKSIZE - 1)
@@ -237,7 +237,7 @@ ensures
     EORShift(t0, a, a, RORShift(Sigma0(1) - Sigma0(0)));
     ADDWrap(h, h, t1);  // h += Ch(e,f,g)
 
-    ghost var old_t1 := if i < SHA_BLOCKSIZE then bswap32(old(t1)) else old(t1);
+    ghost var old_t1 := old(t1);
     assert h == BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(BitwiseAdd32(old(h), old_t1), BSIG1(e)), K_SHA256(i)), Ch(e, f, g));
     lemma_BitwiseAdd32Associates5(old(h), old_t1, BSIG1(e), K_SHA256(i), Ch(e, f, g), h);
 
@@ -406,8 +406,8 @@ predicate Body_00_15LoopStateInvariantBreakdown(
     // t1 holds the current value of W
  && t1 == (if (i < 16) then input[i] else if i + 1 <= 64 then AddrMemContents(mem, sp + CheapMod16(i+1)*WORDSIZE) else last(current_trace.W)[i])
 
-    // The first 16 values in W are the byte-swapped version of the input words
- && (forall j :: 0 <= j < 16 ==> last(current_trace.W)[j] == bswap32(input[j]))
+    // The first 16 values in W are the input words
+ && (forall j :: 0 <= j < 16 ==> last(current_trace.W)[j] == input[j])
 
     // All previous Ws are in memory where we expect them
  && (16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(current_trace.W)[j] == AddrMemContents(mem, sp + CheapMod16(j)*WORDSIZE)))
