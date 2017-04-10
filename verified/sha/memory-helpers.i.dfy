@@ -2,7 +2,7 @@ include "../ARMdef.dfy"
 include "../ARMspartan.dfy"
 include "sha256-invariants.i.dfy"
 
-lemma lemma_ValidMemRange_offset(base:int, count:nat)
+lemma lemma_ValidMemRange_offset_word(base:int, count:nat)
     requires ValidMemRange(base, base + count * WORDSIZE);
     ensures  count > 1 ==> ValidMemRange(base + WORDSIZE, base + WORDSIZE + (count - 1) * WORDSIZE);
 {
@@ -15,6 +15,22 @@ lemma lemma_ValidMemRange_offset(base:int, count:nat)
     //assert ValidMem(limit);
 }
 
+lemma lemma_ValidMemRange_offset(base:int, count:nat, count':nat)
+    requires ValidMemRange(base, base + count * WORDSIZE);
+    requires count' < count;
+    ensures  ValidMemRange(base + count'*WORDSIZE, base + (count - count') * WORDSIZE);
+{
+    var offset := base + count'*WORDSIZE;
+    var limit := base + WORDSIZE + (count - count') * WORDSIZE;
+    assert WordAligned(offset);
+    if count' == 0 {
+    } else {
+        lemma_ValidMemRange_offset(base, count, count' - 1);
+        assert ValidMemRange(base + (count' - 1)*WORDSIZE, base + (count - count' + 1) * WORDSIZE);
+        lemma_ValidMemRange_offset_word(base + (count' - 1)*WORDSIZE, (count - count' + 1));
+    }
+}
+
 function AddrMemContentsSeq(m:memmap, begin_ptr:nat, count:nat) : seq<word>
   requires ValidAddrMemStateOpaque(m);
   requires count > 0 ==> ValidMemRange(begin_ptr, begin_ptr + count * WORDSIZE);
@@ -24,7 +40,7 @@ function AddrMemContentsSeq(m:memmap, begin_ptr:nat, count:nat) : seq<word>
 {
   if count == 0 then []
   else
-      lemma_ValidMemRange_offset(begin_ptr, count);
+      lemma_ValidMemRange_offset_word(begin_ptr, count);
       [AddrMemContents(m, begin_ptr)] + AddrMemContentsSeq(m, begin_ptr + WORDSIZE, count - 1)
 }
 
@@ -55,7 +71,7 @@ lemma lemma_AddrMemContentsSeq_framing(m:memmap, m':memmap, begin_ptr:nat, count
 {
     if count == 0 {
     } else {
-        lemma_ValidMemRange_offset(begin_ptr, count);
+        lemma_ValidMemRange_offset_word(begin_ptr, count);
         lemma_AddrMemContentsSeq_framing(m, m', begin_ptr + WORDSIZE, count - 1, l1, h1, l2, h2);
     }
 }
