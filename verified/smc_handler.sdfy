@@ -138,7 +138,7 @@ procedure {:frame false} smc_handler_inner(
 }
 
 #verbatim
-const ARM_SCR_V:word := 0x2000; // SCR vectors bit (1 = "hivecs" setting)
+const ARM_SCTLR_V:word := 0x2000; // SCTLR vectors bit (1 = "hivecs" setting)
 
 predicate maybe_inject_interrupt_invariants(s:state, r:state)
     requires ValidState(s) && ValidState(r)
@@ -160,7 +160,7 @@ procedure {:frame false} maybe_inject_interrupt(out operand tmp1:reg,
     requires
         @tmp1 == OReg(R2) && @tmp2 == OReg(R3) && @tmp3 == OReg(R4);
     reads
-        mem; scr; vbar;
+        mem; sctlr; vbar;
     modifies
         // FIXME: vale-generated framing seems to be broken for updates to sregs
         globals; lr; spsr_mon; lr_fiq; lr_irq;
@@ -211,8 +211,8 @@ procedure {:frame false} maybe_inject_interrupt(out operand tmp1:reg,
         MSR(spsr_mon, tmp1);
 
         // compute vector base in LR
-        MRC(lr, scr); // read SCR
-        if (tst_ne(lr, const(ARM_SCR_V))) {
+        MRC(lr, sctlr); // read SCTLR
+        if (tst_ne(lr, const(ARM_SCTLR_V))) {
            // if the HIVECS bit is set, vectors are at 0xffff0000
            MOVW(lr, 0);
            MOVT(lr, 0xffff);

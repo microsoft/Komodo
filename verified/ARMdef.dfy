@@ -30,7 +30,7 @@ datatype ARMReg = R0|R1|R2|R3|R4|R5|R6|R7|R8|R9|R10|R11|R12| SP(spm:mode) | LR(l
 
 // Special register instruction operands
 // TODO (style nit): uppercase constructors
-datatype SReg = cpsr | spsr(m:mode) | SCR | VBAR | MVBAR | ttbr0
+datatype SReg = cpsr | spsr(m:mode) | SCR | SCTLR | VBAR | MVBAR | ttbr0
 
 // A model of the relevant configuration register state. References refer to armv7a spec
 // **NOTE** The configuration registers are stored in the state in two places:
@@ -232,6 +232,7 @@ function update_config_from_sreg(s:state, sr:SReg, v:word): config
             var spsr' := s.conf.spsr[ m := decode_psr(v) ];
             s.conf.(spsr := spsr') 
         case SCR => s.conf.(scr := decode_scr(v))
+        case SCTLR => s.conf
         case VBAR => s.conf
         case MVBAR => s.conf
 }

@@ -43,6 +43,7 @@ var{:state sreg(spsr(Abort))}      spsr_abt:int;
 var{:state sreg(spsr(Undefined))}  spsr_und:int;
 var{:state sreg(spsr(Monitor))}    spsr_mon:int;
 var{:state sreg(cpsr)}             cpsr:int;
+var{:state sreg(SCTLR)}            sctlr:word;
 var{:state sreg(SCR)}              scr:word;
 var{:state sreg(ttbr0)}            ttbr0:word;
 var{:state sreg(VBAR)}             vbar:word;

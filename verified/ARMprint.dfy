@@ -133,6 +133,7 @@ method printOperand(o:operand)
            case cpsr    => print("cpsr");
            case spsr(m) => print("spsr");
            case ttbr0   => print("XXX-invalid: TTBR0");
+           case SCTLR   => print("XXX-invalid: SCTLR");
            case SCR     => print("XXX-invalid: SCR");
            case VBAR    => print("XXX-invalid: VBAR");
            case MVBAR   => print("XXX-invalid: MVBAR");
@@ -208,6 +209,7 @@ method printMcr(instr:string, sro:operand, op:operand)
         {
             case cpsr => print("XXX-invalid: CPSR in MCR");
             case spsr(m) => print("XXX invalid: SPSR in MCR");
+            case SCTLR => print(", c1, c0, 0");
             case SCR => print(", c1, c1, 0");
             case VBAR => print(", c12, c0, 0");
             case MVBAR => print(", c12, c0, 1");
