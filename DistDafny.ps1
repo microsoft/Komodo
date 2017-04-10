@@ -4,7 +4,7 @@ $server = "baumann-desk"
 $dafny = "tools/Dafny/Dafny.exe"
 $remoteboogie = "Boogie.exe"
 $args_ignore = @("/ironDafny","/compile:0")
-$args_keep = @("/trace")
+$args_keep = @("/trace","/restartProver")
 $argpats_ignore = @("/allocated","/induction")
 $argpats_keep = @("/timeLimit","/proverOpt","/proc","/errorTrace")
 
