@@ -249,12 +249,10 @@ predicate userspaceExecutionAndException'(s:state, s1:state, s2:state, r:state)
 {
     ExtractAbsPageTable(s).Just?
     // we've entered userland, and didn't change anything before/after doing so
-    && equivStates(s, s1) && evalEnterUserspace(s1, s2) && s2.steps == s1.steps + 1
+    && equivStates(s, s1) && evalEnterUserspace(s1, s2)
     && (var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
-    evalExceptionTaken(s3, ex, expc, r)
-    && r.conf.exstep == s3.steps)
+    evalExceptionTaken(s3, ex, expc, r))
     && mode_of_state(r) != User // known, but we need a lemma to prove it
-    && s.conf.excount + 1 == r.conf.excount
 }
 
 predicate {:opaque} userspaceExecutionAndException(s:state, r:state)

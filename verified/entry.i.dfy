@@ -71,14 +71,6 @@ lemma lemma_userExecutionModel_sufficiency(s:state, r:state)
     assert (s3, expc, ex) == userspaceExecutionFn(s2, OperandContents(s, OLR));
     lemma_psr_of_exception(s3, ex);
     assert evalExceptionTaken(s3, ex, expc, s4);
-    assert s4.conf.exstep == s3.steps;
-    calc {
-        s.conf.excount + 1;
-        s2.conf.excount + 1;
-        { reveal_userspaceExecutionFn(); }
-        s3.conf.excount + 1;
-        s4.conf.excount;
-    }
     lemma_evalExceptionTaken_Mode(s3, ex, expc, s4);
     assert mode_of_state(s4) != User;
     assert s4 == r by { reveal_userExecutionModel(); }
@@ -571,7 +563,6 @@ lemma lemma_userspaceExecutionAndException_pre(s0:state, s1:state, r:state)
     assert evalExceptionTaken(s3, ex, expc, r);
     assert r.conf.exstep == s3.steps;
     assert mode_of_state(r) != User;
-    assert s0.conf.excount + 1 == s1.conf.excount + 1 == r.conf.excount;
     assert userspaceExecutionAndException'(s0, s', s2, r);
     assert userspaceExecutionAndException(s0, r);
 }

@@ -39,7 +39,7 @@ datatype SReg = cpsr | spsr(m:mode) | SCR | SCTLR | VBAR | MVBAR | ttbr0
 // the processor and the concrete representation should be used only for
 // ensuring that the correct values are stored/returned by instructions
 datatype config = Config(cpsr:PSR, spsr:map<mode,PSR>, scr:SCR, ttbr0:TTBR, 
-    ex:exception, excount:nat, exstep:nat)
+    ex:exception, exstep:nat)
 datatype PSR  = PSR(m:mode, f:bool, i:bool) // See B1.3.3
 datatype SCR  = SCRT(ns:world, irq:bool, fiq:bool) // See B4.1.129
 datatype TTBR = TTBR(ptbase:addr)      // See B4.1.154
@@ -536,7 +536,7 @@ function exceptionTakenFn(s:state, e:exception, pc:word): state
     // update mode, copy CPSR of oldmode to SPSR of newmode, havoc LR
     takestep(s).(conf := s.conf.(cpsr := decode_psr(newpsr),
         spsr := s.conf.spsr[newmode := s.conf.cpsr],
-        ex := e, excount := s.conf.excount + 1, exstep := s.steps),
+        ex := e, exstep := s.steps),
         sregs := s.sregs[cpsr := newpsr][spsr(newmode) := s.sregs[cpsr]],
         regs := s.regs[LR(newmode) := pc])
 }
