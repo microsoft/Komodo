@@ -169,13 +169,11 @@ ensures
     ValidAddrMemStateOpaque(old(mem)); 
     ValidAddrMemStateOpaque(mem); 
 
-    // Memory framing:  We only touch the stack and 8 words pointed to by ctx_ptr
-//    AddrMemPreservingExcept3(old(mem), mem, 
-//                             sp - HMAC_KEYSIZE_BYTES * WORDSIZE, sp, 
-//                             old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE,
-//                             old(r1), old(r1) + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE);
+    // Memory framing:  We only touch one block in the tmp buffer
+    AddrMemPreservingExcept(old(mem), mem, r1, r1 + HMAC_KEYSIZE_BYTES);
+    ValidMemRange(r1, r1 + SHA_BLOCKSIZE * WORDSIZE);
 
-    AddrMemContentsSeq(mem, tmp_ptr, SHA_BLOCKSIZE) == SeqXor(key, Ipad(16));
+    AddrMemContentsSeq(mem, r1, SHA_BLOCKSIZE) == SeqXor(key, Ipad(16));
 
 {
     ghost var tmp_ptr := r1;
@@ -184,11 +182,10 @@ ensures
     // Copy key to the beginning of the tmp buffer
     MOV(r5, const(HMAC_KEYSIZE_BYTES)); 
     memcpy(r1 /* tmp_ptr */, r4 /* key_ptr */, r5, r6);
+    lemma_memset_result(old(this.m), this.m, key_ptr, tmp_ptr, SHA_BLOCKSIZE);
+    assert key == AddrMemContentsSeq(mem, tmp_ptr, SHA_BLOCKSIZE);
 
-    ghost var post_key_copy_mem;
-    post_key_copy_mem := mem;
     apply_ipad();
-
 }
 /*
 procedure hmac_inner(

@@ -75,3 +75,14 @@ lemma lemma_AddrMemContentsSeq_framing(m:memmap, m':memmap, begin_ptr:nat, count
         lemma_AddrMemContentsSeq_framing(m, m', begin_ptr + WORDSIZE, count - 1, l1, h1, l2, h2);
     }
 }
+
+lemma lemma_memset_result(m:memstate, m':memstate, src:word, dst:word, num_words:word)
+    requires ValidMemState(m) && ValidMemState(m');
+    requires ValidAddrMemStateOpaque(m.addresses) && ValidAddrMemStateOpaque(m'.addresses);
+    requires ValidMemRange(dst, dst + num_words * WORDSIZE);
+    requires ValidMemRange(src, src + num_words * WORDSIZE);
+    requires forall a:addr :: dst <= a < dst + num_words * WORDSIZE
+                ==> MemContents(m', a) == MemContents(m, a - dst + src);
+    ensures  AddrMemContentsSeq(m'.addresses, dst, num_words) == AddrMemContentsSeq(m.addresses, src, num_words);
+{
+}
