@@ -435,6 +435,12 @@ lemma lemma_user_regs_domain(regs:map<ARMReg, word>, hr:map<ARMReg, word>)
 {
 }
 
+lemma eqregs(x: map<ARMReg,word>, y: map<ARMReg,word>)
+	requires forall r :: r in x <==> r in y
+	requires forall r | r in x :: x[r] == y[r]
+	ensures x == y
+	{}
+
 lemma lemma_validEnclaveStepPrime_enc_conf(
 s11: state, d11: PageDb, s14:state, d14:PageDb, r1:state, rd1:PageDb,
 s21: state, d21: PageDb, s24:state, d24:PageDb, r2:state, rd2:PageDb,
@@ -523,12 +529,13 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
     }
 
     assert user_regs(s13.regs) == user_regs(s23.regs) by {
-        reveal userspaceExecutionFn();
-        reveal ValidRegState();
+        // reveal userspaceExecutionFn();
         var hr1 := havocUserRegs(s12.nondet, user_state1, s12.regs);
         var hr2 := havocUserRegs(s22.nondet, user_state2, s22.regs);
-        assert s13.regs == hr1;
-        assert s23.regs == hr2;
+        assert s13.regs == hr1 by
+            { reveal userspaceExecutionFn(); }
+        assert s23.regs == hr2 by
+            { reveal userspaceExecutionFn(); }
         assert user_state1 == user_state2;
         assert s12.nondet == s22.nondet;
         forall (r | r in USER_REGS() )
@@ -540,17 +547,13 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
             ensures user_regs(hr1)[r] == user_regs(hr2)[r]
         {
         }
-        // assert forall r :: r in USER_REGS() ==> user_regs(hr1)[r] == hr1[r];
-        // assert forall r :: r in USER_REGS() ==> user_regs(hr2)[r] == hr2[r];
         lemma_user_regs_domain(hr1, user_regs(hr1));
         lemma_user_regs_domain(hr2, user_regs(hr2));
         assert forall r :: r in user_regs(hr1) <==> r in user_regs(hr2);
+		assert forall r | r in user_regs(hr1) :: user_regs(hr1)[r] == user_regs(hr2)[r];
 
-
-        // Not sure how to prove equality of these maps...
-        // domains are the same, all values in codomain are the same...
-        // what more do you want?
-        assume user_regs(hr1) == user_regs(hr2);
+		eqregs(user_regs(hr1), user_regs(hr2));
+        assert user_regs(hr1) == user_regs(hr2);
     }
 
     assert expc1 == expc2 by { reveal userspaceExecutionFn(); }
@@ -640,12 +643,50 @@ lemma lemma_userspaceExecutionFn_atkr_conf_regs(
     //     mode_of_exception(s23.conf, ex2)
 {
     //reveal ValidSRegState();
-        
+  
+    assume false;
+
+    // I give up on this lemma
+    assume pt1 == ExtractAbsPageTable(s12);
+    assume pt2 == ExtractAbsPageTable(s22);
+    var user_state1 := user_visible_state(s12, pc1, pt1.v);
+    var user_state2 := user_visible_state(s22, pc2, pt2.v);
+
+    assume s13.nondet == s23.nondet;
+    
+    assert user_regs(s13.regs) == user_regs(s23.regs) by {
+        reveal userspaceExecutionFn();
+        reveal ValidRegState();
+        var hr1 := havocUserRegs(s12.nondet, user_state1, s12.regs);
+        var hr2 := havocUserRegs(s22.nondet, user_state2, s22.regs);
+        assert s13.regs == hr1;
+        assert s23.regs == hr2;
+        assert user_state1 == user_state2;
+        assert s12.nondet == s22.nondet;
+        forall (r | r in USER_REGS() )
+            ensures hr1[r] ==
+                nondet_private_word(s12.nondet, user_state1, NONDET_REG(r))
+            ensures hr2[r] ==
+                nondet_private_word(s22.nondet, user_state2, NONDET_REG(r))
+            ensures hr1[r] == hr2[r]
+            ensures user_regs(hr1)[r] == user_regs(hr2)[r]
+        {
+        }
+        // assert forall r :: r in USER_REGS() ==> user_regs(hr1)[r] == hr1[r];
+        // assert forall r :: r in USER_REGS() ==> user_regs(hr2)[r] == hr2[r];
+        lemma_user_regs_domain(hr1, user_regs(hr1));
+        lemma_user_regs_domain(hr2, user_regs(hr2));
+        assert forall r :: r in user_regs(hr1) <==> r in user_regs(hr2);
+
+
+        // Not sure how to prove equality of these maps...
+        // domains are the same, all values in codomain are the same...
+        // what more do you want?
+        assume user_regs(hr1) == user_regs(hr2);
+    }
    
     assert ex1 == ex2 by {
         reveal userspaceExecutionFn();
-        var user_state1 := user_visible_state(s12, pc1, pt1.v);
-        var user_state2 := user_visible_state(s22, pc2, pt2.v);
         
         // There is no way to prove this!!!!!
         assume s12.conf.cpsr.f == s22.conf.cpsr.f;
@@ -658,7 +699,6 @@ lemma lemma_userspaceExecutionFn_atkr_conf_regs(
         assert ex2 == nondet_exception(s22.nondet, user_state2, s22.conf.cpsr.f, s22.conf.cpsr.i);
         assert ex1 == ex2;
     }
-    assume false;
 
     // assert s13.regs == havocUserRegs(s12.nondet, user_state1, user_regs(s12.regs));
     // assert s23.regs == havocUserRegs(s22.nondet, user_state2, user_regs(s22.regs));
@@ -756,6 +796,89 @@ dispPg: PageNr, atkr: PageNr)
     }
 }
 
+lemma lemma_userMemEquiv_atkr_conf(
+s11: state, s1':state, s12: state, s14: state,
+pc1: word, pt1: Maybe<AbsPTable>, d1: PageDb,
+s21: state, s2':state, s22: state, s24: state,
+pc2: word, pt2: Maybe<AbsPTable>, d2: PageDb,
+dispPg: PageNr, atkr: PageNr, l1p: PageNr)
+    requires ValidState(s11) && ValidState(s12) && ValidState(s14)
+    requires ValidState(s21) && ValidState(s22) && ValidState(s24)
+    requires validPageDb(d1) && validPageDb(d2)
+    requires SaneConstants()
+    requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    requires enc_conf_eq_entry(s12, s22, d1, d2, atkr);
+    requires userspaceExecutionAndException'(s11, s1', s12, s14)
+    requires userspaceExecutionAndException'(s21, s2', s22, s24)
+    requires pc1 == OperandContents(s11, OLR) && pc2 == OperandContents(s21, OLR);
+    requires pt1 == ExtractAbsPageTable(s12) && pt2 == ExtractAbsPageTable(s22);
+    requires nonStoppedL1(d1, l1p) && nonStoppedL1(d2, l1p)
+    requires atkr_entry(d1, d2, dispPg, atkr)
+    requires l1pOfDispatcher(d1, dispPg) == l1pOfDispatcher(d2, dispPg) == l1p
+    requires !stoppedAddrspace(d1[atkr]) && !stoppedAddrspace(d2[atkr])
+    requires user_regs(s11.regs) == user_regs(s21.regs);
+    requires pc1 == pc2;
+    requires 
+        pageTableCorresponds(s12, d1, l1p) &&
+        pageTableCorresponds(s22, d2, l1p) &&
+        dataPagesCorrespond(s12.m, d1) &&
+        dataPagesCorrespond(s22.m, d2)
+    requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+        && d1[atkr].entry.l1ptnr == d2[atkr].entry.l1ptnr == l1p
+    requires pgInAddrSpc(d1, l1p, atkr) && pgInAddrSpc(d2, l1p, atkr)
+    ensures pt1.Just? && pt2.Just?
+    ensures user_mem(pt1.v, s12.m) == user_mem(pt2.v, s22.m)
+{
+    assume false;
+    //  reveal pageTableCorresponds();
+    //  reveal enc_conf_eqpdb();
+    //  reveal validPageDb();
+    //  reveal mkAbsPTable();
+    
+    // This didn't even work.
+    // forall ( a: addr | ValidMem(a) && a in TheValidAddresses() &&
+    //     addrIsSecure(a) && PageBase(a) in AllPagesInTable(pt1.v))
+    //     ensures user_mem(pt1.v, s12.m)[a] == user_mem(pt2.v, s22.m)[a];
+    // {
+    //     assume false;
+    // }
+
+
+    // This didn't work anyway...
+    //// forall ( a: addr | ValidMem(a) && a in TheValidAddresses() &&
+    ////     addrIsSecure(a) && PageBase(a) in AllPagesInTable(pt1.v))
+    //// ensures s12.m.addresses[a] == s22.m.addresses[a]
+    //// {
+    ////     assume false;
+    ////     ///   reveal enc_conf_eqpdb();
+    ////     ///   reveal pageDbDataCorresponds();
+    ////     ///   
+    ////     ///   assume address_is_secure(PageBase(a));
+    ////     ///   var n := monvaddr_page(PageBase(a));
+
+    ////     ///   assert a in AllPagesInTable(mkAbsPTable(d1, l1p)) by {
+    ////     ///      assume false;
+    ////     ///   }
+    ////     ///   assert a in AllPagesInTable(mkAbsPTable(d2, l1p)) by {
+    ////     ///      assume false; 
+    ////     ///   }
+    ////     ///   lemma_PagesInTableAreDataPages(n,a,d1,l1p);
+    ////     ///   lemma_PagesInTableAreDataPages(n,a,d2,l1p);
+
+    ////     ///   // trigger i in pageDbDataCorresponds:
+    ////     ///   var i := (a - page_monvaddr(n)) / WORDSIZE;
+    ////     ///   assert d1[n].entry.contents[i] == d2[n].entry.contents[i];
+    //// }
+    // forall ( a: addr | ValidMem(a) && a in TheValidAddresses() &&
+    //     addrIsSecure(a) && PageBase(a) in AllPagesInTable(pt1.v))
+    // ensures user_mem(pt1.v, s12.m)[a] == s12.m.addresses[a];
+    // ensures user_mem(pt2.v, s22.m)[a] == s22.m.addresses[a];
+    // {
+    //     assume false;
+    // }
+}
+
 lemma lemma_userStatesEquiv_atkr_conf(
 s11: state, s1':state, s12: state, s14: state,
 pc1: word, pt1: Maybe<AbsPTable>, d1: PageDb,
@@ -805,54 +928,12 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
     // assert AllPagesInTable(pt1.v) == AllPagesInTable(pt2.v);
 
     assert user_mem(pt1.v, s12.m) == user_mem(pt2.v, s22.m) by {
-        assume false;
-        //  reveal pageTableCorresponds();
-        //  reveal enc_conf_eqpdb();
-        //  reveal validPageDb();
-        //  reveal mkAbsPTable();
-       
-        // This didn't even work.
-        // forall ( a: addr | ValidMem(a) && a in TheValidAddresses() &&
-        //     addrIsSecure(a) && PageBase(a) in AllPagesInTable(pt1.v))
-        //     ensures user_mem(pt1.v, s12.m)[a] == user_mem(pt2.v, s22.m)[a];
-        // {
-        //     assume false;
-        // }
-
-
-        // This didn't work anyway...
-        //// forall ( a: addr | ValidMem(a) && a in TheValidAddresses() &&
-        ////     addrIsSecure(a) && PageBase(a) in AllPagesInTable(pt1.v))
-        //// ensures s12.m.addresses[a] == s22.m.addresses[a]
-        //// {
-        ////     assume false;
-        ////     ///   reveal enc_conf_eqpdb();
-        ////     ///   reveal pageDbDataCorresponds();
-        ////     ///   
-        ////     ///   assume address_is_secure(PageBase(a));
-        ////     ///   var n := monvaddr_page(PageBase(a));
-
-        ////     ///   assert a in AllPagesInTable(mkAbsPTable(d1, l1p)) by {
-        ////     ///      assume false;
-        ////     ///   }
-        ////     ///   assert a in AllPagesInTable(mkAbsPTable(d2, l1p)) by {
-        ////     ///      assume false; 
-        ////     ///   }
-        ////     ///   lemma_PagesInTableAreDataPages(n,a,d1,l1p);
-        ////     ///   lemma_PagesInTableAreDataPages(n,a,d2,l1p);
-
-        ////     ///   // trigger i in pageDbDataCorresponds:
-        ////     ///   var i := (a - page_monvaddr(n)) / WORDSIZE;
-        ////     ///   assert d1[n].entry.contents[i] == d2[n].entry.contents[i];
-        //// }
-        // forall ( a: addr | ValidMem(a) && a in TheValidAddresses() &&
-        //     addrIsSecure(a) && PageBase(a) in AllPagesInTable(pt1.v))
-        // ensures user_mem(pt1.v, s12.m)[a] == s12.m.addresses[a];
-        // ensures user_mem(pt2.v, s22.m)[a] == s22.m.addresses[a];
-        // {
-        //     assume false;
-        // }
+        lemma_userMemEquiv_atkr_conf(
+            s11, s1', s12, s14, pc1, pt1, d1,
+            s21, s2', s22, s24, pc2, pt2, d2,
+            dispPg, atkr, l1p);
     }
+
 
 }
 
