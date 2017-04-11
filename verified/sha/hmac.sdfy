@@ -243,9 +243,6 @@ ensures
 }
 
 
-
-
-/*
 procedure hmac_inner(
     ghost key:seq(word),
     ghost input:seq(word)
@@ -261,8 +258,8 @@ requires
     StackBytesRemaining(this, 40);
 requires
     // Stack is accessible
-    sp >= STACKSIZE_HMAC * WORDSIZE + 40; 
-    ValidMemRange(sp - STACKSIZE_HMAC * WORDSIZE, sp);
+    sp >= STACKSIZE_SHA_ONE_SHOT * WORDSIZE; 
+    ValidMemRange(sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE, sp);
 
     // K table is valid
     SaneShaGlobal(globals);
@@ -303,16 +300,6 @@ requires
      && ctx + SHA_CTXSIZE*WORDSIZE <= input_ptr
      && input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE <= tmp_ptr
      && tmp_ptr + (num_blocks + 1)*SHA_BLOCKSIZE*WORDSIZE <= key_ptr
-//     && disjoint(ctx, ctx + SHA_CTXSIZE*WORDSIZE, sp - STACKSIZE_HMAC * WORDSIZE, sp)                               // ctx != sp
-//     && disjoint(ctx, ctx + SHA_CTXSIZE*WORDSIZE, input_ptr, input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE)         // ctx != input_ptr 
-//     && disjoint(ctx, ctx + SHA_CTXSIZE*WORDSIZE, tmp_ptr, tmp_ptr + (num_blocks + 1)*SHA_BLOCKSIZE*WORDSIZE)       // ctx != tmp_ptr
-//     && disjoint(ctx, ctx + SHA_CTXSIZE*WORDSIZE, key_ptr, key_ptr + HMAC_KEYSIZE_BYTES)                            // ctx != key_ptr 
-//     && disjoint(sp - STACKSIZE_HMAC * WORDSIZE, sp, input_ptr, input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE)      // sp != input_ptr
-//     && disjoint(sp - STACKSIZE_HMAC * WORDSIZE, sp, tmp_ptr, tmp_ptr + (num_blocks + 1)*SHA_BLOCKSIZE*WORDSIZE)    // sp != tmp_ptr
-//     && disjoint(sp - STACKSIZE_HMAC * WORDSIZE, sp, key_ptr, key_ptr + HMAC_KEYSIZE_BYTES)                         // sp != key_ptr
-//     && disjoint(input_ptr, input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE, tmp_ptr, tmp_ptr + (num_blocks + 1)*SHA_BLOCKSIZE*WORDSIZE) // input_ptr != tmp_ptr
-//     && disjoint(input_ptr, input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE, key_ptr, key_ptr + HMAC_KEYSIZE_BYTES)   // input_ptr != key_ptr
-//     && disjoint(tmp_ptr, tmp_ptr + (num_blocks + 1)*SHA_BLOCKSIZE*WORDSIZE, key_ptr, key_ptr + HMAC_KEYSIZE_BYTES) // tmp_ptr != key_ptr
       ;
 reads
     globals;
@@ -328,29 +315,6 @@ ensures
 //                             sp - HMAC_KEYSIZE_BYTES * WORDSIZE, sp, 
 //                             old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE,
 //                             old(r1), old(r1) + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE);
-
-    // Calling convention
-    r4 == old(r4);
-    r5 == old(r5);
-    r6 == old(r6);
-    r7 == old(r7);
-    r8 == old(r8);
-    r9 == old(r9);
-    r10== old(r10);
-    r11== old(r11);
-    sp == old(sp);  
-    lr == old(lr);
-    
-    // SHA results
-//    let hash := seq(AddrMemContents(mem, r0 + 0*WORDSIZE),
-//                    AddrMemContents(mem, r0 + 1*WORDSIZE),
-//                    AddrMemContents(mem, r0 + 2*WORDSIZE),
-//                    AddrMemContents(mem, r0 + 3*WORDSIZE),
-//                    AddrMemContents(mem, r0 + 4*WORDSIZE),
-//                    AddrMemContents(mem, r0 + 5*WORDSIZE),
-//                    AddrMemContents(mem, r0 + 6*WORDSIZE),
-//                    AddrMemContents(mem, r0 + 7*WORDSIZE)) in
-//    IsSHA256(WordSeqToBytes(AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * old(r2))), hash);
 {
     ghost var ctx := r0;
     ghost var tmp_ptr := r1;
@@ -359,27 +323,27 @@ ensures
     ghost var key_ptr := r4;
 
     // Copy key to the beginning of the tmp buffer
+//    lemma_ValidMemRange_offset(tmp_ptr, (num_blocks + 1) * SHA_BLOCKSIZE, num_blocks * SHA_BLOCKSIZE);
+//    assert (num_blocks + 1) * SHA_BLOCKSIZE - num_blocks * SHA_BLOCKSIZE == SHA_BLOCKSIZE;
+    lemma_ValidMemRange_reduced(tmp_ptr, (num_blocks + 1) * SHA_BLOCKSIZE, num_blocks * SHA_BLOCKSIZE);
     hmac_inner_prep_key(key);
 
     // Copy the input to the rest of the tmp buffer
-    assert r1 == tmp_ptr;
-    assert isUInt32(tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE);
-    assert isUInt32(tmp_ptr + 1 * SHA_BLOCKSIZE * WORDSIZE);
-    assert isUInt32(tmp_ptr + HMAC_KEYSIZE_BYTES);
+//    assert r1 == tmp_ptr;
+//    assert isUInt32(tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE);
+//    assert isUInt32(tmp_ptr + 1 * SHA_BLOCKSIZE * WORDSIZE);
+//    assert isUInt32(tmp_ptr + HMAC_KEYSIZE_BYTES);
     ADD(r7, r1, const(HMAC_KEYSIZE_BYTES));      // Skip the tmp_ptr past the key
-    MOV(r5, const(SHA_BLOCKSIZE*WORDSIZE));
-    assert r2 == num_blocks;
-    assert r5 == SHA_BLOCKSIZE*WORDSIZE;
-    assert isUInt32(input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE);
-    assert isUInt32(num_blocks * SHA_BLOCKSIZE * WORDSIZE);
-    MUL(r6, r2, r5);  // Number of input bytes
-    assume WordAligned(r7);
-    assume WordAligned(r6);
-    //assert (num_blocks+1) * SHA_BLOCKSIZE == num_blocks * SHA_BLOCKSIZE + SHA_BLOCKSIZE;
+
     assume (num_blocks+1) * SHA_BLOCKSIZE > SHA_BLOCKSIZE;
-    lemma_ValidMemRange_offset(tmp_ptr, (num_blocks+1) * SHA_BLOCKSIZE, SHA_BLOCKSIZE);
-    assert ValidMemRange(tmp_ptr + SHA_BLOCKSIZE*WORDSIZE, tmp_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE);
-    memcpy(r7 /* tmp_ptr + HMAC_KEYSIZE_BYTES */, r3 /* input_ptr */, r6, r5);
+    lemma_ValidMemRange_offset(tmp_ptr, (num_blocks + 1) * SHA_BLOCKSIZE, SHA_BLOCKSIZE);
+    assert (num_blocks + 1) * SHA_BLOCKSIZE - SHA_BLOCKSIZE == num_blocks * SHA_BLOCKSIZE;
+    lemma_AddrMemContentsSeq_framing1(old(mem), mem, input_ptr, num_blocks * SHA_BLOCKSIZE, tmp_ptr, tmp_ptr + HMAC_KEYSIZE_BYTES);
+    hmac_inner_prep_input(input);
+
+//    assume (num_blocks+1) * SHA_BLOCKSIZE > SHA_BLOCKSIZE;
+//    lemma_ValidMemRange_offset(tmp_ptr, (num_blocks+1) * SHA_BLOCKSIZE, SHA_BLOCKSIZE);
+//    assert ValidMemRange(tmp_ptr + SHA_BLOCKSIZE*WORDSIZE, tmp_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE);
 
     ADD(r2, r2, 1);   // Need to account for the key block at the beginning
 
@@ -397,6 +361,7 @@ ensures
             AddrMemContents(mem, r0 + 5*WORDSIZE),
             AddrMemContents(mem, r0 + 6*WORDSIZE),
             AddrMemContents(mem, r0 + 7*WORDSIZE));
+    /*
     calc {
         true;
         IsSHA256(WordSeqToBytes(AddrMemContentsSeq(mem, tmp_ptr, SHA_BLOCKSIZE * (num_blocks+1))), inner_hash);
@@ -409,8 +374,10 @@ ensures
         IsSHA256(WordSeqToBytes(SeqXor(key, Ipad(16)) + input), inner_hash);
         inner_hash == SHA256(WordSeqToBytes(SeqXor(key, Ipad(16)) + input));
     }
+    */
 }
 
+/*
 procedure hmac(
     ghost key:seq(word),
     ghost input:seq(word)

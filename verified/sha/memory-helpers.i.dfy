@@ -15,6 +15,21 @@ lemma lemma_ValidMemRange_offset_word(base:int, count:nat)
     //assert ValidMem(limit);
 }
 
+lemma lemma_ValidMemRange_reduced(base:int, count:nat, count':nat)
+    requires ValidMemRange(base, base + count * WORDSIZE);
+    requires count' < count;
+    ensures  ValidMemRange(base, base + (count - count') * WORDSIZE);
+{
+    var offset := base + count'*WORDSIZE;
+    var limit := base + WORDSIZE + (count - count') * WORDSIZE;
+    assert WordAligned(offset);
+    if count' == 0 {
+    } else {
+        lemma_ValidMemRange_offset(base, count, count' - 1);
+        assert ValidMemRange(base, base + (count - count' + 1) * WORDSIZE);
+    }
+}
+
 lemma lemma_ValidMemRange_offset(base:int, count:nat, count':nat)
     requires ValidMemRange(base, base + count * WORDSIZE);
     requires count' < count;
@@ -59,7 +74,23 @@ lemma lemma_AddrMemContentsSeq_adds(m:memmap, begin_ptr:nat, count:nat, count':n
     }
 }
 
-lemma lemma_AddrMemContentsSeq_framing(m:memmap, m':memmap, begin_ptr:nat, count:nat, l1:nat, h1:nat, l2:nat, h2:nat)
+lemma lemma_AddrMemContentsSeq_framing1(m:memmap, m':memmap, begin_ptr:nat, count:nat, l1:nat, h1:nat)
+    requires ValidAddrMemStateOpaque(m) && ValidAddrMemStateOpaque(m');
+    requires l1 <= h1;
+    requires AddrMemPreservingExcept(m, m', l1, h1);
+    requires h1 <= begin_ptr || l1 >= begin_ptr + count * WORDSIZE;
+    requires count > 0 ==> ValidMemRange(begin_ptr, begin_ptr + count * WORDSIZE);
+    decreases count;
+    ensures  AddrMemContentsSeq(m, begin_ptr, count) == AddrMemContentsSeq(m', begin_ptr, count);
+{
+    if count == 0 {
+    } else {
+        lemma_ValidMemRange_offset_word(begin_ptr, count);
+        lemma_AddrMemContentsSeq_framing1(m, m', begin_ptr + WORDSIZE, count - 1, l1, h1);
+    }
+}
+
+lemma lemma_AddrMemContentsSeq_framing2(m:memmap, m':memmap, begin_ptr:nat, count:nat, l1:nat, h1:nat, l2:nat, h2:nat)
     requires ValidAddrMemStateOpaque(m) && ValidAddrMemStateOpaque(m');
     requires l1 <= h1 && l2 <= h2;
     requires AddrMemPreservingExcept2(m, m', l1, h1, l2, h2);
@@ -72,7 +103,7 @@ lemma lemma_AddrMemContentsSeq_framing(m:memmap, m':memmap, begin_ptr:nat, count
     if count == 0 {
     } else {
         lemma_ValidMemRange_offset_word(begin_ptr, count);
-        lemma_AddrMemContentsSeq_framing(m, m', begin_ptr + WORDSIZE, count - 1, l1, h1, l2, h2);
+        lemma_AddrMemContentsSeq_framing2(m, m', begin_ptr + WORDSIZE, count - 1, l1, h1, l2, h2);
     }
 }
 
