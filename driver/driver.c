@@ -27,6 +27,7 @@ __asm (
     "   mov     r0, #42                         \n"
     "   mov     r1, #0xa000                     \n"
     "   str     r0, [r1]                        \n"
+    "   mov     r0, #0                          \n" // KOM_SVC_EXIT
     "1: svc     #0                              \n"
     "   b       1b                              \n"
     "test_enclave_end:                          \n"
