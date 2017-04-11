@@ -34,6 +34,7 @@ lemma lemma_ValidMemRange_offset(base:int, count:nat, count':nat)
     requires ValidMemRange(base, base + count * WORDSIZE);
     requires count' < count;
     ensures  ValidMemRange(base + count'*WORDSIZE, base + (count - count') * WORDSIZE);
+    ensures  ValidMemRange(base + count'*WORDSIZE, base + count * WORDSIZE);
 {
     var offset := base + count'*WORDSIZE;
     var limit := base + WORDSIZE + (count - count') * WORDSIZE;

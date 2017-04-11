@@ -165,7 +165,7 @@ ensures
                     AddrMemContents(mem, old(r0) + 5*WORDSIZE),
                     AddrMemContents(mem, old(r0) + 6*WORDSIZE),
                     AddrMemContents(mem, old(r0) + 7*WORDSIZE)) in
-    IsSHA256(WordSeqToBytes(ConcatenateSeqs(trace_in.M)), hash);
+    hash == SHA256(WordSeqToBytes(ConcatenateSeqs(trace_in.M)));
 {
     ghost var length_in_bits := r2;
     SUB(sp, sp, 64);      // Make room for the final 256-bit input buffer
@@ -239,6 +239,7 @@ ensures
     
     // Restore the stack pointer
     ADD(sp, sp, 64);
+    lemma_SHA256IsAFunction(WordSeqToBytes(ConcatenateSeqs(trace_in.M)), hash);
 }
 
 
@@ -326,7 +327,7 @@ ensures
                     AddrMemContents(mem, r0 + 5*WORDSIZE),
                     AddrMemContents(mem, r0 + 6*WORDSIZE),
                     AddrMemContents(mem, r0 + 7*WORDSIZE)) in
-    IsSHA256(WordSeqToBytes(AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * old(r2))), hash);
+    hash == SHA256(WordSeqToBytes(AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * old(r2))));
 {
   ghost var ctx := r0; 
   ghost var input_ptr := r1;
