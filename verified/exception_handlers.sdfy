@@ -350,25 +350,25 @@ procedure save_disp_context(inout operand base: reg,
         ex == exstate.conf.ex && (ex == ExFIQ || ex == ExIRQ);
         ValidState(exstate) && mode_of_state(exstate) == Monitor
             && spsr_of_state(exstate).m == User;
-        CoreRegPreservingExcept(exstate, this, set(OReg(R0), OSP, OLR));
-        forall o :: set(OSReg(spsr(Monitor)), OReg(LR(User)), OReg(SP(User))) ?[o]
-            ==> OperandContents(exstate, o) == OperandContents(this, o);
-        ValidMem(sp) && OperandContents(exstate, OReg(R0)) == MemContents(this.m, sp);
+        va_get_sreg(spsr(Monitor), exstate) == spsr_mon;
+        forall r :: USER_REGS() ?[r] && r != R0
+            ==> va_get_reg(r, exstate) == va_get_reg(r, this);
+        ValidMem(sp) && va_get_reg(R0, exstate) == MemContents(this.m, sp);
         lr == TruncateWord(OperandContents(exstate, OLR) - 4);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     reads
         globals;
-        r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr_usr; sp_usr; lr; sp; spsr_mon;
+        r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr_usr; sp_usr; lr; sp; spsr_mon;
     modifies
         mem; r0; r1;
     ensures
         validPageDb(pagedb);
-        tuple(r0, r1, pagedb) == exceptionHandled(exstate, pagedb_in, dispPg);
+        pagedb == exPageDb(exceptionHandled(exstate, pagedb_in, dispPg));
         pageDbCorresponds(this.m, pagedb);
-        StackPreserving(old(this), this);
         MemPreservingExcept(old(this), this, old(base), old(base) + PAGESIZE);
+        StackPreserving(old(this), this);
 {
-    ghost var gr0 := OperandContents(exstate, OReg(R0));
+    ghost var gr0 := va_get_reg(R0, exstate);
     ghost var orig_disp := pagedb_in[dispPg].entry;
     ghost var orig_pg := extractPage(old(this.m), dispPg);
     assert orig_disp.entrypoint == orig_pg[base + DISPATCHER_ENTRYPOINT]
@@ -379,72 +379,50 @@ procedure save_disp_context(inout operand base: reg,
     }
 
     save_disp_context_helper(base, dispPg);
-    ghost var st0 := this;
     LDR(r1,sp,0);
     assert r1 == gr0;
     STR(r1, base, const(DISP_CTXT_R0));
     MOV(r1, 1);
     STR(r1, base, const(DISPATCHER_ENTERED));
 
+    assert MemPreservingExcept(old(this), this, old(base), old(base) + DISP_SIZE);
+
     pagedb := exPageDb(exceptionHandled(exstate, pagedb_in, dispPg));
     lemma_exceptionHandled_validPageDb(exstate, pagedb_in, dispPg);
+
     ghost var disp := pagedb[dispPg].entry;
-    ghost var ctxt := disp.ctxt;
     ghost var pg := extractPage(this.m, dispPg);
-    ghost var pgbase := page_monvaddr(dispPg);
     assert pageDbDispatcherCorresponds(dispPg, disp, pg) by {
-        // TODO: figure out how to clean up this disgusting mess of triggers
-        // and explicit assertions... later :(
-        reveal pageDbDispatcherCorresponds;
-        assert pg[pgbase + DISPATCHER_ENTERED] == to_i(true) == to_i(disp.entered);
-        assert orig_disp.entrypoint
-            == disp.entrypoint
-            == pg[pgbase + DISPATCHER_ENTRYPOINT];
-        assert pg[pgbase + DISP_CTXT_PC] == old(lr);
-        // oh for a calc statement...
-        assert pg[pgbase + DISP_CTXT_PSR] == old(spsr_mon)
-            == OperandContents(exstate, OSReg(spsr(Monitor)))
-            == exstate.sregs[spsr(mode_of_state(exstate))];
+        ghost var ctxt := disp.ctxt;
+        ghost var pgbase := page_monvaddr(dispPg);
         assert ctxt == DispatcherContext(user_regs(exstate.regs), old(lr),
                                          old(spsr_mon));
+        /*assert orig_disp.entrypoint == disp.entrypoint
+            == pg[pgbase + DISPATCHER_ENTRYPOINT];
+        assert pg[pgbase + DISP_CTXT_PC] == old(lr)
+            == TruncateWord(OperandContents(exstate, OLR) - 4);
+        // oh for a calc statement...
+        assert pg[pgbase + DISP_CTXT_PSR] == old(spsr_mon)
+            == exstate.sregs[spsr(mode_of_state(exstate))];
         assert pg[pgbase + DISP_CTXT_R0] == gr0 == ctxt.regs[R0];
-        assert forall a:addr :: pg?[a] && a != pgbase + DISP_CTXT_R0
-                && a != pgbase + DISPATCHER_ENTERED
-            ==> extractPage(st0.m, dispPg)[a] == pg[a];
-        assert forall r :: ValidRegOperand(OReg(r)) && r != R0
-            ==> (OperandContents(old(this), OReg(r))
-                == OperandContents(exstate, OReg(r)) == ctxt.regs[r]);
-        assert pg[pgbase + DISP_CTXT_R1] == old(r1) == ctxt.regs[R1];
-        assert pg[pgbase + DISP_CTXT_R2] == old(r2) == ctxt.regs[R2];
-        assert pg[pgbase + DISP_CTXT_R3] == old(r3) == ctxt.regs[R3];
-        assert pg[pgbase + DISP_CTXT_R4] == old(r4) == ctxt.regs[R4];
-        assert pg[pgbase + DISP_CTXT_R5] == old(r5) == ctxt.regs[R5];
-        assert pg[pgbase + DISP_CTXT_R6] == old(r6) == ctxt.regs[R6];
-        assert pg[pgbase + DISP_CTXT_R7] == old(r7) == ctxt.regs[R7];
-        assert pg[pgbase + DISP_CTXT_R8] == old(r8) == ctxt.regs[R8];
-        assert pg[pgbase + DISP_CTXT_R9] == old(r9) == ctxt.regs[R9];
-        assert pg[pgbase + DISP_CTXT_R10] == old(r10) == ctxt.regs[R10];
-        assert pg[pgbase + DISP_CTXT_R11] == old(r11) == ctxt.regs[R11];
-        assert pg[pgbase + DISP_CTXT_R12] == old(r12) == ctxt.regs[R12];
-        assert pg[pgbase + DISP_CTXT_LR] == old(lr_usr)
-            == OperandContents(exstate, OReg(LR(User))) == ctxt.regs[LR(User)];
-        assert pg[pgbase + DISP_CTXT_SP] == old(sp_usr)
-            == OperandContents(exstate, OReg(SP(User))) == ctxt.regs[SP(User)];
+        assert pg[pgbase + DISP_CTXT_LR] == old(lr_usr) == ctxt.regs[LR(User)];
+        assert pg[pgbase + DISP_CTXT_SP] == old(sp_usr) == ctxt.regs[SP(User)];
+        assert forall r :: USER_REGS() ?[r] && r != R0
+            ==> va_get_reg(r, exstate) == va_get_reg(r, old(this)) == ctxt.regs[r];*/
+        reveal pageDbDispatcherCorresponds;
     }
 
-    assert pageDbCorrespondsOnly(this.m, pagedb, dispPg) by {
-        assert pageDbEntryCorresponds(pagedb[dispPg],
-                                      extractPageDbEntry(this.m, dispPg))
-            by { reveal pageDbEntryCorresponds;
-                 assert GlobalsInvariant(old(this), this); }
-        assert pageContentsCorresponds(dispPg, pagedb[dispPg], pg)
-            by { reveal pageContentsCorresponds; }
+    assert pageDbCorresponds(this.m, pagedb) by {
+        assert pageDbCorrespondsOnly(this.m, pagedb, dispPg) by {
+            assert pageDbEntryCorresponds(pagedb[dispPg],
+                                          extractPageDbEntry(this.m, dispPg))
+                by { assert GlobalsInvariant(old(this), this);
+                     reveal pageDbEntryCorresponds; }
+            assert pageContentsCorresponds(dispPg, pagedb[dispPg], pg)
+                by { reveal pageContentsCorresponds; }
+        }
+        AllButOnePagePreserving(dispPg, old(this), this);
     }
-    AllButOnePagePreserving(dispPg, old(this), this);
-    assert pageDbCorresponds(this.m, pagedb);
-
-    MOV(r0, const(KOM_ERR_INTERRUPTED));
-    MOV(r1, 0);
 }
 
 procedure {:frame false} interrupt_handler(
@@ -492,7 +470,8 @@ procedure {:frame false} interrupt_handler(
 
     assert GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp()));
     assert MemPreservingExcept(old(this), this, sp, sp + 2 * WORDSIZE);
-    assert RegPreservingExcept(old(this), this, set(OSP, OLR, OReg(R0), OReg(R1)));
+    assert forall r :: r != R0 && r != R1 && r != LR(Monitor) && r != SP(Monitor)
+        ==> va_get_reg(r, old(this)) == va_get_reg(r, this);
 
     if (r0 == const(encode_mode(User))) { // we came from user-mode
         assert spsr_of_state(old(this)).m == User;
@@ -504,6 +483,9 @@ procedure {:frame false} interrupt_handler(
         assert r1 == old(r1);
         lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb_in);
         pagedb := save_disp_context(r0, ex, old(this), dispPg, pagedb_in);
+
+        MOV(r0, const(KOM_ERR_INTERRUPTED));
+        MOV(r1, 0);
         assert tuple(r0, r1, pagedb) == exceptionHandled(old(this), pagedb_in, dispPg);
 
         ADD(sp, sp, const(2 * WORDSIZE));
