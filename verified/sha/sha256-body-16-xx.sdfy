@@ -371,6 +371,7 @@ procedure {:refined}{:recursive}{:timeLimitMultiplier 2} Body_16_XXUnroller(
         assert OpaqueMod(i, 8) == 0 by { reveal OpaqueMod; }
         trace_out := trace_in;
     }
+    assert {:split_here}{:refined} true;
 }
 
 procedure {:refined} Body_16_XXLoopUnrolled(
