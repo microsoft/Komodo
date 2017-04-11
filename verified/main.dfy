@@ -220,11 +220,11 @@ lemma lemma_PrivExceptionStateSideEffects(s:state, r:state, ex:exception,
     requires KomUserEntryPrecondition(s, pagedb, dispPg)
     requires priv_of_state(s) == PL1 && interrupts_enabled(s)
     requires ex == ExIRQ || ex == ExFIQ
-    requires evalExceptionTaken(s, ex, nondet_word(s.nondet, NONDET_PC()), r)
+    requires evalExceptionTaken(s, ex, nondet_word(s.conf.nondet, NONDET_PC()), r)
     ensures ExceptionStateSideEffects(r) && spsr_of_state(r).m == mode_of_state(s)
 {
     assert r.conf.ex == ex;
-    lemma_evalExceptionTaken_Mode(s, ex, nondet_word(s.nondet, NONDET_PC()), r);
+    lemma_evalExceptionTaken_Mode(s, ex, nondet_word(s.conf.nondet, NONDET_PC()), r);
     assert spsr_of_state(r).m == mode_of_state(s);
     assert mode_of_state(r) == Monitor;
     mode_encodings_are_sane();
@@ -296,7 +296,7 @@ lemma lemma_ExceptionHandlersAreCorrect()
         && UsermodeContinuationPrecondition(s0)
         && priv_of_state(s0) == PL1 && interrupts_enabled(s0)
         && (ex == ExFIQ || ex == ExIRQ)
-        && evalExceptionTaken(s0, ex, nondet_word(s0.nondet, NONDET_PC()), s1)
+        && evalExceptionTaken(s0, ex, nondet_word(s0.conf.nondet, NONDET_PC()), s1)
         && evalCode(exHandler(ex), s1, r)
         ensures exists p0, dp :: KomInterruptHandlerInvariant(s1, p0, r, dp)
     {
