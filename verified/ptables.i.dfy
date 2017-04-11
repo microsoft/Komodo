@@ -69,6 +69,7 @@ lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
         var l1e := l1pt[i];
         var absl1pte := ExtractAbsL1PTE(MemContents(s, WordOffset(l1base, k)));
         assert absl1pte == mkAbsL1PTE(l1e, j);
+        reveal ExtractAbsL1PTable();
         if l1e.Just? {
             var l2p := l1e.v;
             assert validL1PTE(d, l2p);
@@ -226,16 +227,10 @@ lemma lemma_WritablePages(d:PageDb, l1p:PageNr, pagebase:addr)
     assert pte.SecureMapping? && pte.write;
 }
 
-predicate evalUserspaceExecution(s:state, s':state)
-    requires ValidState(s)
-{
-    mode_of_state(s) == User && ExtractAbsPageTable(s).Just?
-    && exists pc:word :: s' == userspaceExecutionFn(s, pc).0
-}
-
 lemma UserExecutionMemInvariant(s:state, s':state, d:PageDb, l1:PageNr)
     requires ValidState(s) && SaneMem(s.m)
-    requires evalUserspaceExecution(s, s')
+    requires mode_of_state(s) == User && ExtractAbsPageTable(s).Just?
+    requires exists pc:word :: s' == userspaceExecutionFn(s, pc).0
     requires validPageDb(d)
     requires pageDbCorresponds(s.m, d)
     requires nonStoppedL1(d, l1)

@@ -579,19 +579,19 @@ function {:opaque} userspaceExecutionFn(s:state, pc:word): (state, word, excepti
     requires ExtractAbsPageTable(s).Just?
     ensures  ValidState(userspaceExecutionFn(s, pc).0)
 {
-    reveal_ValidMemState();
-    reveal_ValidRegState();
-    reveal_ValidSRegState();
+    // havoc writable pages and user regs, and take some steps
     var pt := ExtractAbsPageTable(s).v;
     var user_state := user_visible_state(s, pc, pt);
     var pages := WritablePagesInTable(pt);
-    // havoc writable pages and user regs, and take some steps
-    var rs := reseed_nondet_state(s).(
+    var newpsr := nondet_psr(s.conf.nondet, user_state, s.conf.cpsr);
+    var s' := reseed_nondet_state(s);
+    var rs := s'.(
         m := s.m.(addresses := havocPages(pages, s, user_state)),
         regs := havocUserRegs(s.conf.nondet, user_state, s.regs),
-        sregs := s.sregs[cpsr := nondet_psr(s.conf.nondet, user_state, s.conf.cpsr)],
+        sregs := s.sregs[cpsr := newpsr],
         steps := s.steps + nondet_private_nat(s.conf.nondet, user_state, NONDET_STEPS()));
-    assert rs.conf.cpsr == decode_psr(rs.sregs[cpsr]);
+    assert ValidMemState(rs.m) by { reveal_ValidMemState(); }
+    assert ValidSRegState(rs.sregs, rs.conf) by { reveal_ValidSRegState(); }
     // final PC and exception are functions of private nondeterminism
     var rpc := nondet_private_word(s.conf.nondet, user_state, NONDET_PC());
     var rex := nondet_exception(s.conf.nondet, user_state, s.conf.cpsr.f, s.conf.cpsr.i);
@@ -751,7 +751,7 @@ predicate ValidAbsL1PTable(m:memstate, vbase:int)
                 isUInt32(l2ptr) && WordAligned(l2ptr) && ValidAbsL2PTable(m, l2ptr)))
 }
 
-function ExtractAbsL1PTable(m:memstate, vbase:addr): AbsPTable
+function {:opaque} ExtractAbsL1PTable(m:memstate, vbase:addr): AbsPTable
     requires ValidMemState(m)
     requires ValidAbsL1PTable(m, vbase)
     ensures WellformedAbsPTable(ExtractAbsL1PTable(m, vbase))
