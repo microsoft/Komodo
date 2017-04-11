@@ -317,7 +317,9 @@ procedure unstack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
     LDR_MSR_spsr(spsr_mon, sp, const(17*WORDSIZE), tmp);
 
     reveal_banked_regs_stackframe();
-    assert sp == old(sp) && banked_regs_stackframe(this, old(this.m), old(sp));
+    assert sp == old(sp)
+        && banked_regs_stackframe(this, old(this.m), old(sp));
+    assert {:split_here} true;
 
     ADD(sp, sp, const(BANKED_FRAMESIZE));
     stack_bytes := stack_bytes_in + BANKED_FRAMESIZE;
@@ -1009,21 +1011,24 @@ procedure {:frame false} {:timeLimitMultiplier 2} smc_enterresume_success(
     assert KomUserEntryPrecondition(this, pagedb, dispPg);
     pagedb, steps := enclaveexecution_loop(pagedb, dispPg);
 
+    assert StackPreserving(s0, this);
     ghost var s6 := this;
     ghost var s6_sp := sp;
+
+    lemma_ValidEntryPre(old(this), s0, pagedb_in, s6, pagedb, dispPg,
+                            old(arg1), old(arg2), old(arg3));
 
     leave_secure_world(r2);
 
     lemma_wellformed_banked_regs_stackframe_preserved(s0.m, this.m, sp);
+    assert StackPreserving(s6, this);
     stack_bytes_local := unstack_banked_regs(r2, stack_bytes_local);
     assert stack_bytes_local == stack_bytes;
+    assert GlobalsInvariant(s6, this);
     lemma_SameMemAndGlobalsPreservesPageDb(s6, this, pagedb);
 
     assert StackPreserving(old(this), this);
     lemma_stackunstack_banked_regs(old(this), s0.m, this, s6.m, s6_sp);
-
-    lemma_ValidEntryPre(old(this), s0, pagedb_in, s6, pagedb, dispPg,
-                            old(arg1), old(arg2), old(arg3));
 
     assert validExceptionTransition(s6, pagedb, this, pagedb, dispPg)
         by { reveal_validExceptionTransition(); }
