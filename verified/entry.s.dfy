@@ -179,7 +179,7 @@ predicate preEntryEnter(s:state,s':state,d:PageDb,
     reveal_validPageDb();
     reveal_ValidRegState();
 
-    s.nondet == s'.nondet && preEntryCommon(s', d, dispPage)
+    s.conf.nondet == s'.conf.nondet && preEntryCommon(s', d, dispPage)
     && s'.regs[R0] == a1 && s'.regs[R1] == a2 && s'.regs[R2] == a3
     && (forall r | r in (USER_REGS() - {R0, R1, R2}) :: s'.regs[r] == 0)
     && OperandContents(s', OLR) == d[dispPage].entry.entrypoint
@@ -201,7 +201,7 @@ predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
     var disp := d[dispPage].entry;
     var l1p := l1pOfDispatcher(d, dispPage);
     
-    s.nondet == s'.nondet && preEntryCommon(s', d, dispPage)
+    s.conf.nondet == s'.conf.nondet && preEntryCommon(s', d, dispPage)
     && (reveal_ValidRegState();
         forall r | r in USER_REGS() :: s'.regs[r] == disp.ctxt.regs[r])
     && OperandContents(s', OLR) == disp.ctxt.pc
@@ -240,7 +240,7 @@ predicate preEntryReturn(exs:state, s:state, retregs:SvcReturnRegs)
 predicate equivStates(s1:state, s2:state)
 {
     s1.regs == s2.regs && s1.m == s2.m && s1.sregs == s2.sregs
-        && s1.conf == s2.conf && s1.ok == s2.ok && s1.nondet == s2.nondet
+        && s1.conf == s2.conf && s1.ok == s2.ok
 }
 
 

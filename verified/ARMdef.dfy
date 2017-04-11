@@ -39,7 +39,7 @@ datatype SReg = cpsr | spsr(m:mode) | SCR | SCTLR | VBAR | MVBAR | ttbr0
 // the processor and the concrete representation should be used only for
 // ensuring that the correct values are stored/returned by instructions
 datatype config = Config(cpsr:PSR, spsr:map<mode,PSR>, scr:SCR, ttbr0:TTBR, 
-    ex:exception, exstep:nat)
+    ex:exception, exstep:nat, nondet:int)
 datatype PSR  = PSR(m:mode, f:bool, i:bool) // See B1.3.3
 datatype SCR  = SCRT(ns:world, irq:bool, fiq:bool) // See B4.1.129
 datatype TTBR = TTBR(ptbase:addr)      // See B4.1.154
@@ -65,8 +65,7 @@ datatype state = State(regs:map<ARMReg, word>,
                        m:memstate,
                        conf:config,
                        ok:bool,
-                       steps:nat,
-                       nondet:int)
+                       steps:nat)
 
 // System mode is not modeled
 datatype mode = User | FIQ | IRQ | Supervisor | Abort | Undefined | Monitor
@@ -589,13 +588,13 @@ function {:opaque} userspaceExecutionFn(s:state, pc:word): (state, word, excepti
     // havoc writable pages and user regs, and take some steps
     var rs := reseed_nondet_state(s).(
         m := s.m.(addresses := havocPages(pages, s, user_state)),
-        regs := havocUserRegs(s.nondet, user_state, s.regs),
-        sregs := s.sregs[cpsr := nondet_psr(s.nondet, user_state, s.conf.cpsr)],
-        steps := s.steps + nondet_private_nat(s.nondet, user_state, NONDET_STEPS()));
+        regs := havocUserRegs(s.conf.nondet, user_state, s.regs),
+        sregs := s.sregs[cpsr := nondet_psr(s.conf.nondet, user_state, s.conf.cpsr)],
+        steps := s.steps + nondet_private_nat(s.conf.nondet, user_state, NONDET_STEPS()));
     assert rs.conf.cpsr == decode_psr(rs.sregs[cpsr]);
     // final PC and exception are functions of private nondeterminism
-    var rpc := nondet_private_word(s.nondet, user_state, NONDET_PC());
-    var rex := nondet_exception(s.nondet, user_state, s.conf.cpsr.f, s.conf.cpsr.i);
+    var rpc := nondet_private_word(s.conf.nondet, user_state, NONDET_PC());
+    var rex := nondet_exception(s.conf.nondet, user_state, s.conf.cpsr.f, s.conf.cpsr.i);
     (rs, rpc, rex)
 }
 
@@ -605,8 +604,8 @@ function havocPages(pages:set<addr>, s:state, us:UserState): memmap
     // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
     (map a:addr | ValidMem(a) && a in TheValidAddresses() ::
      if PageBase(a) in pages then (
-        if addrIsSecure(a) then nondet_private_word(s.nondet, us, a)
-        else nondet_word(s.nondet, a)
+        if addrIsSecure(a) then nondet_private_word(s.conf.nondet, us, a)
+        else nondet_word(s.conf.nondet, a)
      ) else MemContents(s.m, a))
 }
 
@@ -920,8 +919,11 @@ function GlobalWord(s:memstate, g:symbol, offset:word): word
 }
 
 function reseed_nondet_state(s:state): state
+    requires ValidState(s)
+    ensures ValidState(s)
 {
-    s.(nondet := nondet_int(s.nondet, NONDET_GENERATOR()))
+    reveal ValidSRegState();
+    s.(conf := s.conf.(nondet := nondet_int(s.conf.nondet, NONDET_GENERATOR())))
 }
 
 function takestep(s:state): state
@@ -1083,7 +1085,7 @@ predicate handleInterrupt(s:state, ex:exception, r:state)
     requires ValidState(s)
 {
     InterruptContinuationPrecondition(s)
-    && exists s1, s2 :: evalExceptionTaken(s, ex, nondet_word(s.nondet, NONDET_PC()), s1)
+    && exists s1, s2 :: evalExceptionTaken(s, ex, nondet_word(s.conf.nondet, NONDET_PC()), s1)
         && InterruptContinuationInvariant(s1, s2)
         && evalMOVSPCLR(s2, r)
 }
@@ -1094,9 +1096,9 @@ predicate maybeHandleInterrupt(s:state, r:state)
 {
     if !interrupts_enabled(s)
         then r == takestep(s)
-    else if !s.conf.cpsr.f && nondet_word(s.nondet, NONDET_EX()) == 0
+    else if !s.conf.cpsr.f && nondet_word(s.conf.nondet, NONDET_EX()) == 0
         then handleInterrupt(reseed_nondet_state(s), ExFIQ, r)
-    else if !s.conf.cpsr.i && nondet_word(s.nondet, NONDET_EX()) == 1
+    else if !s.conf.cpsr.i && nondet_word(s.conf.nondet, NONDET_EX()) == 1
         then handleInterrupt(reseed_nondet_state(s), ExIRQ, r)
     else r == takestep(reseed_nondet_state(s))
 }

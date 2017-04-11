@@ -629,7 +629,7 @@ lemma lemma_ValidEntryPre(s0:state, s1:state, sd:PageDb, r:state, rd:PageDb, dp:
                            a1:word, a2:word, a3:word)
     requires ValidState(s0) && ValidState(s1) && ValidState(r) && validPageDb(sd)
     requires SaneConstants()
-    requires s0.nondet == s1.nondet
+    requires s0.conf.nondet == s1.conf.nondet
     ensures smc_enter(s1, sd, r, rd, dp, a1, a2, a3)
         ==> smc_enter(s0, sd, r, rd, dp, a1, a2, a3)
     ensures smc_resume(s1, sd, r, rd, dp) ==> smc_resume(s0, sd, r, rd, dp)
@@ -670,20 +670,6 @@ lemma lemma_evalExceptionTaken_Mode(s:state, e:exception, expc:word, r:state)
         newmode;
     }
 }
-
-/*
-function {:opaque} nondet_reseeded(x:int, reseeds:nat): int
-    decreases reseeds
-{
-    if reseeds == 0 then x
-    else nondet_reseeded(nondet_int(x, NONDET_GENERATOR()), reseeds - 1)
-}
-
-predicate nondet_preserved(s:state, r:state, reseeds:nat)
-{
-    r.nondet == nondet_reseeded(s.nondet, reseeds)
-}
-*/
 
 lemma lemma_validEnclaveExecutionStep_PageDb(s1:state, d1:PageDb, r1:state,
     rd:PageDb, dispPg:PageNr, retToEnclave:bool)

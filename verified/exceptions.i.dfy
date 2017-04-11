@@ -119,14 +119,14 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
             ==> s.regs[LR(m)] == r.regs[LR(m)]
                 && s.regs[SP(m)] == r.regs[SP(m)]
 {
-    var nondet := nondet_word(s.nondet, NONDET_EX());
+    var nondet := nondet_word(s.conf.nondet, NONDET_EX());
     if !interrupts_enabled(s) {
         assert r == takestep(s);
     } else if (!s.conf.cpsr.f && nondet == 0) || (!s.conf.cpsr.i && nondet == 1) {
         var ex := if nondet == 0 then ExFIQ else ExIRQ;
         var s' := reseed_nondet_state(s);
         assert handleInterrupt(s', ex, r);
-        var expc := nondet_word(s'.nondet, NONDET_PC());
+        var expc := nondet_word(s'.conf.nondet, NONDET_PC());
         var s1, s2 :| evalExceptionTaken(s', ex, expc, s1)
             && InterruptContinuationInvariant(s1, s2)
             && evalMOVSPCLR(s2, r);

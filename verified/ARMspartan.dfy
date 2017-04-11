@@ -271,7 +271,6 @@ predicate va_state_eq(s0:state, s1:state)
  && s0.m == s1.m
  && s0.conf == s1.conf
  && s0.ok == s1.ok
- && s0.nondet == s1.nondet
 }
 
 predicate {:opaque} ValidAddrMemStateOpaque(mem: memmap)
