@@ -358,7 +358,7 @@ ensures
 
   // Prove that input still accurate in memory
   assert input == AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * old(r2)) by { 
-    lemma_AddrMemContentsSeq_framing(input_mem, mem, input_ptr, SHA_BLOCKSIZE*num_blocks, sp - STACKSIZE_SHA_UPDATE*WORDSIZE, sp,
+    lemma_AddrMemContentsSeq_framing2(input_mem, mem, input_ptr, SHA_BLOCKSIZE*num_blocks, sp - STACKSIZE_SHA_UPDATE*WORDSIZE, sp,
                                      old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE); 
   }
 
@@ -378,7 +378,7 @@ ensures
    
   // Prove that input still accurate in memory
   assert input == AddrMemContentsSeq(mem, old(r1), SHA_BLOCKSIZE * old(r2)) by { 
-    lemma_AddrMemContentsSeq_framing(input_mem, mem, input_ptr, SHA_BLOCKSIZE*num_blocks, sp - STACKSIZE_SHA_FINALIZE * WORDSIZE, sp,
+    lemma_AddrMemContentsSeq_framing2(input_mem, mem, input_ptr, SHA_BLOCKSIZE*num_blocks, sp - STACKSIZE_SHA_FINALIZE * WORDSIZE, sp,
                                      old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE); 
   }
   

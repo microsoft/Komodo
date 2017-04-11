@@ -11,7 +11,7 @@ lemma lemma_apply_opad_complete(m:memmap, m':memmap, base:nat, count:nat)
 {
   if count == 0 {
 	} else {
-		lemma_ValidMemRange_offset(base, count);
+		lemma_ValidMemRange_offset_word(base, count);
 		lemma_apply_opad_complete(m, m', base, count - 1);
 	}
 }
@@ -28,7 +28,7 @@ lemma lemma_apply_ipad_complete(m:memmap, m':memmap, base:nat, count:nat)
 {
   if count == 0 {
 	} else {
-		lemma_ValidMemRange_offset(base, count);
+		lemma_ValidMemRange_offset_word(base, count);
 		lemma_apply_ipad_complete(m, m', base, count - 1);
 	}
 }
