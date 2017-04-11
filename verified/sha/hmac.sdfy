@@ -146,18 +146,13 @@ requires
      && key == AddrMemContentsSeq(mem, key_ptr, SHA_BLOCKSIZE)
      
      // tmp_ptr points to reasonable memory location with at least num_blocks+1 space
-     //&& isUInt32(tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE)
      && ValidMemRange(tmp_ptr, tmp_ptr + SHA_BLOCKSIZE * WORDSIZE)
 
      // Non-refined requirements
-//     && disjoint(tmp_ptr, tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE, StackBase(), StackLimit())
      && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
      && tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() //|| tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
 
      // Anti-aliasing via direct layout of  sp, ctx, input, tmp, key
-//     && sp <= ctx
-//     && ctx + SHA_CTXSIZE*WORDSIZE <= input_ptr
-//     && input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE <= tmp_ptr
      && tmp_ptr + SHA_BLOCKSIZE*WORDSIZE <= key_ptr
      ;
 reads 
@@ -187,6 +182,69 @@ ensures
 
     apply_ipad();
 }
+
+
+procedure hmac_inner_prep_input(
+    ghost input:seq(word)
+    ) 
+requires/ensures
+    ValidAddrMemStateOpaque(mem);
+    SaneState(this);
+requires 
+    !interrupts_enabled(this);
+    mode_of_state(this) == Monitor;
+requires
+    let num_blocks := r2 in // Number of 64-byte blocks to process
+    let input_ptr := r3 in
+    let tmp_ptr := r7 in
+
+     // In-memory input is reasonable
+        isUInt32(input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
+     && ValidMemRange(input_ptr, input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
+     && input == AddrMemContentsSeq(mem, input_ptr, num_blocks * SHA_BLOCKSIZE)
+
+     // tmp_ptr points to reasonable memory location with at least num_blocks space
+     && isUInt32(tmp_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
+     && ValidMemRange(tmp_ptr, tmp_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
+
+     // Non-refined requirements
+     && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
+     && tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() //|| tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
+
+     // Anti-aliasing via direct layout of  sp, ctx, input, tmp, key
+     && input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE <= tmp_ptr
+      ;
+reads
+    r2; r3; r7;
+modifies
+    mem; r5; r6;
+ensures
+    // Framing
+    ValidAddrMemStateOpaque(old(mem)); 
+    ValidAddrMemStateOpaque(mem); 
+
+    // Memory framing:  We only touch the tmp buffer
+    AddrMemPreservingExcept(old(mem), mem, r7, r7 + r2 * SHA_BLOCKSIZE * WORDSIZE);
+    ValidMemRange(r7, r7 + r2 * SHA_BLOCKSIZE * WORDSIZE);
+
+    AddrMemContentsSeq(mem, r7, r2 * SHA_BLOCKSIZE) == input;
+
+{
+    ghost var num_blocks := r2; 
+    ghost var input_ptr := r3; 
+    ghost var tmp_ptr := r7;
+
+    MOV(r5, const(SHA_BLOCKSIZE*WORDSIZE));
+    MUL(r6, r2, r5);  // Number of input bytes
+//    assume WordAligned(r7);
+//    assume WordAligned(r6);
+    memcpy(r7, r3, r6, r5);
+    lemma_memset_result(old(this.m), this.m, input_ptr, tmp_ptr, num_blocks * SHA_BLOCKSIZE);
+}
+
+
+
+
 /*
 procedure hmac_inner(
     ghost key:seq(word),
@@ -299,19 +357,9 @@ ensures
     ghost var num_blocks := r2; 
     ghost var input_ptr := r3; 
     ghost var key_ptr := r4;
-    ghost var s:int;
-    //lemma_ValidMemRange_offset(sp - STACKSIZE_HMAC * WORDSIZE - 40, STACKSIZE_HMAC);
-    s := stack_nonvolatiles(40);
 
     // Copy key to the beginning of the tmp buffer
-    MOV(r5, const(HMAC_KEYSIZE_BYTES)); 
-    memcpy(r1 /* tmp_ptr */, r4 /* key_ptr */, r5, r6);
-
-    ghost var post_key_copy_mem;
-    post_key_copy_mem := mem;
-    apply_ipad();
-
-    assert {:split_here} true;
+    hmac_inner_prep_key(key);
 
     // Copy the input to the rest of the tmp buffer
     assert r1 == tmp_ptr;

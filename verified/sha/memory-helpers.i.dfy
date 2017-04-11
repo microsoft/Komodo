@@ -85,4 +85,8 @@ lemma lemma_memset_result(m:memstate, m':memstate, src:word, dst:word, num_words
                 ==> MemContents(m', a) == MemContents(m, a - dst + src);
     ensures  AddrMemContentsSeq(m'.addresses, dst, num_words) == AddrMemContentsSeq(m.addresses, src, num_words);
 {
+    if num_words == 0 {
+    } else {
+        lemma_memset_result(m, m', src, dst, num_words - 1);
+    }
 }
