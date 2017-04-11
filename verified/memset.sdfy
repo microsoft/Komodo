@@ -1,8 +1,8 @@
 include {:verbatim} "kom_common.i.dfy"
 include "ARMdecls.sdfy"
 
-procedure memcpy(operand dst:addr, operand src:addr,
-                 inout operand size:reg, out operand tmp:reg)
+procedure {:timeLimitMultiplier 2} memcpy(operand dst:addr, operand src:addr,
+                                          inout operand size:reg, out operand tmp:reg)
     modifies
         mem;
     requires/ensures
@@ -22,12 +22,15 @@ procedure memcpy(operand dst:addr, operand src:addr,
         forall a:addr :: old(dst) <= a < old(dst + size)
             ==> MemContents(this.m, a) == old(MemContents(this.m, a - dst + src));
 {
+    assert @dst != @src && @dst != @size && @dst != @tmp && @src != @size
+        && @src != @tmp && @size != @tmp && @size != OSP && @tmp != OSP;
+
     while (size > 0)
         invariant
             SaneState(this);
             GlobalsInvariant(old(this),this);
             SmcProcedureInvariant(old(this),this);
-            RegPreservingExcept(old(this), this, set(@size, @tmp));
+            //RegPreservingExcept(old(this), this, set(@size, @tmp));
             WordAligned(size) && 0 <= size <= old(size);
             dst == old(dst) && src == old(src);
             MemPreservingExcept(old(this), this, dst + size, dst + old(size));
