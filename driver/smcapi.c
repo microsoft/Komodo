@@ -89,8 +89,23 @@ kom_multival_t kom_smc_enter(kom_secure_pageno_t dispatcher, uintptr_t arg1,
 {
     kom_multival_t ret;
     ret.raw = invoke_smc(KOM_SMC_ENTER, dispatcher, arg1, arg2, arg3);
+    return ret;
+}
+
+kom_multival_t kom_smc_resume(kom_secure_pageno_t dispatcher)
+{
+    kom_multival_t ret;
+    ret.raw = invoke_smc(KOM_SMC_RESUME, dispatcher, 0, 0, 0);
+    return ret;
+}
+
+kom_multival_t kom_smc_execute(kom_secure_pageno_t dispatcher, uintptr_t arg1,
+                               uintptr_t arg2, uintptr_t arg3)
+{
+    kom_multival_t ret;
+    ret = kom_smc_enter(dispatcher, arg1, arg2, arg3);
     while (ret.x.err == KOM_ERR_INTERRUPTED) {
-        ret.raw = invoke_smc(KOM_SMC_RESUME, dispatcher, 0, 0, 0);
+        ret = kom_smc_resume(dispatcher);
     }
 
     return ret;

@@ -95,4 +95,8 @@ kom_multival_t kom_smc_enter(kom_secure_pageno_t dispatcher, uintptr_t arg1,
                              uintptr_t arg2, uintptr_t arg3);
 kom_multival_t kom_smc_resume(kom_secure_pageno_t dispatcher);
 
+// not a real SMC: enter and then resume until !interrupted
+kom_multival_t kom_smc_execute(kom_secure_pageno_t dispatcher, uintptr_t arg1,
+                               uintptr_t arg2, uintptr_t arg3);
+
 #endif

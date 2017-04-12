@@ -24,14 +24,27 @@ void __attribute__ ((visibility ("hidden"))) test_enclave_end(void);
 __asm (
     ".text                                      \n"
     "test_enclave:                              \n"
-    "   mov     r0, #42                         \n"
-    "   mov     r1, #0xa000                     \n"
-    "   str     r0, [r1]                        \n"
+    //"   mov     r0, #42                         \n"
+    //"   mov     r1, #0xa000                     \n"
+    //"   str     r0, [r1]                        \n"
     "   mov     r0, #0                          \n" // KOM_SVC_EXIT
     "1: svc     #0                              \n"
     "   b       1b                              \n"
     "test_enclave_end:                          \n"
 );
+
+static void enable_pmccntr(void)
+{
+    asm volatile ("mcr p15, 0, %0, c9, c12, 0" :: "r"(1));
+    asm volatile ("mcr p15, 0, %0, c9, c12, 1" :: "r"(1 << 31));
+}
+
+static inline uint32_t rdcycles(void)
+{
+    uint32_t r = 0;
+    asm volatile("mrc p15, 0, %0, c9, c13, 0" : "=r"(r));
+    return r;
+}
 
 static int test(void)
 {
@@ -42,6 +55,8 @@ static int test(void)
     u32 shared_phys;
     void *shared_virt;
     kom_multival_t ret;
+
+    enable_pmccntr();
 
     shared_page = alloc_page(GFP_KERNEL);
     BUG_ON(shared_page == NULL);
@@ -141,7 +156,7 @@ static int test(void)
         return -EIO;
     }
     
-    ret = kom_smc_enter(disp, 1, 2, 3);
+    ret = kom_smc_execute(disp, 1, 2, 3);
     printk(KERN_DEBUG "enter: %d\n", ret.x.err);
     if (ret.x.err != KOM_ERR_SUCCESS) {
         return -EIO;
@@ -149,6 +164,36 @@ static int test(void)
 
     printk(KERN_DEBUG "returned: %lx\n", ret.x.val);
     printk(KERN_DEBUG "wrote: %x\n", *(u32 *)shared_virt);
+
+    {
+        u32 s0, s1, resumecnt = 0, i;
+        bool interrupted = false;
+        s0 = rdcycles();
+        for (i = 0; i < 100; i++) {
+            kom_multival_t ret;
+            if (interrupted) {
+                resumecnt++;
+                ret = kom_smc_resume(disp);
+            } else {
+                ret = kom_smc_enter(disp, 0, 0, 0);
+            }
+            if (ret.x.err == KOM_ERR_INTERRUPTED) {
+                interrupted = true;
+            } else if (ret.x.err == KOM_ERR_SUCCESS) {
+                interrupted = false;
+            } else {
+                if (interrupted) {
+                    resumecnt--;
+                }
+                printk(KERN_DEBUG "error on enter/resume iteration %d: %d\n", i, err);
+                return -EIO;
+            }
+        }
+        s1 = rdcycles();
+
+        printk(KERN_DEBUG "komodo: %u enter + %u resume took %u cycles\n",
+               100-resumecnt, resumecnt, s1-s0);
+    }
 
     err = kom_smc_stop(addrspace);
     printk(KERN_DEBUG "stop: %d\n", err);
@@ -250,6 +295,14 @@ static int __init driver_init(void)
     }
 
     printk(KERN_DEBUG "komodo: running tests\n");
+    {
+        u32 s0, s1, i;
+        s0 = rdcycles();
+        for (i = 0; i < 100; i++) kom_smc_query();
+        s1 = rdcycles();
+        printk(KERN_DEBUG "komodo: 100 iterations of a null SMC took %u cycles\n", s1-s0);
+    }
+
     r = test();
     printk(KERN_DEBUG "komodo: test complete: %d\n", r);
     
