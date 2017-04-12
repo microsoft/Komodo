@@ -350,7 +350,7 @@ procedure hmac_inner(
     ghost key:seq(word),
     ghost input:seq(word)
     ) returns (
-    ghost hash:seq(word)
+    ghost inner_hash:seq(word)
     )
 requires/ensures
     ValidAddrMemStateOpaque(mem);
@@ -414,10 +414,26 @@ ensures
     ValidAddrMemStateOpaque(mem); 
 
     // Memory framing:  We only touch the stack and 8 words pointed to by ctx_ptr
-//    AddrMemPreservingExcept3(old(mem), mem, 
-//                             sp - HMAC_KEYSIZE_BYTES * WORDSIZE, sp, 
-//                             old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE,
-//                             old(r1), old(r1) + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE);
+    AddrMemPreservingExcept3(old(mem), mem, 
+                             sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE, sp, 
+                             old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE,
+                             old(r1), old(r1) + (old(r2) + 1) * SHA_BLOCKSIZE * WORDSIZE);
+    ValidMemRange(r0, r0 + SHA_CTXSIZE * WORDSIZE);
+
+    // Register framing
+    r0 == old(r0);
+    r1 == old(r1);
+    r4 == old(r4);
+    r8 == old(r8);
+    r9 == old(r9);
+    r11== old(r11);
+    sp == old(sp);  
+    lr == old(lr);
+    
+    // HMAC results
+    inner_hash == AddrMemContentsSeq(mem, r0, SHA_CTXSIZE);
+    SeqLength(WordSeqToBytes(SeqXor(key, Ipad(16)) + input)) <= MaxBytesForSHA();
+    inner_hash == SHA256(WordSeqToBytes(SeqXor(key, Ipad(16)) + input));
 {
     ghost var ctx := r0;
     ghost var tmp_ptr := r1;
@@ -426,13 +442,12 @@ ensures
     ghost var key_ptr := r4;
     
     hmac_inner_prep_hash(key, input);
-
     ghost var prepped_mem;
     prepped_mem := mem;
 
-    assert r0 == ctx;
-    assert r1 == tmp_ptr;
-    assert r2 == num_blocks + 1;
+//    assert r0 == ctx;
+//    assert r1 == tmp_ptr;
+//    assert r2 == num_blocks + 1;
     sha256_one_shot();
     assert WordAligned(r0);
     assume WordAligned(r0 + 1*WORDSIZE);
@@ -443,7 +458,7 @@ ensures
     assume WordAligned(r0 + 6*WORDSIZE);
     assume WordAligned(r0 + 7*WORDSIZE);
 
-    ghost var inner_hash := 
+    inner_hash := 
         seq(AddrMemContents(mem, r0 + 0*WORDSIZE),
             AddrMemContents(mem, r0 + 1*WORDSIZE),
             AddrMemContents(mem, r0 + 2*WORDSIZE),
@@ -452,6 +467,7 @@ ensures
             AddrMemContents(mem, r0 + 5*WORDSIZE),
             AddrMemContents(mem, r0 + 6*WORDSIZE),
             AddrMemContents(mem, r0 + 7*WORDSIZE));
+
     calc {
         true;
         inner_hash == SHA256(WordSeqToBytes(AddrMemContentsSeq(mem, tmp_ptr, SHA_BLOCKSIZE * (num_blocks+1))));
@@ -469,6 +485,8 @@ ensures
           { assert AddrMemContentsSeq(prepped_mem, tmp_ptr, (num_blocks+1) * SHA_BLOCKSIZE) == SeqXor(key, Ipad(16)) + input; }
         inner_hash == SHA256(WordSeqToBytes(SeqXor(key, Ipad(16)) + input));
     }
+
+    lemma_package_hash_result(mem, r0, inner_hash);
 }
 
 /*

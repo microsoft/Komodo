@@ -160,3 +160,19 @@ lemma lemma_memset_result(m:memstate, m':memstate, src:word, dst:word, num_words
         }
     }
 }
+
+lemma {:fuel AddrMemContentsSeq,9} lemma_package_hash_result(m:memmap, base:word, s:seq<word>)
+    requires ValidAddrMemStateOpaque(m);
+    requires ValidMemRange(base, base + SHA_CTXSIZE * WORDSIZE);
+    requires s == [ AddrMemContents(m, base + 0*WORDSIZE),
+                    AddrMemContents(m, base + 1*WORDSIZE),
+                    AddrMemContents(m, base + 2*WORDSIZE),
+                    AddrMemContents(m, base + 3*WORDSIZE),
+                    AddrMemContents(m, base + 4*WORDSIZE),
+                    AddrMemContents(m, base + 5*WORDSIZE),
+                    AddrMemContents(m, base + 6*WORDSIZE),
+                    AddrMemContents(m, base + 7*WORDSIZE) ];
+    ensures  s == AddrMemContentsSeq(m, base, SHA_CTXSIZE);
+{
+
+}
