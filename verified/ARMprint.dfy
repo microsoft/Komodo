@@ -60,14 +60,6 @@ method printCmp(c:ocmp, o1:operand, o2:operand)
     }
 }
 
-/*
-method printId(id:id)
-{
-    match id
-        case LocalVar(slot) => print("[sp, #");print(4*slot);print("]");
-        case GlobalVar(n) => not_impl();
-}
-*/
 method printMode(m:mode)
 {
     match m
@@ -77,7 +69,7 @@ method printMode(m:mode)
         case Supervisor => print("svc");
         case Abort => print("abt");
         case Undefined => print("und");
-        case Monitor => print("mon"); //TOOD check this
+        case Monitor => print("mon");
 }
 
 method printReg(r:ARMReg)
@@ -129,15 +121,14 @@ method printOperand(o:operand)
         case OConst(n) => print("#"); print(n);
         case OReg(r) => { printReg(r); }
         case OShift(r, s) => { printReg(r); print(","); printShift(s); }
-        case OSReg(r)   => {match r
-           case cpsr    => print("cpsr");
-           case spsr(m) => print("spsr");
-           case ttbr0   => print("XXX-invalid: TTBR0");
-           case SCTLR   => print("XXX-invalid: SCTLR");
-           case SCR     => print("XXX-invalid: SCR");
-           case VBAR    => print("XXX-invalid: VBAR");
-           case MVBAR   => print("XXX-invalid: MVBAR");
-        }
+        case OSReg(r) =>
+            if (r.cpsr?) {
+                print("cpsr");
+            } else if (r.spsr?) {
+                print("spsr");
+            } else {
+                print("XXX-invalid-OSReg");
+            }
         case OSP => print("sp");
         case OLR => print("lr");
 }
@@ -212,8 +203,8 @@ method printMcr(instr:string, sro:operand, op:operand)
             case SCTLR => print(", c1, c0, 0");
             case SCR => print(", c1, c1, 0");
             case VBAR => print(", c12, c0, 0");
-            case MVBAR => print(", c12, c0, 1");
             case ttbr0 => print(", c2, c0, 0");
+            case TLBIASID => print(", c8, c7, 2");
         }
     } else {
         print("XXX-invalid-sreg");
@@ -263,7 +254,7 @@ method printIns(ins:ins)
         case MRS(dst, src) => printIns2Op("MRS", dst, src);
         case MSR(dst, src) => printIns2Op("MSR", dst, src);
         case MRC(dst, src) => printMcr("MRC", src, dst);
-        case MCR(dst,src) => printMcr("MCR", dst, src);
+        case MCR(dst,src) => printMcr("MCR", dst, src); printInsFixed("ISB", "");
         case CPSID_IAF(mod) => printIns1Op("CPSID iaf,", mod);
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE =>
             printInsFixed("MOVS", "pc, lr");

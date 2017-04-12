@@ -47,6 +47,7 @@ var{:state sreg(SCTLR)}            sctlr:word;
 var{:state sreg(SCR)}              scr:word;
 var{:state sreg(ttbr0)}            ttbr0:word;
 var{:state sreg(VBAR)}             vbar:word;
+var{:state sreg(TLBIASID)}         tlbiasid:word;
 
 #verbatim
 function MaybeUpdateOk(s:va_state, r:va_state) : va_state
