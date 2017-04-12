@@ -48,6 +48,7 @@ SECTIONS {
 
         /* TODO: figure out how to avoid including all the zero-bytes
          * of the monitor BSS in the loaded image */
+        monitor_image_bss = .;
         monitor.bss . :
         {
                 */monitor.elf(.bss);

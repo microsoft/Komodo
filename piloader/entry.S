@@ -171,6 +171,23 @@ leave_secure_world:
         /* copy the caller's stack pointer to the banked SP register */
         msr     sp_svc, r1
 
+        /* Enable dcache and icache bits in system control register */
+        mrc     p15, 0, r0, c1, c0, 0
+        orr     r0, r0, #ARM_SCTLR_C
+        orr     r0, r0, #ARM_SCTLR_I
+        mcr     p15, 0, r0, c1, c0, 0
+
+        /* Enable cache coherence (SMP bit) in auxiliary control register */
+        mrc     p15, 0, r0, c1, c0, 1
+        orr     r0, r0, #(ARM_ACR_SMP)
+        mcr     p15, 0, r0, c1, c0, 1
+
+        /* Set timer frequency, and enable it */
+        ldr     r0, =1
+        mcr     p15, 0, r0, c14, c3, 1  // CNTV_CTL=1
+        ldr     r0, =RASPI_TIMER_FREQ
+        mcr     p15, 0, r0, c14, c0, 0  // CNTFRQ
+
         /* return to caller (in normal-world supervisor mode) */
         movs pc, lr /* or ERET */
 

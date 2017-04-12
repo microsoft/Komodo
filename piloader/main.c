@@ -30,7 +30,8 @@
 #define ARM_SCR_NS      0x01 // non-secure bit
 
 // defined in linker script
-extern char monitor_image_start, monitor_image_data, monitor_image_end;
+extern char monitor_image_start, monitor_image_data, monitor_image_bss,
+    monitor_image_end;
 // defined in monitor image
 extern char monitor_stack_base, _monitor_vectors, _secure_vectors,
     g_monitor_physbase, g_secure_physbase;
@@ -51,6 +52,12 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar, uintptr_t mvbar,
                               uintptr_t mon_sp)
 {
     uint32_t reg;
+
+    __asm volatile("mrc p15, 0, %0, c2, c0, 0" : "=r" (reg));
+    console_printf("Initial secure TTBR0: %lx\n", reg);
+    __asm volatile("mrc p15, 0, %0, c2, c0, 1" : "=r" (reg));
+    console_printf("Initial secure TTBR1: %lx\n", reg);
+
     /* setup secure-world page tables */
 
     /* load the same page table base into both TTBR0 and TTBR1
@@ -59,6 +66,7 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar, uintptr_t mvbar,
     uintptr_t ttbr = ptbase | 0x6a; // XXX: cache pt walks, seems a good idea!
     __asm volatile("mcr p15, 0, %0, c2, c0, 0" :: "r" (ttbr));
     __asm volatile("mcr p15, 0, %0, c2, c0, 1" :: "r" (ttbr));
+    console_printf("Final secure TTBR0/1: %lx\n", ttbr);
 
     /* setup TTBCR for a 1G/3G address split, and enable both TTBR0 and TTBR1
      * ref: B3.5.4 Selecting between TTBR0 and TTBR1, Short-descriptor
@@ -80,15 +88,17 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar, uintptr_t mvbar,
     /* enable the MMU in the system control register
      * (this should be ok, since we have a 1:1 map for low RAM) */
     __asm volatile("mrc p15, 0, %0, c1, c0, 0" : "=r" (reg));
+    console_printf("initial secure SCTLR: %lx\n", reg);
     reg |= ARM_SCTLR_M | ARM_SCTLR_AFE;
     // while we're here, ensure that there's no funny business with the VBAR
     reg &= ~(ARM_SCTLR_V | ARM_SCTLR_VE);
-    console_printf("updating SCR to %lx\n", reg);
     __asm volatile("mcr p15, 0, %0, c1, c0, 0" : : "r" (reg));
+    console_printf("Final secure SCTLR: %lx\n", reg);
 
     /* setup secure VBAR and MVBAR */
     __asm volatile("mcr p15, 0, %0, c12, c0, 0" :: "r" (vbar));
     __asm volatile("mcr p15, 0, %0, c12, c0, 1" :: "r" (mvbar));
+    console_printf("Final secure VBAR: %lx; MVBAR: %lx\n", vbar, mvbar);
 
     /* update monitor-mode's banked SP value for use in later SMCs */
     /* FIXME: this causes an undefined instruction exception on
@@ -118,7 +128,8 @@ static void __attribute__((noreturn)) secondary_main(uint8_t coreid)
     while (1) {}
 }
 
-static void map_section(armpte_short_l1 *l1pt, uintptr_t vaddr, uintptr_t paddr)
+static void map_section(armpte_short_l1 *l1pt, uintptr_t vaddr, uintptr_t paddr,
+                        bool nocache)
 {
     uintptr_t idx = vaddr >> ARM_L1_SECTION_BITS;
 
@@ -131,7 +142,7 @@ static void map_section(armpte_short_l1 *l1pt, uintptr_t vaddr, uintptr_t paddr)
             .domain = 0,
             .ap0 = 1, // access flag = 1 (already accessed)
             .ap1 = 0, // system
-            .tex = 5, // 0b101: cacheable, write-back, write-allocate
+            .tex = nocache ? 0 : 5, // 0b101: cacheable, write-back, write-allocate
             .ap2 = 0,
             .s = 1, // shareable
             .ng = 0, // global (ASID doesn't apply)
@@ -212,22 +223,25 @@ void __attribute__((noreturn)) main(void)
      */
 
     uintptr_t monitor_physbase, ptbase;
-    size_t monitor_image_bytes = &monitor_image_end - &monitor_image_start;
-    size_t monitor_image_reserve = ROUND_UP(monitor_image_bytes, ARM_L1_PTABLE_BYTES);
+    size_t monitor_image_bytes = &monitor_image_bss - &monitor_image_start;
+    size_t monitor_mem_bytes = &monitor_image_end - &monitor_image_start;
+    size_t monitor_mem_reserve = ROUND_UP(monitor_mem_bytes, ARM_L1_PTABLE_BYTES);
     
-    monitor_physbase = atags_reserve_physmem(monitor_image_reserve
+    monitor_physbase = atags_reserve_physmem(monitor_mem_reserve
                                              + ARM_L1_PTABLE_BYTES
                                              + KOM_PAGE_SIZE
                                              + KOM_SECURE_RESERVE);
-
+    
     /* copy the monitor image into place */
     console_printf("Copying monitor to %lx\n", monitor_physbase);
     memcpy((void *)monitor_physbase, &monitor_image_start, monitor_image_bytes);
+    memset((char *)monitor_physbase + monitor_image_bytes, 0,
+           monitor_mem_bytes - monitor_image_bytes);
 
     console_puts("Constructing page tables\n");
 
     /* L1 page table must be 16kB-aligned */
-    ptbase = ROUND_UP(monitor_physbase + monitor_image_bytes, ARM_L1_PTABLE_BYTES);
+    ptbase = ROUND_UP(monitor_physbase + monitor_mem_bytes, ARM_L1_PTABLE_BYTES);
 
     armpte_short_l1 *l1pt = (void *)ptbase;
     armpte_short_l2 *l2pt = (void *)(ptbase + ARM_L1_PTABLE_BYTES);
@@ -237,12 +251,12 @@ void __attribute__((noreturn)) main(void)
     console_printf("L1 %p L2 %p\n", l1pt, l2pt);
 
     /* direct-map first 1MB of RAM and UART registers using section mappings */
-    map_section(l1pt, 0, 0);
-    map_section(l1pt, 0x3f200000, 0x3f200000); // TODO: not-cacheable!?
+    map_section(l1pt, 0, 0, false);
+    map_section(l1pt, 0x3f200000, 0x3f200000, true);
 
     /* direct-map phys memory in the 2-4G region for the monitor to use */
     for (uintptr_t off = 0; off < KOM_DIRECTMAP_SIZE; off += ARM_L1_SECTION_SIZE) {
-        map_section(l1pt, KOM_DIRECTMAP_VBASE + off, off);
+        map_section(l1pt, KOM_DIRECTMAP_VBASE + off, off, false);
     }
 
     /* install a second-level page table for the monitor image */
@@ -265,10 +279,11 @@ void __attribute__((noreturn)) main(void)
     // data and bss
     console_printf("mapping monitor RW at %lx-%lx\n",
                    KOM_MON_VBASE + monitor_executable_size,
-                   KOM_MON_VBASE + ROUND_UP(monitor_image_bytes, 0x1000));
+                   KOM_MON_VBASE + ROUND_UP(monitor_mem_bytes, 0x1000));
     map_l2_pages(l2pt, KOM_MON_VBASE + monitor_executable_size,
                  monitor_physbase + monitor_executable_size,
-                 ROUND_UP(monitor_image_bytes, 0x1000) - monitor_executable_size, false);
+                 ROUND_UP(monitor_mem_bytes, 0x1000) - monitor_executable_size,
+                 false);
 
     uintptr_t monitor_stack
         = &monitor_stack_base - &monitor_image_start + KOM_MON_VBASE;
@@ -284,17 +299,33 @@ void __attribute__((noreturn)) main(void)
     secure_world_init(g_ptbase, g_vbar, g_mvbar, monitor_stack);
 
     /* init the monitor by setting up the secure physbase */
-    console_printf("passing secure_physbase %lx to monitor\n", secure_physbase);
-
     uintptr_t *monitor_monitor_physbase
         = (uintptr_t *)(&g_monitor_physbase - &monitor_image_start + KOM_MON_VBASE);
+    console_printf("passing monitor_physbase %lx to monitor (&%p)\n",
+                   monitor_physbase, monitor_monitor_physbase);
     *monitor_monitor_physbase = monitor_physbase;
     uintptr_t *monitor_secure_physbase
         = (uintptr_t *)(&g_secure_physbase - &monitor_image_start + KOM_MON_VBASE);
+    console_printf("passing secure_physbase %lx to monitor (&%p)\n",
+                   secure_physbase, monitor_secure_physbase);
     *monitor_secure_physbase = secure_physbase;
 
     // this call will return in non-secure world (where MMUs are still off)
+    __asm volatile("" : : : "memory");
+
     leave_secure_world();
+
+    __asm volatile("mrc p15, 0, %0, c2, c0, 0" : "=r" (reg));
+    console_printf("Final !secure TTBR0: %lx\n", reg);
+    __asm volatile("mrc p15, 0, %0, c2, c0, 1" : "=r" (reg));
+    console_printf("Final !secure TTBR1: %lx\n", reg);
+    __asm volatile("mrc p15, 0, %0, c1, c0, 0" : "=r" (reg));
+    console_printf("Final !secure SCTLR: %lx\n", reg);
+    __asm volatile("mrc p15, 0, %0, c12, c0, 0" : "=r" (reg));
+    console_printf("Final !secure VBAR: %lx\n", reg);
+
+    __asm volatile("mrs %0, cpsr" : "=r" (reg));
+    console_printf("Final CPSR: %lx\n", reg);
 
     global_barrier = true;
 
