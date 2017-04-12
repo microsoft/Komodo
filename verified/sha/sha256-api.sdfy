@@ -157,6 +157,7 @@ ensures
     lr == old(lr);
 
     // SHA results
+    SeqLength(WordSeqToBytes(ConcatenateSeqs(trace_in.M))) <= MaxBytesForSHA();
     let hash := seq(AddrMemContents(mem, old(r0) + 0*WORDSIZE),
                     AddrMemContents(mem, old(r0) + 1*WORDSIZE),
                     AddrMemContents(mem, old(r0) + 2*WORDSIZE),
