@@ -32,6 +32,18 @@ predicate AddrMemPreservingExcept2(sm:memmap, rm:memmap, base1:int, limit1:int, 
         ==> AddrMemContents(sm, a) == AddrMemContents(rm, a)
 }
 
+predicate AddrMemPreservingExcept3(sm:memmap, rm:memmap, 
+                                   base1:int, limit1:int, 
+                                   base2:int, limit2:int,
+                                   base3:int, limit3:int)
+    requires ValidAddrMemStateOpaque(sm) && ValidAddrMemStateOpaque(rm);
+    requires limit1 >= base1 && limit2 >= base2 && limit3 >= base3;
+{
+    forall a:addr :: ValidMem(a) && !(base1 <= a < limit1) && !(base2 <= a < limit2) && !(base3 <= a < limit3)
+        ==> AddrMemContents(sm, a) == AddrMemContents(rm, a)
+}
+
+
 const SHA_BLOCKSIZE:int := 16; // 16 words per block
 const SHA_CTXSIZE:int := 8; // 8 words
 const SHA_STACKSIZE:int := 19; // 19 words on the stack
