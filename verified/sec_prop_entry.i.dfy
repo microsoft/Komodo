@@ -890,28 +890,10 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
     ensures pt1.Just? && pt2.Just?
     ensures  user_visible_state(s12, pc1, pt1.v) == user_visible_state(s22, pc2, pt2.v)
 {
-    assume false;
-    // assume user_regs(s12.regs) == user_regs(s22.regs);
-    // assume pc1 == pc2;
-    // assert pt1.Just? &&  pt2.Just? by
-    //     {  reveal userspaceExecutionFn(); }
-
-    // reveal userspaceExecutionFn();
-    // assert pt1.v == pt2.v by
-    // {  
-    //     lemma_eqpdb_pt_coresp(d1, d2, s12, s22, l1p, atkr);
-    // }
-
-    // assert AllPagesInTable(pt1.v) == AllPagesInTable(pt2.v);
-
-    assert user_mem(pt1.v, s12.m) == user_mem(pt2.v, s22.m) by {
-        lemma_userMemEquiv_atkr_conf(
-            s11, s1', s12, s14, pc1, pt1, d1,
-            s21, s2', s22, s24, pc2, pt2, d2,
-            dispPg, atkr, l1p);
-    }
-
-
+    lemma_userMemEquiv_atkr_conf(
+        s11, s1', s12, s14, pc1, pt1, d1,
+        s21, s2', s22, s24, pc2, pt2, d2,
+        dispPg, atkr, l1p);
 }
 
 lemma lemma_userspaceExec_atkr_conf(
