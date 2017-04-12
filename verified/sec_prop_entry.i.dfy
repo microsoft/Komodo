@@ -796,7 +796,11 @@ dispPg: PageNr, atkr: PageNr)
     }
 }
 
-lemma lemma_userMemEquiv_atkr_conf(
+lemma
+    {:fuel userspaceExecutionAndException', 0}
+    {:fuel ExtractAbsPageTable, 0}
+    {:fuel l1pOfDispatcher, 0}
+lemma_userMemEquiv_atkr_conf(
 s11: state, s1':state, s12: state, s14: state,
 pc1: word, pt1: Maybe<AbsPTable>, d1: PageDb,
 s21: state, s2':state, s22: state, s24: state,
@@ -830,53 +834,26 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
     ensures pt1.Just? && pt2.Just?
     ensures user_mem(pt1.v, s12.m) == user_mem(pt2.v, s22.m)
 {
-    assume false;
-    //  reveal pageTableCorresponds();
-    //  reveal enc_conf_eqpdb();
-    //  reveal validPageDb();
-    //  reveal mkAbsPTable();
-    
-    // This didn't even work.
-    // forall ( a: addr | ValidMem(a) && a in TheValidAddresses() &&
-    //     addrIsSecure(a) && PageBase(a) in AllPagesInTable(pt1.v))
-    //     ensures user_mem(pt1.v, s12.m)[a] == user_mem(pt2.v, s22.m)[a];
-    // {
-    //     assume false;
-    // }
+    assert pt1.Just? && pt2.Just?
+        && ExtractAbsPageTable(s11).Just?
+        && ExtractAbsPageTable(s21).Just? by
+    {
+        assert{:fuel ExtractAbsPageTable, 1}{:fuel userspaceExecutionAndException', 1}
+            pt1.Just? && pt2.Just?;
+        assert{:fuel userspaceExecutionAndException', 1}
+            ExtractAbsPageTable(s11).Just? && ExtractAbsPageTable(s21).Just?;
+    }
 
+    lemma_eqpdb_pt_coresp(d1, d2, s12, s22, l1p, atkr);
 
-    // This didn't work anyway...
-    //// forall ( a: addr | ValidMem(a) && a in TheValidAddresses() &&
-    ////     addrIsSecure(a) && PageBase(a) in AllPagesInTable(pt1.v))
-    //// ensures s12.m.addresses[a] == s22.m.addresses[a]
-    //// {
-    ////     assume false;
-    ////     ///   reveal enc_conf_eqpdb();
-    ////     ///   reveal pageDbDataCorresponds();
-    ////     ///   
-    ////     ///   assume address_is_secure(PageBase(a));
-    ////     ///   var n := monvaddr_page(PageBase(a));
-
-    ////     ///   assert a in AllPagesInTable(mkAbsPTable(d1, l1p)) by {
-    ////     ///      assume false;
-    ////     ///   }
-    ////     ///   assert a in AllPagesInTable(mkAbsPTable(d2, l1p)) by {
-    ////     ///      assume false; 
-    ////     ///   }
-    ////     ///   lemma_PagesInTableAreDataPages(n,a,d1,l1p);
-    ////     ///   lemma_PagesInTableAreDataPages(n,a,d2,l1p);
-
-    ////     ///   // trigger i in pageDbDataCorresponds:
-    ////     ///   var i := (a - page_monvaddr(n)) / WORDSIZE;
-    ////     ///   assert d1[n].entry.contents[i] == d2[n].entry.contents[i];
-    //// }
-    // forall ( a: addr | ValidMem(a) && a in TheValidAddresses() &&
-    //     addrIsSecure(a) && PageBase(a) in AllPagesInTable(pt1.v))
-    // ensures user_mem(pt1.v, s12.m)[a] == s12.m.addresses[a];
-    // ensures user_mem(pt2.v, s22.m)[a] == s22.m.addresses[a];
-    // {
-    //     assume false;
-    // }
+    forall a:addr | ValidMem(a) && a in TheValidAddresses() && addrIsSecure(a)
+            && PageBase(a) in AllPagesInTable(pt1.v)
+        ensures a in s12.m.addresses
+        ensures a in s22.m.addresses
+        ensures s12.m.addresses[a] == s22.m.addresses[a]
+    {
+        lemma_data_eqpdb_to_addrs(d1, d2, s12, s22, a, atkr, l1p);
+    }
 }
 
 lemma lemma_userStatesEquiv_atkr_conf(
@@ -1073,6 +1050,83 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
 
     reveal_enc_conf_eqpdb();
     assert enc_conf_eqpdb(d14, d24, atkr);
+}
+
+// TODO: move this to ptables.i.dfy, next to lemma_WritablePages
+lemma lemma_AllPages(d:PageDb, l1p:PageNr, pagebase:addr, pt:PageNr)
+    requires PhysBase() == KOM_DIRECTMAP_VBASE
+    requires validPageDb(d)
+    requires nonStoppedL1(d, l1p)
+    requires PageAligned(pagebase) && address_is_secure(pagebase)
+    requires pt == monvaddr_page(pagebase)
+    requires pagebase in AllPagesInTable(mkAbsPTable(d, l1p))
+    ensures d[pt].PageDbEntryTyped?;
+    ensures d[pt].entry.DataPage?;
+    ensures d[pt].addrspace == d[l1p].addrspace;
+{
+    assert validL1PTable(d, l1p) by { reveal_validPageDb(); }
+    var abspt := mkAbsPTable(d, l1p);
+    var l1pt := d[l1p].entry.l1pt;
+    var i, j :| 0 <= i < ARM_L1PTES && 0 <= j < ARM_L2PTES
+        && abspt[i].Just? && abspt[i].v[j].Just?
+        && pagebase == abspt[i].v[j].v.phys + PhysBase();
+    var p := monvaddr_page(pagebase);
+    reveal_mkAbsPTable();
+    assert p == (abspt[i].v[j].v.phys - SecurePhysBase()) / PAGESIZE;
+    var n := i / 4;
+    assert l1pt[n].Just?;
+    var l2p := l1pt[n].v;
+    assert d[l2p].PageDbEntryTyped? && d[l2p].entry.L2PTable?
+        && wellFormedPageDbEntry(d[l2p]) && validL2PTable(d, l2p)
+        by { reveal_validPageDb(); }
+    var l2pt := d[l2p].entry.l2pt;
+    var pte := l2pt[(i%4)*ARM_L2PTES + j];
+    assert validL2PTE(d, d[l2p].addrspace, pte);
+    assert mkAbsPTE(pte) == abspt[i].v[j];
+    assert pte.SecureMapping?;
+}
+
+lemma lemma_data_eqpdb_to_addrs( d1:PageDb, d2:PageDb, s1: state, s2: state,
+a:addr, atkr:PageNr, l1p: PageNr)
+    requires validPageDb(d1) && validPageDb(d2)
+    requires ValidState(s1) && ValidState(s2) && SaneConstants()
+    requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    requires dataPagesCorrespond(s1.m, d1) && dataPagesCorrespond(s2.m, d2)
+    requires ExtractAbsPageTable(s1).Just?
+    requires ExtractAbsPageTable(s2).Just?
+    requires ValidMem(a)
+    requires a in TheValidAddresses()
+    requires addrIsSecure(a)
+    requires PageBase(a) in AllPagesInTable(ExtractAbsPageTable(s1).v)
+    requires PageBase(a) in AllPagesInTable(ExtractAbsPageTable(s2).v)
+    requires nonStoppedL1(d1, l1p) && nonStoppedL1(d2, l1p)
+    requires pgInAddrSpc(d1, l1p, atkr) && pgInAddrSpc(d2, l1p, atkr)
+    requires pageTableCorresponds(s1, d1, l1p)
+    requires pageTableCorresponds(s2, d2, l1p)
+    ensures a in s1.m.addresses
+    ensures a in s2.m.addresses
+    ensures s1.m.addresses[a] == s2.m.addresses[a]
+{
+    assert address_is_secure(a) by
+        { assume forall a:addr :: address_is_secure(a) <==> addrIsSecure(a); }
+    var p := lemma_secure_addrInPage(a);
+
+    assert PageBase(a) in AllPagesInTable(mkAbsPTable(d1, l1p))
+        && PageBase(a) in AllPagesInTable(mkAbsPTable(d2, l1p)) by
+        { reveal pageTableCorresponds(); }
+
+    lemma_AllPages(d1, l1p, PageBase(a), monvaddr_page(PageBase(a)));
+    lemma_AllPages(d2, l1p, PageBase(a), monvaddr_page(PageBase(a)));
+
+    assert a in addrsInPage(p, page_monvaddr(p)) by
+    {
+        var a0 := page_monvaddr(p);
+        var a1 := a0 + PAGESIZE;
+        var i := (a - a0) / WORDSIZE;
+        assert addrRangeSeq(a0, a1)[i] == a0 + WordsToBytes(i);
+    }
+    lemma_data_page_eqdb_to_addrs(d1, d2, s1, s2, p, a, atkr);
 }
 
 lemma lemma_data_page_eqdb_to_addrs( d1:PageDb, d2:PageDb, s1: state, s2: state,
