@@ -146,7 +146,7 @@ static void map_section(armpte_short_l1 *l1pt, uintptr_t vaddr, uintptr_t paddr,
             .ap2 = 0,
             .s = 1, // shareable
             .ng = 0, // global (ASID doesn't apply)
-            .ns = 0, // secure-world PA, not that it makes a difference on Pi
+            .ns = 1, // non-secure-world PA
             .secbase = paddr >> ARM_L1_SECTION_BITS,
         }
     }.raw;
@@ -264,7 +264,7 @@ void __attribute__((noreturn)) main(void)
         .pagetable = {
             .type = 1,
             .pxn = 0,
-            .ns = 0, // secure world PA, not that it matters on Pi?
+            .ns = 1, // non-secure world PA
             .ptbase = ((uintptr_t)l2pt) >> 10,
         }
     }.raw;
