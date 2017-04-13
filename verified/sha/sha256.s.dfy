@@ -126,7 +126,7 @@ function {:axiom} SHA256(message:seq<byte>) : seq<word>
 
 function {:autoReq} HMAC_SHA256(key:seq<word>, message:seq<byte>) : seq<word>
 {
-    SHA256(WordSeqToBytes(SeqXor(key, Opad(16)) + SHA256(WordSeqToBytes(SeqXor(key, Ipad(16))) + message)))
+    SHA256(WordSeqToBytes(SeqXor(key, Opad(8)) + SHA256(WordSeqToBytes(SeqXor(key, Ipad(8))) + message)))
 }
 
 //lemma {:axiom} lemma_SHA256IsAFunction(messageBits:seq<int>, hash:seq<int>)
