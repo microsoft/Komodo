@@ -33,8 +33,3 @@ lemma lemma_apply_ipad_complete(m:memmap, m':memmap, base:nat, count:nat)
 	}
 }
 
-lemma lemma_SHA_inequality_helper(num_blocks:word)
-    ensures (num_blocks + 1) * SHA_BLOCKSIZE > SHA_BLOCKSIZE;
-{
-    assert (num_blocks + 1) * SHA_BLOCKSIZE == num_blocks * SHA_BLOCKSIZE + SHA_BLOCKSIZE;
-}

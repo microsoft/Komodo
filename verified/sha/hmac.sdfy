@@ -301,8 +301,6 @@ ensures
     // Copy the input to the rest of the tmp buffer
     ADD(r7, r1, const(HMAC_KEYSIZE_BYTES));      // Skip the tmp_ptr past the key
 
-    lemma_SHA_inequality_helper(num_blocks);
-    assert (num_blocks+1) * SHA_BLOCKSIZE > SHA_BLOCKSIZE;
     calc {
         ValidMemRange(tmp_ptr, tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE);
           { lemma_ValidMemRange_offset(tmp_ptr, (num_blocks + 1) * SHA_BLOCKSIZE, SHA_CTXSIZE); }
