@@ -20,7 +20,8 @@ const KOM_SMC_STOP:int              := 29;
 
 const KOM_SVC_EXIT:int              := 0;
 const KOM_SVC_ATTEST:int            := 1;
-const KOM_SVC_VERIFY:int            := 2;
+const KOM_SVC_VERIFY_STEP0:int      := 2;
+const KOM_SVC_VERIFY_STEP1:int      := 3;
 
 //-----------------------------------------------------------------------------
 // Errors
@@ -90,6 +91,7 @@ function method {:opaque} SecurePhysBaseOp(): symbol {"g_secure_physbase" }
 function method {:opaque} CurDispatcherOp(): symbol { "g_cur_dispatcher" }
 function method {:opaque} PendingInterruptOp(): symbol { "g_pending_interrupt" }
 function method {:opaque} K_SHA256s(): symbol { "g_k_sha256" }
+function method {:opaque} AttestKeyOp(): symbol { "g_attestkey" }
 
 // XXX: workaround so dafny sees that these are distinct, despite the opaques
 predicate DistinctGlobals()
@@ -99,16 +101,22 @@ predicate DistinctGlobals()
     && PageDb() != CurDispatcherOp()
     && PageDb() != PendingInterruptOp()
     && PageDb() != K_SHA256s()
+    && PageDb() != AttestKeyOp()
     && MonitorPhysBaseOp() != SecurePhysBaseOp()
     && MonitorPhysBaseOp() != CurDispatcherOp()
     && MonitorPhysBaseOp() != PendingInterruptOp()
     && MonitorPhysBaseOp() != K_SHA256s()
+    && MonitorPhysBaseOp() != AttestKeyOp()
     && SecurePhysBaseOp() != CurDispatcherOp()
     && SecurePhysBaseOp() != PendingInterruptOp()
     && SecurePhysBaseOp() != K_SHA256s()
+    && SecurePhysBaseOp() != AttestKeyOp()
     && CurDispatcherOp() != PendingInterruptOp()
     && CurDispatcherOp() != K_SHA256s()
+    && CurDispatcherOp() != AttestKeyOp()
     && PendingInterruptOp() != K_SHA256s()
+    && PendingInterruptOp() != AttestKeyOp()
+    && K_SHA256s() != AttestKeyOp()
 }
 
 lemma lemma_DistinctGlobals()
@@ -120,6 +128,7 @@ lemma lemma_DistinctGlobals()
     reveal_CurDispatcherOp();
     reveal_PendingInterruptOp();
     reveal_K_SHA256s();
+    reveal_AttestKeyOp();
 }
 
 // the phys bases are unknown, but never change
@@ -134,6 +143,9 @@ function method {:axiom} SecurePhysBase(): addr
     ensures 0 < SecurePhysBase() <= KOM_PHYSMEM_LIMIT - KOM_SECURE_RESERVE
     ensures PageAligned(SecurePhysBase())
 
+function AttestKey(): seq<word>
+    ensures |AttestKey()| == 8
+
 function method KomGlobalDecls(): globaldecls
     ensures ValidGlobalDecls(KomGlobalDecls());
 {
@@ -142,7 +154,8 @@ function method KomGlobalDecls(): globaldecls
         SecurePhysBaseOp() := WORDSIZE,
         CurDispatcherOp() := WORDSIZE,
         PendingInterruptOp() := WORDSIZE,
-        K_SHA256s() := 256
+        K_SHA256s() := 256,
+        AttestKeyOp() := 8*WORDSIZE
         ]
 }
 
@@ -172,6 +185,7 @@ predicate SaneMem(s:memstate)
     // globals are as we expect
     && GlobalFullContents(s, MonitorPhysBaseOp()) == [MonitorPhysBase()]
     && GlobalFullContents(s, SecurePhysBaseOp()) == [SecurePhysBase()]
+    && GlobalFullContents(s, AttestKeyOp()) == AttestKey()
 }
 
 predicate SaneConstants()

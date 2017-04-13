@@ -43,8 +43,6 @@ predicate AddrMemPreservingExcept3(sm:memmap, rm:memmap,
         ==> AddrMemContents(sm, a) == AddrMemContents(rm, a)
 }
 
-
-const SHA_BLOCKSIZE:int := 16; // 16 words per block
 const SHA_CTXSIZE:int := 8; // 8 words
 const SHA_STACKSIZE:int := 19; // 19 words on the stack
 

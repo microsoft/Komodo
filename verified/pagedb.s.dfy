@@ -2,6 +2,8 @@ include "kom_common.s.dfy"
 include "Maybe.dfy"
 include "Sets.dfy"
 include "ARMdef.dfy"
+include "sha/sha_common.s.dfy"
+include "sha/sha256.s.dfy"
 
 type PageNr = x | validPageNr(x)
 type InsecurePageNr = x | validInsecurePageNr(x)
@@ -68,8 +70,12 @@ predicate physPageIsSecure(physPage: int)
 
 
 datatype PageDbEntryTyped
-    = Addrspace(l1ptnr: PageNr, refcount: nat, state: AddrspaceState)
-    | Dispatcher(entrypoint:word, entered:bool, ctxt:DispatcherContext)
+    = Addrspace(l1ptnr: PageNr, refcount: nat, state: AddrspaceState,
+                measurement: seq<word>,
+                // XXX: shatrace is untrusted ghost state... shouldn't be here
+                shatrace:SHA256Trace)
+    | Dispatcher(entrypoint:word, entered:bool, ctxt:DispatcherContext,
+                verifywords:seq<word>)
     | L1PTable(l1pt: seq<Maybe<PageNr>>)
     | L2PTable(l2pt: seq<L2PTE>)
     | DataPage(contents: seq<word>)
@@ -105,8 +111,11 @@ predicate wellFormedPageDbEntryTyped(e: PageDbEntryTyped)
 {
     (e.L1PTable? ==> |e.l1pt| == NR_L1PTES)
     && (e.L2PTable? ==> |e.l2pt| == NR_L2PTES)
-    && (e.Dispatcher? ==> wellformedDispatcherContext(e.ctxt))
+    && (e.Dispatcher? ==> wellformedDispatcherContext(e.ctxt) && |e.verifywords| == 8)
     && (e.DataPage? ==> |e.contents| == PAGESIZE / WORDSIZE)
+    && (e.Addrspace? ==>
+        |e.measurement| % SHA_BLOCKSIZE == 0
+        && WordsToBytes(|e.measurement|) < MaxBytesForSHA())
 }
 
 predicate {:opaque} validPageDb(d: PageDb)
@@ -211,8 +220,11 @@ predicate validAddrspace(d: PageDb, n: PageNr)
         && addrspace.refcount == |addrspaceRefs(d, n)|
         && (stoppedAddrspace(d[n]) || (
             var l1pt := d[addrspace.l1ptnr];
-            l1pt.PageDbEntryTyped? && l1pt.entry.L1PTable? && l1pt.addrspace == n
-        ))
+            l1pt.PageDbEntryTyped? && l1pt.entry.L1PTable? && l1pt.addrspace == n))
+        // XXX: sha trace invariants don't need to be trusted... move out of spec
+        && IsCompleteSHA256Trace(addrspace.shatrace)
+        && SHA256TraceIsCorrect(addrspace.shatrace)
+        && ConcatenateSeqs(addrspace.shatrace.M) == addrspace.measurement
 }
 
 predicate addrspaceL1Unique(d: PageDb, n: PageNr)

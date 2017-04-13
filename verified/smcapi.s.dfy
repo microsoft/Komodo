@@ -29,6 +29,7 @@ function updateL2Pte(d: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
     //requires isValidMappingTarget(d, a, mapping) == KOM_ERR_SUCCESS
     requires d[a].entry.state.InitState?
     requires validL2PTE(d, a, l2e)
+    ensures wellFormedPageDb(updateL2Pte(d, a, mapping, l2e))
 {
     reveal_validPageDb();
     var addrspace := d[a].entry;
@@ -92,7 +93,7 @@ function smc_initAddrspace(pageDbIn: PageDb, addrspacePage: word, l1PTPage: word
     else if( !g[addrspacePage].PageDbEntryFree? || !g[l1PTPage].PageDbEntryFree? ) then
         (pageDbIn, KOM_ERR_PAGEINUSE)
     else
-        var addrspace := Addrspace(l1PTPage, 1, InitState);
+        var addrspace := Addrspace(l1PTPage, 1, InitState, [], InitialSHA256Trace());
         var l1PT := L1PTable(SeqRepeat(NR_L1PTES,Nothing));
         var pageDbOut := 
             (pageDbIn[addrspacePage := PageDbEntryTyped(addrspacePage, addrspace)])[
@@ -117,6 +118,42 @@ function initDispCtxt() : DispatcherContext
         psr) // PSR
 }
 
+// XXX: this is a workaround for keeping SHA256Trace objects in the pagedb spec
+lemma {:axiom} lemma_SHATracesAreEqual(t1:SHA256Trace, t2:SHA256Trace)
+    requires IsCompleteSHA256Trace(t1) && SHA256TraceIsCorrect(t1)
+    requires IsCompleteSHA256Trace(t2) && SHA256TraceIsCorrect(t2)
+    requires ConcatenateSeqs(t1.M) == ConcatenateSeqs(t2.M)
+    ensures t1 == t2
+
+// XXX: this is a workaround for keeping SHA256Trace objects in the pagedb spec
+lemma {:axiom} lemma_SHATraceExists(measurement:seq<word>)
+    requires |measurement| % SHA_BLOCKSIZE == 0
+    ensures exists t :: IsCompleteSHA256Trace(t) && SHA256TraceIsCorrect(t)
+                && ConcatenateSeqs(t.M) == measurement
+
+function newShaTraceForMeasurement(measurement:seq<word>): SHA256Trace
+    requires |measurement| % SHA_BLOCKSIZE == 0
+{
+    lemma_SHATraceExists(measurement);
+    var newshatrace :|
+        IsCompleteSHA256Trace(newshatrace) && SHA256TraceIsCorrect(newshatrace)
+        && ConcatenateSeqs(newshatrace.M) == measurement;
+    newshatrace
+}
+
+function updateMeasurement(d: PageDb, addrsp:PageNr, metadata:seq<word>,
+                           contents:seq<word>): PageDb
+    requires wellFormedPageDb(d) && validAddrspacePage(d, addrsp)
+    requires |metadata| <= SHA_BLOCKSIZE
+    requires |contents| % SHA_BLOCKSIZE == 0
+{
+    var padded_metadata := metadata + SeqRepeat(SHA_BLOCKSIZE - |metadata|, 0);
+    var newmeasurement := d[addrsp].entry.measurement + padded_metadata + contents;
+    d[addrsp := d[addrsp].(entry := d[addrsp].entry.(
+        measurement := newmeasurement,
+        shatrace := newShaTraceForMeasurement(newmeasurement)))]
+}
+
 function smc_initDispatcher(pageDbIn: PageDb, page:word, addrspacePage:word,
     entrypoint:word)
     : (PageDb, word) // PageDbOut, KOM_ERR
@@ -126,7 +163,14 @@ function smc_initDispatcher(pageDbIn: PageDb, page:word, addrspacePage:word,
     if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KOM_ERR_INVALID_ADDRSPACE)
     else
-        allocatePage(pageDbIn, page, addrspacePage, Dispatcher(entrypoint, false, initDispCtxt()))
+        var initDisp := Dispatcher(entrypoint, false, initDispCtxt(),
+                                  [0, 0, 0, 0, 0, 0, 0, 0]);
+        var (pagedb', err) := allocatePage(pageDbIn, page, addrspacePage, initDisp);
+        if err == KOM_ERR_SUCCESS then
+            (updateMeasurement(pagedb', addrspacePage,
+                               [KOM_SMC_INIT_DISPATCHER, entrypoint], []), err)
+        else
+            (pagedb', err)
 }
 
 function installL1PTE(l1pt: PageDbEntryTyped, l2page: PageNr, l1index: int): PageDbEntryTyped
@@ -282,7 +326,9 @@ function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,
                 if(errA != KOM_ERR_SUCCESS) then (pageDbIn, errA)
                 else
                     var l2pte := SecureMapping(page, abs_mapping.perm.w, abs_mapping.perm.x);
-                    var pageDbOut := updateL2Pte(pageDbA, addrspacePage, abs_mapping, l2pte);
+                    var pageDbB := updateL2Pte(pageDbA, addrspacePage, abs_mapping, l2pte);
+                    var pageDbOut := updateMeasurement(pageDbB, addrspacePage,
+                               [KOM_SMC_MAP_SECURE, mapping], fromJust(contents));
                     (pageDbOut, KOM_ERR_SUCCESS)
 }
 
@@ -302,7 +348,9 @@ function smc_mapInsecure(pageDbIn: PageDb, addrspacePage: word,
             var abs_mapping := wordToMapping(mapping);
             assert validInsecurePageNr(physPage);
             var l2pte := InsecureMapping( physPage,  abs_mapping.perm.w);
-            var pageDbOut := updateL2Pte(pageDbIn, addrspacePage, abs_mapping, l2pte);
+            var pageDb' := updateL2Pte(pageDbIn, addrspacePage, abs_mapping, l2pte);
+            var pageDbOut := updateMeasurement(pageDb', addrspacePage,
+                               [KOM_SMC_MAP_INSECURE, mapping], []);
             (pageDbOut, KOM_ERR_SUCCESS)
 }
 

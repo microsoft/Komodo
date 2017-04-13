@@ -4,6 +4,8 @@
 include "sha_common.s.dfy"
 include "hmac_common.s.dfy"
 
+const SHA_BLOCKSIZE:int := 16; // 16 words per block
+
 function method{:opaque} K_SHA256(t:word) : word
     requires 0 <= t <= 63;
 {
@@ -54,7 +56,7 @@ function ConvertAtoHToSeq(v:atoh_Type) : seq<word>
 
 predicate IsCompleteSHA256Trace(z:SHA256Trace)
 {
-    (forall i :: 0 <= i < |z.M| ==> |z.M[i]| == 16) &&
+    (forall i :: 0 <= i < |z.M| ==> |z.M[i]| == SHA_BLOCKSIZE) &&
     |z.H| == |z.M| + 1 &&
     |z.W| == |z.atoh| == |z.M| &&
     (forall blk :: 0 <= blk <  |z.M| ==> |z.W[blk]| == 64) &&
@@ -113,6 +115,17 @@ predicate DoesTraceDemonstrateSHA256(z:SHA256Trace, message:seq<byte>, hash:seq<
     && |message| <= MaxBytesForSHA()
     && WordSeqIsProperlySHAPaddedByteSeq(ConcatenateSeqs(z.M), message)
     && hash == z.H[|z.H|-1]
+}
+
+function InitialSHA256Trace(): SHA256Trace
+{
+    reveal_InitialH_SHA256();
+    var initial_Hs := [1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225];
+    SHA256Trace_c([], // Empty M
+                  [initial_Hs], // Initial Hs
+                  [], // Empty Ws
+                  []  // Empty atohs
+                  )
 }
 
 predicate IsSHA256(message:seq<byte>, hash:seq<word>)
