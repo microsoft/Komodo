@@ -443,9 +443,7 @@ procedure ARM_L2PTE_impl(
 {
     ghost var pa := pte;
 
-    // construct const bits in tmp reg (they're too big for an inline constant)
-    tmp := 0xd00;
-    ADD(tmp, tmp, 0x76);
+    MOVW(tmp, 0xd76);
     assert tmp == L2PTE_CONST_WORD();
 
     // OR in const bits
