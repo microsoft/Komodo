@@ -576,12 +576,6 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         assert enc_conf_eqpdb(rd1, rd2, atkr);
         assert enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
     } else {
-        /*
-        lemma_userspaceExecutionFn_atkr_conf_regs(
-            s12, s13, expc1, ex1, pc1, pt1,
-            s22, s23, expc2, ex2, pc2, pt2);
-        */
-        
         assume cpsr in s13.sregs && cpsr in s23.sregs &&
             s13.sregs[cpsr] == s23.sregs[cpsr];
         assume mode_of_exception(s13.conf, ex1) ==
@@ -625,104 +619,64 @@ requires ValidState(s1) && ValidState(s2)
     
 }
 
-lemma lemma_userspaceExecutionFn_atkr_conf_regs(
-    s12: state, s13: state, expc1:word, ex1:exception,
-    pc1:word, pt1: Maybe<AbsPTable>,
-    s22: state, s23: state, expc2:word, ex2:exception,
-    pc2:word, pt2: Maybe<AbsPTable>)
-    requires ValidState(s12) && ValidState(s13) 
-    requires ValidState(s22) && ValidState(s23) 
-    requires (s13, expc1, ex1) == userspaceExecutionFn(s12, pc1)
-    requires (s23, expc2, ex2) == userspaceExecutionFn(s22, pc2)
-    requires user_state_same(s12, s22, pc1, pc2, pt1, pt2)
-   //  ensures user_regs(s13.regs) == user_regs(s23.regs)
-    ensures ex1 == ex2
-    // ensures cpsr in s13.sregs && cpsr in s23.sregs &&
-    //     s13.sregs[cpsr] == s23.sregs[cpsr]
-    // ensures mode_of_exception(s13.conf, ex1) ==
-    //     mode_of_exception(s23.conf, ex2)
-{
-    //reveal ValidSRegState();
-  
-    assume false;
-
-    // I give up on this lemma
-    assume pt1 == ExtractAbsPageTable(s12);
-    assume pt2 == ExtractAbsPageTable(s22);
-    var user_state1 := user_visible_state(s12, pc1, pt1.v);
-    var user_state2 := user_visible_state(s22, pc2, pt2.v);
-
-    assume s13.nondet == s23.nondet;
-    
-    assert user_regs(s13.regs) == user_regs(s23.regs) by {
-        reveal userspaceExecutionFn();
-        reveal ValidRegState();
-        var hr1 := havocUserRegs(s12.nondet, user_state1, s12.regs);
-        var hr2 := havocUserRegs(s22.nondet, user_state2, s22.regs);
-        assert s13.regs == hr1;
-        assert s23.regs == hr2;
-        assert user_state1 == user_state2;
-        assert s12.nondet == s22.nondet;
-        forall (r | r in USER_REGS() )
-            ensures hr1[r] ==
-                nondet_private_word(s12.nondet, user_state1, NONDET_REG(r))
-            ensures hr2[r] ==
-                nondet_private_word(s22.nondet, user_state2, NONDET_REG(r))
-            ensures hr1[r] == hr2[r]
-            ensures user_regs(hr1)[r] == user_regs(hr2)[r]
-        {
-        }
-        // assert forall r :: r in USER_REGS() ==> user_regs(hr1)[r] == hr1[r];
-        // assert forall r :: r in USER_REGS() ==> user_regs(hr2)[r] == hr2[r];
-        lemma_user_regs_domain(hr1, user_regs(hr1));
-        lemma_user_regs_domain(hr2, user_regs(hr2));
-        assert forall r :: r in user_regs(hr1) <==> r in user_regs(hr2);
-
-
-        // Not sure how to prove equality of these maps...
-        // domains are the same, all values in codomain are the same...
-        // what more do you want?
-        assume user_regs(hr1) == user_regs(hr2);
-    }
-   
-    assert ex1 == ex2 by {
-        reveal userspaceExecutionFn();
-        
-        // There is no way to prove this!!!!!
-        assume s12.conf.cpsr.f == s22.conf.cpsr.f;
-        assume s12.conf.cpsr.i == s22.conf.cpsr.i;
-        
-        // Not sure what preconds I'm missing here that are in th ebody of 
-        // ValidPrime...
-        assume false;
-        assert ex1 == nondet_exception(s12.nondet, user_state1, s12.conf.cpsr.f, s12.conf.cpsr.i);
-        assert ex2 == nondet_exception(s22.nondet, user_state2, s22.conf.cpsr.f, s22.conf.cpsr.i);
-        assert ex1 == ex2;
-    }
-
-    // assert s13.regs == havocUserRegs(s12.nondet, user_state1, user_regs(s12.regs));
-    // assert s23.regs == havocUserRegs(s22.nondet, user_state2, user_regs(s22.regs));
-    // assert user_regs(s13.regs) == user_regs(s23.regs);
-}
-
-
-
 lemma lemma_exceptionTaken_atkr_conf(
     s13: state, s14: state, ex1:exception, pc1:word,
     s23: state, s24: state, ex2:exception, pc2:word
 )
+    requires ValidState(s13) && ValidState(s23) &&
+        ValidState(s14) && ValidState(s24);
     requires user_regs(s13.regs) == user_regs(s23.regs)
     requires ex1 == ex2 && pc1 == pc2
     requires cpsr in s13.sregs && cpsr in s23.sregs &&
         s13.sregs[cpsr] == s23.sregs[cpsr]
     requires mode_of_exception(s13.conf, ex1) ==
         mode_of_exception(s23.conf, ex2)
+    requires ValidPsrWord(psr_of_exception(s13, ex1))
+    requires ValidPsrWord(psr_of_exception(s23, ex2))
     requires s14 == exceptionTakenFn(s13, ex1, pc1)
     requires s24 == exceptionTakenFn(s23, ex2, pc2)
     ensures user_regs(s14.regs) == user_regs(s24.regs)
+    ensures mode_of_state(s14) != User && mode_of_state(s24) != User
     ensures mode_of_state(s14) == mode_of_state(s24)
     ensures lr_spsr_same(s14, s24);
 {
+    assert user_regs(s14.regs) == user_regs(s24.regs) by {
+        var newmode := mode_of_exception(s13.conf, ex1);
+        assert s14.regs == s13.regs[LR(newmode) := pc1];
+        assert s24.regs == s23.regs[LR(newmode) := pc1];
+        assert forall r :: r in user_regs(s14.regs) <==> r in user_regs(s24.regs);
+        assert forall r :: r in user_regs(s14.regs) <==> r in user_regs(s13.regs);
+        forall( r | r in user_regs(s14.regs)) 
+            ensures user_regs(s24.regs) == user_regs(s14.regs)
+        {
+            assert user_regs(s13.regs) == user_regs(s23.regs);
+            if(r != LR(newmode)) {
+                assert s14.regs[r] == s13.regs[r];
+                assert s24.regs[r] == s23.regs[r];
+                assert s13.regs[r] == s23.regs[r];
+            } else {
+            }
+        }
+        eqregs(user_regs(s24.regs), user_regs(s14.regs));
+    }
+    assert mode_of_state(s14) != User && mode_of_state(s24) != User by {
+        var newmode := mode_of_exception(s13.conf, ex1);
+        var newpsr := psr_of_exception(s13, ex1);
+        var maskfiq := ex1 == ExFIQ || newmode == Monitor;
+        var maskbits := BitsAsWord(BitOr(if maskfiq then 0x40 else 0,
+                                     if true then 0x80 else 0));
+        reveal update_psr();
+        assume false;
+        assert newmode != User;
+        assert psr_mask_mode(newpsr) == BitwiseOr(encode_mode(newmode), maskbits);
+        assert decode_mode(psr_mask_mode(newpsr)) == newmode;
+        assert decode_psr(newpsr).m == newmode;
+        assert s14.conf.cpsr == decode_psr(newpsr);
+        assert s24.conf.cpsr == decode_psr(newpsr);
+        assert mode_of_state(s14) == newmode;
+        assert mode_of_state(s24) == newmode;
+    }
+    assume false;
 }
 
 // This is just for the reveal
