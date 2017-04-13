@@ -832,7 +832,7 @@ requires/ensures
 requires 
     !interrupts_enabled(this);
     mode_of_state(this) == Monitor;
-    StackBytesRemaining(this, 40);
+    StackBytesRemaining(this, STACKSIZE_HMAC * WORDSIZE);
 requires
     // Stack is accessible
     sp >= STACKSIZE_HMAC * WORDSIZE; 
@@ -888,10 +888,10 @@ ensures
     ValidAddrMemStateOpaque(mem); 
 
     // Memory framing:  We only touch the stack, 8 words pointed to by ctx_ptr, and the tmp buffer
-//    AddrMemPreservingExcept3(old(mem), mem, 
-//                             sp - STACKSIZE_HMAC * WORDSIZE, sp, 
-//                             old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE,
-//                             old(r1), old(r1) + (old(r2) + 1) * SHA_BLOCKSIZE * WORDSIZE);
+    AddrMemPreservingExcept3(old(mem), mem, 
+                             StackLimit(), old(sp),
+                             old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE,
+                             old(r1), old(r1) + (old(r2) + 1) * SHA_BLOCKSIZE * WORDSIZE);
     ValidMemRange(r0, r0 + SHA_CTXSIZE * WORDSIZE);
 
     // Calling convention
@@ -919,6 +919,7 @@ ensures
     ghost var key_ptr := r4;
     ghost var s:int;
     s := stack_nonvolatiles(40);
+
     assert MemContents(this.m, sp + 32) == old(r4);
     assert sp == old(sp) - 40;
     assert STACKSIZE_HMAC * WORDSIZE == 40 + STACKSIZE_SHA_ONE_SHOT * WORDSIZE;
@@ -926,17 +927,34 @@ ensures
     assert ValidMemRange(sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE, sp);
 
     // Prove that stack_nonvolatiles didn't disrupt the rest of memory, especially the input or key
-    lemma_MemPreservingExcept_implies_AddrMemPreservingExcept(old(this), this, StackLimit(), StackBase());
+    //lemma_MemPreservingExcept_implies_AddrMemPreservingExcept(old(this), this, StackLimit(), StackBase());
+    //assert AddrMemPreservingExcept(old(mem), mem, StackLimit(), StackBase());
+    lemma_ParentStackPreserving_implies_AddrMemPreservingExcept(old(this), this);
+    assert AddrMemPreservingExcept(old(mem), mem, StackLimit(), old(sp));
     lemma_AddrMemContentsSeq_framing1(old(mem), mem, key_ptr, HMAC_KEYSIZE_WORDS, 
-                                      StackLimit(), StackBase());
+                                      StackLimit(), old(sp));
     lemma_AddrMemContentsSeq_framing1(old(mem), mem, input_ptr, num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE, 
-                                      StackLimit(), StackBase());
+                                      StackLimit(), old(sp));
+
 
     ghost var inner_hash; 
     ghost var outer_hash;
     ghost var pre_inner_mem;
     pre_inner_mem := mem;
     inner_hash := hmac_inner(key, input);
+    
+//    AddrMemPreservingExcept3(old(mem), mem, 
+//                             sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE, sp, 
+//                             old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE,
+//                             old(r1), old(r1) + (old(r2) + 1) * SHA_BLOCKSIZE * WORDSIZE);
+    assert StackLimit() <= sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE;
+    assert sp <= old(sp);
+    lemma_AddrMemPreservingExcept3_hierarchy(pre_inner_mem, mem, 
+                             sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE, sp, 
+                             StackLimit(), old(sp),
+                             old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE,
+                             old(r1), old(r1) + (old(r2) + 1) * SHA_BLOCKSIZE * WORDSIZE);
+
     assume WordAligned(sp + 32);
     assume WordAligned(sp + 28);
     assume WordAligned(sp + 24);
@@ -969,6 +987,7 @@ ensures
     assert ValidMemRange(tmp_ptr, tmp_ptr + SHA_BLOCKSIZE * WORDSIZE);
 
     outer_hash := hmac_outer(key, inner_hash);
+
 
     assert WordAligned(r0);
     assume WordAligned(r0 + 1*WORDSIZE);
@@ -1017,4 +1036,5 @@ ensures
     assert r10== MemContents(pre_pop_state.m, pre_pop_sp+ 8) == old(r10);
     assert r11== MemContents(pre_pop_state.m, pre_pop_sp+ 4) == old(r11);
     assert r12== MemContents(pre_pop_state.m, pre_pop_sp+ 0) == old(r12);
+
 }

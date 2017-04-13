@@ -84,6 +84,28 @@ lemma lemma_MemPreservingExcept_implies_AddrMemPreservingExcept(s:state, r:state
 {
 }
 
+lemma lemma_ParentStackPreserving_implies_AddrMemPreservingExcept(s:state, r:state)
+    requires ValidState(s) && ValidState(r) && SaneConstants();
+    requires ParentStackPreserving(s, r);
+    requires NonStackMemPreserving(s, r);
+    ensures  SP(Monitor) in s.regs;
+    ensures  AddrMemPreservingExcept(s.m.addresses, r.m.addresses, StackLimit(), s.regs[SP(Monitor)]);
+{
+}
+
+lemma lemma_AddrMemPreservingExcept3_hierarchy(m:memmap, m':memmap, 
+                                               l1:nat, h1:nat, 
+                                               l1':nat, h1':nat, 
+                                               l2:nat, h2:nat, 
+                                               l3:nat, h3:nat)
+    requires ValidAddrMemStateOpaque(m) && ValidAddrMemStateOpaque(m');
+    requires l1 <= h1 && l2 <= h2 && l3 <= h3;
+    requires l1' <= l1 && h1 <= h1';
+    requires AddrMemPreservingExcept3(m, m', l1, h1, l2, h2, l3, h3);
+    ensures  AddrMemPreservingExcept3(m, m', l1', h1', l2, h2, l3, h3);
+{
+}
+
 lemma lemma_AddrMemContentsSeq_framing1(m:memmap, m':memmap, begin_ptr:nat, count:nat, l1:nat, h1:nat)
     requires ValidAddrMemStateOpaque(m) && ValidAddrMemStateOpaque(m');
     requires l1 <= h1;
