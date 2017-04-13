@@ -433,12 +433,38 @@ procedure smc_enter_err(
 }
 
 #verbatim
-lemma lemma_PageAligned_PageBase_trivial(x:word)
+lemma lemma_PageAligned_PageBase(x:word, y:word)
     requires PageAligned(x)
-    ensures PageBase(x) == x
+    requires y == BitwiseOr(x, 0x6a)
+    ensures PageBase(y) == x
 {
-    assert PageBase(x) == x / PAGESIZE * PAGESIZE by { reveal_PageBase(); }
-    reveal_PageAligned();
+    assert WordAsBits(0x6a) == 0x6a by { reveal WordAsBits(); }
+    lemma_BitsAndWordConversions();
+
+    calc {
+        PageBase(BitwiseOr(x, 0x6a));
+        { reveal PageBase(); }
+        BitwiseMaskHigh(BitwiseOr(x, 0x6a), PAGEBITS);
+        { reveal BitwiseMaskHigh(); }
+        BitsAsWord(BitAnd(BitOr(WordAsBits(x), 0x6a), BitmaskHigh(PAGEBITS)));
+        { lemma_Bitmask12(); }
+        BitsAsWord(BitAnd(BitOr(WordAsBits(x), 0x6a), 0xfffff000));
+        { lemma_BitOrAndRelation(WordAsBits(x), 0x6a, 0xfffff000); }
+        BitsAsWord(BitOr(BitAnd(WordAsBits(x), 0xfffff000), BitAnd(0x6a, 0xfffff000)));
+        { reveal BitAnd(); }
+        BitsAsWord(BitOr(BitAnd(WordAsBits(x), 0xfffff000), 0));
+        { reveal BitOr(); }
+        BitsAsWord(BitAnd(WordAsBits(x), 0xfffff000));
+        { lemma_Bitmask12(); }
+        BitsAsWord(BitAnd(WordAsBits(x), BitmaskHigh(PAGEBITS)));
+        { reveal BitwiseMaskHigh(); }
+        BitwiseMaskHigh(x, PAGEBITS);
+        {
+            assert PageBase(x) == x / PAGESIZE * PAGESIZE by { reveal_PageBase(); }
+            reveal PageAligned();
+        }
+        x;
+    }
 }
 #endverbatim
 
@@ -460,7 +486,7 @@ procedure switch_addrspace(
     reads
         globals; mem;
     modifies
-        scr; ttbr0; r10; r11;
+        scr; ttbr0; tlbiasid; r10; r11;
     ensures
         BankedRegsInvariant(old(this),this);
         this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, old(pagenr)));
@@ -519,11 +545,17 @@ procedure switch_addrspace(
     }
 
     assert r10 == page_paddr(l1p);
+    ORR(r10, r10, 0x6a); // magic low bits ==> use cache for PT walks
     MCR(ttbr0, r10);
     assert this.conf.ttbr0.ptbase == page_paddr(l1p) by {
-        assert this.conf.ttbr0.ptbase == PageBase(r10) == PageBase(page_paddr(l1p));
-        lemma_PageAligned_PageBase_trivial(page_paddr(l1p));
+        assert this.conf.ttbr0.ptbase == PageBase(r10);
+        assert r10 == BitwiseOr(page_paddr(l1p), 0x6a);
+        lemma_PageAligned_PageBase(page_paddr(l1p), r10);
     }
+
+    // flush non-global TLB entries with ASID 0 (the only one we use)
+    MOV(r10, 0);
+    MCR(tlbiasid, r10);
 }
 
 procedure leave_secure_world(out operand tmp:reg)
@@ -571,7 +603,7 @@ procedure pre_entry_enter(
     reads
         mem;
     modifies
-        globals; scr; ttbr0; spsr_mon;
+        globals; scr; ttbr0; tlbiasid; spsr_mon;
         r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr; lr_usr; sp_usr;
     ensures
         GlobalsPreservingExcept(old(this), this, set(CurDispatcherOp()));
@@ -739,7 +771,7 @@ procedure pre_entry_resume(
     reads
         mem;
     modifies
-        globals; scr; ttbr0; spsr_mon;
+        globals; scr; ttbr0; tlbiasid; spsr_mon;
         r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr_usr; sp_usr; lr;
     ensures
         GlobalsPreservingExcept(old(this),this, set(CurDispatcherOp()));
@@ -975,7 +1007,7 @@ procedure {:frame false} {:timeLimitMultiplier 2} smc_enterresume_success(
         sp_usr; sp_fiq; sp_irq; sp_svc; sp_abt; sp_und;
         lr_usr; lr_fiq; lr_irq; lr_svc; lr_abt; lr_und; sp;
     modifies
-        mem; globals; scr; ttbr0; spsr_mon;
+        mem; globals; scr; ttbr0; tlbiasid; spsr_mon;
         r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr_usr; sp_usr; lr;
     ensures
         EnterResumeSmcProcedureInvariant(old(this), this);
@@ -1068,7 +1100,7 @@ procedure {:frame false} kom_smc_enterresume(
         sp_usr; sp_fiq; sp_irq; sp_svc; sp_abt; sp_und;
         lr_usr; lr_fiq; lr_irq; lr_svc; lr_abt; lr_und; sp;
     modifies
-        mem; globals; scr; ttbr0; spsr_mon;
+        mem; globals; scr; ttbr0; tlbiasid; spsr_mon;
         r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr_usr; sp_usr; lr;
     ensures
         EnterResumeSmcProcedureInvariant(old(this), this);
