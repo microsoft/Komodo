@@ -80,6 +80,7 @@ lemma lemma_MemPreservingExcept_implies_AddrMemPreservingExcept(s:state, r:state
     requires ValidState(s) && ValidState(r);
     requires limit >= base;
     requires MemPreservingExcept(s, r, base, limit);
+    requires ValidAddrMemStateOpaque(s.m.addresses) && ValidAddrMemStateOpaque(r.m.addresses);
     ensures  AddrMemPreservingExcept(s.m.addresses, r.m.addresses, base, limit);
 {
 }
@@ -88,9 +89,25 @@ lemma lemma_ParentStackPreserving_implies_AddrMemPreservingExcept(s:state, r:sta
     requires ValidState(s) && ValidState(r) && SaneConstants();
     requires ParentStackPreserving(s, r);
     requires NonStackMemPreserving(s, r);
+    requires ValidAddrMemStateOpaque(s.m.addresses) && ValidAddrMemStateOpaque(r.m.addresses);
     ensures  SP(Monitor) in s.regs;
     ensures  AddrMemPreservingExcept(s.m.addresses, r.m.addresses, StackLimit(), s.regs[SP(Monitor)]);
 {
+    lemma_MemPreservingExcept_implies_AddrMemPreservingExcept(s, r, StackLimit(), StackBase());
+    assert AddrMemPreservingExcept(s.m.addresses, r.m.addresses, StackLimit(), StackBase());
+
+    forall a:addr | ValidMem(a) && !(StackLimit() <= a < s.regs[SP(Monitor)])
+        ensures AddrMemContents(s.m.addresses, a) == AddrMemContents(r.m.addresses, a)
+    {
+        if a < StackLimit() {
+        } else {
+            //assert a >= s.regs[SP(Monitor)];
+            if a < StackBase() {
+                assert MemContents(s.m, a) == MemContents(r.m, a);      // OBSERVE
+            } else {
+            }
+        }
+    }
 }
 
 lemma lemma_AddrMemPreservingExcept3_hierarchy(m:memmap, m':memmap, 
