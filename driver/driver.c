@@ -48,9 +48,9 @@ static inline uint32_t rdcycles(void)
 
 static int test(void)
 {
-    int r;
+    int r = 0;
     kom_err_t err;
-    u32 addrspace, l1pt, l2pt, disp, code, data;
+    u32 addrspace = -1, l1pt = -1, l2pt = -1, disp = -1, code = -1, data = -1;
     struct page *shared_page;
     u32 shared_phys;
     void *shared_virt;
@@ -70,37 +70,37 @@ static int test(void)
     r = pgalloc_alloc(&addrspace);
     if (r != 0) {
         printk(KERN_DEBUG "page alloc failed: %d\n", r);
-        return r;
+        goto cleanup;
     }
 
     r = pgalloc_alloc_l1pt(&l1pt);
     if (r != 0) {
         printk(KERN_DEBUG "page alloc failed: %d\n", r);
-        return r;
+        goto cleanup;
     }
 
     r = pgalloc_alloc(&l2pt);
     if (r != 0) {
         printk(KERN_DEBUG "page alloc failed: %d\n", r);
-        return r;
+        goto cleanup;
     }
 
     r = pgalloc_alloc(&disp);
     if (r != 0) {
         printk(KERN_DEBUG "page alloc failed: %d\n", r);
-        return r;
+        goto cleanup;
     }
 
     r = pgalloc_alloc(&code);
     if (r != 0) {
         printk(KERN_DEBUG "page alloc failed: %d\n", r);
-        return r;
+        goto cleanup;
     }
 
     r = pgalloc_alloc(&data);
     if (r != 0) {
         printk(KERN_DEBUG "page alloc failed: %d\n", r);
-        return r;
+        goto cleanup;
     }
 
     printk(KERN_DEBUG "pages allocated: addrspace %x l1pt %x"
@@ -110,19 +110,22 @@ static int test(void)
     err = kom_smc_init_addrspace(addrspace, l1pt);
     printk(KERN_DEBUG "init_addrspace: %d\n", err);
     if (err != KOM_ERR_SUCCESS) {
-        return -EIO;
+        r = -EIO;
+        goto cleanup;
     }
 
     err = kom_smc_init_dispatcher(disp, addrspace, 0x8000);
     printk(KERN_DEBUG "init_dispatcher: %d\n", err);
     if (err != KOM_ERR_SUCCESS) {
-        return -EIO;
+        r = -EIO;
+        goto cleanup;
     }
 
     err = kom_smc_init_l2table(l2pt, addrspace, 0);
     printk(KERN_DEBUG "init_l2table: %d\n", err);
     if (err != KOM_ERR_SUCCESS) {
-        return -EIO;
+        r = -EIO;
+        goto cleanup;
     }
 
     /* Populate the page with our test code! */
@@ -133,33 +136,38 @@ static int test(void)
                              shared_phys >> 12);
     printk(KERN_DEBUG "map_secure (code): %d\n", err);
     if (err != KOM_ERR_SUCCESS) {
-        return -EIO;
+        r = -EIO;
+        goto cleanup;
     }
     
     err = kom_smc_map_secure(data, addrspace,
                              0x9000 | KOM_MAPPING_R | KOM_MAPPING_W, 0);
     printk(KERN_DEBUG "map_secure (data): %d\n", err);
     if (err != KOM_ERR_SUCCESS) {
-        return -EIO;
+        r = -EIO;
+        goto cleanup;
     }
     
     err = kom_smc_map_insecure(addrspace, shared_phys >> 12,
                                0xa000 | KOM_MAPPING_R | KOM_MAPPING_W);
     printk(KERN_DEBUG "map_insecure: %d\n", err);
     if (err != KOM_ERR_SUCCESS) {
-        return -EIO;
+        r = -EIO;
+        goto cleanup;
     }
 
     err = kom_smc_finalise(addrspace);
     printk(KERN_DEBUG "finalise: %d\n", err);
     if (err != KOM_ERR_SUCCESS) {
-        return -EIO;
+        r = -EIO;
+        goto cleanup;
     }
     
     ret = kom_smc_execute(disp, 1, 2, 3);
     printk(KERN_DEBUG "enter: %d\n", ret.x.err);
     if (ret.x.err != KOM_ERR_SUCCESS) {
-        return -EIO;
+        r = -EIO;
+        goto cleanup;
     }
 
     printk(KERN_DEBUG "returned: %lx\n", ret.x.val);
@@ -186,7 +194,8 @@ static int test(void)
                     resumecnt--;
                 }
                 printk(KERN_DEBUG "error on enter/resume iteration %d: %d\n", i, err);
-                return -EIO;
+                r = -EIO;
+                goto cleanup;
             }
         }
         s1 = rdcycles();
@@ -195,34 +204,47 @@ static int test(void)
                100-resumecnt, resumecnt, s1-s0);
     }
 
+cleanup:
     err = kom_smc_stop(addrspace);
     printk(KERN_DEBUG "stop: %d\n", err);
     if (err != KOM_ERR_SUCCESS) {
-        return -EIO;
+        r = -EIO;
     }
 
-    err = kom_smc_remove(disp);
-    printk(KERN_DEBUG "remove: %d\n", err);
+    if (disp != -1) {
+        err = kom_smc_remove(disp);
+        printk(KERN_DEBUG "remove: %d\n", err);
+    }
 
-    err = kom_smc_remove(code);
-    printk(KERN_DEBUG "remove: %d\n", err);
+    if (code != -1) {
+        err = kom_smc_remove(code);
+        printk(KERN_DEBUG "remove: %d\n", err);
+    }
 
-    err = kom_smc_remove(data);
-    printk(KERN_DEBUG "remove: %d\n", err);
+    if (data != -1) {
+        err = kom_smc_remove(data);
+        printk(KERN_DEBUG "remove: %d\n", err);
+    }
 
-    err = kom_smc_remove(l2pt);
-    printk(KERN_DEBUG "remove: %d\n", err);
+    if (l2pt != -1) {
+        err = kom_smc_remove(l2pt);
+        printk(KERN_DEBUG "remove: %d\n", err);
+    }
 
-    err = kom_smc_remove(l1pt);
-    printk(KERN_DEBUG "remove: %d\n", err);
+    if (l1pt != -1) {
+        err = kom_smc_remove(l1pt);
+        printk(KERN_DEBUG "remove: %d\n", err);
+    }
 
-    err = kom_smc_remove(addrspace);
-    printk(KERN_DEBUG "remove: %d\n", err);
+    if (addrspace != -1) {
+        err = kom_smc_remove(addrspace);
+        printk(KERN_DEBUG "remove: %d\n", err);
+    }
 
     kunmap(shared_page);
     __free_page(shared_page);
 
-    return 0;
+    return r;
 }
 
 static int komodo_open(struct inode *inode, struct file *filp)
