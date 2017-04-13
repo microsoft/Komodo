@@ -128,6 +128,7 @@ _smc:
 
         /* update target PSR to FIQ mode, with IRQ and FIQ both masked */
         mrs     r2, spsr
+        msr     spsr_fiq, r2
         lsr     r2, #5
         lsl     r2, #5
         orr     r2, r2, #(CPSR_F|CPSR_I|CPSRM_FIQ)
@@ -156,6 +157,7 @@ _smc:
 
         /* update target PSR to IRQ mode, with IRQ masked */
         mrs     r2, spsr
+        msr     spsr_irq, r2
         lsr     r2, #5
         lsl     r2, #5
         orr     r2, r2, #(CPSRM_IRQ|CPSR_I)
