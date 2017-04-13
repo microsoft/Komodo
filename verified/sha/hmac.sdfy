@@ -224,8 +224,6 @@ ensures
     ADD(r6, r6, r5);  // num_blocks * SHA_BLOCKSIZE * WORDSIZE + SHA_CTXSIZE * WORDSIZE 
     assert r6 == (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE;
 
-//    assume WordAligned(r7);
-//    assume WordAligned(r6);
     memcpy(r7, r3, r6, r5);
     lemma_memset_result(old(this.m), this.m, input_ptr, tmp_ptr, (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE));
 }
@@ -927,8 +925,6 @@ ensures
     assert ValidMemRange(sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE, sp);
 
     // Prove that stack_nonvolatiles didn't disrupt the rest of memory, especially the input or key
-    //lemma_MemPreservingExcept_implies_AddrMemPreservingExcept(old(this), this, StackLimit(), StackBase());
-    //assert AddrMemPreservingExcept(old(mem), mem, StackLimit(), StackBase());
     lemma_ParentStackPreserving_implies_AddrMemPreservingExcept(old(this), this);
     assert AddrMemPreservingExcept(old(mem), mem, StackLimit(), old(sp));
     lemma_AddrMemContentsSeq_framing1(old(mem), mem, key_ptr, HMAC_KEYSIZE_WORDS, 
@@ -936,19 +932,12 @@ ensures
     lemma_AddrMemContentsSeq_framing1(old(mem), mem, input_ptr, num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE, 
                                       StackLimit(), old(sp));
 
-
     ghost var inner_hash; 
     ghost var outer_hash;
     ghost var pre_inner_mem;
     pre_inner_mem := mem;
     inner_hash := hmac_inner(key, input);
     
-//    AddrMemPreservingExcept3(old(mem), mem, 
-//                             sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE, sp, 
-//                             old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE,
-//                             old(r1), old(r1) + (old(r2) + 1) * SHA_BLOCKSIZE * WORDSIZE);
-    assert StackLimit() <= sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE;
-    assert sp <= old(sp);
     lemma_AddrMemPreservingExcept3_hierarchy(pre_inner_mem, mem, 
                              sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE, sp, 
                              StackLimit(), old(sp),
@@ -964,15 +953,6 @@ ensures
     assume WordAligned(sp +  8);
     assume WordAligned(sp +  4);
     assume WordAligned(sp +  0);
-    assert MemContents(this.m, sp + 32) == old(r4);
-    assert MemContents(this.m, sp + 28) == old(r5);
-    assert MemContents(this.m, sp + 24) == old(r6);
-    assert MemContents(this.m, sp + 20) == old(r7);
-    assert MemContents(this.m, sp + 16) == old(r8);
-    assert MemContents(this.m, sp + 12) == old(r9);
-    assert MemContents(this.m, sp +  8) == old(r10);
-    assert MemContents(this.m, sp +  4) == old(r11);
-    assert MemContents(this.m, sp +  0) == old(r12);
 
     // Prove that the key is still intact
     lemma_AddrMemContentsSeq_framing3(pre_inner_mem, mem, 
@@ -1027,14 +1007,4 @@ ensures
     pre_pop_state := this;
     pre_pop_sp := sp;
     s := unstack_nonvolatiles_except_lr(0);
-    assert r4 == MemContents(pre_pop_state.m, pre_pop_sp+32) == old(r4);
-    assert r5 == MemContents(pre_pop_state.m, pre_pop_sp+28) == old(r5);
-    assert r6 == MemContents(pre_pop_state.m, pre_pop_sp+24) == old(r6);
-    assert r7 == MemContents(pre_pop_state.m, pre_pop_sp+20) == old(r7);
-    assert r8 == MemContents(pre_pop_state.m, pre_pop_sp+16) == old(r8);
-    assert r9 == MemContents(pre_pop_state.m, pre_pop_sp+12) == old(r9);
-    assert r10== MemContents(pre_pop_state.m, pre_pop_sp+ 8) == old(r10);
-    assert r11== MemContents(pre_pop_state.m, pre_pop_sp+ 4) == old(r11);
-    assert r12== MemContents(pre_pop_state.m, pre_pop_sp+ 0) == old(r12);
-
 }
