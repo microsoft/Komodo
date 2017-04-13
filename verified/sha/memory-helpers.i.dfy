@@ -1,5 +1,6 @@
 include "../ARMdef.dfy"
 include "../ARMspartan.dfy"
+include "../kom_common.i.dfy"
 include "sha256-invariants.i.dfy"
 
 lemma lemma_ValidMemRange_offset_word(base:int, count:nat)
@@ -75,6 +76,14 @@ lemma lemma_AddrMemContentsSeq_adds(m:memmap, begin_ptr:nat, count:nat, count':n
     }
 }
 
+lemma lemma_MemPreservingExcept_implies_AddrMemPreservingExcept(s:state, r:state, base:nat, limit:nat)
+    requires ValidState(s) && ValidState(r);
+    requires limit >= base;
+    requires MemPreservingExcept(s, r, base, limit);
+    ensures  AddrMemPreservingExcept(s.m.addresses, r.m.addresses, base, limit);
+{
+}
+
 lemma lemma_AddrMemContentsSeq_framing1(m:memmap, m':memmap, begin_ptr:nat, count:nat, l1:nat, h1:nat)
     requires ValidAddrMemStateOpaque(m) && ValidAddrMemStateOpaque(m');
     requires l1 <= h1;
@@ -105,6 +114,27 @@ lemma lemma_AddrMemContentsSeq_framing2(m:memmap, m':memmap, begin_ptr:nat, coun
     } else {
         lemma_ValidMemRange_offset_word(begin_ptr, count);
         lemma_AddrMemContentsSeq_framing2(m, m', begin_ptr + WORDSIZE, count - 1, l1, h1, l2, h2);
+    }
+}
+
+lemma lemma_AddrMemContentsSeq_framing3(m:memmap, m':memmap, begin_ptr:nat, count:nat, 
+                                        l1:nat, h1:nat, 
+                                        l2:nat, h2:nat, 
+                                        l3:nat, h3:nat)
+    requires ValidAddrMemStateOpaque(m) && ValidAddrMemStateOpaque(m');
+    requires l1 <= h1 && l2 <= h2 && l3 <= h3;
+    requires AddrMemPreservingExcept3(m, m', l1, h1, l2, h2, l3, h3);
+    requires h1 < begin_ptr || l1 > begin_ptr + count * WORDSIZE;
+    requires h2 < begin_ptr || l2 > begin_ptr + count * WORDSIZE;
+    requires h3 <= begin_ptr || l3 >= begin_ptr + count * WORDSIZE;
+    requires count > 0 ==> ValidMemRange(begin_ptr, begin_ptr + count * WORDSIZE);
+    decreases count;
+    ensures  AddrMemContentsSeq(m, begin_ptr, count) == AddrMemContentsSeq(m', begin_ptr, count);
+{
+    if count == 0 {
+    } else {
+        lemma_ValidMemRange_offset_word(begin_ptr, count);
+        lemma_AddrMemContentsSeq_framing3(m, m', begin_ptr + WORDSIZE, count - 1, l1, h1, l2, h2, l3, h3);
     }
 }
 
