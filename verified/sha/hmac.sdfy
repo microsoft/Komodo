@@ -521,7 +521,7 @@ ensures
     AddrMemPreservingExcept(old(mem), mem, r1, r1 + HMAC_KEYSIZE_BYTES);
     ValidMemRange(r1, r1 + SHA_BLOCKSIZE * WORDSIZE);
 
-    AddrMemContentsSeq(mem, r1, SHA_BLOCKSIZE) == SeqXor(key, Opad(HMAC_KEYSIZE_WORDS));
+    AddrMemContentsSeq(mem, r1, HMAC_KEYSIZE_WORDS) == SeqXor(key, Opad(HMAC_KEYSIZE_WORDS));
 
 {
     ghost var tmp_ptr := r1;
@@ -530,8 +530,8 @@ ensures
     // Copy key to the beginning of the tmp buffer
     MOV(r5, const(HMAC_KEYSIZE_BYTES)); 
     memcpy(r1 /* tmp_ptr */, r4 /* key_ptr */, r5, r6);
-    lemma_memset_result(old(this.m), this.m, key_ptr, tmp_ptr, SHA_BLOCKSIZE);
-    assert key == AddrMemContentsSeq(mem, tmp_ptr, SHA_BLOCKSIZE);
+    lemma_memset_result(old(this.m), this.m, key_ptr, tmp_ptr, HMAC_KEYSIZE_WORDS);
+    assert key == AddrMemContentsSeq(mem, tmp_ptr, HMAC_KEYSIZE_WORDS);
 
     apply_opad();
 }
@@ -553,7 +553,7 @@ requires
         ValidMemRange(ctx_ptr, ctx_ptr + SHA_CTXSIZE * WORDSIZE)
      && inner_hash == AddrMemContentsSeq(mem, ctx_ptr, SHA_CTXSIZE)
      
-     // tmp_ptr points to reasonable memory location with at least 2 blocks of space
+     // tmp_ptr points to reasonable memory location with at least 1 ctx of space
      && isUInt32(tmp_ptr + SHA_CTXSIZE * WORDSIZE)
      && ValidMemRange(tmp_ptr, tmp_ptr + SHA_CTXSIZE * WORDSIZE)
 
@@ -565,9 +565,9 @@ requires
      && ctx_ptr + SHA_BLOCKSIZE*WORDSIZE <= tmp_ptr
       ;
 reads
-    r0;
+    r0; r7;
 modifies
-    mem; r5; r6; r7;
+    mem; r5; r6;
 ensures
     // Framing
     ValidAddrMemStateOpaque(old(mem)); 
@@ -609,9 +609,8 @@ requires
         ValidMemRange(ctx_ptr, ctx_ptr + SHA_CTXSIZE * WORDSIZE)
      && inner_hash == AddrMemContentsSeq(mem, ctx_ptr, SHA_CTXSIZE)
      
-     // tmp_ptr points to reasonable memory location with at least 2 blocks of space
-     //&& isUInt32(tmp_ptr + 2 * SHA_BLOCKSIZE * WORDSIZE)
-     && ValidMemRange(tmp_ptr, tmp_ptr + 2 * SHA_BLOCKSIZE * WORDSIZE)
+     // tmp_ptr points to reasonable memory location with at least 1 block of space
+     && ValidMemRange(tmp_ptr, tmp_ptr + SHA_BLOCKSIZE * WORDSIZE)
 
      // Key points to reasonable memory location
      && ValidMemRange(key_ptr, key_ptr + HMAC_KEYSIZE_BYTES)
@@ -624,7 +623,7 @@ requires
 
      // Anti-aliasing via direct layout of ctx, tmp, key
      && ctx_ptr + SHA_CTXSIZE*WORDSIZE <= tmp_ptr
-     && tmp_ptr + 2*SHA_BLOCKSIZE*WORDSIZE <= key_ptr
+     && tmp_ptr + SHA_BLOCKSIZE*WORDSIZE <= key_ptr
      ;
 reads
     globals; r0; r1; r4;
@@ -635,20 +634,20 @@ ensures
     ValidAddrMemStateOpaque(old(mem)); 
     ValidAddrMemStateOpaque(mem); 
 
-    // Memory framing:  We only touch two blocks in the tmp buffer
-    AddrMemPreservingExcept(old(mem), mem, r1, r1 + 2 * SHA_BLOCKSIZE * WORDSIZE);
-    ValidMemRange(r1, r1 + 2 * SHA_BLOCKSIZE * WORDSIZE);
+    // Memory framing:  We only touch 1 block in the tmp buffer
+    AddrMemPreservingExcept(old(mem), mem, r1, r1 + SHA_BLOCKSIZE * WORDSIZE);
+    ValidMemRange(r1, r1 + SHA_BLOCKSIZE * WORDSIZE);
 
-    r2 == 2;
+    r2 == 1;
 
-    //AddrMemContentsSeq(mem, r1, 2 * SHA_BLOCKSIZE) == SeqXor(key, Opad(HMAC_KEYSIZE_WORDS)) + input;
+    //AddrMemContentsSeq(mem, r1, SHA_BLOCKSIZE) == SeqXor(key, Opad(HMAC_KEYSIZE_WORDS)) + inner_hash;
 {
     ghost var ctx_ptr := r0;
     ghost var tmp_ptr := r1;
     ghost var key_ptr := r4;
 
     // Copy key to the beginning of the tmp buffer
-    lemma_ValidMemRange_reduced(tmp_ptr, 2 * SHA_BLOCKSIZE, SHA_BLOCKSIZE);
+    lemma_ValidMemRange_reduced(tmp_ptr, SHA_BLOCKSIZE, SHA_CTXSIZE);
     hmac_outer_prep_key(key);
 
     ghost var key_mem;    // Snapshot of memory after we prep the key
@@ -658,33 +657,36 @@ ensures
     ADD(r7, r1, const(HMAC_KEYSIZE_BYTES));      // Skip the tmp_ptr past the key
 
     calc {
-        ValidMemRange(tmp_ptr, tmp_ptr + 2 * SHA_BLOCKSIZE * WORDSIZE);
-          { lemma_ValidMemRange_offset(tmp_ptr, 2 * SHA_BLOCKSIZE, SHA_BLOCKSIZE); }
-        ValidMemRange(tmp_ptr + SHA_BLOCKSIZE * WORDSIZE, tmp_ptr + 2 * SHA_BLOCKSIZE * WORDSIZE);
-          { assert r7 == tmp_ptr + SHA_BLOCKSIZE*WORDSIZE; }
-        ValidMemRange(r7, r7 + SHA_BLOCKSIZE * WORDSIZE);
+        ValidMemRange(tmp_ptr, tmp_ptr + SHA_BLOCKSIZE * WORDSIZE);
+          { lemma_ValidMemRange_offset(tmp_ptr, SHA_BLOCKSIZE, SHA_CTXSIZE); }
+        ValidMemRange(tmp_ptr + SHA_CTXSIZE * WORDSIZE, tmp_ptr + SHA_CTXSIZE * WORDSIZE);
+          { assert r7 == tmp_ptr + SHA_CTXSIZE*WORDSIZE; }
+        ValidMemRange(r7, r7 + SHA_CTXSIZE * WORDSIZE);
     }
     lemma_AddrMemContentsSeq_framing1(old(mem), mem, ctx_ptr, SHA_CTXSIZE, tmp_ptr, tmp_ptr + HMAC_KEYSIZE_BYTES);
     hmac_outer_prep_ctx(inner_hash);
+    assert AddrMemPreservingExcept(key_mem, mem, r7, r7 + SHA_CTXSIZE * WORDSIZE);
+    assert r7 == tmp_ptr + HMAC_KEYSIZE_BYTES;
 
     
-    MOV(r2, 2);   // Need to account for the key block at the beginning
-
     calc {
-        AddrMemContentsSeq(mem, r1, r2 * SHA_BLOCKSIZE);
-        AddrMemContentsSeq(mem, tmp_ptr, 2 * SHA_BLOCKSIZE);
-          { lemma_AddrMemContentsSeq_adds(mem, tmp_ptr, 2 * SHA_BLOCKSIZE, SHA_BLOCKSIZE); }
-        AddrMemContentsSeq(mem, tmp_ptr, SHA_BLOCKSIZE) + AddrMemContentsSeq(mem, tmp_ptr + SHA_BLOCKSIZE * WORDSIZE, SHA_BLOCKSIZE);
+        AddrMemContentsSeq(mem, r1, SHA_BLOCKSIZE);
+        AddrMemContentsSeq(mem, tmp_ptr, SHA_BLOCKSIZE);
+          { lemma_AddrMemContentsSeq_adds(mem, tmp_ptr, SHA_BLOCKSIZE, SHA_CTXSIZE); }
+        AddrMemContentsSeq(mem, tmp_ptr, SHA_CTXSIZE) + AddrMemContentsSeq(mem, tmp_ptr + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE);
           { 
-            assert AddrMemContentsSeq(mem, tmp_ptr, SHA_BLOCKSIZE) == SeqXor(key, Ipad(HMAC_KEYSIZE_WORDS)) by {
-              lemma_AddrMemContentsSeq_framing1(key_mem, mem, tmp_ptr, SHA_BLOCKSIZE, 
+            assert AddrMemContentsSeq(mem, tmp_ptr, SHA_CTXSIZE) == SeqXor(key, Opad(HMAC_KEYSIZE_WORDS)) by {
+              lemma_AddrMemContentsSeq_framing1(key_mem, mem, tmp_ptr, SHA_CTXSIZE, 
                                                 tmp_ptr + HMAC_KEYSIZE_BYTES, 
-                                                tmp_ptr + HMAC_KEYSIZE_BYTES + SHA_BLOCKSIZE * WORDSIZE);
+                                                tmp_ptr + HMAC_KEYSIZE_BYTES + SHA_CTXSIZE * WORDSIZE);
             }
-            assert AddrMemContentsSeq(mem, tmp_ptr + SHA_BLOCKSIZE * WORDSIZE, SHA_BLOCKSIZE) == inner_hash; 
+            assert AddrMemContentsSeq(mem, tmp_ptr + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE) == inner_hash; 
           }
         SeqXor(key, Opad(HMAC_KEYSIZE_WORDS)) + inner_hash;
     }
+    assume false;
+    
+    MOV(r2, 1);   // Set this up for the outer hash
 }
 /*
 procedure hmac(
