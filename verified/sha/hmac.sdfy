@@ -346,6 +346,7 @@ ensures
     }
 }
 
+
 procedure hmac_inner(
     ghost key:seq(word),
     ghost input:seq(word)
@@ -489,6 +490,210 @@ ensures
     lemma_package_hash_result(mem, r0, inner_hash);
 }
 
+
+procedure hmac_outer_prep_key(ghost key:seq(word))
+requires/ensures
+    ValidAddrMemStateOpaque(mem);
+    SaneState(this);
+requires 
+    !interrupts_enabled(this);
+    mode_of_state(this) == Monitor;
+requires
+    let tmp_ptr := r1 in
+    let key_ptr := r4 in
+
+     // key points to reasonable memory location
+        ValidMemRange(key_ptr, key_ptr + HMAC_KEYSIZE_BYTES)
+     && key == AddrMemContentsSeq(mem, key_ptr, SHA_BLOCKSIZE)
+     
+     // tmp_ptr points to reasonable memory location with at least num_blocks+1 space
+     && ValidMemRange(tmp_ptr, tmp_ptr + SHA_BLOCKSIZE * WORDSIZE)
+
+     // Non-refined requirements
+     && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
+     && tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() //|| tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
+
+     // Anti-aliasing via direct layout of  sp, ctx, input, tmp, key
+     && tmp_ptr + SHA_BLOCKSIZE*WORDSIZE <= key_ptr
+     ;
+reads 
+    r1; r4;
+modifies
+    mem; r5; r6; r10; 
+ensures
+    // Framing
+    ValidAddrMemStateOpaque(old(mem)); 
+    ValidAddrMemStateOpaque(mem); 
+
+    // Memory framing:  We only touch one block in the tmp buffer
+    AddrMemPreservingExcept(old(mem), mem, r1, r1 + HMAC_KEYSIZE_BYTES);
+    ValidMemRange(r1, r1 + SHA_BLOCKSIZE * WORDSIZE);
+
+    AddrMemContentsSeq(mem, r1, SHA_BLOCKSIZE) == SeqXor(key, Opad(16));
+
+{
+    ghost var tmp_ptr := r1;
+    ghost var key_ptr := r4;
+
+    // Copy key to the beginning of the tmp buffer
+    MOV(r5, const(HMAC_KEYSIZE_BYTES)); 
+    memcpy(r1 /* tmp_ptr */, r4 /* key_ptr */, r5, r6);
+    lemma_memset_result(old(this.m), this.m, key_ptr, tmp_ptr, SHA_BLOCKSIZE);
+    assert key == AddrMemContentsSeq(mem, tmp_ptr, SHA_BLOCKSIZE);
+
+    apply_opad();
+}
+
+procedure hmac_outer_prep_ctx(
+    ghost inner_hash:seq(word)
+    ) 
+requires/ensures
+    ValidAddrMemStateOpaque(mem);
+    SaneState(this);
+requires 
+    !interrupts_enabled(this);
+    mode_of_state(this) == Monitor;
+requires
+    let ctx_ptr := r0 in
+    let tmp_ptr := r7 in
+
+     // Hash is reasonable
+        ValidMemRange(ctx_ptr, ctx_ptr + SHA_CTXSIZE * WORDSIZE)
+     && inner_hash == AddrMemContentsSeq(mem, ctx_ptr, SHA_CTXSIZE)
+     
+     // tmp_ptr points to reasonable memory location with at least 2 blocks of space
+     && isUInt32(tmp_ptr + SHA_CTXSIZE * WORDSIZE)
+     && ValidMemRange(tmp_ptr, tmp_ptr + SHA_CTXSIZE * WORDSIZE)
+
+     // Non-refined requirements
+     && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
+     && tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() //|| tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
+
+     // Anti-aliasing via direct layout of ctx, tmp
+     && ctx_ptr + SHA_BLOCKSIZE*WORDSIZE <= tmp_ptr
+      ;
+reads
+    r0;
+modifies
+    mem; r5; r6; r7;
+ensures
+    // Framing
+    ValidAddrMemStateOpaque(old(mem)); 
+    ValidAddrMemStateOpaque(mem); 
+
+    // Memory framing:  We only touch the tmp buffer
+    AddrMemPreservingExcept(old(mem), mem, r7, r7 + SHA_CTXSIZE * WORDSIZE);
+    ValidMemRange(r7, r7 + SHA_CTXSIZE * WORDSIZE);
+
+    AddrMemContentsSeq(mem, r7, SHA_CTXSIZE) == inner_hash;
+
+{
+    ghost var ctx_ptr := r0;
+    ghost var tmp_ptr := r7;
+
+    MOV(r6, const(SHA_CTXSIZE*WORDSIZE));
+    memcpy(r7, r0, r6, r5);
+    lemma_memset_result(old(this.m), this.m, ctx_ptr, tmp_ptr, SHA_CTXSIZE);
+}
+
+
+
+procedure hmac_outer_prep_hash(
+    ghost key:seq(word),
+    ghost inner_hash:seq(word)
+    ) 
+requires/ensures
+    ValidAddrMemStateOpaque(mem);
+    SaneState(this);
+requires 
+    !interrupts_enabled(this);
+    mode_of_state(this) == Monitor;
+requires
+    let ctx_ptr := r0 in
+    let tmp_ptr := r1 in
+    let key_ptr := r4 in
+
+     // Hash is reasonable
+        ValidMemRange(ctx_ptr, ctx_ptr + SHA_CTXSIZE * WORDSIZE)
+     && inner_hash == AddrMemContentsSeq(mem, ctx_ptr, SHA_CTXSIZE)
+     
+     // tmp_ptr points to reasonable memory location with at least 2 blocks of space
+     //&& isUInt32(tmp_ptr + 2 * SHA_BLOCKSIZE * WORDSIZE)
+     && ValidMemRange(tmp_ptr, tmp_ptr + 2 * SHA_BLOCKSIZE * WORDSIZE)
+
+     // Key points to reasonable memory location
+     && ValidMemRange(key_ptr, key_ptr + HMAC_KEYSIZE_BYTES)
+     && key == AddrMemContentsSeq(mem, key_ptr, SHA_BLOCKSIZE)
+     
+     // Non-refined requirements
+//     && disjoint(tmp_ptr, tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE, StackBase(), StackLimit())
+     && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
+     && tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() //|| tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
+
+     // Anti-aliasing via direct layout of ctx, tmp, key
+     && ctx_ptr + SHA_CTXSIZE*WORDSIZE <= tmp_ptr
+     && tmp_ptr + 2*SHA_BLOCKSIZE*WORDSIZE <= key_ptr
+     ;
+reads
+    globals; r0; r1; r4;
+modifies
+    mem; r2; r5; r6; r7; r10;
+ensures
+    // Framing
+    ValidAddrMemStateOpaque(old(mem)); 
+    ValidAddrMemStateOpaque(mem); 
+
+    // Memory framing:  We only touch two blocks in the tmp buffer
+    AddrMemPreservingExcept(old(mem), mem, r1, r1 + 2 * SHA_BLOCKSIZE * WORDSIZE);
+    ValidMemRange(r1, r1 + 2 * SHA_BLOCKSIZE * WORDSIZE);
+
+    r2 == 2;
+
+    //AddrMemContentsSeq(mem, r1, 2 * SHA_BLOCKSIZE) == SeqXor(key, Opad(16)) + input;
+{
+    ghost var ctx_ptr := r0;
+    ghost var tmp_ptr := r1;
+    ghost var key_ptr := r4;
+
+    // Copy key to the beginning of the tmp buffer
+    lemma_ValidMemRange_reduced(tmp_ptr, 2 * SHA_BLOCKSIZE, SHA_BLOCKSIZE);
+    hmac_outer_prep_key(key);
+
+    ghost var key_mem;    // Snapshot of memory after we prep the key
+    key_mem := mem;
+
+    // Copy the hash to the rest of the tmp buffer
+    ADD(r7, r1, const(HMAC_KEYSIZE_BYTES));      // Skip the tmp_ptr past the key
+
+    calc {
+        ValidMemRange(tmp_ptr, tmp_ptr + 2 * SHA_BLOCKSIZE * WORDSIZE);
+          { lemma_ValidMemRange_offset(tmp_ptr, 2 * SHA_BLOCKSIZE, SHA_BLOCKSIZE); }
+        ValidMemRange(tmp_ptr + SHA_BLOCKSIZE * WORDSIZE, tmp_ptr + 2 * SHA_BLOCKSIZE * WORDSIZE);
+          { assert r7 == tmp_ptr + SHA_BLOCKSIZE*WORDSIZE; }
+        ValidMemRange(r7, r7 + SHA_BLOCKSIZE * WORDSIZE);
+    }
+    lemma_AddrMemContentsSeq_framing1(old(mem), mem, ctx_ptr, SHA_CTXSIZE, tmp_ptr, tmp_ptr + HMAC_KEYSIZE_BYTES);
+    hmac_outer_prep_ctx(inner_hash);
+
+    
+    MOV(r2, 2);   // Need to account for the key block at the beginning
+
+    calc {
+        AddrMemContentsSeq(mem, r1, r2 * SHA_BLOCKSIZE);
+        AddrMemContentsSeq(mem, tmp_ptr, 2 * SHA_BLOCKSIZE);
+          { lemma_AddrMemContentsSeq_adds(mem, tmp_ptr, 2 * SHA_BLOCKSIZE, SHA_BLOCKSIZE); }
+        AddrMemContentsSeq(mem, tmp_ptr, SHA_BLOCKSIZE) + AddrMemContentsSeq(mem, tmp_ptr + SHA_BLOCKSIZE * WORDSIZE, SHA_BLOCKSIZE);
+          { 
+            assert AddrMemContentsSeq(mem, tmp_ptr, SHA_BLOCKSIZE) == SeqXor(key, Ipad(16)) by {
+              lemma_AddrMemContentsSeq_framing1(key_mem, mem, tmp_ptr, SHA_BLOCKSIZE, 
+                                                tmp_ptr + HMAC_KEYSIZE_BYTES, 
+                                                tmp_ptr + HMAC_KEYSIZE_BYTES + SHA_BLOCKSIZE * WORDSIZE);
+            }
+            assert AddrMemContentsSeq(mem, tmp_ptr + SHA_BLOCKSIZE * WORDSIZE, SHA_BLOCKSIZE) == inner_hash; 
+          }
+        SeqXor(key, Opad(16)) + inner_hash;
+    }
+}
 /*
 procedure hmac(
     ghost key:seq(word),
