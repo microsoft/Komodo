@@ -301,7 +301,8 @@ ensures
     // Copy the input to the rest of the tmp buffer
     ADD(r7, r1, const(HMAC_KEYSIZE_BYTES));      // Skip the tmp_ptr past the key
 
-    assume (num_blocks+1) * SHA_BLOCKSIZE > SHA_BLOCKSIZE;
+    lemma_SHA_inequality_helper(num_blocks);
+    assert (num_blocks+1) * SHA_BLOCKSIZE > SHA_BLOCKSIZE;
     calc {
         ValidMemRange(tmp_ptr, tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE);
           { lemma_ValidMemRange_offset(tmp_ptr, (num_blocks + 1) * SHA_BLOCKSIZE, SHA_CTXSIZE); }
@@ -441,13 +442,13 @@ ensures
 //    assert r2 == num_blocks + 1;
     sha256_one_shot();
     assert WordAligned(r0);
-    assume WordAligned(r0 + 1*WORDSIZE);
-    assume WordAligned(r0 + 2*WORDSIZE);
-    assume WordAligned(r0 + 3*WORDSIZE);
-    assume WordAligned(r0 + 4*WORDSIZE);
-    assume WordAligned(r0 + 5*WORDSIZE);
-    assume WordAligned(r0 + 6*WORDSIZE);
-    assume WordAligned(r0 + 7*WORDSIZE);
+    WordAlignedAdd(r0, 1*WORDSIZE);
+    WordAlignedAdd(r0, 2*WORDSIZE);
+    WordAlignedAdd(r0, 3*WORDSIZE);
+    WordAlignedAdd(r0, 4*WORDSIZE);
+    WordAlignedAdd(r0, 5*WORDSIZE);
+    WordAlignedAdd(r0, 6*WORDSIZE);
+    WordAlignedAdd(r0, 7*WORDSIZE);
 
     inner_hash := 
         seq(AddrMemContents(mem, r0 + 0*WORDSIZE),
@@ -780,13 +781,13 @@ ensures
 //    assert r2 == 1;
     sha256_one_shot();
     assert WordAligned(r0);
-    assume WordAligned(r0 + 1*WORDSIZE);
-    assume WordAligned(r0 + 2*WORDSIZE);
-    assume WordAligned(r0 + 3*WORDSIZE);
-    assume WordAligned(r0 + 4*WORDSIZE);
-    assume WordAligned(r0 + 5*WORDSIZE);
-    assume WordAligned(r0 + 6*WORDSIZE);
-    assume WordAligned(r0 + 7*WORDSIZE);
+    WordAlignedAdd(r0, 1*WORDSIZE);
+    WordAlignedAdd(r0, 2*WORDSIZE);
+    WordAlignedAdd(r0, 3*WORDSIZE);
+    WordAlignedAdd(r0, 4*WORDSIZE);
+    WordAlignedAdd(r0, 5*WORDSIZE);
+    WordAlignedAdd(r0, 6*WORDSIZE);
+    WordAlignedAdd(r0, 7*WORDSIZE);
 
     outer_hash := 
         seq(AddrMemContents(mem, r0 + 0*WORDSIZE),
@@ -943,16 +944,15 @@ ensures
                              StackLimit(), old(sp),
                              old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE,
                              old(r1), old(r1) + (old(r2) + 1) * SHA_BLOCKSIZE * WORDSIZE);
-
-    assume WordAligned(sp + 32);
-    assume WordAligned(sp + 28);
-    assume WordAligned(sp + 24);
-    assume WordAligned(sp + 20);
-    assume WordAligned(sp + 16);
-    assume WordAligned(sp + 12);
-    assume WordAligned(sp +  8);
-    assume WordAligned(sp +  4);
-    assume WordAligned(sp +  0);
+    assert WordAligned(sp);
+    WordAlignedAdd(sp, 32);
+    WordAlignedAdd(sp, 28);
+    WordAlignedAdd(sp, 24);
+    WordAlignedAdd(sp, 20);
+    WordAlignedAdd(sp, 16);
+    WordAlignedAdd(sp, 12);
+    WordAlignedAdd(sp,  8);
+    WordAlignedAdd(sp,  4);
 
     // Prove that the key is still intact
     lemma_AddrMemContentsSeq_framing3(pre_inner_mem, mem, 
@@ -968,15 +968,15 @@ ensures
 
     outer_hash := hmac_outer(key, inner_hash);
 
-
     assert WordAligned(r0);
-    assume WordAligned(r0 + 1*WORDSIZE);
-    assume WordAligned(r0 + 2*WORDSIZE);
-    assume WordAligned(r0 + 3*WORDSIZE);
-    assume WordAligned(r0 + 4*WORDSIZE);
-    assume WordAligned(r0 + 5*WORDSIZE);
-    assume WordAligned(r0 + 6*WORDSIZE);
-    assume WordAligned(r0 + 7*WORDSIZE);
+    WordAlignedAdd(r0, 1*WORDSIZE);
+    WordAlignedAdd(r0, 2*WORDSIZE);
+    WordAlignedAdd(r0, 3*WORDSIZE);
+    WordAlignedAdd(r0, 4*WORDSIZE);
+    WordAlignedAdd(r0, 5*WORDSIZE);
+    WordAlignedAdd(r0, 6*WORDSIZE);
+    WordAlignedAdd(r0, 7*WORDSIZE);
+
     mac := 
         seq(AddrMemContents(mem, r0 + 0*WORDSIZE),
             AddrMemContents(mem, r0 + 1*WORDSIZE),
