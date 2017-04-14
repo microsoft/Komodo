@@ -23,10 +23,11 @@ void __attribute__ ((visibility ("hidden"))) test_enclave(void);
 void __attribute__ ((visibility ("hidden"))) test_enclave_end(void);
 __asm (
     ".text                                      \n"
+    ".arm                                       \n"
     "test_enclave:                              \n"
-    //"   mov     r0, #42                         \n"
-    //"   mov     r1, #0xa000                     \n"
-    //"   str     r0, [r1]                        \n"
+    //"   mov     r1, #42                         \n"
+    //"   mov     r0, #0xa000                     \n"
+    //"   str     r1, [r0]                        \n"
     "   mov     r0, #0                          \n" // KOM_SVC_EXIT
     "1: svc     #0                              \n"
     "   b       1b                              \n"
@@ -36,7 +37,8 @@ __asm (
 static void enable_pmccntr(void)
 {
     asm volatile ("mcr p15, 0, %0, c9, c12, 0" :: "r"(1));
-    asm volatile ("mcr p15, 0, %0, c9, c12, 1" :: "r"(1 << 31));
+    asm volatile ("mcr p15, 0, %0, c9, c12, 1" :: "r"((u32)1 << 31));
+    asm volatile ("isb");
 }
 
 static inline uint32_t rdcycles(void)
@@ -57,6 +59,23 @@ static int test(void)
     kom_multival_t ret;
 
     enable_pmccntr();
+
+    {
+        u32 s0, s1, i, total = 0;
+
+        for (i = 0; i < 10; i++) {
+            s0 = rdcycles();
+            s1 = rdcycles();
+            total += s1-s0;
+        }
+        printk(KERN_DEBUG "approx cycle counter overhead is %u/10 cycles\n",
+               total);
+
+        s0 = rdcycles();
+        for (i = 0; i < 100; i++) kom_smc_query();
+        s1 = rdcycles();
+        printk(KERN_DEBUG "100 iterations of a null SMC took %u cycles\n", s1-s0);
+    }
 
     shared_page = alloc_page(GFP_KERNEL);
     BUG_ON(shared_page == NULL);
@@ -131,6 +150,10 @@ static int test(void)
     /* Populate the page with our test code! */
     memcpy(shared_virt, &test_enclave, &test_enclave_end - &test_enclave);
 
+    /* Memory barrier prior to komodo fetching the memory from secure
+       world using an alias mapping */
+    asm volatile ("dsb");
+
     err = kom_smc_map_secure(code, addrspace,
                              0x8000 | KOM_MAPPING_R | KOM_MAPPING_X,
                              shared_phys >> 12);
@@ -164,7 +187,7 @@ static int test(void)
     }
     
     ret = kom_smc_execute(disp, 1, 2, 3);
-    printk(KERN_DEBUG "enter: %d\n", ret.x.err);
+    printk(KERN_DEBUG "enter: %x %lx\n", ret.x.err, ret.x.val);
     if (ret.x.err != KOM_ERR_SUCCESS) {
         r = -EIO;
         goto cleanup;
@@ -176,6 +199,7 @@ static int test(void)
     {
         u32 s0, s1, resumecnt = 0, i;
         bool interrupted = false;
+
         s0 = rdcycles();
         for (i = 0; i < 100; i++) {
             kom_multival_t ret;
@@ -317,14 +341,6 @@ static int __init driver_init(void)
     }
 
     printk(KERN_DEBUG "komodo: running tests\n");
-    {
-        u32 s0, s1, i;
-        s0 = rdcycles();
-        for (i = 0; i < 100; i++) kom_smc_query();
-        s1 = rdcycles();
-        printk(KERN_DEBUG "komodo: 100 iterations of a null SMC took %u cycles\n", s1-s0);
-    }
-
     r = test();
     printk(KERN_DEBUG "komodo: test complete: %d\n", r);
     
