@@ -705,8 +705,8 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
     // I think the OLR here is nonsensical and I'm not sure it makes sense to 
     // use the PC value as part of the user state since we aren't really 
     // modeling the PC...
-    assume OperandContents(r1, OLR) == OperandContents(r2, OLR);
-    assume user_regs(r1.regs) == user_regs(r2.regs);
+    // assume OperandContents(r1, OLR) == OperandContents(r2, OLR);
+    // assume user_regs(r1.regs) == user_regs(r2.regs);
 }
 
 predicate user_state_same(s1:state, s2:state, pc1:word, pc2:word,
