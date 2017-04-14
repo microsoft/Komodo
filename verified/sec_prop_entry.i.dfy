@@ -316,7 +316,7 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
         ensures enc_conf_eq_entry(s1', s2', d1', d2', atkr)
     {
         assume steps1 == steps2;
-        assume s11.nondet == s21.nondet;
+        assume s11.conf.nondet == s21.conf.nondet;
 
         assume OperandContents(s11, OLR) == OperandContents(s21, OLR); //TODO proveme
         // TODO entry.s spec needs to fix this:
@@ -485,11 +485,11 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
     var (s13, expc1, ex1) := userspaceExecutionFn(s12, pc1);
     var (s23, expc2, ex2) := userspaceExecutionFn(s22, pc2);
 
-    assert s13.nondet == s23.nondet by
+    assert s13.conf.nondet == s23.conf.nondet by
     {
         reveal userspaceExecutionFn();
-        assert s13.nondet == nondet_int(s12.nondet, NONDET_GENERATOR());
-        assert s23.nondet == nondet_int(s22.nondet, NONDET_GENERATOR());
+        assert s13.conf.nondet == nondet_int(s12.conf.nondet, NONDET_GENERATOR());
+        assert s23.conf.nondet == nondet_int(s22.conf.nondet, NONDET_GENERATOR());
     }
 
     assert s12.m == s11.m;
@@ -524,25 +524,25 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         assume s12.conf.cpsr.f == s22.conf.cpsr.f;
         assume s12.conf.cpsr.i == s22.conf.cpsr.i;
         
-        assert ex1 == nondet_exception(s12.nondet, user_state1, s12.conf.cpsr.f, s12.conf.cpsr.i);
-        assert ex2 == nondet_exception(s22.nondet, user_state2, s22.conf.cpsr.f, s22.conf.cpsr.i);
+        assert ex1 == nondet_exception(s12.conf.nondet, user_state1, s12.conf.cpsr.f, s12.conf.cpsr.i);
+        assert ex2 == nondet_exception(s22.conf.nondet, user_state2, s22.conf.cpsr.f, s22.conf.cpsr.i);
     }
 
     assert user_regs(s13.regs) == user_regs(s23.regs) by {
         // reveal userspaceExecutionFn();
-        var hr1 := havocUserRegs(s12.nondet, user_state1, s12.regs);
-        var hr2 := havocUserRegs(s22.nondet, user_state2, s22.regs);
+        var hr1 := havocUserRegs(s12.conf.nondet, user_state1, s12.regs);
+        var hr2 := havocUserRegs(s22.conf.nondet, user_state2, s22.regs);
         assert s13.regs == hr1 by
             { reveal userspaceExecutionFn(); }
         assert s23.regs == hr2 by
             { reveal userspaceExecutionFn(); }
         assert user_state1 == user_state2;
-        assert s12.nondet == s22.nondet;
+        assert s12.conf.nondet == s22.conf.nondet;
         forall (r | r in USER_REGS() )
             ensures hr1[r] ==
-                nondet_private_word(s12.nondet, user_state1, NONDET_REG(r))
+                nondet_private_word(s12.conf.nondet, user_state1, NONDET_REG(r))
             ensures hr2[r] ==
-                nondet_private_word(s22.nondet, user_state2, NONDET_REG(r))
+                nondet_private_word(s22.conf.nondet, user_state2, NONDET_REG(r))
             ensures hr1[r] == hr2[r]
             ensures user_regs(hr1)[r] == user_regs(hr2)[r]
         {
@@ -560,7 +560,7 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
 
     assert s14.conf.ex == ex1 && s24.conf.ex == ex2;
 
-    assert s14.nondet == s24.nondet;
+    assert s14.conf.nondet == s24.conf.nondet;
 
     lemma_userspaceExec_atkr_conf(
         s11, s1', s12, s13, s14, d11, d14,
@@ -571,8 +571,8 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         assert rd1 == d14;
         assert rd2 == d24;
         // XXX Can't prove this from entry.s:
-        assume r1.nondet == s14.nondet;
-        assume r2.nondet == s24.nondet;
+        assume r1.conf.nondet == s14.conf.nondet;
+        assume r2.conf.nondet == s24.conf.nondet;
         assert enc_conf_eqpdb(rd1, rd2, atkr);
         assert enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
     } else {
@@ -592,8 +592,8 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
             s23, s24, ex2, expc2);
         lemma_exceptionHandled_atkr_conf(s14, d14, rd1, s24, d24, rd2, dispPg, atkr);
         // // No idea how to prove anything about nd_*
-        assume r1.nondet == s14.nondet;
-        assume r2.nondet == s24.nondet;
+        assume r1.conf.nondet == s14.conf.nondet;
+        assume r2.conf.nondet == s24.conf.nondet;
         assert enc_conf_eqpdb(rd1, rd2, atkr);
         assert enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
     }
@@ -613,7 +613,7 @@ requires ValidState(s1) && ValidState(s2)
     pt2 == ExtractAbsPageTable(s2) &&
     pt1.Just? && pt2.Just? &&
     pc1 == pc2 &&
-    s1.nondet == s2.nondet &&
+    s1.conf.nondet == s2.conf.nondet &&
     user_visible_state(s1, pc1, pt1.v) ==
         user_visible_state(s2, pc2, pt2.v)
     
@@ -659,24 +659,7 @@ lemma lemma_exceptionTaken_atkr_conf(
         }
         eqregs(user_regs(s24.regs), user_regs(s14.regs));
     }
-    assert mode_of_state(s14) != User && mode_of_state(s24) != User by {
-        var newmode := mode_of_exception(s13.conf, ex1);
-        var newpsr := psr_of_exception(s13, ex1);
-        var maskfiq := ex1 == ExFIQ || newmode == Monitor;
-        var maskbits := BitsAsWord(BitOr(if maskfiq then 0x40 else 0,
-                                     if true then 0x80 else 0));
-        reveal update_psr();
-        assume false;
-        assert newmode != User;
-        assert psr_mask_mode(newpsr) == BitwiseOr(encode_mode(newmode), maskbits);
-        assert decode_mode(psr_mask_mode(newpsr)) == newmode;
-        assert decode_psr(newpsr).m == newmode;
-        assert s14.conf.cpsr == decode_psr(newpsr);
-        assert s24.conf.cpsr == decode_psr(newpsr);
-        assert mode_of_state(s14) == newmode;
-        assert mode_of_state(s24) == newmode;
-    }
-    assume false;
+    lemma_evalExceptionTaken_Mode(s13, ex1, pc1, s14);
 }
 
 // This is just for the reveal
