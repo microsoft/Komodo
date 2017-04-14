@@ -31,7 +31,8 @@ lemma lemma_enter_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
             var e1', e2' := smc_enter_err(d1, dispPage, false), smc_enter_err(d2, dispPage, false);
             assert enc_conf_eqpdb(d1', d2', atkr) by {
                 lemma_enter_enc_conf_eqpdb(s1, d1, s1', d1', s2, d2, s2', d2',
-                                 dispPage, arg1, arg2, arg3, asp1, asp2, atkr);
+                                 dispPage, arg1, arg2, arg3, asp1, asp2, atkr, 
+                                 false);
             }
             assert pgInAddrSpc(d1, dispPage, atkr) <==>
                 pgInAddrSpc(d2, dispPage, atkr);
@@ -47,7 +48,7 @@ lemma lemma_enter_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
                     assert entering_atkr(d1, d2, dispPage, atkr, false);
                     lemma_enter_enc_conf_atkr_enter(s1, d1, s1', d1', s2, d2, s2', d2',
                                                     dispPage, arg1, arg2, arg3, 
-                                                    atkr);
+                                                    atkr, false);
                     assert enc_conf_eq_entry(s1', s2', d1', d2', atkr);
                 } else {
                     assert !entering_atkr(d1, d2, dispPage, atkr, false);
@@ -62,10 +63,13 @@ lemma lemma_enter_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
 lemma lemma_enter_enc_conf_eqpdb(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                  s2: state, d2: PageDb, s2':state, d2': PageDb,
                                  disp: word, arg1: word, arg2: word, arg3: word,
-                                 asp1: PageNr, asp2: PageNr, atkr: PageNr)
+                                 asp1: PageNr, asp2: PageNr, atkr: PageNr,
+                                 isresume:bool)
     requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
-    requires smc_enter(s1, d1, s1', d1', disp, arg1, arg2, arg3)
-    requires smc_enter(s2, d2, s2', d2', disp, arg1, arg2, arg3)
+    requires !isresume ==> smc_enter(s1, d1, s1', d1', disp, arg1, arg2, arg3)
+    requires !isresume ==> smc_enter(s2, d2, s2', d2', disp, arg1, arg2, arg3)
+    requires isresume ==> smc_resume(s1, d1, s1', d1', disp)
+    requires isresume ==> smc_resume(s2, d2, s2', d2', disp)
     requires validPageNr(disp) && d1[disp].PageDbEntryTyped? && 
         d2[disp].PageDbEntryTyped?
     requires d1[disp].addrspace == asp1 && d2[disp].addrspace == asp2
@@ -76,14 +80,14 @@ lemma lemma_enter_enc_conf_eqpdb(s1: state, d1: PageDb, s1':state, d1': PageDb,
 {
 
     reveal_enc_conf_eqpdb();
-    var go1 := smc_enter_err(d1, disp, false) == KOM_ERR_SUCCESS;
-    var go2 := smc_enter_err(d2, disp, false) == KOM_ERR_SUCCESS;
+    var go1 := smc_enter_err(d1, disp, isresume) == KOM_ERR_SUCCESS;
+    var go2 := smc_enter_err(d2, disp, isresume) == KOM_ERR_SUCCESS;
 
     if(go1 && go2) {
         lemma_enter_only_affects_entered(s1, d1, s1', d1',
-             disp, asp1, arg1, arg2, arg3);
+             disp, asp1, arg1, arg2, arg3, isresume);
         lemma_enter_only_affects_entered(s2, d2, s2', d2',
-             disp, asp2, arg1, arg2, arg3);
+             disp, asp2, arg1, arg2, arg3, isresume);
         
         assert d1[atkr].PageDbEntryTyped? <==> d2[atkr].PageDbEntryTyped?;
         assert d1[atkr].PageDbEntryTyped? <==> d1'[atkr].PageDbEntryTyped?;
@@ -101,11 +105,11 @@ lemma lemma_enter_enc_conf_eqpdb(s1: state, d1: PageDb, s1':state, d1': PageDb,
         assert asp1 == atkr <==> asp2 == atkr;
         
         if(asp1 == atkr) {
-            assert entering_atkr(d1, d2, disp, atkr, false);
+            assert entering_atkr(d1, d2, disp, atkr, isresume);
             assert enc_conf_eq_entry(s1, s2, d1, d2, atkr);
             lemma_enter_enc_conf_atkr_enter(s1, d1, s1', d1', s2, d2, s2', d2',
                                             disp, arg1, arg2, arg3, 
-                                            atkr);
+                                            atkr, isresume);
         } else {
             assert asp1 != atkr && asp2 != atkr;
             assert outside_world_same(d1, d1', disp, asp1);
@@ -148,12 +152,12 @@ lemma lemma_enter_enc_conf_eqpdb(s1: state, d1: PageDb, s1':state, d1': PageDb,
 
     if(go1 && !go2) {
         lemma_enter_enc_conf_eqpdb_one_go(s1, d1, s1', d1', s2, d2, s2', d2',
-                         disp, arg1, arg2, arg3, asp1, asp2, atkr);
+                         disp, arg1, arg2, arg3, asp1, asp2, atkr, isresume);
         assert enc_conf_eqpdb(d1', d2', atkr);
     }
     if(!go1 && go2) {
         lemma_enter_enc_conf_eqpdb_one_go(s2, d2, s2', d2', s1, d1, s1', d1',
-                         disp, arg1, arg2, arg3, asp2, asp1, atkr);
+                         disp, arg1, arg2, arg3, asp2, asp1, atkr, isresume);
         assert enc_conf_eqpdb(d1', d2', atkr);
     }
     if(!go1 && !go2) { 
@@ -165,21 +169,24 @@ lemma lemma_enter_enc_conf_eqpdb(s1: state, d1: PageDb, s1':state, d1': PageDb,
 lemma lemma_enter_enc_conf_eqpdb_one_go(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                         s2: state, d2: PageDb, s2':state, d2': PageDb,
                                         disp: word, arg1: word, arg2: word, arg3: word,
-                                        asp1: PageNr, asp2: PageNr, atkr: PageNr)
+                                        asp1: PageNr, asp2: PageNr, atkr: PageNr,
+                                        isresume:bool)
     requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
-    requires smc_enter(s1, d1, s1', d1', disp, arg1, arg2, arg3)
-    requires smc_enter(s2, d2, s2', d2', disp, arg1, arg2, arg3)
+    requires !isresume ==> smc_enter(s1, d1, s1', d1', disp, arg1, arg2, arg3)
+    requires !isresume ==> smc_enter(s2, d2, s2', d2', disp, arg1, arg2, arg3)
+    requires isresume ==> smc_resume(s1, d1, s1', d1', disp)
+    requires isresume ==> smc_resume(s2, d2, s2', d2', disp)
     requires validPageNr(disp) && d1[disp].PageDbEntryTyped? && 
         d2[disp].PageDbEntryTyped?
     requires d1[disp].addrspace == asp1 && d2[disp].addrspace == asp2
     requires enc_conf_eqpdb(d1, d2, atkr)
-    requires smc_enter_err(d1, disp, false) == KOM_ERR_SUCCESS
-            && !(smc_enter_err(d2, disp, false) == KOM_ERR_SUCCESS);
+    requires smc_enter_err(d1, disp, isresume) == KOM_ERR_SUCCESS
+            && !(smc_enter_err(d2, disp, isresume) == KOM_ERR_SUCCESS);
     ensures  enc_conf_eqpdb(d1', d2', atkr)
 {
    reveal_enc_conf_eqpdb();
-   var go1 := smc_enter_err(d1, disp, false) == KOM_ERR_SUCCESS;
-   var go2 := smc_enter_err(d2, disp, false) == KOM_ERR_SUCCESS;
+   var go1 := smc_enter_err(d1, disp, isresume) == KOM_ERR_SUCCESS;
+   var go2 := smc_enter_err(d2, disp, isresume) == KOM_ERR_SUCCESS;
    assert go1 && !go2;
    
    assert d2' == d2;
@@ -199,7 +206,7 @@ lemma lemma_enter_enc_conf_eqpdb_one_go(s1: state, d1: PageDb, s1':state, d1': P
    }
 
    lemma_enter_only_affects_entered(s1, d1, s1', d1',
-        disp, asp1, arg1, arg2, arg3);
+        disp, asp1, arg1, arg2, arg3, isresume);
    assert outside_world_same(d1, d1', disp, asp1);
 
    assert forall n : PageNr :: pgInAddrSpc(d1', n, asp1)
@@ -248,22 +255,35 @@ predicate outside_world_same(d:PageDb, d':PageDb, p:PageNr, asp: PageNr)
 }
 
 lemma lemma_enter_only_affects_entered(s: state, d: PageDb, s': state, d': PageDb,
-                                       disp:PageNr, asp:PageNr, arg1: word, arg2: word, arg3: word)
+                                       disp:PageNr, asp:PageNr,
+                                       arg1: word, arg2: word, arg3: word,
+                                       isresume:bool)
     requires ValidState(s) && validPageDb(d) && ValidState(s') && 
         validPageDb(d') && SaneConstants()
     requires validPageNr(disp) && valDispPage(d, disp)
     requires validPageNr(asp) && valAddrPage(d, asp)
     requires d[disp].addrspace == asp
-    requires smc_enter(s, d, s', d', disp, arg1, arg2, arg3)
-    requires smc_enter_err(d, disp, false) == KOM_ERR_SUCCESS
+    requires !isresume ==> smc_enter(s, d, s', d', disp, arg1, arg2, arg3)
+    requires isresume ==> smc_resume(s, d, s', d', disp)
+    requires smc_enter_err(d, disp, isresume) == KOM_ERR_SUCCESS
     ensures outside_world_same(d, d', disp, asp)
 {
-    forall(s1: state, steps:nat |
-        preEntryEnter(s, s1, d, disp, arg1, arg2, arg3) &&
-        validEnclaveExecution(s1, d, s', d', disp, steps))
-        ensures outside_world_same(d, d', disp, asp)
-    {
-        lemma_validEnclaveEx_oae(s1, d, s', d', disp, steps, asp);
+    if(!isresume) {
+        forall(s1: state, steps:nat |
+            preEntryEnter(s, s1, d, disp, arg1, arg2, arg3) &&
+            validEnclaveExecution(s1, d, s', d', disp, steps))
+            ensures outside_world_same(d, d', disp, asp)
+        {
+            lemma_validEnclaveEx_oae(s1, d, s', d', disp, steps, asp);
+        }
+    } else {
+        forall(s1: state, steps:nat |
+            preEntryResume(s, s1, d, disp) &&
+            validEnclaveExecution(s1, d, s', d', disp, steps))
+            ensures outside_world_same(d, d', disp, asp)
+        {
+            lemma_validEnclaveEx_oae(s1, d, s', d', disp, steps, asp);
+        }
     }
 }
 
@@ -362,44 +382,76 @@ predicate atkr_entry(d1: PageDb, d2: PageDb, disp: word, atkr: PageNr)
 lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                       s2: state, d2: PageDb, s2':state, d2': PageDb,
                                       dispPage: word, arg1: word, arg2: word, arg3: word,
-                                      atkr: PageNr)
+                                      atkr: PageNr, isresume:bool)
     requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
-    requires smc_enter(s1, d1, s1', d1', dispPage, arg1, arg2, arg3)
-    requires smc_enter(s2, d2, s2', d2', dispPage, arg1, arg2, arg3)
+    requires !isresume ==> smc_enter(s1, d1, s1', d1', dispPage, arg1, arg2, arg3)
+    requires !isresume ==> smc_enter(s2, d2, s2', d2', dispPage, arg1, arg2, arg3)
+    requires isresume ==> smc_resume(s1, d1, s1', d1', dispPage)
+    requires isresume ==> smc_resume(s2, d2, s2', d2', dispPage)
     requires enc_conf_eqpdb(d1, d2, atkr)
-    requires entering_atkr(d1, d2, dispPage, atkr, false);
+    requires entering_atkr(d1, d2, dispPage, atkr, isresume);
     requires enc_conf_eq_entry(s1, s2, d1, d2, atkr)
     ensures  enc_conf_eqpdb(d1', d2', atkr)
     ensures  enc_conf_eq_entry(s1', s2', d1', d2', atkr)
 {
 
-    var s11:state, steps1: nat :|
-        preEntryEnter(s1, s11, d1, dispPage, arg1, arg2, arg3) &&
-        validEnclaveExecution(s11, d1, s1', d1', dispPage, steps1);
-    
-    var s21:state, steps2: nat :|
-        preEntryEnter(s2, s21, d2, dispPage, arg1, arg2, arg3) &&
-        validEnclaveExecution(s21, d2, s2', d2', dispPage, steps2);
+    if(!isresume) {
+        var s11:state, steps1: nat :|
+            preEntryEnter(s1, s11, d1, dispPage, arg1, arg2, arg3) &&
+            validEnclaveExecution(s11, d1, s1', d1', dispPage, steps1);
+        
+        var s21:state, steps2: nat :|
+            preEntryEnter(s2, s21, d2, dispPage, arg1, arg2, arg3) &&
+            validEnclaveExecution(s21, d2, s2', d2', dispPage, steps2);
 
-    assert s11.conf.nondet == s21.conf.nondet;
-    assert user_regs(s11.regs) == user_regs(s21.regs);
+        assert s11.conf.nondet == s21.conf.nondet;
+        assert user_regs(s11.regs) == user_regs(s21.regs);
 
-    assert OperandContents(s11, OLR) == OperandContents(s21, OLR) by 
-    {
-        assert OperandContents(s11, OLR) == d1[dispPage].entry.entrypoint;
-        assert OperandContents(s21, OLR) == d2[dispPage].entry.entrypoint;
-        reveal enc_conf_eqpdb();
+        assert OperandContents(s11, OLR) == OperandContents(s21, OLR) by 
+        {
+            assert OperandContents(s11, OLR) == d1[dispPage].entry.entrypoint;
+            assert OperandContents(s21, OLR) == d2[dispPage].entry.entrypoint;
+            reveal enc_conf_eqpdb();
+        }
+        
+        assert steps1 == steps2 by {
+            lemma_validEnclaveEx_same_steps(s11, d1, s1', d1', s21, d2, s2', d2',
+                                                 dispPage, steps1, steps2, atkr);
+        }
+
+        var steps := steps1;
+
+        lemma_validEnclaveEx_enc_conf(s11, d1, s1', d1', s21, d2, s2', d2',
+                                             dispPage, steps, atkr);
+    } else {
+        var s11:state, steps1: nat :|
+            preEntryResume(s1, s11, d1, dispPage) &&
+            validEnclaveExecution(s11, d1, s1', d1', dispPage, steps1);
+        
+        var s21:state, steps2: nat :|
+            preEntryResume(s2, s21, d2, dispPage) &&
+            validEnclaveExecution(s21, d2, s2', d2', dispPage, steps2);
+
+        assert s11.conf.nondet == s21.conf.nondet;
+        assert user_regs(s11.regs) == user_regs(s21.regs) by {assume false;}
+
+        assert OperandContents(s11, OLR) == OperandContents(s21, OLR) by 
+        {   assume false;
+            assert OperandContents(s11, OLR) == d1[dispPage].entry.entrypoint;
+            assert OperandContents(s21, OLR) == d2[dispPage].entry.entrypoint;
+            reveal enc_conf_eqpdb();
+        }
+        
+        assert steps1 == steps2 by {
+            lemma_validEnclaveEx_same_steps(s11, d1, s1', d1', s21, d2, s2', d2',
+                                                 dispPage, steps1, steps2, atkr);
+        }
+
+        var steps := steps1;
+
+        lemma_validEnclaveEx_enc_conf(s11, d1, s1', d1', s21, d2, s2', d2',
+                                             dispPage, steps, atkr);
     }
-    
-    assert steps1 == steps2 by {
-        lemma_validEnclaveEx_same_steps(s11, d1, s1', d1', s21, d2, s2', d2',
-                                             dispPage, steps1, steps2, atkr);
-    }
-
-    var steps := steps1;
-
-    lemma_validEnclaveEx_enc_conf(s11, d1, s1', d1', s21, d2, s2', d2',
-                                         dispPage, steps, atkr);
 }
 
 lemma lemma_validEnclaveEx_same_steps(s1: state, d1: PageDb, s1':state, d1': PageDb,
