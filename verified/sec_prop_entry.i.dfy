@@ -388,9 +388,8 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
 
     var steps := steps1;
 
-    // need spec fixes for these two 
-    assume s11.conf.nondet == s21.conf.nondet;
-    assume user_regs(s11.regs) == user_regs(s21.regs);
+    assert s11.conf.nondet == s21.conf.nondet;
+    assert user_regs(s11.regs) == user_regs(s21.regs);
 
     assert OperandContents(s11, OLR) == OperandContents(s21, OLR) by 
     {
