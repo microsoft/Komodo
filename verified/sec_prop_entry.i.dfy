@@ -225,12 +225,17 @@ lemma lemma_enter_enc_conf_eqpdb_one_go(s1: state, d1: PageDb, s1':state, d1': P
    assert enc_conf_eqpdb(d1', d2', atkr);
 }
 
+//-----------------------------------------------------------------------------
+// Single enclave executions (attacker or otherwise) only affect their own things.
+//-----------------------------------------------------------------------------
+
 predicate outside_world_same(d:PageDb, d':PageDb, p:PageNr, asp: PageNr) 
     requires validPageDb(d) && validPageDb(d')
     requires validPageNr(p) && valDispPage(d, p)
     requires validPageNr(asp) && valAddrPage(d, asp)
     requires d[p].addrspace == asp
 {
+    nonStoppedDispatcher(d', p) && nonStoppedDispatcher(d, p) &&
     valDispPage(d', p) && valAddrPage(d', asp) && d'[p].addrspace == asp &&
     (forall n : PageNr :: d'[n].PageDbEntryTyped? <==>
         d[n].PageDbEntryTyped?) &&
@@ -253,9 +258,93 @@ lemma lemma_enter_only_affects_entered(s: state, d: PageDb, s': state, d': PageD
     requires smc_enter_err(d, disp, false) == KOM_ERR_SUCCESS
     ensures outside_world_same(d, d', disp, asp)
 {
-    assume false;
-
+    forall(s1: state, steps:nat |
+        preEntryEnter(s, s1, d, disp, arg1, arg2, arg3) &&
+        validEnclaveExecution(s1, d, s', d', disp, steps))
+        ensures outside_world_same(d, d', disp, asp)
+    {
+        lemma_validEnclaveEx_oae(s1, d, s', d', disp, steps, asp);
+    }
 }
+
+lemma lemma_validEnclaveEx_oae(
+    s:state, d: PageDb, s':state, d': PageDb,
+    disp: PageNr, steps:nat, asp: PageNr)
+    requires ValidState(s) && validPageDb(d) && ValidState(s') && 
+        validPageDb(d') && SaneConstants()
+    requires validPageNr(disp) && valDispPage(d, disp)
+    requires validPageNr(asp) && valAddrPage(d, asp)
+    requires d[disp].addrspace == asp
+    requires nonStoppedDispatcher(d, disp)
+    requires validEnclaveExecution(s, d, s', d', disp, steps);
+    ensures outside_world_same(d, d', disp, asp)
+    decreases steps;
+{
+    reveal validEnclaveExecution();
+    var retToEnclave := (steps > 0);
+    var  s5, d5 :|
+        validEnclaveExecutionStep(s, d, s5, d5, disp, retToEnclave) &&
+        (if retToEnclave then
+            validEnclaveExecution(s5, d5, s', d', disp, steps -1)
+        else
+            s' == s5 && d' == d5);
+    lemma_validEnclaveExecutionStep_validPageDb(s, d, s5, d5, disp, retToEnclave);
+    lemma_validEnclaveStep_oae(s, d, s5, d5, disp, asp, retToEnclave);
+    if(retToEnclave) {
+        lemma_validEnclaveExecution(s5, d5, s', d', disp, steps - 1);
+        lemma_validEnclaveEx_oae(s5, d5, s', d', disp, steps - 1, asp);
+    } else {
+        assert s' == s5 && d' == d5;
+    }
+}
+
+lemma lemma_validEnclaveStep_oae(
+    s:state, d: PageDb, s':state, d': PageDb,
+    disp: PageNr, asp: PageNr, ret:bool)
+    requires ValidState(s) && validPageDb(d) && ValidState(s') && 
+        validPageDb(d') && SaneConstants()
+    requires validPageNr(disp) && valDispPage(d, disp)
+    requires validPageNr(asp) && valAddrPage(d, asp)
+    requires d[disp].addrspace == asp
+    requires nonStoppedDispatcher(d, disp)
+    requires validEnclaveExecutionStep(s, d, s', d', disp, ret);
+    ensures outside_world_same(d, d', disp, asp)
+{
+    reveal validEnclaveExecutionStep();
+    var s4, d4 :|
+        validEnclaveExecutionStep'(s, d, s4, d4, s', d', disp, ret);
+    lemma_validEnclaveStepPrime_oae(s, d, s4, d4, s', d', disp, ret, asp);
+}
+
+lemma lemma_validEnclaveStepPrime_oae(
+    s1:state, d1: PageDb, s4:state, d4: PageDb, r:state, rd: PageDb,
+    disp: PageNr, ret:bool, asp: PageNr)
+    requires ValidState(s1) && ValidState(s4) && ValidState(r)
+    requires validPageDb(d1) && validPageDb(d4) && validPageDb(rd)
+    requires SaneConstants()
+    requires validPageNr(disp) && valDispPage(d1, disp)
+    requires validPageNr(asp) && valAddrPage(d1, asp)
+    requires d1[disp].addrspace == asp
+    requires nonStoppedDispatcher(d1, disp)
+    requires validEnclaveExecutionStep'(s1,d1,s4,d4,r,rd,disp,ret)
+    ensures outside_world_same(d1, rd, disp, asp)
+{
+    assert d4 == updateUserPagesFromState(s4, d1, disp);
+    assert outside_world_same(d1, d4, disp, asp) by 
+        { reveal_updateUserPagesFromState(); }
+    if (ret) {
+        assert rd == d4;
+        assert outside_world_same(d1, rd, disp, asp);
+    } else {
+        // This is the slow case if that matters.
+    }
+}
+
+
+//-----------------------------------------------------------------------------
+// Executions of attacker enclaves beginning from low-equiv states produce 
+// low-equiv states.
+//-----------------------------------------------------------------------------
 
 
 predicate atkr_entry(d1: PageDb, d2: PageDb, disp: word, atkr: PageNr)
@@ -268,6 +357,7 @@ predicate atkr_entry(d1: PageDb, d2: PageDb, disp: word, atkr: PageNr)
     nonStoppedDispatcher(d1, disp) && nonStoppedDispatcher(d2, disp) &&
     d1[disp].addrspace == d2[disp].addrspace == atkr
 }
+
 
 lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                       s2: state, d2: PageDb, s2':state, d2': PageDb,
@@ -887,23 +977,10 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
     assert forall n : PageNr :: pageSWrInAddrspace(d1, l1p, n) <==>
         pageSWrInAddrspace(d2, l1p, n);
 
-    //-----------------------------------------------------------------------------
-    //Factor this out into a separate lemma
-    //-----------------------------------------------------------------------------
-
     var pc1 := OperandContents(s11, OLR);
     var pc2 := OperandContents(s21, OLR);
     var pt1 := ExtractAbsPageTable(s12);
     var pt2 := ExtractAbsPageTable(s22);
-    //assume pc1 == pc2;
-
-    // assume ExtractAbsPageTable(s12).Just? && ExtractAbsPageTable(s22).Just?;
-
-    // var pt1 := ExtractAbsPageTable(s12).v;
-    // var pt2 := ExtractAbsPageTable(s22).v;
-    // assert pt1 == pt2 by { 
-    //     assume false;
-    // }
     
     lemma_userStatesEquiv_atkr_conf(
         s11, s1', s12, s14, pc1, pt1, d1,
@@ -914,9 +991,6 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
     var user_state1 := user_visible_state(s12, pc1, pt1.v);
     var user_state2 := user_visible_state(s22, pc2, pt2.v);
     assert user_state1 == user_state2;
-    // assume user_state1 == user_state2;
-    // assume s12.nondet == s22.nondet;
-    //-----------------------------------------------------------------------------
 
     forall( n : PageNr | pageSWrInAddrspace(d1, l1p, n))
         ensures contentsOfPage(s14, n) ==
