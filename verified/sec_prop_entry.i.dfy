@@ -666,10 +666,24 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         assert enc_conf_eqpdb(rd1, rd2, atkr);
         assert enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
     } else {
-        assume cpsr in s13.sregs && cpsr in s23.sregs &&
-            s13.sregs[cpsr] == s23.sregs[cpsr];
-        assume mode_of_exception(s13.conf, ex1) ==
-            mode_of_exception(s23.conf, ex2);
+        assert cpsr in s13.sregs && cpsr in s23.sregs &&
+            s13.sregs[cpsr] == s23.sregs[cpsr] by
+            { 
+                assert user_state1 == user_state2;
+                // Not sure if this is something we can know currently..
+                assume s12.conf.cpsr == s22.conf.cpsr;
+                var newpsr := nondet_psr(s12.conf.nondet, user_state1, s12.conf.cpsr);
+                reveal userspaceExecutionFn();
+                assert s13.sregs[cpsr] == newpsr;
+                assert s23.sregs[cpsr] == newpsr;
+            }
+        assert mode_of_exception(s13.conf, ex1) ==
+            mode_of_exception(s23.conf, ex2) by
+            { 
+                assume s13.conf.scr.irq == s23.conf.scr.irq;
+                assume s13.conf.scr.fiq == s23.conf.scr.fiq;
+                reveal userspaceExecutionFn();
+            }
 
         assert s14 == exceptionTakenFn(s13, ex1, expc1) by {
             assert evalExceptionTaken(s13, ex1, expc1, s14);
@@ -681,7 +695,7 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
             s13, s14, ex1, expc1, 
             s23, s24, ex2, expc2);
         lemma_exceptionHandled_atkr_conf(s14, d14, rd1, s24, d24, rd2, dispPg, atkr);
-        // // No idea how to prove anything about nd_*
+        // XXX Can't prove this from entry.s:
         assume r1.conf.nondet == s14.conf.nondet;
         assume r2.conf.nondet == s24.conf.nondet;
         assert enc_conf_eqpdb(rd1, rd2, atkr);
