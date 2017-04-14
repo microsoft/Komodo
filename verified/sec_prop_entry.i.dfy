@@ -381,13 +381,6 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
         preEntryEnter(s2, s21, d2, dispPage, arg1, arg2, arg3) &&
         validEnclaveExecution(s21, d2, s2', d2', dispPage, steps2);
 
-    assert steps1 == steps2 by {
-        // TODO proveme :(
-        assume false;
-    }
-
-    var steps := steps1;
-
     assert s11.conf.nondet == s21.conf.nondet;
     assert user_regs(s11.regs) == user_regs(s21.regs);
 
@@ -398,8 +391,36 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
         reveal enc_conf_eqpdb();
     }
     
+    assert steps1 == steps2 by {
+        lemma_validEnclaveEx_same_steps(s11, d1, s1', d1', s21, d2, s2', d2',
+                                             dispPage, steps1, steps2, atkr);
+    }
+
+    var steps := steps1;
+
     lemma_validEnclaveEx_enc_conf(s11, d1, s1', d1', s21, d2, s2', d2',
                                          dispPage, steps, atkr);
+}
+
+lemma lemma_validEnclaveEx_same_steps(s1: state, d1: PageDb, s1':state, d1': PageDb,
+                                      s2: state, d2: PageDb, s2':state, d2': PageDb,
+                                      dispPg: PageNr, steps1:nat, steps2:nat,
+                                      atkr: PageNr)
+    //requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
+    requires ValidState(s1) && ValidState(s2) &&
+             ValidState(s1') && ValidState(s2') &&
+             validPageDb(d1) && validPageDb(d2) && 
+             validPageDb(d1') && validPageDb(d2') && SaneConstants()
+    requires atkr_entry(d1, d2, dispPg, atkr)
+    requires validEnclaveExecution(s1, d1, s1', d1', dispPg, steps1)
+    requires validEnclaveExecution(s2, d2, s2', d2', dispPg, steps2);
+    requires enc_conf_eqpdb(d1, d2, atkr)
+    requires enc_conf_eq_entry(s1, s2, d1, d2, atkr)
+    requires OperandContents(s1, OLR) == OperandContents(s2, OLR)
+    requires user_regs(s1.regs) == user_regs(s2.regs)
+    ensures steps1 == steps2
+{
+    assume false;
 }
 
 lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageDb,
