@@ -657,6 +657,9 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         s21, s2', s22, s23, s24, d21, d24,
         dispPg, atkr, l1p);
 
+    assert user_regs(s14.regs) == user_regs(s13.regs);
+    assert user_regs(s24.regs) == user_regs(s23.regs);
+
     if(retToEnclave) {
         assert rd1 == d14;
         assert rd2 == d24;
@@ -665,6 +668,9 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         assume r2.conf.nondet == s24.conf.nondet;
         assert enc_conf_eqpdb(rd1, rd2, atkr);
         assert enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
+        assert user_regs(r1.regs) == user_regs(r2.regs);
+        assert OperandContents(r1, OLR) == OperandContents(r2, OLR) by
+            { reveal userspaceExecutionFn(); }
     } else {
         assert cpsr in s13.sregs && cpsr in s23.sregs &&
             s13.sregs[cpsr] == s23.sregs[cpsr] by
@@ -694,19 +700,46 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         lemma_exceptionTaken_atkr_conf(
             s13, s14, ex1, expc1, 
             s23, s24, ex2, expc2);
-        lemma_exceptionHandled_atkr_conf(s14, d14, rd1, s24, d24, rd2, dispPg, atkr);
+        lemma_exceptionHandled_atkr_conf(s14, d14, rd1, s24, d24, rd2,
+             dispPg, atkr);
+
         // XXX Can't prove this from entry.s:
         assume r1.conf.nondet == s14.conf.nondet;
         assume r2.conf.nondet == s24.conf.nondet;
+        assert user_regs(r1.regs) == user_regs(r2.regs) by {
+            if(ex1.ExSVC?) {
+                calc {
+                    user_regs(r1.regs);
+                    user_regs(s14.regs[R0  := KOM_ERR_SUCCESS]);
+                    user_regs(s14.regs)[R0 := KOM_ERR_SUCCESS];
+                    user_regs(s24.regs)[R0 := KOM_ERR_SUCCESS];
+                    user_regs(s24.regs[R0  := KOM_ERR_SUCCESS]);
+                    user_regs(r2.regs);
+                }
+            } else if(ex1.ExAbt? || ex1.ExUnd?) {
+                calc {
+                    user_regs(r1.regs);
+                    user_regs(s14.regs[R0  := KOM_ERR_FAULT][R1 := 0]);
+                    user_regs(s14.regs)[R0 := KOM_ERR_FAULT][R1 := 0];
+                    user_regs(s24.regs)[R0 := KOM_ERR_FAULT][R1 := 0];
+                    user_regs(s24.regs[R0  := KOM_ERR_FAULT][R1 := 0]);
+                    user_regs(r2.regs);
+                }
+            } else {
+                calc {
+                    user_regs(r1.regs);
+                    user_regs(s14.regs[R0  := KOM_ERR_INTERRUPTED][R1 := 0]);
+                    user_regs(s14.regs)[R0 := KOM_ERR_INTERRUPTED][R1 := 0];
+                    user_regs(s24.regs)[R0 := KOM_ERR_INTERRUPTED][R1 := 0];
+                    user_regs(s24.regs[R0  := KOM_ERR_INTERRUPTED][R1 := 0]);
+                    user_regs(r2.regs);
+                }
+            }
+        }
         assert enc_conf_eqpdb(rd1, rd2, atkr);
         assert enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
+        assert OperandContents(r1, OLR) == OperandContents(r2, OLR);
     }
-
-    // I think the OLR here is nonsensical and I'm not sure it makes sense to 
-    // use the PC value as part of the user state since we aren't really 
-    // modeling the PC...
-    // assume OperandContents(r1, OLR) == OperandContents(r2, OLR);
-    // assume user_regs(r1.regs) == user_regs(r2.regs);
 }
 
 predicate user_state_same(s1:state, s2:state, pc1:word, pc2:word,
