@@ -22,6 +22,7 @@ const ADDRSPACE_L1PT:int        := 0;
 const ADDRSPACE_L1PT_PHYS:int   := 1*WORDSIZE;
 const ADDRSPACE_REF:int         := 2*WORDSIZE;
 const ADDRSPACE_STATE:int       := 3*WORDSIZE;
+/* TODO: add SHA context, word count */
 const ADDRSPACE_SIZE:int        := 4*WORDSIZE;
 
 //-----------------------------------------------------------------------------
@@ -47,6 +48,7 @@ const DISP_CTXT_LR:int          := 15*WORDSIZE;
 const DISP_CTXT_SP:int          := 16*WORDSIZE;
 const DISP_CTXT_PC:int          := 17*WORDSIZE;
 const DISP_CTXT_PSR:int         := 18*WORDSIZE;
+/* TODO: add user words, increase size */
 const DISP_SIZE:int             := 19*WORDSIZE;
 
 //-----------------------------------------------------------------------------
@@ -162,6 +164,9 @@ predicate {:opaque} pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, pag
     && page[base + ADDRSPACE_L1PT_PHYS] == page_paddr(e.l1ptnr)
     && page[base + ADDRSPACE_REF] == e.refcount
     && page[base + ADDRSPACE_STATE] == pageDbAddrspaceStateVal(e.state)
+    /* TODO: add SHA context, word count, relate to ghost state
+     * NB: e.state is one of InitState | FinalState | StoppedState
+     * we only care about the final measurement in FinalState */
 }
 
 function  to_i(b:bool):int { if(b) then 1 else 0 }
@@ -192,6 +197,7 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
     && page[base + DISP_CTXT_R10] == e.ctxt.regs[R10]
     && page[base + DISP_CTXT_R11] == e.ctxt.regs[R11]
     && page[base + DISP_CTXT_R12] == e.ctxt.regs[R12]))
+    /* TODO: add user_words */
 }
 
 function ARM_L1PTE(paddr: word): word

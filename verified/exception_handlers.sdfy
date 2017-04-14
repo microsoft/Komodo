@@ -177,7 +177,7 @@ procedure svc_returning(
         globals;
     modifies
          r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
-         spsr_mon;
+         spsr_mon; mem;
     requires/ensures
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
@@ -196,6 +196,25 @@ procedure svc_returning(
 {
     assert svcHandled(exstate, pagedb, dispPg) == tuple(KOM_ERR_INVALID,0,0,0,0,0,0,0,0);
 
+/*
+    requires
+        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+...
+
+    LDRglobaladdr(r2, CurDispatcherOp());
+    LDRglobal(r2, CurDispatcherOp(), r2, 0);
+    assert r2 == page_monvaddr(dispPg);
+
+    MOV(r0, 0);
+    STR(r0, r2, const(DISPATCHER_ENTERED));
+
+
+    TODO: AB to write helper function to retrieve monvaddr of addrspace given
+    curdispatcher VA.
+
+    
+    
+*/
     MOV(r0, const(encode_mode(User)));
     MSR(spsr_mon, r0);
 
