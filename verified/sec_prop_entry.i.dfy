@@ -405,12 +405,20 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
         ensures enc_conf_eqpdb(d1', d2', atkr)
         ensures enc_conf_eq_entry(s1', s2', d1', d2', atkr)
     {
+        // Need to prove this somehow...
         assume steps1 == steps2;
+        
+        // need spec fixes for these two 
         assume s11.conf.nondet == s21.conf.nondet;
-
-        assume OperandContents(s11, OLR) == OperandContents(s21, OLR); //TODO proveme
-        // TODO entry.s spec needs to fix this:
         assume user_regs(s11.regs) == user_regs(s21.regs);
+
+        assert OperandContents(s11, OLR) == OperandContents(s21, OLR) by 
+        {
+            assert OperandContents(s11, OLR) == d1[dispPage].entry.entrypoint;
+            assert OperandContents(s21, OLR) == d2[dispPage].entry.entrypoint;
+            reveal enc_conf_eqpdb();
+        }
+        // TODO entry.s spec needs to fix this:
         lemma_validEnclaveEx_enc_conf(s11, d1, s1', d1', s21, d2, s2', d2',
                                          dispPage, steps1, atkr);
     }
