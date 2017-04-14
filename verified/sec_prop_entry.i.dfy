@@ -373,7 +373,6 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
     ensures  enc_conf_eq_entry(s1', s2', d1', d2', atkr)
 {
 
-    /*
     var s11:state, steps1: nat :|
         preEntryEnter(s1, s11, d1, dispPage, arg1, arg2, arg3) &&
         validEnclaveExecution(s11, d1, s1', d1', dispPage, steps1);
@@ -388,40 +387,20 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
     }
 
     var steps := steps1;
+
+    // need spec fixes for these two 
+    assume s11.conf.nondet == s21.conf.nondet;
+    assume user_regs(s11.regs) == user_regs(s21.regs);
+
+    assert OperandContents(s11, OLR) == OperandContents(s21, OLR) by 
+    {
+        assert OperandContents(s11, OLR) == d1[dispPage].entry.entrypoint;
+        assert OperandContents(s21, OLR) == d2[dispPage].entry.entrypoint;
+        reveal enc_conf_eqpdb();
+    }
     
     lemma_validEnclaveEx_enc_conf(s11, d1, s1', d1', s21, d2, s2', d2',
                                          dispPage, steps, atkr);
-    */
-
-    // TODO
-    // The thing that cannot be proven here is that the number of steps taken 
-    // is the same in both executions. Factor this out into a lemma.
-
-    forall(s11:state, s21:state, steps1:nat, steps2:nat |
-        preEntryEnter(s1, s11, d1, dispPage, arg1, arg2, arg3) &&
-        preEntryEnter(s2, s21, d2, dispPage, arg1, arg2, arg3) &&
-        validEnclaveExecution(s11, d1, s1', d1', dispPage, steps1) &&
-        validEnclaveExecution(s21, d2, s2', d2', dispPage, steps2))
-        ensures enc_conf_eqpdb(d1', d2', atkr)
-        ensures enc_conf_eq_entry(s1', s2', d1', d2', atkr)
-    {
-        // Need to prove this somehow...
-        assume steps1 == steps2;
-        
-        // need spec fixes for these two 
-        assume s11.conf.nondet == s21.conf.nondet;
-        assume user_regs(s11.regs) == user_regs(s21.regs);
-
-        assert OperandContents(s11, OLR) == OperandContents(s21, OLR) by 
-        {
-            assert OperandContents(s11, OLR) == d1[dispPage].entry.entrypoint;
-            assert OperandContents(s21, OLR) == d2[dispPage].entry.entrypoint;
-            reveal enc_conf_eqpdb();
-        }
-        // TODO entry.s spec needs to fix this:
-        lemma_validEnclaveEx_enc_conf(s11, d1, s1', d1', s21, d2, s2', d2',
-                                         dispPage, steps1, atkr);
-    }
 }
 
 lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageDb,
