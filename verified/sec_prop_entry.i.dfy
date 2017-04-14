@@ -1148,8 +1148,6 @@ a:addr, atkr:PageNr, l1p: PageNr)
     ensures a in s2.m.addresses
     ensures s1.m.addresses[a] == s2.m.addresses[a]
 {
-    assert address_is_secure(a) by
-        { assume forall a:addr :: address_is_secure(a) <==> addrIsSecure(a); }
     var p := lemma_secure_addrInPage(a);
 
     assert PageBase(a) in AllPagesInTable(mkAbsPTable(d1, l1p))
