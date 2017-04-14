@@ -122,10 +122,10 @@ method printOperand(o:operand)
         case OReg(r) => { printReg(r); }
         case OShift(r, s) => { printReg(r); print(","); printShift(s); }
         case OSReg(r) =>
-            if (r.cpsr?) {
+            if (r == cpsr) {
                 print("cpsr");
             } else if (r.spsr?) {
-                print("spsr");
+                print("spsr_"); printMode(r.m);
             } else {
                 print("XXX-invalid-OSReg");
             }
