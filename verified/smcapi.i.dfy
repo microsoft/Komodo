@@ -426,10 +426,7 @@ lemma lemma_validEnclaveExecutionStep_validPageDb(s1:state, d1:PageDb,
     reveal_validEnclaveExecutionStep();
     reveal_updateUserPagesFromState();
 
-    if retToEnclave {
-        var s4 :| userspaceExecutionAndException(s1, s4)
-            && rd == updateUserPagesFromState(s4, d1, dispPg);
-    } else {
+    if !retToEnclave {
         var s4, d4 :| userspaceExecutionAndException(s1, s4)
             && d4 == updateUserPagesFromState(s4, d1, dispPg)
             && rd == exceptionHandled(s4, d4, dispPg).2;
