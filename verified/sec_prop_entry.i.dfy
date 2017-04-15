@@ -507,8 +507,8 @@ lemma lemma_validEnclaveStep_enc_conf(s1: state, d1: PageDb, s1':state, d1': Pag
     ensures  atkr_entry(d1', d2', dispPage, atkr)
     ensures  enc_conf_eqpdb(d1', d2', atkr)
     ensures  enc_conf_eq_entry(s1', s2', d1', d2', atkr)
-    ensures OperandContents(s1', OLR) == OperandContents(s2', OLR)
-    ensures user_regs(s1'.regs) == user_regs(s2'.regs)
+    ensures ret ==> OperandContents(s1', OLR) == OperandContents(s2', OLR)
+    ensures ret ==> user_regs(s1'.regs) == user_regs(s2'.regs)
 {
     reveal validEnclaveExecutionStep();
     var s14, d14 :|
@@ -538,6 +538,56 @@ lemma eqregs(x: map<ARMReg,word>, y: map<ARMReg,word>)
 	ensures x == y
 	{}
 
+lemma only_user_in_user_regs(r:ARMReg, m:mode)
+    requires r == LR(m) && m != User
+    ensures r !in USER_REGS() {}
+
+lemma lemma_exceptionTakenRegs(s3:state, ex:exception, expc:word, s4:state)
+    requires ValidState(s3) && ValidPsrWord(psr_of_exception(s3, ex))
+    requires ValidState(s4)
+    requires evalExceptionTaken(s3, ex, expc, s4)
+    ensures user_regs(s4.regs) == user_regs(s3.regs)
+    ensures OperandContents(s4, OLR) == expc
+{
+    lemma_evalExceptionTaken_Mode(s3, ex, expc, s4);
+}
+
+
+lemma lemma_preEntryUserRegs(
+    s1:state, s1':state, ret1:SvcReturnRegs,
+    s2:state, s2':state, ret2:SvcReturnRegs)
+    requires ValidState(s1) && ValidState(s1')
+    requires ValidState(s2) && ValidState(s2')
+    requires user_regs(s1.regs) == user_regs(s2.regs)
+    requires ret1 == ret2 
+    requires preEntryReturn(s1, s1', ret1)
+    requires preEntryReturn(s2, s2', ret2)
+    ensures  user_regs(s1'.regs) == user_regs(s2'.regs)
+{
+    assert s1'.regs[R0] == s2'.regs[R0];
+    assert s1'.regs[R1] == s2'.regs[R1];
+    assert s1'.regs[R2] == s2'.regs[R2];
+    assert s1'.regs[R3] == s2'.regs[R3];
+    assert s1'.regs[R4] == s2'.regs[R4];
+    assert s1'.regs[R5] == s2'.regs[R5];
+    assert s1'.regs[R6] == s2'.regs[R6];
+    assert s1'.regs[R7] == s2'.regs[R7];
+    assert s1'.regs[R8] == s2'.regs[R8];
+    forall( r | r in {R9, R10, R11, R12, LR(User), SP(User)} )
+        ensures s1.regs[r] == s2.regs[r]
+    {
+        assert r in USER_REGS();
+        assert user_regs(s1.regs) == user_regs(s2.regs);
+        assert user_regs(s1.regs)[r] == user_regs(s2.regs)[r];
+    }
+    assert s1'.regs[R9] == s2'.regs[R9];
+    assert s1'.regs[R10] == s2'.regs[R10];
+    assert s1'.regs[R11] == s2'.regs[R11];
+    assert s1'.regs[R12] == s2'.regs[R12];
+    assert s1'.regs[LR(User)] == s2'.regs[LR(User)];
+    assert s1'.regs[SP(User)] == s2'.regs[SP(User)];
+}
+
 lemma lemma_validEnclaveStepPrime_enc_conf(
 s11: state, d11: PageDb, s14:state, d14:PageDb, r1:state, rd1:PageDb,
 s21: state, d21: PageDb, s24:state, d24:PageDb, r2:state, rd2:PageDb,
@@ -557,8 +607,8 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
     ensures  atkr_entry(rd1, rd2, dispPg, atkr)
     ensures  enc_conf_eqpdb(rd1, rd2, atkr)
     ensures  enc_conf_eq_entry(r1, r2, rd1, rd2, atkr)
-    ensures OperandContents(r1, OLR) == OperandContents(r2, OLR)
-    ensures user_regs(r1.regs) == user_regs(r2.regs)
+    ensures retToEnclave ==> OperandContents(r1, OLR) == OperandContents(r2, OLR)
+    ensures retToEnclave ==> user_regs(r1.regs) == user_regs(r2.regs)
 {
 
     assert l1pOfDispatcher(d11, dispPg) == l1pOfDispatcher(d21, dispPg) by
@@ -626,7 +676,6 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
     }
 
     assert user_regs(s13.regs) == user_regs(s23.regs) by {
-        // reveal userspaceExecutionFn();
         var hr1 := havocUserRegs(s12.conf.nondet, user_state1, s12.regs);
         var hr2 := havocUserRegs(s22.conf.nondet, user_state2, s22.regs);
         assert s13.regs == hr1 by
@@ -664,8 +713,19 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         s21, s2', s22, s23, s24, d21, d24,
         dispPg, atkr, l1p);
 
-    assert user_regs(s14.regs) == user_regs(s13.regs);
-    assert user_regs(s24.regs) == user_regs(s23.regs);
+    assert user_regs(s14.regs) == user_regs(s13.regs)
+        && user_regs(s24.regs) == user_regs(s23.regs) by
+    {
+        lemma_exceptionTakenRegs(s13, ex1, expc1, s14);
+        lemma_exceptionTakenRegs(s23, ex2, expc2, s24);
+    }
+
+    assert OperandContents(s14, OLR) == OperandContents(s24, OLR) by
+    {
+        lemma_exceptionTakenRegs(s13, ex1, expc1, s14);
+        lemma_exceptionTakenRegs(s23, ex2, expc2, s24);
+        assert expc1 == expc2;
+    }
 
     if(retToEnclave) {
         assert rd1 == d14;
@@ -675,9 +735,11 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         assume r2.conf.nondet == s24.conf.nondet;
         assert enc_conf_eqpdb(rd1, rd2, atkr);
         assert enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
-        assert user_regs(r1.regs) == user_regs(r2.regs);
-        assert OperandContents(r1, OLR) == OperandContents(r2, OLR) by
-            { reveal userspaceExecutionFn(); }
+        var ret1 := svcHandled(s14, d14, dispPg);
+        var ret2 := svcHandled(s24, d24, dispPg);
+        assert user_regs(r1.regs) == user_regs(r2.regs) by
+            { lemma_preEntryUserRegs(s14, r1, ret1, s24, r2, ret2); }
+        assert OperandContents(r1, OLR) == OperandContents(r2, OLR);
     } else {
         assert cpsr in s13.sregs && cpsr in s23.sregs &&
             s13.sregs[cpsr] == s23.sregs[cpsr] by
@@ -713,39 +775,8 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         // XXX Can't prove this from entry.s:
         assume r1.conf.nondet == s14.conf.nondet;
         assume r2.conf.nondet == s24.conf.nondet;
-        assert user_regs(r1.regs) == user_regs(r2.regs) by {
-            if(ex1.ExSVC?) {
-                calc {
-                    user_regs(r1.regs);
-                    user_regs(s14.regs[R0  := KOM_ERR_SUCCESS]);
-                    user_regs(s14.regs)[R0 := KOM_ERR_SUCCESS];
-                    user_regs(s24.regs)[R0 := KOM_ERR_SUCCESS];
-                    user_regs(s24.regs[R0  := KOM_ERR_SUCCESS]);
-                    user_regs(r2.regs);
-                }
-            } else if(ex1.ExAbt? || ex1.ExUnd?) {
-                calc {
-                    user_regs(r1.regs);
-                    user_regs(s14.regs[R0  := KOM_ERR_FAULT][R1 := 0]);
-                    user_regs(s14.regs)[R0 := KOM_ERR_FAULT][R1 := 0];
-                    user_regs(s24.regs)[R0 := KOM_ERR_FAULT][R1 := 0];
-                    user_regs(s24.regs[R0  := KOM_ERR_FAULT][R1 := 0]);
-                    user_regs(r2.regs);
-                }
-            } else {
-                calc {
-                    user_regs(r1.regs);
-                    user_regs(s14.regs[R0  := KOM_ERR_INTERRUPTED][R1 := 0]);
-                    user_regs(s14.regs)[R0 := KOM_ERR_INTERRUPTED][R1 := 0];
-                    user_regs(s24.regs)[R0 := KOM_ERR_INTERRUPTED][R1 := 0];
-                    user_regs(s24.regs[R0  := KOM_ERR_INTERRUPTED][R1 := 0]);
-                    user_regs(r2.regs);
-                }
-            }
-        }
         assert enc_conf_eqpdb(rd1, rd2, atkr);
         assert enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
-        assert OperandContents(r1, OLR) == OperandContents(r2, OLR);
     }
 }
 
@@ -816,6 +847,41 @@ predicate lr_spsr_same(s1:state, s2:state)
     s1.regs[LR(mode_of_state(s1))] == s2.regs[LR(mode_of_state(s2))] &&
     s1.sregs[spsr(mode_of_state(s1))] == s2.sregs[spsr(mode_of_state(s2))]
 }
+
+/*
+lemma lemma_stepPrimeUserRegs(
+s11: state, d11: PageDb, s14:state, d14:PageDb, r1:state, rd1:PageDb,
+s21: state, d21: PageDb, s24:state, d24:PageDb, r2:state, rd2:PageDb,
+dispPg:PageNr, retToEnclave:bool, atkr: PageNr
+)
+    requires ValidState(s11) && ValidState(s21) &&
+             ValidState(r1)  && ValidState(r2)  &&
+             validPageDb(d11) && validPageDb(d21) &&
+             validPageDb(rd1) && validPageDb(rd2) && SaneConstants()
+    requires atkr_entry(d11, d21, dispPg, atkr)
+    requires validEnclaveExecutionStep'(s11,d11,s14,d14,r1,rd1,dispPg,retToEnclave)
+    requires validEnclaveExecutionStep'(s21,d21,s24,d24,r2,rd2,dispPg,retToEnclave)
+    requires user_regs(s14.regs) == user_regs(s24.regs)
+    requires !retToEnclave
+    requires s14.conf.ex == s24.conf.ex
+    ensures  user_regs(r1.regs) == user_regs(r2.regs)
+{
+    var exhr0 := exceptionHandled(s14, d14, dispPg).0;
+    var exhr1 := exceptionHandled(s24, d24, dispPg).1;
+    assert exceptionHandled(s14, d14, dispPg).0 ==
+        exceptionHandled(s24, d14, dispPg).0;
+    assert exceptionHandled(s14, d14, dispPg).1 ==
+        exceptionHandled(s24, d14, dispPg).1;
+    calc {
+        user_regs(r1.regs);
+        user_regs(s14.regs[R0 := exhr0][R1 := exhr1]);
+        user_regs(s14.regs)[R0 := exhr0][R1 := exhr1];
+        user_regs(s24.regs)[R0 := exhr0][R1 := exhr1];
+        user_regs(s24.regs[R0 := exhr0][R1 := exhr1]);
+        user_regs(r2.regs);
+    }
+}
+*/
 
 
 lemma lemma_exceptionHandled_atkr_conf(
@@ -1082,6 +1148,8 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
         ensures d14[n].entry == d24[n].entry
     {
         reveal_updateUserPagesFromState();
+        assert pageSWrInAddrspace(d1, l1p, n) <==>
+            pageSWrInAddrspace(d2, l1p, n);
         if(pageSWrInAddrspace(d1, l1p, n)) {
             assert d1[n].entry == d2[n].entry;
             assert d14[n] == d1[n].(entry := d1[n].entry.(
