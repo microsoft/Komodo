@@ -275,8 +275,8 @@ function pageDbEntryTypeVal(e: PageDbEntry): word
 {
     if e.PageDbEntryFree? then KOM_PAGE_FREE
     else match e.entry {
-        case Addrspace(l1pt, ref, state) => KOM_PAGE_ADDRSPACE
-        case Dispatcher(ep, entered, ctxt) => KOM_PAGE_DISPATCHER
+        case Addrspace(l1pt, ref, state, measurement, shatrace) => KOM_PAGE_ADDRSPACE
+        case Dispatcher(ep, entered, ctxt, verifywords) => KOM_PAGE_DISPATCHER
         case L1PTable(pt) => KOM_PAGE_L1PTABLE
         case L2PTable(pt) => KOM_PAGE_L2PTABLE
         case DataPage(cont) => KOM_PAGE_DATA

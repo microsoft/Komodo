@@ -163,7 +163,7 @@ predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr)
     && pageDbCorresponds(r.m, rd)
     && (if retToEnclave
        then rsp == ssp
-        && preEntryReturn(s, r, svcHandled(s, sd, dp))
+        && var (regs, sd') := svcHandled(s, sd, dp); preEntryReturn(s, r, regs)
        else rsp == BitwiseOr(ssp, 1)
         && (r.regs[R0], r.regs[R1], rd) == exceptionHandled(s, sd, dp))
 }
@@ -567,6 +567,46 @@ lemma lemma_userspaceExecutionAndException_pre(s0:state, s1:state, r:state)
     assert userspaceExecutionAndException(s0, r);
 }
 
+lemma lemma_svcHandled_pageDbCorresponds(s4:state, d4:PageDb, r:state, dispPg:PageNr, regs:SvcReturnRegs, rd:PageDb)
+    requires ValidState(s4) && mode_of_state(s4) != User && SaneMem(s4.m)
+    requires validPageDb(d4) && pageDbCorresponds(s4.m, d4)
+    requires nonStoppedDispatcher(d4, dispPg)
+    requires KomExceptionHandlerInvariant(s4, d4, r, dispPg)
+    requires validPageDb(d4) && validDispatcherPage(d4, dispPg)
+    requires isReturningSvc(s4)
+    requires (regs, rd) == svcHandled(s4, d4, dispPg)
+    ensures (regs, rd) == svcHandled(s4, d4, dispPg)
+    ensures pageDbCorresponds(r.m, rd)
+{
+    reveal pageDbEntryCorresponds();
+    reveal pageContentsCorresponds();
+    reveal pageDbDispatcherCorresponds();
+}
+
+lemma lemma_svcHandled_validPageDb(s4:state, d4:PageDb, r:state, dispPg:PageNr, regs:SvcReturnRegs, rd:PageDb)
+    requires ValidState(s4) && mode_of_state(s4) != User && SaneMem(s4.m)
+    requires validPageDb(d4) && validDispatcherPage(d4, dispPg)
+    requires isReturningSvc(s4)
+    requires nonStoppedDispatcher(d4, dispPg)
+    requires validPageNr(l1pOfDispatcher(d4, dispPg))
+    requires (regs, rd) == svcHandled(s4, d4, dispPg)
+    ensures validPageDb(rd)
+{
+    forall n | validPageNr(n) ensures validPageDbEntry(rd, n)
+    {
+        var e := rd[n];
+        if (e.PageDbEntryTyped?)
+        {
+            var entry := e.entry;
+            if (entry.Addrspace?)
+            {
+                assert addrspaceRefs(rd, n) == addrspaceRefs(d4, n); // set equality
+            }
+        }
+    }
+    reveal validPageDb();
+}
+
 lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     returns (rd:PageDb, retToEnclave:bool)
     requires SaneState(s)
@@ -597,9 +637,13 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     retToEnclave := isReturningSvc(s4);
     if retToEnclave {
         assert ssp == rsp;
-        rd := d4;
+        var (regs, d4') := svcHandled(s4, d4, dispPg);
+        lemma_svcHandled_pageDbCorresponds(s4, d4, r, dispPg, regs, d4');
+        lemma_svcHandled_validPageDb(s4, d4, r, dispPg, regs, d4');
+        rd := d4';
+
         assert spsr_of_state(r).m == User by {
-            assert preEntryReturn(s4, r, svcHandled(s4, d4, dispPg));
+            assert preEntryReturn(s4, r, regs);
             assert (reveal_ValidSRegState();
                         r.sregs[spsr(mode_of_state(r))] == encode_mode(User));
             assert decode_mode(psr_mask_mode(encode_mode(User))) == User by {
@@ -620,8 +664,8 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
         reveal_validEnclaveExecutionStep();
         lemma_userspaceExecutionAndException_pre(s, takestep(s), s4);
         lemma_pageDbCorrespondsForSpec(s, sd, l1pOfDispatcher(sd, dispPg));
-        assert validEnclaveExecutionStep'(s, sd, s4, d4, r, rd,
-                                          dispPg, retToEnclave);
+        assert validExceptionTransition(s4, d4, r, rd, dispPg) by { reveal validExceptionTransition(); }
+        assert validEnclaveExecutionStep'(s, sd, s4, d4, r, rd, dispPg, retToEnclave); // trigger exists
     }
 }
 
