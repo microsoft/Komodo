@@ -647,10 +647,11 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
             assert preEntryResume(s1, s11, d1, dispPage);
             assert preEntryResume(s2, s21, d2, dispPage);
             reveal ValidSRegState();
-            assume mode_of_state(s11) == Monitor;
-            assume mode_of_state(s21) == Monitor;
-            assert s11.sregs[spsr(Monitor)] == disp.ctxt.cpsr;
-            assert s21.sregs[spsr(Monitor)] == disp.ctxt.cpsr;
+            var mode1 := mode_of_state(s11);
+            var mode2 := mode_of_state(s21);
+            assert mode1 != User && mode2 != User;
+            assert s11.sregs[spsr(mode1)] == disp.ctxt.cpsr;
+            assert s21.sregs[spsr(mode2)] == disp.ctxt.cpsr;
         }
         lemma_validEnclaveEx_enc_conf(s11, d1, s1', d1', s21, d2, s2', d2',
                                              dispPage, steps1, steps2, atkr);
@@ -799,14 +800,16 @@ lemma lemma_exceptionTakenRegs(s3:state, ex:exception, expc:word, s4:state)
 
 
 lemma lemma_preEntryUserRegs(
-    s1:state, s1':state, ret1:SvcReturnRegs,
-    s2:state, s2':state, ret2:SvcReturnRegs)
+    s1:state, s1':state, ret1:SvcReturnRegs, rd1:PageDb,
+    s2:state, s2':state, ret2:SvcReturnRegs, rd2:PageDb,
+    disp:PageNr
+)
     requires ValidState(s1) && ValidState(s1')
     requires ValidState(s2) && ValidState(s2')
     requires user_regs(s1.regs) == user_regs(s2.regs)
     requires ret1 == ret2 
-    requires preEntryReturn(s1, s1', ret1)
-    requires preEntryReturn(s2, s2', ret2)
+    requires preEntryReturn(s1, s1', ret1, rd1, disp)
+    requires preEntryReturn(s2, s2', ret2, rd2, disp)
     ensures  user_regs(s1'.regs) == user_regs(s2'.regs)
 {
     assert s1'.regs[R0] == s2'.regs[R0];
@@ -892,6 +895,7 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
     requires enc_conf_eq_entry(s11, s21, d11, d21, atkr)
     requires mode_of_state(s11) != User && mode_of_state(s21) != User
     requires spsr_same(s11, s21)
+    requires s11.conf.scr == s21.conf.scr;
     ensures  atkr_entry(rd1, rd2, dispPg, atkr)
     ensures  enc_conf_eqpdb(rd1, rd2, atkr)
     ensures  retToEnclave1 == retToEnclave2
@@ -1030,6 +1034,12 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
 
     }
 
+    assert s13.conf.scr == s12.conf.scr &&
+        s23.conf.scr == s22.conf.scr by
+    {
+        reveal userspaceExecutionFn();
+    }
+
     var retToEnclave := retToEnclave1;
 
     if(retToEnclave) {
@@ -1043,7 +1053,12 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
         var ret1 := svcHandled(s14, d14, dispPg);
         var ret2 := svcHandled(s24, d24, dispPg);
         assert user_regs(r1.regs) == user_regs(r2.regs) by
-            { lemma_preEntryUserRegs(s14, r1, ret1, s24, r2, ret2); }
+        { 
+            lemma_preEntryUserRegs(
+                s14, r1, ret1, rd1,
+                s24, r2, ret2, rd2, dispPg
+            );
+        }
         assert OperandContents(r1, OLR) == OperandContents(r2, OLR);
     } else {
         assert cpsr in s13.sregs && cpsr in s23.sregs &&
@@ -1060,8 +1075,8 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
         assert mode_of_exception(s13.conf, ex1) ==
             mode_of_exception(s23.conf, ex2) by
             { 
-                assume s13.conf.scr.irq == s23.conf.scr.irq;
-                assume s13.conf.scr.fiq == s23.conf.scr.fiq;
+                assert s13.conf.scr.irq == s23.conf.scr.irq;
+                assert s13.conf.scr.fiq == s23.conf.scr.fiq;
                 reveal userspaceExecutionFn();
             }
 
