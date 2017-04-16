@@ -189,6 +189,9 @@ function paddr_page(p:addr): PageNr
 function specPageDb(t: (PageDb, int)): PageDb { t.0 }
 function specErr(t: (PageDb, int)): int { t.1 }
 
+function firstOf2<T,U>(t:(T, U)) : T { t.0 }
+function secondOf2<T,U>(t:(T, U)) : U { t.1 }
+
 //-----------------------------------------------------------------------------
 // Common lemmas
 //-----------------------------------------------------------------------------

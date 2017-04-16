@@ -168,11 +168,55 @@ procedure fault_exit(
     reveal validExceptionTransition;
 }
 
+procedure svc_returning_default(
+    ghost exstate: state,
+    ghost stack_bytes: int,
+    ghost pagedb: PageDb,
+    ghost dispPg: PageNr)
+    modifies
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; spsr_mon;
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidState(exstate) && mode_of_state(exstate) != User;
+        isReturningSvc(exstate);
+        CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+        validDispatcherPage(pagedb, dispPg);
+        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+        r0 > 3;
+    ensures
+        let tuple := svcHandled(exstate, pagedb, dispPg) in
+        let retRegs := firstOf2(tuple) in
+        let pagedb' := secondOf2(tuple) in
+        preEntryReturn(old(this), this, retRegs);
+{
+    // Fall back position
+    assert firstOf2(svcHandled(exstate, pagedb, dispPg)) == tuple(KOM_ERR_INVALID,0,0,0,0,0,0,0,0);
+
+    MOV(r0, const(encode_mode(User)));
+    MSR(spsr_mon, r0);
+
+    MOV(r0, const(KOM_ERR_INVALID));
+    MOV(r1, 0);
+    MOV(r2, 0);
+    MOV(r3, 0);
+    MOV(r4, 0);
+    MOV(r5, 0);
+    MOV(r6, 0);
+    MOV(r7, 0);
+    MOV(r8, 0);
+}
+
 procedure svc_returning(
     ghost exstate: state,
     ghost stack_bytes: int,
     ghost pagedb: PageDb,
     ghost dispPg: PageNr)
+    returns (
+    ghost pagedb': PageDb
+    )
     reads
         globals;
     modifies
@@ -188,45 +232,45 @@ procedure svc_returning(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validDispatcherPage(pagedb, dispPg);
+        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
         lr == old(lr);
         StackPreserving(old(this), this);
         NonStackMemPreserving(old(this), this);
-        preEntryReturn(old(this), this, svcHandled(exstate, pagedb, dispPg));
+        let tuple := svcHandled(exstate, pagedb, dispPg) in
+        let retRegs := firstOf2(tuple) in
+        let handled_pagedb := secondOf2(tuple) in
+        pagedb' == handled_pagedb && preEntryReturn(old(this), this, retRegs);
 {
-    assert svcHandled(exstate, pagedb, dispPg) == tuple(KOM_ERR_INVALID,0,0,0,0,0,0,0,0);
-
-/*
-    requires
-        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
-...
 
     LDRglobaladdr(r2, CurDispatcherOp());
     LDRglobal(r2, CurDispatcherOp(), r2, 0);
     assert r2 == page_monvaddr(dispPg);
 
+
+/*
+...
+
     MOV(r0, 0);
     STR(r0, r2, const(DISPATCHER_ENTERED));
+
+    Use dispatcher to grab DISP_CTXT_USER_WORDS
 
 
     TODO: AB to write helper function to retrieve monvaddr of addrspace given
     curdispatcher VA.
 
+    Use that to grab ADDRSPACE_HASH 
     
-    
+    TODO: Add more stack space
+        - precondition on stack_bytes
+        - In entry.i.dfy, increase 
+            const EXCEPTION_STACK_BYTES:int := 100*WORDSIZE;
 */
-    MOV(r0, const(encode_mode(User)));
-    MSR(spsr_mon, r0);
 
-    MOV(r0, const(KOM_ERR_INVALID));
-    MOV(r1, 0);
-    MOV(r2, 0);
-    MOV(r3, 0);
-    MOV(r4, 0);
-    MOV(r5, 0);
-    MOV(r6, 0);
-    MOV(r7, 0);
-    MOV(r8, 0);
+    // Fall back position
+    svc_returning_default(exstate, stack_bytes, pagedb, dispPg);
+    pagedb' := pagedb;
 }
 
 procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: PageNr)
@@ -264,9 +308,11 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
         assert r12 == OperandContents(this, OReg(R12)) == old(r12);
         assert lr_usr == old(lr_usr) && sp_usr == old(sp_usr);
 
-        pagedb := pagedb_in;
-        svc_returning(old(this), EXCEPTION_STACK_BYTES, pagedb, dispPg);
-        assert preEntryReturn(old(this), this, svcHandled(old(this), pagedb, dispPg));
+        pagedb := svc_returning(old(this), EXCEPTION_STACK_BYTES, pagedb_in, dispPg);
+        ghost var tuple;
+        tuple := svcHandled(old(this), pagedb, dispPg);
+        assert pagedb == secondOf2(tuple);
+        assert preEntryReturn(old(this), this, firstOf2(tuple));
     }
 
     assert validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg)
