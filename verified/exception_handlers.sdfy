@@ -168,6 +168,47 @@ procedure fault_exit(
     reveal validExceptionTransition;
 }
 
+procedure addrspace_va_for_page_va(
+    operand page_va: reg,
+    out operand as_va: reg,
+    out operand tmp: reg,
+    ghost pagenr:PageNr,
+    ghost pagedb:PageDb)
+    reads
+        globals;
+    requires/ensures
+        SaneState(this);
+    requires
+        @as_va != @tmp; @as_va != OSP; @tmp != OSP;
+        page_va == page_monvaddr(pagenr);
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
+        pagedb[pagenr] is PageDbEntryTyped;
+    ensures
+        as_va == page_monvaddr(pagedb[pagenr].addrspace);
+{
+    // compute page number
+    SUB(as_va, page_va, const(KOM_DIRECTMAP_VBASE));
+    LDRglobaladdr(tmp, SecurePhysBaseOp());
+    LDRglobal(tmp, SecurePhysBaseOp(), tmp, 0);
+    SUB(as_va, as_va, tmp);
+    lemma_RightShift12(as_va);
+    LSR(as_va, as_va, const(PAGEBITS));
+    assert as_va == monvaddr_page(old(page_va)) == pagenr;
+
+    // retrieve addrspace field from pagedb
+    // TODO: avoid pointless double-shift
+    lemma_LeftShift3(as_va);
+    LSL(as_va, as_va, const(PAGEDB_ENTRY_SHIFT));
+    ADD(as_va, as_va, const(PAGEDB_ENTRY_ADDRSPACE));
+    assert as_va == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE;
+    LDRglobaladdr(tmp, PageDb());
+    LDRglobal(as_va, PageDb(), tmp, as_va);
+
+    reveal pageDbEntryCorresponds;
+    PageDbCorrespondsImpliesEntryCorresponds(this.m, pagedb, pagenr);
+    extractPageDbToAbstractOne(this.m, pagenr, PAGEDB_ENTRY_ADDRSPACE);
+}
+
 procedure svc_returning_default(
     ghost exstate: state,
     ghost stack_bytes: int,
@@ -258,7 +299,9 @@ procedure svc_returning(
 
 
     TODO: AB to write helper function to retrieve monvaddr of addrspace given
-    curdispatcher VA.
+    curdispatcher VA:
+
+    addrspace_va_for_page_va(r2, r0, r1, dispPg, pagedb);
 
     Use that to grab ADDRSPACE_HASH 
     
