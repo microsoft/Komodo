@@ -597,7 +597,17 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
         }
 
         var steps := steps1;
-
+    
+        assert spsr_same(s11, s21) by {
+            assert preEntryEnter(s1, s11, d1, dispPage, arg1, arg2, arg3);
+            assert preEntryEnter(s2, s21, d2, dispPage, arg1, arg2, arg3);
+            var mode1 := mode_of_state(s11);
+            var mode2 := mode_of_state(s21);
+            assert mode1 != User && mode2 != User;
+            reveal ValidSRegState();
+            assert s11.sregs[spsr(mode1)] == encode_mode(User);
+            assert s21.sregs[spsr(mode2)] == encode_mode(User);
+        }
         lemma_validEnclaveEx_enc_conf(s11, d1, s1', d1', s21, d2, s2', d2',
                                              dispPage, steps, atkr);
     } else {
@@ -636,6 +646,16 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
 
         var steps := steps1;
 
+        assert spsr_same(s11, s21) by {
+            var disp := d1[dispPage].entry;
+            assert preEntryResume(s1, s11, d1, dispPage);
+            assert preEntryResume(s2, s21, d2, dispPage);
+            reveal ValidSRegState();
+            assume mode_of_state(s11) == Monitor;
+            assume mode_of_state(s21) == Monitor;
+            assert s11.sregs[spsr(Monitor)] == disp.ctxt.cpsr;
+            assert s21.sregs[spsr(Monitor)] == disp.ctxt.cpsr;
+        }
         lemma_validEnclaveEx_enc_conf(s11, d1, s1', d1', s21, d2, s2', d2',
                                              dispPage, steps, atkr);
     }
@@ -678,6 +698,8 @@ lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageD
     requires enc_conf_eq_entry(s1, s2, d1, d2, atkr)
     requires OperandContents(s1, OLR) == OperandContents(s2, OLR)
     requires user_regs(s1.regs) == user_regs(s2.regs)
+    requires mode_of_state(s1) != User && mode_of_state(s2) != User
+    requires spsr_same(s1, s2)
     ensures  atkr_entry(d1', d2', dispPg, atkr)
     ensures  enc_conf_eqpdb(d1', d2', atkr)
     ensures  enc_conf_eq_entry(s1', s2', d1', d2', atkr)
@@ -743,6 +765,8 @@ lemma lemma_validEnclaveStep_enc_conf(s1: state, d1: PageDb, s1':state, d1': Pag
     requires enc_conf_eq_entry(s1, s2, d1, d2, atkr)
     requires OperandContents(s1, OLR) == OperandContents(s2, OLR)
     requires user_regs(s1.regs) == user_regs(s2.regs)
+    requires mode_of_state(s1) != User && mode_of_state(s2) != User
+    requires spsr_same(s1, s2)
     ensures  atkr_entry(d1', d2', dispPage, atkr)
     ensures  enc_conf_eqpdb(d1', d2', atkr)
     ensures  enc_conf_eq_entry(s1', s2', d1', d2', atkr)
@@ -827,6 +851,47 @@ lemma lemma_preEntryUserRegs(
     assert s1'.regs[SP(User)] == s2'.regs[SP(User)];
 }
 
+predicate spsr_same(s1:state, s2:state)
+    requires ValidState(s1) && ValidState(s2)
+    requires mode_of_state(s1) != User
+    requires mode_of_state(s2) != User
+{
+    reveal ValidSRegState();
+    var spsr1 := spsr(mode_of_state(s1));
+    var spsr2 := spsr(mode_of_state(s2));
+    s1.sregs[spsr1] == s2.sregs[spsr2]
+}
+
+predicate cpsr_same(s1:state, s2:state)
+    requires ValidState(s1) && ValidState(s2)
+{
+    reveal ValidSRegState();
+    s1.sregs[cpsr] == s2.sregs[cpsr] &&
+    s1.conf.cpsr == s2.conf.cpsr
+}
+
+lemma lemma_eval_cpsrs(
+s11: state, s1':state, s12: state, 
+s21: state, s2':state, s22: state)
+    requires ValidState(s11) && ValidState(s12) && ValidState(s1')
+    requires ValidState(s21) && ValidState(s22) && ValidState(s2')
+    requires equivStates(s11, s1') && evalEnterUserspace(s1', s12)
+    requires equivStates(s21, s2') && evalEnterUserspace(s2', s22)
+    requires mode_of_state(s11) != User && mode_of_state(s21) != User
+    requires spsr_same(s11, s21)
+    ensures  cpsr_same(s12, s22)
+{
+    assert equivStates(s11, s1') && evalEnterUserspace(s1', s12);
+    assert equivStates(s21, s2') && evalEnterUserspace(s2', s22);
+    var (m1, m2) := (mode_of_state(s1'), mode_of_state(s2'));
+    var (spsr1, spsr2) := (OSReg(spsr(m1)), OSReg(spsr(m2)));
+    assert OperandContents(s1', spsr1) == OperandContents(s2', spsr2);
+    var (spsr1v, spsr2v) :=
+        (OperandContents(s1', spsr1), OperandContents(s2', spsr2));
+    assert evalUpdate(takestep(s1'), OSReg(cpsr), spsr1v, s12);
+    assert evalUpdate(takestep(s2'), OSReg(cpsr), spsr2v, s22);
+}
+
 lemma lemma_validEnclaveStepPrime_enc_conf(
 s11: state, d11: PageDb, s14:state, d14:PageDb, r1:state, rd1:PageDb,
 s21: state, d21: PageDb, s24:state, d24:PageDb, r2:state, rd2:PageDb,
@@ -843,6 +908,8 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
     requires user_regs(s11.regs) == user_regs(s21.regs)
     requires enc_conf_eqpdb(d11, d21, atkr)
     requires enc_conf_eq_entry(s11, s21, d11, d21, atkr)
+    requires mode_of_state(s11) != User && mode_of_state(s21) != User
+    requires spsr_same(s11, s21)
     ensures  atkr_entry(rd1, rd2, dispPg, atkr)
     ensures  enc_conf_eqpdb(rd1, rd2, atkr)
     ensures  enc_conf_eq_entry(r1, r2, rd1, rd2, atkr)
@@ -880,6 +947,9 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
 
     assert s12.m == s11.m;
     assert s22.m == s21.m;
+    assert cpsr_same(s12, s22) by {
+        lemma_eval_cpsrs(s11, s1', s12, s21, s2', s22);
+    }
 
     assert pageTableCorresponds(s12, d11, l1p) by
     { 
@@ -906,9 +976,8 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
     assert ex1 == ex2 by {
         reveal userspaceExecutionFn();
 
-        // There is no way to prove this!!!!!
-        assume s12.conf.cpsr.f == s22.conf.cpsr.f;
-        assume s12.conf.cpsr.i == s22.conf.cpsr.i;
+        assert s12.conf.cpsr.f == s22.conf.cpsr.f;
+        assert s12.conf.cpsr.i == s22.conf.cpsr.i;
         
         assert ex1 == nondet_exception(s12.conf.nondet, user_state1, s12.conf.cpsr.f, s12.conf.cpsr.i);
         assert ex2 == nondet_exception(s22.conf.nondet, user_state2, s22.conf.cpsr.f, s22.conf.cpsr.i);
@@ -985,7 +1054,7 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
             { 
                 assert user_state1 == user_state2;
                 // Not sure if this is something we can know currently..
-                assume s12.conf.cpsr == s22.conf.cpsr;
+                assert s12.conf.cpsr == s22.conf.cpsr;
                 var newpsr := nondet_psr(s12.conf.nondet, user_state1, s12.conf.cpsr);
                 reveal userspaceExecutionFn();
                 assert s13.sregs[cpsr] == newpsr;
