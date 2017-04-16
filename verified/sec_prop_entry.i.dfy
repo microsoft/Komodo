@@ -678,6 +678,29 @@ lemma lemma_validEnclaveEx_same_steps(s1: state, d1: PageDb, s1':state, d1': Pag
     assume false;
 }
 
+lemma lemma_unpack_validEnclaveExecution(s1:state, d1:PageDb,
+    rs:state, rd:PageDb, dispPg:PageNr, steps:nat)
+    returns (retToEnclave:bool, s5:state, d5:PageDb)
+    requires ValidState(s1) && validPageDb(d1) && SaneConstants()
+    requires nonStoppedDispatcher(d1, dispPg)
+    requires validEnclaveExecution(s1, d1, rs, rd, dispPg, steps)
+    ensures retToEnclave == (steps > 0)
+    ensures validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
+    ensures retToEnclave ==> ValidState(s5) && validPageDb(d5)
+    ensures retToEnclave ==> nonStoppedDispatcher(d5, dispPg)
+    ensures retToEnclave ==> validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1)
+    ensures !retToEnclave ==> rs == s5 && rd == d5
+{
+    reveal_validEnclaveExecution();
+    retToEnclave := (steps > 0);
+    s5, d5 :|
+        validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
+        && (if retToEnclave then
+            validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1)
+          else
+            rs == s5 && rd == d5);
+}
+
 lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                     s2: state, d2: PageDb, s2':state, d2': PageDb,
                                     dispPg: PageNr, steps:nat,
@@ -703,25 +726,10 @@ lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageD
     reveal_validEnclaveExecution();
     var retToEnclave := (steps > 0);
 
-    // I can't figure out how to get around assuming nonStoppedDispatcher here. 
-    // I tried using a premium version of validEnclaveExecutionStep that calls 
-    // the lemma that proves nonstopped, but LHS values couldn't be found...
-
-    var s15, d15 :|
-        validEnclaveExecutionStep(s1, d1, s15, d15, dispPg, retToEnclave) &&
-        (if retToEnclave then
-            (assume nonStoppedDispatcher(d15, dispPg);
-            validEnclaveExecution(s15, d15, s1', d1', dispPg, steps - 1))
-          else
-             s1' == s15 && d1' == d15);
-
-    var s25, d25 :|
-        validEnclaveExecutionStep(s2, d2, s25, d25, dispPg, retToEnclave) &&
-        (if retToEnclave then 
-            (assume nonStoppedDispatcher(d25, dispPg);
-            validEnclaveExecution(s25, d25, s2', d2', dispPg, steps - 1))
-          else
-             s2' == s25 && d2' == d25);
+    var retToEnclave1, s15, d15 := lemma_unpack_validEnclaveExecution(
+        s1, d1, s1', d1', dispPg, steps);
+    var retToEnclave2, s25, d25 := lemma_unpack_validEnclaveExecution(
+        s2, d2, s2', d2', dispPg, steps);
 
     lemma_validEnclaveExecutionStep_validPageDb(s1, d1, s15, d15, dispPg, retToEnclave);
     lemma_validEnclaveExecutionStep_validPageDb(s2, d2, s25, d25, dispPg, retToEnclave);
