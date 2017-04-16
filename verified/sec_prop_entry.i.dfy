@@ -139,8 +139,6 @@ lemma lemma_enter_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
     requires entering_atkr(d1, d2, dispPage, atkr, false) ==>
         enc_conf_eq_entry(s1, s2, d1, d2, atkr)
     ensures enc_conf_eqpdb(d1', d2', atkr)
-    ensures entering_atkr(d1, d2, dispPage, atkr, false) ==>
-        enc_conf_eq_entry(s1', s2', d1', d2', atkr)
 {
     reveal_enc_conf_eqpdb();
     if(!validPageNr(dispPage)){
@@ -173,7 +171,6 @@ lemma lemma_enter_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
                     lemma_enter_enc_conf_atkr_enter(s1, d1, s1', d1', s2, d2, s2', d2',
                                                     dispPage, arg1, arg2, arg3, 
                                                     atkr, false);
-                    assert enc_conf_eq_entry(s1', s2', d1', d2', atkr);
                 } else {
                     assert !entering_atkr(d1, d2, dispPage, atkr, false);
                 }
@@ -569,7 +566,6 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
     requires entering_atkr(d1, d2, dispPage, atkr, isresume);
     requires enc_conf_eq_entry(s1, s2, d1, d2, atkr)
     ensures  enc_conf_eqpdb(d1', d2', atkr)
-    ensures  enc_conf_eq_entry(s1', s2', d1', d2', atkr)
 {
 
     if(!isresume) {
@@ -702,7 +698,6 @@ lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageD
     requires spsr_same(s1, s2)
     ensures  atkr_entry(d1', d2', dispPg, atkr)
     ensures  enc_conf_eqpdb(d1', d2', atkr)
-    ensures  enc_conf_eq_entry(s1', s2', d1', d2', atkr)
     decreases steps
 {
     reveal_validEnclaveExecution();
@@ -739,14 +734,12 @@ lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageD
         lemma_validEnclaveEx_enc_conf(s15, d15, s1', d1', s25, d25, s2', d2',
                                          dispPg, steps -1, atkr);
         assert enc_conf_eqpdb(d1', d2', atkr);
-        assert enc_conf_eq_entry(s1', s2', d1', d2', atkr);
     } else {
         assert s2' == s25;
         assert s1' == s15;
         assert d1' == d15;
         assert d2' == d25;
         assert enc_conf_eqpdb(d1', d2', atkr);
-        assert enc_conf_eq_entry(s1', s2', d1', d2', atkr);
     }
 
 }
@@ -769,9 +762,9 @@ lemma lemma_validEnclaveStep_enc_conf(s1: state, d1: PageDb, s1':state, d1': Pag
     requires spsr_same(s1, s2)
     ensures  atkr_entry(d1', d2', dispPage, atkr)
     ensures  enc_conf_eqpdb(d1', d2', atkr)
-    ensures  enc_conf_eq_entry(s1', s2', d1', d2', atkr)
-    ensures ret ==> OperandContents(s1', OLR) == OperandContents(s2', OLR)
-    ensures ret ==> user_regs(s1'.regs) == user_regs(s2'.regs)
+    ensures  ret ==> enc_conf_eq_entry(s1', s2', d1', d2', atkr)
+    ensures  ret ==> OperandContents(s1', OLR) == OperandContents(s2', OLR)
+    ensures  ret ==> user_regs(s1'.regs) == user_regs(s2'.regs)
 {
     reveal validEnclaveExecutionStep();
     var s14, d14 :|
@@ -912,9 +905,9 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
     requires spsr_same(s11, s21)
     ensures  atkr_entry(rd1, rd2, dispPg, atkr)
     ensures  enc_conf_eqpdb(rd1, rd2, atkr)
-    ensures  enc_conf_eq_entry(r1, r2, rd1, rd2, atkr)
-    ensures retToEnclave ==> OperandContents(r1, OLR) == OperandContents(r2, OLR)
-    ensures retToEnclave ==> user_regs(r1.regs) == user_regs(r2.regs)
+    ensures  retToEnclave ==> enc_conf_eq_entry(r1, r2, rd1, rd2, atkr)
+    ensures  retToEnclave ==> OperandContents(r1, OLR) == OperandContents(r2, OLR)
+    ensures  retToEnclave ==> user_regs(r1.regs) == user_regs(r2.regs)
 {
 
     assert l1pOfDispatcher(d11, dispPg) == l1pOfDispatcher(d21, dispPg) by
@@ -1080,11 +1073,7 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         lemma_exceptionHandled_atkr_conf(s14, d14, rd1, s24, d24, rd2,
              dispPg, atkr);
 
-        // XXX Can't prove this from entry.s:
-        assume r1.conf.nondet == s14.conf.nondet;
-        assume r2.conf.nondet == s24.conf.nondet;
         assert enc_conf_eqpdb(rd1, rd2, atkr);
-        assert enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
     }
 }
 
@@ -1450,8 +1439,6 @@ lemma lemma_resume_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
     requires entering_atkr(d1, d2, dispPage, atkr, true) ==>
         enc_conf_eq_entry(s1, s2, d1, d2, atkr)
     ensures enc_conf_eqpdb(d1', d2', atkr)
-    ensures entering_atkr(d1, d2, dispPage, atkr, true) ==>
-        enc_conf_eq_entry(s1', s2', d1', d2', atkr)
 {
     reveal_enc_conf_eqpdb();
     if(!validPageNr(dispPage)){
@@ -1484,7 +1471,6 @@ lemma lemma_resume_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
                     lemma_enter_enc_conf_atkr_enter(s1, d1, s1', d1', s2, d2, s2', d2',
                                                     dispPage, 0, 0, 0, 
                                                     atkr, true);
-                    assert enc_conf_eq_entry(s1', s2', d1', d2', atkr);
                 } else {
                     assert !entering_atkr(d1, d2, dispPage, atkr, true);
                 }

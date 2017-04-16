@@ -29,12 +29,6 @@ lemma lemma_enc_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     ensures !(var callno := s1.regs[R0]; var asp := s1.regs[R1];
         callno == KOM_SMC_STOP && asp == atkr) ==>
         enc_conf_eqpdb(d1', d2', atkr)
-    ensures (var callno := s1.regs[R0]; var dispPage := s1.regs[R1];
-        (callno == KOM_SMC_ENTER && entering_atkr(d1, d2, dispPage, atkr, false))
-            ==> enc_conf_eq_entry(s1', s2', d1', d2', atkr))
-    ensures (var callno := s1.regs[R0]; var dispPage := s1.regs[R1];
-        (callno == KOM_SMC_RESUME && entering_atkr(d1, d2, dispPage, atkr, true))
-            ==> (enc_conf_eq_entry(s1', s2', d1', d2', atkr)))
 {
     reveal_ValidRegState();
     var callno, arg1, arg2, arg3, arg4
