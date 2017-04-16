@@ -587,12 +587,12 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
             reveal enc_conf_eqpdb();
         }
         
-        assert steps1 == steps2 by {
-            lemma_validEnclaveEx_same_steps(s11, d1, s1', d1', s21, d2, s2', d2',
-                                                 dispPage, steps1, steps2, atkr);
-        }
+        // assert steps1 == steps2 by {
+        //     lemma_validEnclaveEx_same_steps(s11, d1, s1', d1', s21, d2, s2', d2',
+        //                                          dispPage, steps1, steps2, atkr);
+        // }
 
-        var steps := steps1;
+        // var steps := steps1;
     
         assert spsr_same(s11, s21) by {
             assert preEntryEnter(s1, s11, d1, dispPage, arg1, arg2, arg3);
@@ -605,7 +605,7 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
             assert s21.sregs[spsr(mode2)] == encode_mode(User);
         }
         lemma_validEnclaveEx_enc_conf(s11, d1, s1', d1', s21, d2, s2', d2',
-                                             dispPage, steps, atkr);
+                                             dispPage, steps1, steps2, atkr);
     } else {
         var s11:state, steps1: nat :|
             preEntryResume(s1, s11, d1, dispPage) &&
@@ -635,12 +635,12 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
             reveal enc_conf_eqpdb();
         }
         
-        assert steps1 == steps2 by {
-            lemma_validEnclaveEx_same_steps(s11, d1, s1', d1', s21, d2, s2', d2',
-                                                 dispPage, steps1, steps2, atkr);
-        }
+        // assert steps1 == steps2 by {
+        //     lemma_validEnclaveEx_same_steps(s11, d1, s1', d1', s21, d2, s2', d2',
+        //                                          dispPage, steps1, steps2, atkr);
+        // }
 
-        var steps := steps1;
+        // var steps := steps1;
 
         assert spsr_same(s11, s21) by {
             var disp := d1[dispPage].entry;
@@ -653,15 +653,15 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
             assert s21.sregs[spsr(Monitor)] == disp.ctxt.cpsr;
         }
         lemma_validEnclaveEx_enc_conf(s11, d1, s1', d1', s21, d2, s2', d2',
-                                             dispPage, steps, atkr);
+                                             dispPage, steps1, steps2, atkr);
     }
 }
 
+/*
 lemma lemma_validEnclaveEx_same_steps(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                       s2: state, d2: PageDb, s2':state, d2': PageDb,
                                       dispPg: PageNr, steps1:nat, steps2:nat,
                                       atkr: PageNr)
-    //requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
     requires ValidState(s1) && ValidState(s2) &&
              ValidState(s1') && ValidState(s2') &&
              validPageDb(d1) && validPageDb(d2) && 
@@ -674,9 +674,32 @@ lemma lemma_validEnclaveEx_same_steps(s1: state, d1: PageDb, s1':state, d1': Pag
     requires OperandContents(s1, OLR) == OperandContents(s2, OLR)
     requires user_regs(s1.regs) == user_regs(s2.regs)
     ensures steps1 == steps2
+    decreases steps1, steps2
 {
-    assume false;
+
+    var retToEnclave1, s15, d15 := lemma_unpack_validEnclaveExecution(
+        s1, d1, s1', d1', dispPg, steps1);
+    var retToEnclave2, s25, d25 := lemma_unpack_validEnclaveExecution(
+        s2, d2, s2', d2', dispPg, steps2);
+
+    lemma_validEnclaveExecutionStep_validPageDb(s1, d1, s15, d15, dispPg, retToEnclave1);
+    lemma_validEnclaveExecutionStep_validPageDb(s2, d2, s25, d25, dispPg, retToEnclave2);
+
+    assert retToEnclave1 == retToEnclave2 by {
+        assume false;
+    }
+
+    assert steps1 == 0 <==> steps2 == 0;
+
+    if(steps1 == 0 && steps2 ==0){
+        assert steps1 == steps2;
+    } else {
+        lemma_validEnclaveEx_same_steps(s15, d15, s1', d1', s25, d25, s2', d2',
+                                             dispPg, steps1 - 1, steps2 - 1, atkr);
+    }
+    
 }
+*/
 
 lemma lemma_unpack_validEnclaveExecution(s1:state, d1:PageDb,
     rs:state, rd:PageDb, dispPg:PageNr, steps:nat)
@@ -703,7 +726,7 @@ lemma lemma_unpack_validEnclaveExecution(s1:state, d1:PageDb,
 
 lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                     s2: state, d2: PageDb, s2':state, d2': PageDb,
-                                    dispPg: PageNr, steps:nat,
+                                    dispPg: PageNr, steps1:nat, steps2:nat,
                                     atkr: PageNr)
     //requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
     requires ValidState(s1) && ValidState(s2) &&
@@ -711,8 +734,8 @@ lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageD
              validPageDb(d1) && validPageDb(d2) && 
              validPageDb(d1') && validPageDb(d2') && SaneConstants()
     requires atkr_entry(d1, d2, dispPg, atkr)
-    requires validEnclaveExecution(s1, d1, s1', d1', dispPg, steps)
-    requires validEnclaveExecution(s2, d2, s2', d2', dispPg, steps);
+    requires validEnclaveExecution(s1, d1, s1', d1', dispPg, steps1)
+    requires validEnclaveExecution(s2, d2, s2', d2', dispPg, steps2);
     requires enc_conf_eqpdb(d1, d2, atkr)
     requires enc_conf_eq_entry(s1, s2, d1, d2, atkr)
     requires OperandContents(s1, OLR) == OperandContents(s2, OLR)
@@ -721,26 +744,27 @@ lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageD
     requires spsr_same(s1, s2)
     ensures  atkr_entry(d1', d2', dispPg, atkr)
     ensures  enc_conf_eqpdb(d1', d2', atkr)
-    decreases steps
+    decreases steps1, steps2
 {
     reveal_validEnclaveExecution();
-    var retToEnclave := (steps > 0);
 
     var retToEnclave1, s15, d15 := lemma_unpack_validEnclaveExecution(
-        s1, d1, s1', d1', dispPg, steps);
+        s1, d1, s1', d1', dispPg, steps1);
     var retToEnclave2, s25, d25 := lemma_unpack_validEnclaveExecution(
-        s2, d2, s2', d2', dispPg, steps);
+        s2, d2, s2', d2', dispPg, steps2);
 
-    lemma_validEnclaveExecutionStep_validPageDb(s1, d1, s15, d15, dispPg, retToEnclave);
-    lemma_validEnclaveExecutionStep_validPageDb(s2, d2, s25, d25, dispPg, retToEnclave);
+    lemma_validEnclaveExecutionStep_validPageDb(s1, d1, s15, d15, dispPg, retToEnclave1);
+    lemma_validEnclaveExecutionStep_validPageDb(s2, d2, s25, d25, dispPg, retToEnclave2);
     lemma_validEnclaveStep_enc_conf(s1, d1, s15, d15, s2, d2, s25, d25,
-        dispPg, atkr, retToEnclave);
+        dispPg, atkr, retToEnclave1, retToEnclave2);
 
-    if(retToEnclave) {
-        lemma_validEnclaveExecution(s15, d15, s1', d1', dispPg, steps - 1);
-        lemma_validEnclaveExecution(s25, d25, s2', d2', dispPg, steps - 1);
+    assert retToEnclave1 == retToEnclave2;
+
+    if(retToEnclave1) {
+        lemma_validEnclaveExecution(s15, d15, s1', d1', dispPg, steps1 - 1);
+        lemma_validEnclaveExecution(s25, d25, s2', d2', dispPg, steps2 - 1);
         lemma_validEnclaveEx_enc_conf(s15, d15, s1', d1', s25, d25, s2', d2',
-                                         dispPg, steps -1, atkr);
+                                         dispPg, steps1 - 1, steps2 - 1, atkr);
         assert enc_conf_eqpdb(d1', d2', atkr);
     } else {
         assert s2' == s25;
@@ -754,14 +778,14 @@ lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageD
 
 lemma lemma_validEnclaveStep_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                       s2: state, d2: PageDb, s2':state, d2': PageDb,
-                                      dispPage:PageNr, atkr: PageNr, ret:bool)
+                                      dispPage:PageNr, atkr: PageNr, ret1:bool, ret2:bool)
     requires ValidState(s1) && ValidState(s2) &&
              ValidState(s1') && ValidState(s2') &&
              validPageDb(d1) && validPageDb(d2) && 
              validPageDb(d1') && validPageDb(d2') && SaneConstants()
     requires atkr_entry(d1, d2, dispPage, atkr)
-    requires validEnclaveExecutionStep(s1, d1, s1', d1', dispPage, ret);
-    requires validEnclaveExecutionStep(s2, d2, s2', d2', dispPage, ret);
+    requires validEnclaveExecutionStep(s1, d1, s1', d1', dispPage, ret1);
+    requires validEnclaveExecutionStep(s2, d2, s2', d2', dispPage, ret2);
     requires enc_conf_eqpdb(d1, d2, atkr)
     requires enc_conf_eq_entry(s1, s2, d1, d2, atkr)
     requires OperandContents(s1, OLR) == OperandContents(s2, OLR)
@@ -770,23 +794,24 @@ lemma lemma_validEnclaveStep_enc_conf(s1: state, d1: PageDb, s1':state, d1': Pag
     requires spsr_same(s1, s2)
     ensures  atkr_entry(d1', d2', dispPage, atkr)
     ensures  enc_conf_eqpdb(d1', d2', atkr)
-    ensures  ret ==> enc_conf_eq_entry(s1', s2', d1', d2', atkr)
-    ensures  ret ==> OperandContents(s1', OLR) == OperandContents(s2', OLR)
-    ensures  ret ==> user_regs(s1'.regs) == user_regs(s2'.regs)
+    ensures  ret1 == ret2
+    ensures  ret1 ==> enc_conf_eq_entry(s1', s2', d1', d2', atkr)
+    ensures  ret1 ==> OperandContents(s1', OLR) == OperandContents(s2', OLR)
+    ensures  ret1 ==> user_regs(s1'.regs) == user_regs(s2'.regs)
 {
     reveal validEnclaveExecutionStep();
     var s14, d14 :|
         validEnclaveExecutionStep'(s1, d1, s14, d14, s1', d1',
-            dispPage, ret);
+            dispPage, ret1);
 
     var s24, d24 :|
         validEnclaveExecutionStep'(s2, d2, s24, d24, s2', d2',
-            dispPage, ret);
+            dispPage, ret2);
 
     lemma_validEnclaveStepPrime_enc_conf(
         s1, d1, s14, d14, s1', d1',
         s2, d2, s24, d24, s2', d2',
-        dispPage, ret, atkr);
+        dispPage, ret1, ret2, atkr);
 }
 
 lemma lemma_user_regs_domain(regs:map<ARMReg, word>, hr:map<ARMReg, word>)
@@ -896,15 +921,15 @@ s21: state, s2':state, s22: state)
 lemma lemma_validEnclaveStepPrime_enc_conf(
 s11: state, d11: PageDb, s14:state, d14:PageDb, r1:state, rd1:PageDb,
 s21: state, d21: PageDb, s24:state, d24:PageDb, r2:state, rd2:PageDb,
-dispPg:PageNr, retToEnclave:bool, atkr: PageNr
+dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
 )
     requires ValidState(s11) && ValidState(s21) &&
              ValidState(r1)  && ValidState(r2)  &&
              validPageDb(d11) && validPageDb(d21) &&
              validPageDb(rd1) && validPageDb(rd2) && SaneConstants()
     requires atkr_entry(d11, d21, dispPg, atkr)
-    requires validEnclaveExecutionStep'(s11,d11,s14,d14,r1,rd1,dispPg,retToEnclave)
-    requires validEnclaveExecutionStep'(s21,d21,s24,d24,r2,rd2,dispPg,retToEnclave)
+    requires validEnclaveExecutionStep'(s11,d11,s14,d14,r1,rd1,dispPg,retToEnclave1)
+    requires validEnclaveExecutionStep'(s21,d21,s24,d24,r2,rd2,dispPg,retToEnclave2)
     requires OperandContents(s11, OLR) == OperandContents(s21, OLR)
     requires user_regs(s11.regs) == user_regs(s21.regs)
     requires enc_conf_eqpdb(d11, d21, atkr)
@@ -913,10 +938,11 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
     requires spsr_same(s11, s21)
     ensures  atkr_entry(rd1, rd2, dispPg, atkr)
     ensures  enc_conf_eqpdb(rd1, rd2, atkr)
-    ensures  retToEnclave ==> enc_conf_eq_entry(r1, r2, rd1, rd2, atkr)
-    ensures  retToEnclave ==> OperandContents(r1, OLR) == OperandContents(r2, OLR)
-    ensures  retToEnclave ==> user_regs(r1.regs) == user_regs(r2.regs)
-{
+    ensures  retToEnclave1 == retToEnclave2
+    ensures  retToEnclave1 ==> enc_conf_eq_entry(r1, r2, rd1, rd2, atkr)
+    ensures  retToEnclave1 ==> OperandContents(r1, OLR) == OperandContents(r2, OLR)
+    ensures  retToEnclave1 ==> user_regs(r1.regs) == user_regs(r2.regs)
+{                        
 
     assert l1pOfDispatcher(d11, dispPg) == l1pOfDispatcher(d21, dispPg) by
         { reveal_enc_conf_eqpdb(); }
@@ -1035,6 +1061,20 @@ dispPg:PageNr, retToEnclave:bool, atkr: PageNr
         lemma_exceptionTakenRegs(s23, ex2, expc2, s24);
         assert expc1 == expc2;
     }
+
+    assert retToEnclave1 == retToEnclave2 by {
+        assert retToEnclave1 == isReturningSvc(s14);
+        assert retToEnclave2 == isReturningSvc(s24);
+        reveal ValidRegState();
+        assert s14.conf.ex == s24.conf.ex;
+        assert R0 in USER_REGS();
+        assert R0 in user_regs(s14.regs) && R0 in user_regs(s24.regs);
+        assert user_regs(s14.regs) == user_regs(s24.regs);
+        assert s14.regs[R0] == s24.regs[R0];
+
+    }
+
+    var retToEnclave := retToEnclave1;
 
     if(retToEnclave) {
         assert rd1 == d14;
