@@ -115,6 +115,7 @@ predicate wellFormedPageDbEntryTyped(e: PageDbEntryTyped)
     && (e.DataPage? ==> |e.contents| == PAGESIZE / WORDSIZE)
     && (e.Addrspace? ==>
         |e.measurement| % SHA_BLOCKSIZE == 0
+        && |e.shatrace.H| > 0
         && WordsToBytes(|e.measurement|) < MaxBytesForSHA())
 }
 

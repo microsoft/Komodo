@@ -1,5 +1,6 @@
 include "pagedb.s.dfy"
 include "kom_common.i.dfy"
+include "sha/Seqs.s.dfy"
 
 //-----------------------------------------------------------------------------
 // Data Structures
@@ -18,12 +19,13 @@ const PAGEDB_ENTRY_ADDRSPACE:int := 4;
 //-----------------------------------------------------------------------------
 // Addrspace Fields
 //-----------------------------------------------------------------------------
-const ADDRSPACE_L1PT:int        := 0;
-const ADDRSPACE_L1PT_PHYS:int   := 1*WORDSIZE;
-const ADDRSPACE_REF:int         := 2*WORDSIZE;
-const ADDRSPACE_STATE:int       := 3*WORDSIZE;
-/* TODO: add SHA context, word count */
-const ADDRSPACE_SIZE:int        := 4*WORDSIZE;
+const ADDRSPACE_L1PT:int               := 0;
+const ADDRSPACE_L1PT_PHYS:int          := 1*WORDSIZE;
+const ADDRSPACE_REF:int                := 2*WORDSIZE;
+const ADDRSPACE_STATE:int              := 3*WORDSIZE;
+const ADDRSPACE_HASH:int               := 4*WORDSIZE;   // Requires 8 words, hence the bump for block count
+const ADDRSPACE_HASHED_BLOCK_COUNT:int := 12*WORDSIZE;
+const ADDRSPACE_SIZE:int               := 13*WORDSIZE;
 
 //-----------------------------------------------------------------------------
 // Dispatcher Fields
@@ -48,8 +50,8 @@ const DISP_CTXT_LR:int          := 15*WORDSIZE;
 const DISP_CTXT_SP:int          := 16*WORDSIZE;
 const DISP_CTXT_PC:int          := 17*WORDSIZE;
 const DISP_CTXT_PSR:int         := 18*WORDSIZE;
-/* TODO: add user words, increase size */
-const DISP_SIZE:int             := 19*WORDSIZE;
+const DISP_CTXT_USER_WORDS:int  := 19*WORDSIZE;     // Requires 8 words, hence bump for block count
+const DISP_SIZE:int             := 27*WORDSIZE;
 
 //-----------------------------------------------------------------------------
 // Page Types
@@ -156,17 +158,25 @@ predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:memmap
 
 predicate {:opaque} pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
     requires memContainsPage(page, p)
-    requires e.Addrspace?
+    requires wellFormedPageDbEntryTyped(e) && e.Addrspace?
 {
     var base := page_monvaddr(p);
+    var addr_space_hash := [page[base + ADDRSPACE_HASH + 0*WORDSIZE],
+                            page[base + ADDRSPACE_HASH + 1*WORDSIZE],
+                            page[base + ADDRSPACE_HASH + 2*WORDSIZE],
+                            page[base + ADDRSPACE_HASH + 3*WORDSIZE],
+                            page[base + ADDRSPACE_HASH + 4*WORDSIZE],
+                            page[base + ADDRSPACE_HASH + 5*WORDSIZE],
+                            page[base + ADDRSPACE_HASH + 6*WORDSIZE],
+                            page[base + ADDRSPACE_HASH + 7*WORDSIZE]];
     assert base in page;
     page[base + ADDRSPACE_L1PT] == page_monvaddr(e.l1ptnr)
     && page[base + ADDRSPACE_L1PT_PHYS] == page_paddr(e.l1ptnr)
     && page[base + ADDRSPACE_REF] == e.refcount
     && page[base + ADDRSPACE_STATE] == pageDbAddrspaceStateVal(e.state)
-    /* TODO: add SHA context, word count, relate to ghost state
-     * NB: e.state is one of InitState | FinalState | StoppedState
-     * we only care about the final measurement in FinalState */
+    && page[base + ADDRSPACE_HASHED_BLOCK_COUNT] == |e.shatrace.M|
+    && addr_space_hash == last(e.shatrace.H)
+    && (e.state.FinalState? ==> addr_space_hash == SHA256(WordSeqToBytes(e.measurement)))
 }
 
 function  to_i(b:bool):int { if(b) then 1 else 0 }
