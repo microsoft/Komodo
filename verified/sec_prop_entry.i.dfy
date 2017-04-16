@@ -199,7 +199,7 @@ lemma lemma_enter_enc_conf_eqpdb_not_atkr(s1: state, d1: PageDb, s1':state, d1':
     requires d1[disp].addrspace == asp1 && d2[disp].addrspace == asp2
     requires enc_conf_eqpdb(d1, d2, atkr)
     requires asp1 != atkr && asp2 != atkr
-    requires validPageNr(disp) && valDispPage(d1', disp) && valDispPage(d2', DISP)
+    requires validPageNr(disp) && valDispPage(d1', disp) && valDispPage(d2', disp)
     requires outside_world_same(d1, d1', disp, asp1)
     requires outside_world_same(d2, d2', disp, asp2)
     requires smc_enter_err(d1, disp, isresume) == KOM_ERR_SUCCESS
@@ -591,12 +591,22 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
             validEnclaveExecution(s21, d2, s2', d2', dispPage, steps2);
 
         assert s11.conf.nondet == s21.conf.nondet;
-        assert user_regs(s11.regs) == user_regs(s21.regs) by {assume false;}
+
+        assert d1[dispPage].entry == d2[dispPage].entry by
+            { reveal enc_conf_eqpdb(); }
+
+        assert user_regs(s11.regs) == user_regs(s21.regs) by {
+            var disp := d1[dispPage].entry;
+            assert (forall r | r in USER_REGS() :: 
+                (s11.regs[r] == disp.ctxt.regs[r] &&
+                 s21.regs[r] == disp.ctxt.regs[r]));
+            eqregs(user_regs(s11.regs), user_regs(s21.regs));
+        }
 
         assert OperandContents(s11, OLR) == OperandContents(s21, OLR) by 
-        {   assume false;
-            assert OperandContents(s11, OLR) == d1[dispPage].entry.entrypoint;
-            assert OperandContents(s21, OLR) == d2[dispPage].entry.entrypoint;
+        {   
+            assert OperandContents(s11, OLR) == d1[dispPage].entry.ctxt.pc;
+            assert OperandContents(s21, OLR) == d2[dispPage].entry.ctxt.pc;
             reveal enc_conf_eqpdb();
         }
         
