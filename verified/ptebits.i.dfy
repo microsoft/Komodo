@@ -329,7 +329,10 @@ lemma lemma_ARM_L1PTE_Dual(paddr: word)
     requires paddr % ARM_L2PTABLE_BYTES == 0
     ensures ARM_L1PTE(paddr) == paddr + 1
 {
-    assert paddr % 0x400 == 0 && paddr % 2 == 0;
+    calc {
+        paddr % 0x400 == 0;
+        paddr % 2 == 0;
+    }
     lemma_BitOrOneIsLikePlus(paddr);
 }
 
