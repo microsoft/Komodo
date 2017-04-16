@@ -184,7 +184,9 @@ lemma lemma_enter_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
     }
 }
 
-lemma lemma_enter_enc_conf_eqpdb_not_atkr(s1: state, d1: PageDb, s1':state, d1': PageDb,
+lemma 
+{:fuel outside_world_same, 0}
+lemma_enter_enc_conf_eqpdb_not_atkr(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                  s2: state, d2: PageDb, s2':state, d2': PageDb,
                                  disp: word, arg1: word, arg2: word, arg3: word,
                                  asp1: PageNr, asp2: PageNr, atkr: PageNr,
@@ -207,51 +209,68 @@ lemma lemma_enter_enc_conf_eqpdb_not_atkr(s1: state, d1: PageDb, s1':state, d1':
     ensures  enc_conf_eqpdb(d1', d2', atkr)
 {
 
-    assert asp1 != atkr && asp2 != atkr;
-    assert outside_world_same(d1, d1', disp, asp1);
-    assert outside_world_same(d2, d2', disp, asp2);
-
-    assert forall n : PageNr :: pgInAddrSpc(d1', n, asp1)
-        <==>  pgInAddrSpc(d1, n, asp1);
-    assert forall n : PageNr :: pgInAddrSpc(d1', n, atkr)
-        ==> !pgInAddrSpc(d1', n, asp1);
-
-    assert forall n : PageNr :: pgInAddrSpc(d2', n, asp2)
-        <==>  pgInAddrSpc(d2, n, asp2);
-    assert forall n : PageNr :: pgInAddrSpc(d2', n, atkr)
-        ==> !pgInAddrSpc(d2', n, asp2);
-
-    assert (forall n : PageNr | pgInAddrSpc(d1', n, atkr) 
+    assert {:fuel outside_world_same, 1}
+        (forall n : PageNr | pgInAddrSpc(d1', n, atkr) 
         && d1'[n].PageDbEntryTyped? ::
             d1'[n].addrspace == d1[n].addrspace &&
-            d1'[n].entry == d1[n].entry);
+            d1'[n].entry == d1[n].entry) by
+    {
+        assert forall n : PageNr :: pgInAddrSpc(d1', n, asp1)
+            <==>  pgInAddrSpc(d1, n, asp1);
+        assert forall n : PageNr :: pgInAddrSpc(d1', n, atkr)
+            ==> !pgInAddrSpc(d1', n, asp1);
+    }
     
-    assert (forall n : PageNr | pgInAddrSpc(d2', n, atkr) 
+    assert {:fuel outside_world_same, 1}
+        (forall n : PageNr | pgInAddrSpc(d2', n, atkr) 
         && d2'[n].PageDbEntryTyped? ::
             d2'[n].addrspace == d2[n].addrspace &&
-            d2'[n].entry == d2[n].entry);
+            d2'[n].entry == d2[n].entry) by
+    {
+        assert forall n : PageNr :: pgInAddrSpc(d2', n, asp2)
+            <==>  pgInAddrSpc(d2, n, asp2);
+        assert forall n : PageNr :: pgInAddrSpc(d2', n, atkr)
+            ==> !pgInAddrSpc(d2', n, asp2);
+    }
     
     assert forall n : PageNr :: pgInAddrSpc(d1', n, atkr) <==>
-        pgInAddrSpc(d1, n, atkr);
-    assert forall n : PageNr :: pgInAddrSpc(d2', n, atkr) <==>
-        pgInAddrSpc(d2, n, atkr);
-    assert forall n : PageNr :: pgInAddrSpc(d1', n, atkr) <==>
         pgInAddrSpc(d2', n, atkr) by
-        { reveal enc_conf_eqpdb(); }
+    { 
+        assert forall n : PageNr :: pgInAddrSpc(d1', n, atkr) <==>
+            pgInAddrSpc(d1, n, atkr);
+        assert forall n : PageNr :: pgInAddrSpc(d2', n, atkr) <==>
+            pgInAddrSpc(d2, n, atkr);
+        reveal enc_conf_eqpdb();
+    }
 
     assert forall n : PageNr | pgInAddrSpc(d1', n, atkr) ::
         d1'[n].entry == d2'[n].entry by {reveal enc_conf_eqpdb();}
 
-    assert d1'[atkr].PageDbEntryTyped? <==> d2'[atkr].PageDbEntryTyped?;
-    assert d1'[atkr].PageDbEntryTyped? ==>
-        valAddrPage(d1', atkr) && valAddrPage(d2', atkr);
-    assert (forall n : PageNr :: pgInAddrSpc(d1', n, atkr) <==>
-        pgInAddrSpc(d2', n, atkr));
-    assert forall n : PageNr | pgInAddrSpc(d1', n, atkr) ::
-        d1'[n].entry == d2'[n].entry;
+    assert enc_conf_eqpdb(d1', d2', atkr) by {
+        reveal enc_conf_eqpdb();
 
-    reveal enc_conf_eqpdb();
-    assert enc_conf_eqpdb(d1', d2', atkr);
+        assert d1'[atkr].PageDbEntryTyped? <==> d2'[atkr].PageDbEntryTyped? &&
+        (d1'[atkr].PageDbEntryTyped? ==>
+        (valAddrPage(d1', atkr) && valAddrPage(d2', atkr) &&
+        // The set of pages that belong to the enclave is the same in both 
+        // states.
+        (forall n : PageNr :: pgInAddrSpc(d1', n, atkr) <==>
+            pgInAddrSpc(d2', n, atkr)) &&
+        // This together with two concrete states that refine d1', d2' ensure that 
+        // the contents of the pages that belong to the enclave are the same in 
+        // both states.
+        (forall n : PageNr | pgInAddrSpc(d1', n, atkr) ::
+            d1'[n].entry == d2'[n].entry)));
+
+        // assert d1'[atkr].PageDbEntryTyped? <==> d2'[atkr].PageDbEntryTyped?;
+        // if(d1'[atkr].PageDbEntryTyped?) {
+        //     assert valAddrPage(d1', atkr) && valAddrPage(d2', atkr);
+        //     assert (forall n : PageNr :: pgInAddrSpc(d1', n, atkr) <==>
+        //         pgInAddrSpc(d2', n, atkr));
+        //     assert forall n : PageNr | pgInAddrSpc(d1', n, atkr) ::
+        //         d1'[n].entry == d2'[n].entry;
+        // }
+    }
 }
 
 lemma lemma_enter_enc_conf_eqpdb(s1: state, d1: PageDb, s1':state, d1': PageDb,
