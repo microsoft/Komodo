@@ -657,50 +657,6 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
     }
 }
 
-/*
-lemma lemma_validEnclaveEx_same_steps(s1: state, d1: PageDb, s1':state, d1': PageDb,
-                                      s2: state, d2: PageDb, s2':state, d2': PageDb,
-                                      dispPg: PageNr, steps1:nat, steps2:nat,
-                                      atkr: PageNr)
-    requires ValidState(s1) && ValidState(s2) &&
-             ValidState(s1') && ValidState(s2') &&
-             validPageDb(d1) && validPageDb(d2) && 
-             validPageDb(d1') && validPageDb(d2') && SaneConstants()
-    requires atkr_entry(d1, d2, dispPg, atkr)
-    requires validEnclaveExecution(s1, d1, s1', d1', dispPg, steps1)
-    requires validEnclaveExecution(s2, d2, s2', d2', dispPg, steps2);
-    requires enc_conf_eqpdb(d1, d2, atkr)
-    requires enc_conf_eq_entry(s1, s2, d1, d2, atkr)
-    requires OperandContents(s1, OLR) == OperandContents(s2, OLR)
-    requires user_regs(s1.regs) == user_regs(s2.regs)
-    ensures steps1 == steps2
-    decreases steps1, steps2
-{
-
-    var retToEnclave1, s15, d15 := lemma_unpack_validEnclaveExecution(
-        s1, d1, s1', d1', dispPg, steps1);
-    var retToEnclave2, s25, d25 := lemma_unpack_validEnclaveExecution(
-        s2, d2, s2', d2', dispPg, steps2);
-
-    lemma_validEnclaveExecutionStep_validPageDb(s1, d1, s15, d15, dispPg, retToEnclave1);
-    lemma_validEnclaveExecutionStep_validPageDb(s2, d2, s25, d25, dispPg, retToEnclave2);
-
-    assert retToEnclave1 == retToEnclave2 by {
-        assume false;
-    }
-
-    assert steps1 == 0 <==> steps2 == 0;
-
-    if(steps1 == 0 && steps2 ==0){
-        assert steps1 == steps2;
-    } else {
-        lemma_validEnclaveEx_same_steps(s15, d15, s1', d1', s25, d25, s2', d2',
-                                             dispPg, steps1 - 1, steps2 - 1, atkr);
-    }
-    
-}
-*/
-
 lemma lemma_unpack_validEnclaveExecution(s1:state, d1:PageDb,
     rs:state, rd:PageDb, dispPg:PageNr, steps:nat)
     returns (retToEnclave:bool, s5:state, d5:PageDb)
