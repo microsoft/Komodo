@@ -96,7 +96,7 @@ predicate validEnclaveExecutionStep'(s1:state, d1:PageDb,
         && isReturningSvc(s4) == retToEnclave
         && (if retToEnclave then
             var retRegs := svcHandled(s4, d4, dispPg);
-            d4 == rd && preEntryReturn(s4, rs, retRegs)
+            d4 == rd && preEntryReturn(s4, rs, retRegs, rd, dispPg)
           else reveal_ValidRegState();
             (rs.regs[R0], rs.regs[R1], rd) == exceptionHandled(s4, d4, dispPg))
 }
@@ -161,7 +161,10 @@ predicate preEntryCommon(s:state, d:PageDb, dispPage:PageNr)
 {
     ValidState(s) && validPageDb(d) && nonStoppedDispatcher(d, dispPage)
         && priv_of_state(s) == PL1
-        && s.conf.scr.ns == Secure
+        // XXX: we don't really need the impl to set SCR.FIQ and
+        // SCR.IRQ, but for the NI proof we need them to be constant,
+        // and this is just the simplest way of specifying that
+        && s.conf.scr == SCRT(Secure, true, true)
         && s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(d, dispPage))
 }
 
@@ -206,14 +209,14 @@ predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
         forall r | r in USER_REGS() :: s'.regs[r] == disp.ctxt.regs[r])
     && OperandContents(s', OLR) == disp.ctxt.pc
     && (reveal_ValidSRegState();
-        s'.sregs[spsr(Monitor)] == disp.ctxt.cpsr)
+        s'.sregs[spsr(mode_of_state(s'))] == disp.ctxt.cpsr)
 }
 
-predicate preEntryReturn(exs:state, s:state, retregs:SvcReturnRegs)
+predicate preEntryReturn(exs:state, s:state, retregs:SvcReturnRegs, d:PageDb, dispPg:PageNr)
     requires ValidState(exs) && ValidState(s)
 {
     reveal_ValidRegState();
-    mode_of_state(s) == Monitor
+    preEntryCommon(s, d, dispPg)
     // returning to same PC
     && OperandContents(s, OLR) == OperandContents(exs, OLR)
     && (reveal_ValidSRegState();

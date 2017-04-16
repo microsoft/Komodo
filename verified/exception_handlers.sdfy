@@ -185,14 +185,13 @@ procedure svc_returning(
         ValidState(exstate) && mode_of_state(exstate) != User;
         isReturningSvc(exstate);
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
-        validPageDb(pagedb);
+        preEntryCommon(this, pagedb, dispPg);
         pageDbCorresponds(this.m, pagedb);
-        validDispatcherPage(pagedb, dispPg);
     ensures
         lr == old(lr);
         StackPreserving(old(this), this);
         NonStackMemPreserving(old(this), this);
-        preEntryReturn(old(this), this, svcHandled(exstate, pagedb, dispPg));
+        preEntryReturn(old(this), this, svcHandled(exstate, pagedb, dispPg), pagedb, dispPg);
 {
     assert svcHandled(exstate, pagedb, dispPg) == tuple(KOM_ERR_INVALID,0,0,0,0,0,0,0,0);
 
@@ -247,7 +246,8 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
 
         pagedb := pagedb_in;
         svc_returning(old(this), EXCEPTION_STACK_BYTES, pagedb, dispPg);
-        assert preEntryReturn(old(this), this, svcHandled(old(this), pagedb, dispPg));
+        assert preEntryReturn(old(this), this, svcHandled(old(this), pagedb, dispPg),
+                              pagedb, dispPg);
     }
 
     assert validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg)
