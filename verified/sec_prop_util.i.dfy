@@ -3,6 +3,40 @@ include "pagedb.s.dfy"
 include "entry.s.dfy"
 include "sec_prop_util.i.dfy"
 
+predicate contentsOk(physPage: word, contents: Maybe<seq<word>>)
+{
+    (physPage == 0 || physPageIsInsecureRam(physPage) ==> contents.Just?) &&
+    (contents.Just? ==> |fromJust(contents)| == PAGESIZE / WORDSIZE)
+}
+
+lemma lemma_maybeContents_insec_ni(s1: state, s2: state, c1: Maybe<seq<word>>, 
+        c2: Maybe<seq<word>>, physPage: word)
+    requires ValidState(s1) && ValidState(s2) && SaneConstants()
+    requires InsecureMemInvariant(s1, s2)
+    requires c1 == maybeContentsOfPhysPage(s1, physPage)
+    requires c2 == maybeContentsOfPhysPage(s2, physPage)
+    ensures  c1 == c2;
+{
+    if(physPage == 0) {
+        assert c1 == c2;
+    } else if( physPageIsInsecureRam(physPage) ) {
+        var base := physPage * PAGESIZE + KOM_DIRECTMAP_VBASE;
+        forall( a: PageNr | base <= a < base + PAGESIZE)
+            ensures s1.m.addresses[a] == s2.m.addresses[a]
+        {
+        }
+        reveal_addrRangeSeq();
+        reveal_addrSeqToContents();
+        assert c1 == Just(contentsOfPhysPage(s1, physPage));
+        assert c2 == Just(contentsOfPhysPage(s2, physPage));
+        assert contentsOfPhysPage(s1, physPage)
+            == contentsOfPhysPage(s2, physPage); // seq equality
+        assert c1 == c2;
+    } else {
+        assert c1 == c2;
+    }
+}
+
 //-----------------------------------------------------------------------------
 // Enclave Confidentiality
 //-----------------------------------------------------------------------------

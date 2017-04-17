@@ -141,11 +141,17 @@ lemma lemma_smchandlerInvariant_regs_ni(
     requires os_regs_equiv(s1, s2)
     requires os_ctrl_eq(s1, s2)
     requires InsecureMemInvariant(s1, s2)
-    ensures  os_ctrl_eq(s1', s2')
+    ensures  !entry ==> os_ctrl_eq(s1', s2')
     ensures  !entry ==> InsecureMemInvariant(s1', s2')
-    ensures  !entry ==> non_ret_os_regs_equiv(s1, s2)
+    ensures  !entry ==> non_ret_os_regs_equiv(s1', s2')
 {
-    assume false;
+    if(!entry) {
+        assert forall m | m != User ::
+            s1.sregs[spsr(m)] == s1'.sregs[spsr(m)];
+        assert forall m | m != User ::
+            s2.sregs[spsr(m)] == s2'.sregs[spsr(m)];
+        assert os_ctrl_eq(s1', s2');
+    }
 }
 
 lemma lemma_initAddrspace_os_conf_ni(
