@@ -654,9 +654,9 @@ lemma lemma_os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     // and smchandler(s2, d2) => (s2', d2')
     requires smchandler(s2, d2, s2', d2')
     // s.t. (s1, d1) =_{os} (s2, d2)
-    requires os_conf_eq(s1, s2, d1, d2)
+    requires os_conf_eq(s1, d1, s2, d2)
     // then (s1', d1') =_{os} (s2', d2')
-    ensures os_conf_eq(s1', s2', d1', d2')
+    ensures os_conf_eq(s1', d1', s2', d2')
 {
     reveal_ValidRegState();
     var callno, arg1, arg2, arg3, arg4

@@ -699,6 +699,7 @@ lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageD
     requires user_regs(s1.regs) == user_regs(s2.regs)
     requires mode_of_state(s1) != User && mode_of_state(s2) != User
     requires spsr_same(s1, s2)
+    requires s1.conf.scr == s2.conf.scr;
     ensures  atkr_entry(d1', d2', dispPg, atkr)
     ensures  enc_conf_eqpdb(d1', d2', atkr)
     decreases steps1, steps2
@@ -749,9 +750,11 @@ lemma lemma_validEnclaveStep_enc_conf(s1: state, d1: PageDb, s1':state, d1': Pag
     requires user_regs(s1.regs) == user_regs(s2.regs)
     requires mode_of_state(s1) != User && mode_of_state(s2) != User
     requires spsr_same(s1, s2)
+    requires s1.conf.scr == s2.conf.scr;
     ensures  atkr_entry(d1', d2', dispPage, atkr)
     ensures  enc_conf_eqpdb(d1', d2', atkr)
     ensures  ret1 == ret2
+    ensures  ret1 ==> s1'.conf.scr == s2'.conf.scr;
     ensures  ret1 ==> enc_conf_eq_entry(s1', s2', d1', d2', atkr)
     ensures  ret1 ==> OperandContents(s1', OLR) == OperandContents(s2', OLR)
     ensures  ret1 ==> user_regs(s1'.regs) == user_regs(s2'.regs)
@@ -899,6 +902,7 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
     ensures  atkr_entry(rd1, rd2, dispPg, atkr)
     ensures  enc_conf_eqpdb(rd1, rd2, atkr)
     ensures  retToEnclave1 == retToEnclave2
+    ensures  retToEnclave1 ==> r1.conf.scr == r2.conf.scr
     ensures  retToEnclave1 ==> enc_conf_eq_entry(r1, r2, rd1, rd2, atkr)
     ensures  retToEnclave1 ==> OperandContents(r1, OLR) == OperandContents(r2, OLR)
     ensures  retToEnclave1 ==> user_regs(r1.regs) == user_regs(r2.regs)
@@ -1039,6 +1043,8 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
     {
         reveal userspaceExecutionFn();
     }
+
+    assert s14.conf.scr == s24.conf.scr;
 
     var retToEnclave := retToEnclave1;
 
