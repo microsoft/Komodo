@@ -448,16 +448,8 @@ procedure svc_returning_verify_step0(
 
     ghost var disp := pagedb'[dispPg].entry;
     ghost var pg := extractPage(this.m, dispPg);
-    assert pageDbDispatcherCorresponds(dispPg, disp, pg) by {
-        ghost var ctxt := disp.ctxt;
-        ghost var pgbase := page_monvaddr(dispPg);
-
-        // TODO: Prove this
-        assume false;
-        assert ctxt == DispatcherContext(user_regs(exstate.regs), old(lr),
-                                         old(spsr_mon));
-        reveal pageDbDispatcherCorresponds;
-    }
+    lemma_svc_returning_verify_step0_helper(old(this), pagedb, dispPg, old(this.m), this.m,
+        user_words, pagedb', disp, pg);
 
     assert pageDbCorresponds(this.m, pagedb') by {
         assert pageDbCorrespondsOnly(this.m, pagedb', dispPg) by {
@@ -469,31 +461,6 @@ procedure svc_returning_verify_step0(
                 by { reveal pageContentsCorresponds; }
         }
         AllButOnePagePreserving(dispPg, old(this), this);
-    }
-    assert validDispatcherPage(pagedb', dispPg) by {
-        reveal validPageDb;
-        forall n :| validPageNr(n) :: validPageDbEntry(pagedb', n)
-        {
-            ghost if (n != dispPg) {
-                assert pagedb'[n] == pagedb[n];
-//                lemma_validPageDbEntry_equivalence(pagedb, pagedb', n);
-//                assert pageDbEntriesValid(pagedb);
-//                assert validPageDbEntry(pagedb, n);
-//                ghost if (pagedb'[n] is PageDbEntryTyped) {
-//                    assert pagedb[n].entry == pagedb'[n].entry;
-//                    assert validPageDbEntryTyped(pagedb', n);
-//                }
-
-                // TODO: Prove me too!
-                assume false;
-                assert validPageDbEntry(pagedb', n);
-            } else {
-
-                assert validPageDbEntry(pagedb', n);
-            }
-        }
-
-        assert wellFormedPageDb(pagedb') && pageDbEntriesValid(pagedb') && pageDbEntriesValidRefs(pagedb');
     }
 }
 
