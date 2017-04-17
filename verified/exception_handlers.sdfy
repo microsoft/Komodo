@@ -186,12 +186,13 @@ procedure svc_returning(
         isReturningSvc(exstate);
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
         preEntryCommon(this, pagedb, dispPg);
+        this.conf.nondet == maybe_reseed_nondet_once_on_interrupt(exstate.conf.nondet);
         pageDbCorresponds(this.m, pagedb);
     ensures
         lr == old(lr);
         StackPreserving(old(this), this);
         NonStackMemPreserving(old(this), this);
-        preEntryReturn(old(this), this, svcHandled(exstate, pagedb, dispPg), pagedb, dispPg);
+        preEntryReturn(exstate, this, svcHandled(exstate, pagedb, dispPg), pagedb, dispPg);
 {
     assert svcHandled(exstate, pagedb, dispPg) == tuple(KOM_ERR_INVALID,0,0,0,0,0,0,0,0);
 
@@ -207,6 +208,7 @@ procedure svc_returning(
     MOV(r6, 0);
     MOV(r7, 0);
     MOV(r8, 0);
+    assert this.conf.nondet == old(this).conf.nondet;
 }
 
 procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: PageNr)
@@ -229,6 +231,8 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
     lemma_Establish_InterruptContinuationPrecondition(this, pagedb_in, dispPg);
     switch_to_monitor(Supervisor);
     lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb_in);
+    // TODO:
+    assume this.conf.nondet == maybe_reseed_nondet_once_on_interrupt(old(this).conf.nondet);
 
     if (r0 == const(KOM_SVC_EXIT)) {
         assert !isReturningSvc(old(this));
