@@ -206,8 +206,16 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
     && page[base + DISP_CTXT_R9]  == e.ctxt.regs[R9]
     && page[base + DISP_CTXT_R10] == e.ctxt.regs[R10]
     && page[base + DISP_CTXT_R11] == e.ctxt.regs[R11]
-    && page[base + DISP_CTXT_R12] == e.ctxt.regs[R12]))
-    /* TODO: add user_words */
+    && page[base + DISP_CTXT_R12] == e.ctxt.regs[R12])
+    && page[base + DISP_CTXT_USER_WORDS + 0*WORDSIZE] == e.verifywords[0]
+    && page[base + DISP_CTXT_USER_WORDS + 1*WORDSIZE] == e.verifywords[1]
+    && page[base + DISP_CTXT_USER_WORDS + 2*WORDSIZE] == e.verifywords[2]
+    && page[base + DISP_CTXT_USER_WORDS + 3*WORDSIZE] == e.verifywords[3]
+    && page[base + DISP_CTXT_USER_WORDS + 4*WORDSIZE] == e.verifywords[4]
+    && page[base + DISP_CTXT_USER_WORDS + 5*WORDSIZE] == e.verifywords[5]
+    && page[base + DISP_CTXT_USER_WORDS + 6*WORDSIZE] == e.verifywords[6]
+    && page[base + DISP_CTXT_USER_WORDS + 7*WORDSIZE] == e.verifywords[7]
+       )
 }
 
 function ARM_L1PTE(paddr: word): word
@@ -380,6 +388,57 @@ lemma extractPageDbToAbstractOne(s:memstate, p:PageNr, o:int)
 }
 
 /*
+lemma lemma_validPageDbEntry_equivalence(d:PageDb, d':PageDb, n:PageNr)
+    requires wellFormedPageDb(d) && wellFormedPageDb(d');
+    requires n in d && n in d';
+    requires d[n] == d'[n];
+    requires validPageDbEntry(d, n);
+    ensures  validPageDbEntry(d', n);
+{
+    var e := d[n];
+    if e.PageDbEntryFree? {
+        assert validPageDbEntry(d', n);
+    } else if (e.PageDbEntryTyped? && validPageDbEntryTyped(d, n)) {
+
+
+        assert wellFormedPageDbEntry(d[n]) && isAddrspace(d, d[n].addrspace);
+        assert d[d[n].addrspace].entry.Addrspace?;
+        assert d'[n].entry == d[n].entry;
+
+
+        assert wellFormedPageDb(d')
+        && validPageNr(d'[n].addrspace)
+        && d'[d'[n].addrspace].PageDbEntryTyped?
+        && d'[d'[n].addrspace].entry.Addrspace?;
+
+        assert wellFormedPageDbEntry(d'[n]) && isAddrspace(d', d'[n].addrspace);
+
+        var entry := d[n].entry;
+        assert (entry.Addrspace? && validAddrspace(d, n))
+       || (entry.L1PTable? && validL1PTable(d, n))
+       || (entry.L2PTable? && validL2PTable(d, n))
+       || (entry.Dispatcher? && (entry.entered ==>
+            validDispatcherContext(entry.ctxt)))
+       // AFAIK the only requirements we need to specify about data pages are 
+       // covered by wellFormedPageDbTyped
+       || (entry.DataPage?);
+        var entry' := d'[n].entry;
+        assert (entry'.Addrspace? && validAddrspace(d', n))
+       || (entry'.L1PTable? && validL1PTable(d', n))
+       || (entry'.L2PTable? && validL2PTable(d', n))
+       || (entry'.Dispatcher? && (entry'.entered ==>
+            validDispatcherContext(entry'.ctxt)))
+       // AFAIK the only requirements we need to specify about data pages are 
+       // covered by wellFormedPageDbTyped
+       || (entry'.DataPage?);
+
+        assert validPageDbEntry(d', n);
+    }
+
+}
+*/
+
+/*
 lemma allOnlyCorrespondImpliesCorresponds(s:memstate,d:PageDb)
     requires SaneMem(s)
     ensures pageDbCorresponds(s,d)
@@ -387,6 +446,27 @@ lemma allOnlyCorrespondImpliesCorresponds(s:memstate,d:PageDb)
     reveal_pageDbEntryCorresponds
 }
 */
+
+/*
+lemma lemma_ModifiedUserWordsPreservesPageDb(s:state, s':state, pagedb:PageDb, pagedb':PageDb,
+                                             dispPg:PageNr, base:nat, user_words:seq<word>)
+    requires ValidState(s) && SaneMem(s.m) && ValidState(s') && SaneMem(s'.m)
+    requires validPageDb(pagedb)
+    requires pageDbCorresponds(s.m, pagedb)
+    requires |user_words| == 8;
+    requires base == page_monvaddr(dispPg);
+    requires extractPage(s.m, dispPg)[base + DISP_CTXT_USER_WORDS + 0 * WORDSIZE] == user_words[0];
+    requires extractPage(s.m, dispPg)[base + DISP_CTXT_USER_WORDS + 1 * WORDSIZE] == user_words[1];
+    requires extractPage(s.m, dispPg)[base + DISP_CTXT_USER_WORDS + 2 * WORDSIZE] == user_words[2];
+    requires extractPage(s.m, dispPg)[base + DISP_CTXT_USER_WORDS + 3 * WORDSIZE] == user_words[3];
+    requires extractPage(s.m, dispPg)[base + DISP_CTXT_USER_WORDS + 4 * WORDSIZE] == user_words[4];
+    requires extractPage(s.m, dispPg)[base + DISP_CTXT_USER_WORDS + 5 * WORDSIZE] == user_words[5];
+    requires extractPage(s.m, dispPg)[base + DISP_CTXT_USER_WORDS + 6 * WORDSIZE] == user_words[6];
+    requires extractPage(s.m, dispPg)[base + DISP_CTXT_USER_WORDS + 7 * WORDSIZE] == user_words[7];
+    ensures  wellFormedPageDb(pagedb');
+    ensures  pageDbCorresponds(s'.m, pagedb')
+*/
+
 
 lemma lemma_SameMemAndGlobalsPreservesPageDb(s:state, s':state, pagedb:PageDb)
     requires ValidState(s) && SaneMem(s.m) && ValidState(s') && SaneMem(s'.m)
