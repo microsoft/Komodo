@@ -645,15 +645,6 @@ lemma lemma_maybeContents_insec_ni(s1: state, s2: state, c1: Maybe<seq<word>>,
 // Confidentiality, Enclave Secrets are NI with OS
 //-----------------------------------------------------------------------------
 
-predicate os_ni_reqs(s1: state, d1: PageDb, s1': state, d1': PageDb,
-                     s2: state, d2: PageDb, s2': state, d2': PageDb)
-{
-    ValidState(s1) && validPageDb(d1) && ValidState(s1') && validPageDb(d1') &&
-    ValidState(s2) && validPageDb(d2) && ValidState(s2') && validPageDb(d2') && SaneConstants()
-    // pageDbCorresponds(s1.m, d1) && pageDbCorresponds(s1'.m, d1') &&
-    // pageDbCorresponds(s2.m, d2) && pageDbCorresponds(s2'.m, d2')
-}
-
 lemma lemma_os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
                  s2: state, d2: PageDb, s2': state, d2': PageDb,
                  atkr: PageNr)
@@ -663,9 +654,9 @@ lemma lemma_os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     // and smchandler(s2, d2) => (s2', d2')
     requires smchandler(s2, d2, s2', d2')
     // s.t. (s1, d1) =_{os} (s2, d2)
-    requires os_conf_eq(s1, s2)
+    requires os_conf_eq(s1, s2, d1, d2)
     // then (s1', d1') =_{os} (s2', d2')
-    ensures os_conf_eq(s1', s2')
+    ensures os_conf_eq(s1', s2', d1', d2')
 {
     reveal_ValidRegState();
     var callno, arg1, arg2, arg3, arg4

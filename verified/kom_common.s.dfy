@@ -202,3 +202,15 @@ predicate SaneState(s:state)
     && !interrupts_enabled(s)
 }
 
+
+//-----------------------------------------------------------------------------
+// Stack/procedure invariants
+//-----------------------------------------------------------------------------
+predicate InsecureMemInvariant(s:state, r:state)
+    requires ValidState(s) && ValidState(r);
+{
+    forall m:addr :: ValidMem(m)
+        && KOM_DIRECTMAP_VBASE <= m < KOM_DIRECTMAP_VBASE + MonitorPhysBase()
+        ==> MemContents(s.m, m) == MemContents(r.m, m)
+}
+
