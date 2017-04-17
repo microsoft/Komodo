@@ -634,7 +634,8 @@ lemma lemma_maybeContents_insec_ni(s1: state, s2: state, c1: Maybe<seq<word>>,
         reveal_addrSeqToContents();
         assert c1 == Just(contentsOfPhysPage(s1, physPage));
         assert c2 == Just(contentsOfPhysPage(s2, physPage));
-        assume false; // X_X
+        assert contentsOfPhysPage(s1, physPage)
+            == contentsOfPhysPage(s2, physPage); // seq equality
         assert c1 == c2;
     } else {
         assert c1 == c2;
