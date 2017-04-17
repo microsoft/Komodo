@@ -84,19 +84,25 @@ predicate enc_conf_eq_entry(s1:state, s2:state, d1:PageDb, d2:PageDb,
 // Confidentiality, Malicious OS
 //-----------------------------------------------------------------------------
 
+predicate os_conf_eqentry(e1:PageDbEntryTyped, e2:PageDbEntryTyped)
+{
+    match e1
+        case Addrspace(_,_,_) => e1 == e2
+        case L1PTable(_) => e1 == e2
+        case L2PTable(_) => e1 == e2
+        case Dispatcher(_,_,_) => e2.Dispatcher? &&
+            e2.entered == e1.entered && e2.entrypoint == e1.entrypoint
+        case DataPage(_) => e2.DataPage?
+}
+
 predicate {:opaque} os_conf_eqpdb(d1:PageDb, d2:PageDb)
     requires validPageDb(d1) && validPageDb(d2)
 {
     (forall n: PageNr ::
         d1[n].PageDbEntryTyped? <==> d2[n].PageDbEntryTyped?) &&
-    (forall n: PageNr | d1[n].PageDbEntryTyped? &&
-        (d1[n].entry.Addrspace? || d1[n].entry.L1PTable? || 
-            d1[n].entry.L2PTable?) ::
-                d1[n].entry == d2[n].entry) &&
-    (forall n : PageNr | d1[n].PageDbEntryTyped? && d1[n].entry.Dispatcher? ::
-        d2[n].entry.Dispatcher? && d1[n].entry.entered == d2[n].entry.entered) &&
-    (forall n : PageNr | d1[n].PageDbEntryTyped? && d1[n].entry.DataPage? ::
-        d2[n].entry.DataPage?)
+    (forall n : PageNr | d1[n].PageDbEntryTyped? ::
+        os_conf_eqentry(d1[n].entry, d2[n].entry) &&
+        d1[n].addrspace == d2[n].addrspace)
 }
 
 predicate os_conf_eq(s1: state, d1: PageDb, s2: state, d2: PageDb)
@@ -104,7 +110,7 @@ predicate os_conf_eq(s1: state, d1: PageDb, s2: state, d2: PageDb)
     requires validPageDb(d1) && validPageDb(d2)
 {
     reveal_ValidMemState();
-    s1.conf.nondet == s2.conf.nondet &&
+    //s1.conf.nondet == s2.conf.nondet &&
     os_regs_equiv(s1, s2) &&
     os_ctrl_eq(s1, s2) &&
     InsecureMemInvariant(s1, s2) &&

@@ -103,7 +103,7 @@ procedure {:frame false} smc_handler_inner(
     } else if (callno == const(KOM_SMC_MAP_SECURE)) {
         ghost if (!(arg4 == 0 || !physPageIsInsecureRam(arg4))) {
             assert contentsOfPhysPage(old(this), arg4) == contentsOfPhysPage(this, arg4)
-                by { assert InsecureMemInvariant(old(this), this); }
+                by { assert InsecureMemInvariant(old(this), this, entry); }
         }
         pagedb := kom_smc_map_secure(arg1, arg2, arg3, arg4, r12, err, pagedb_in);
         MOV(retval, 0);
