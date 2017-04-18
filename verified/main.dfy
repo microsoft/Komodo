@@ -161,6 +161,7 @@ predicate ExceptionStateSideEffects(s:state)
     && if s.conf.ex == ExFIQ || s.conf.ex == ExIRQ
         then mode_of_state(s) == Monitor && !interrupts_enabled(s)
     else
+        interrupts_enabled(s) &&
         mode_of_state(s) == (match s.conf.ex
             case ExAbt => Abort
             case ExUnd => Undefined

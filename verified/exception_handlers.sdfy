@@ -26,6 +26,7 @@ CPSID_IAF(operand mod:word)
         ValidModeEncoding(mod);
         priv_of_state(this) == PL1;
         ValidModeChange'(this, decode_mode(mod));
+        interrupts_enabled(this);
     modifies
         cpsr;
     ensures
@@ -41,6 +42,7 @@ CPSID_IAF(operand mod:word)
             && m != mode_of_exception(old(this).conf, ExFIQ)
             ==> old(this).regs[LR(m)] == this.regs[LR(m)]
               && old(this).regs[SP(m)] == this.regs[SP(m)];
+        this.conf.nondet == nondet_int(old(this).conf.nondet, NONDET_GENERATOR());
 {
     reveal va_eval;
     exists s' :: maybeHandleInterrupt(old(this), s') && evalIns'(CPSID_IAF(@mod), s', this);
@@ -65,6 +67,7 @@ procedure {:frame false} switch_to_monitor(inline oldmode:mode)
         mode_of_state(this) == oldmode;
         oldmode == Supervisor || oldmode == Abort || oldmode == Undefined;
         this.ok;
+        interrupts_enabled(this);
     ensures
         SaneState(this);
         SaneStack(this);
@@ -77,6 +80,7 @@ procedure {:frame false} switch_to_monitor(inline oldmode:mode)
         lr == OperandContents(old(this), OLR);
         this.conf.ttbr0 == old(this).conf.ttbr0;
         this.conf.scr == old(this).conf.scr;
+        this.conf.nondet == nondet_int(old(this).conf.nondet, NONDET_GENERATOR());
 {
     CPSID_IAF(const(encode_mode(Monitor)));
 
@@ -168,6 +172,20 @@ procedure fault_exit(
     reveal validExceptionTransition;
 }
 
+#verbatim
+predicate exregs_preserved(s1:state, s2:state)
+    requires ValidState(s1) && ValidState(s2)
+{
+    reveal ValidRegState();
+    s1.regs[R9] == s2.regs[R9] &&
+    s1.regs[R10] == s2.regs[R10] &&
+    s1.regs[R11] == s2.regs[R11] &&
+    s1.regs[R12] == s2.regs[R12] &&
+    s1.regs[LR(User)] == s2.regs[LR(User)] &&
+    s1.regs[SP(User)] == s2.regs[SP(User)]
+}
+#endverbatim
+
 procedure svc_returning(
     ghost exstate: state,
     ghost stack_bytes: int,
@@ -186,8 +204,10 @@ procedure svc_returning(
         isReturningSvc(exstate);
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
         preEntryCommon(this, pagedb, dispPg);
-        this.conf.nondet == maybe_reseed_nondet_once_on_interrupt(exstate.conf.nondet);
+        this.conf.nondet == nondet_int(exstate.conf.nondet, NONDET_GENERATOR());
         pageDbCorresponds(this.m, pagedb);
+        exregs_preserved(exstate, this);
+        OperandContents(this, OLR) == OperandContents(exstate, OLR);
     ensures
         lr == old(lr);
         StackPreserving(old(this), this);
@@ -223,6 +243,7 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
         InterruptContinuationInvariantDef();
         mode_of_state(this) == Supervisor && spsr_of_state(this).m == User;
         this.conf.ex == ExSVC;
+        interrupts_enabled(this);
     ensures
         KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
         validPageDb(pagedb);
@@ -232,7 +253,6 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
     switch_to_monitor(Supervisor);
     lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb_in);
     // TODO:
-    assume this.conf.nondet == maybe_reseed_nondet_once_on_interrupt(old(this).conf.nondet);
 
     if (r0 == const(KOM_SVC_EXIT)) {
         assert !isReturningSvc(old(this));
@@ -273,6 +293,7 @@ procedure {:frame false} abort_handler(
         this.conf.ex == ex && (ex == ExAbt || ex == ExUnd);
         mode_of_state(this) == (if ex == ExAbt then Abort else Undefined);
         spsr_of_state(this).m == User;
+        interrupts_enabled(this);
     ensures
         KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
         validPageDb(pagedb);

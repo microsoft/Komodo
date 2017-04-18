@@ -212,22 +212,12 @@ predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
         s'.sregs[spsr(mode_of_state(s'))] == disp.ctxt.cpsr)
 }
 
-// nondet constrained to be deterministic function of whether or not we took an interrupt
-function maybe_reseed_nondet_once_on_interrupt(nondet:int): int
-{
-    // if we take an interrupt (see maybeHandleInterrupt in ARMdef)
-    var nd_word := nondet_word(nondet, NONDET_EX());
-    if nd_word == 0 || nd_word == 1
-        then nondet_int(nondet, NONDET_GENERATOR())
-        else nondet
-}
-
 predicate preEntryReturn(exs:state, s:state, retregs:SvcReturnRegs, d:PageDb, dispPg:PageNr)
     requires ValidState(exs) && ValidState(s)
 {
     reveal_ValidRegState();
     preEntryCommon(s, d, dispPg)
-    && s.conf.nondet == maybe_reseed_nondet_once_on_interrupt(exs.conf.nondet)
+    && s.conf.nondet == nondet_int(exs.conf.nondet, NONDET_GENERATOR())
     // returning to same PC
     && OperandContents(s, OLR) == OperandContents(exs, OLR)
     && (reveal_ValidSRegState();
