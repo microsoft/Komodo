@@ -26,18 +26,31 @@ __asm (
     ".arm                                       \n"
     "test_enclave:                              \n"
     //"   mov     r1, #42                         \n"
-    //"   mov     r0, #0xa000                     \n"
-    //"   str     r1, [r0]                        \n"
-    "   mov     r0, #0                          \n" // KOM_SVC_EXIT
-    "1: svc     #0                              \n"
+    //"   mov     r2, #0xa000                     \n"
+    //"   str     r1, [r2]                        \n"
+    "   mrc     p15, 0, r1, c9, c13, 0          \n" // always return cycles in r1
+    "   cmp     r0, #1                          \n"
+    "   beq     2f                              \n"
+    "1: mov     r0, #0                          \n" // KOM_SVC_EXIT
+    "   svc     #0                              \n"
     "   b       1b                              \n"
+    "2: mov     r2, r1                          \n"
+    "   mrc     p15, 0, r1, c9, c13, 0          \n" // while (1) {
+    "   sub     r3, r1, r2                      \n" // delta = rdcycles() - oldcycles;
+    "   cmp     r3, #200                        \n" // if (delta > 200) break;
+    "   bgt     1b                              \n"
+    "   b       2b                              \n"
     "test_enclave_end:                          \n"
 );
 
 static void enable_pmccntr(void)
 {
+    // PMCR
     asm volatile ("mcr p15, 0, %0, c9, c12, 0" :: "r"(1));
+    // PMCNTENSET
     asm volatile ("mcr p15, 0, %0, c9, c12, 1" :: "r"((u32)1 << 31));
+    // PMUSERENR
+    asm volatile ("mcr p15, 0, %0, c9, c14, 0" :: "r"(1));
     asm volatile ("isb");
 }
 
@@ -47,6 +60,118 @@ static inline uint32_t rdcycles(void)
     asm volatile("mrc p15, 0, %0, c9, c13, 0" : "=r"(r));
     return r;
 }
+
+#define ITER 1000
+
+static int bench_enter_resume(u32 disp)
+{
+    u32 s0, s1, resumecnt = 0, i, total = 0;
+    bool interrupted = false;
+    kom_multival_t ret;
+
+    s0 = rdcycles();
+    for (i = 0; i < ITER; i++) {
+        if (interrupted) {
+            resumecnt++;
+            ret = kom_smc_resume(disp);
+        } else {
+            ret = kom_smc_enter(disp, 0, 0, 0);
+        }
+        if (ret.x.err == KOM_ERR_INTERRUPTED) {
+            interrupted = true;
+        } else if (ret.x.err == KOM_ERR_SUCCESS) {
+            interrupted = false;
+        } else {
+            if (interrupted) {
+                resumecnt--;
+            }
+            printk(KERN_DEBUG "error on enter/resume iteration %u: %u\n",
+                   i, ret.x.err);
+            return -EIO;
+        }
+    }
+    s1 = rdcycles();
+
+    printk(KERN_DEBUG "%u crossings (%u enter + %u resume) = %u cycles total\n",
+           ITER, ITER-resumecnt, resumecnt, s1-s0);
+
+    if (interrupted) {
+        i = 0;
+        do {
+            ret = kom_smc_resume(disp);
+        } while (ret.x.err == KOM_ERR_INTERRUPTED && i++ < 10);
+        if (ret.x.err != KOM_ERR_SUCCESS) {
+            printk(KERN_DEBUG "failed to get out of interrupted enclave: %u\n",
+                   ret.x.err);
+            return -EIO;
+        }
+    }
+
+    total = 0;
+    for (i = 0; i < ITER; i++) {
+        s0 = rdcycles();
+        ret = kom_smc_enter(disp, 0, 0, 0);
+        if (ret.x.err != KOM_ERR_SUCCESS) {
+            if (ret.x.err == KOM_ERR_INTERRUPTED && i > 0) {
+                // discard result, try again
+                ret = kom_smc_resume(disp);
+                if (ret.x.err == KOM_ERR_SUCCESS) {
+                    i--;
+                    continue;
+                }
+            }
+            printk(KERN_DEBUG "error on enter iteration %u (!success): %u\n",
+                   i, ret.x.err);
+            return -EIO;
+        }
+        s1 = ret.x.val;
+
+        if (s1 <= s0) {
+            printk(KERN_DEBUG "bogus cycle count returned? %u %u\n", s0, s1);
+            return -EIO;
+        }
+        total += s1 - s0;
+    }
+
+    printk(KERN_DEBUG "%u enters (not exits) took %u cycles\n", ITER, total);
+
+    total = 0;
+    for (i = 0; i < ITER; i++) {
+        ret = kom_smc_enter(disp, 1, 0, 0);
+        if (ret.x.err != KOM_ERR_INTERRUPTED) {
+            printk(KERN_DEBUG "error on resume iteration %u (not interrupted): %u\n",
+                   i, ret.x.err);
+            return -EIO;
+        }
+
+        s0 = rdcycles();
+        ret = kom_smc_resume(disp);
+        if (ret.x.err != KOM_ERR_SUCCESS) {
+            if (ret.x.err == KOM_ERR_INTERRUPTED && i > 0) {
+                // discard result, try again
+                ret = kom_smc_resume(disp);
+                if (ret.x.err == KOM_ERR_SUCCESS) {
+                    i--;
+                    continue;
+                }
+            }
+            printk(KERN_DEBUG "error on resume iteration %u (not success): %u\n",
+                   i, ret.x.err);
+            return -EIO;
+        }
+        s1 = ret.x.val;
+        if (s1 <= s0) {
+            printk(KERN_DEBUG "bogus cycle count returned? %u %u\n", s0, s1);
+            return -EIO;
+        }
+        total += s1 - s0;
+    }
+
+    printk(KERN_DEBUG "%u resumes (not save) took %u cycles\n", ITER, total);
+
+    return 0;
+}
+
 
 static int test(void)
 {
@@ -63,18 +188,19 @@ static int test(void)
     {
         u32 s0, s1, i, total = 0;
 
-        for (i = 0; i < 10; i++) {
+        for (i = 0; i < ITER; i++) {
             s0 = rdcycles();
             s1 = rdcycles();
             total += s1-s0;
         }
-        printk(KERN_DEBUG "approx cycle counter overhead is %u/10 cycles\n",
-               total);
+        printk(KERN_DEBUG "approx cycle counter overhead is %u/%u cycles\n",
+               total, ITER);
 
         s0 = rdcycles();
-        for (i = 0; i < 100; i++) kom_smc_query();
+        for (i = 0; i < ITER; i++) kom_smc_query();
         s1 = rdcycles();
-        printk(KERN_DEBUG "100 iterations of a null SMC took %u cycles\n", s1-s0);
+        printk(KERN_DEBUG "%u iterations of a null SMC took %u cycles\n",
+               ITER, s1-s0);
     }
 
     shared_page = alloc_page(GFP_KERNEL);
@@ -186,46 +312,18 @@ static int test(void)
         goto cleanup;
     }
     
-    ret = kom_smc_execute(disp, 1, 2, 3);
+    ret = kom_smc_execute(disp, 0, 1, 2);
     printk(KERN_DEBUG "enter: %x %lx\n", ret.x.err, ret.x.val);
     if (ret.x.err != KOM_ERR_SUCCESS) {
         r = -EIO;
         goto cleanup;
     }
 
-    printk(KERN_DEBUG "returned: %lx\n", ret.x.val);
     printk(KERN_DEBUG "wrote: %x\n", *(u32 *)shared_virt);
 
-    {
-        u32 s0, s1, resumecnt = 0, i;
-        bool interrupted = false;
-
-        s0 = rdcycles();
-        for (i = 0; i < 100; i++) {
-            kom_multival_t ret;
-            if (interrupted) {
-                resumecnt++;
-                ret = kom_smc_resume(disp);
-            } else {
-                ret = kom_smc_enter(disp, 0, 0, 0);
-            }
-            if (ret.x.err == KOM_ERR_INTERRUPTED) {
-                interrupted = true;
-            } else if (ret.x.err == KOM_ERR_SUCCESS) {
-                interrupted = false;
-            } else {
-                if (interrupted) {
-                    resumecnt--;
-                }
-                printk(KERN_DEBUG "error on enter/resume iteration %d: %d\n", i, err);
-                r = -EIO;
-                goto cleanup;
-            }
-        }
-        s1 = rdcycles();
-
-        printk(KERN_DEBUG "komodo: %u enter + %u resume took %u cycles\n",
-               100-resumecnt, resumecnt, s1-s0);
+    r = bench_enter_resume(disp);
+    if (r != 0) {
+        goto cleanup;
     }
 
 cleanup:
