@@ -507,20 +507,26 @@ procedure svc_returning_attest(
     SUB(sp, sp, const(STACKSIZE_ATTEST * WORDSIZE));
     
     // Arrange the user words in memory after the gap for the MAC output
-    STR(r1, sp, const(SHA_CTXSIZE + 0 * WORDSIZE));
-    STR(r2, sp, const(SHA_CTXSIZE + 1 * WORDSIZE));
-    STR(r3, sp, const(SHA_CTXSIZE + 2 * WORDSIZE));
-    STR(r4, sp, const(SHA_CTXSIZE + 3 * WORDSIZE));
-    STR(r5, sp, const(SHA_CTXSIZE + 4 * WORDSIZE));
-    STR(r6, sp, const(SHA_CTXSIZE + 5 * WORDSIZE));
-    STR(r7, sp, const(SHA_CTXSIZE + 6 * WORDSIZE));
-    STR(r8, sp, const(SHA_CTXSIZE + 7 * WORDSIZE));
+
+    // TODO: Call arrange_user_regs_in_memory
+
+//    STR(r1, sp, const(SHA_CTXSIZE + 0 * WORDSIZE));
+//    STR(r2, sp, const(SHA_CTXSIZE + 1 * WORDSIZE));
+//    STR(r3, sp, const(SHA_CTXSIZE + 2 * WORDSIZE));
+//    STR(r4, sp, const(SHA_CTXSIZE + 3 * WORDSIZE));
+//    STR(r5, sp, const(SHA_CTXSIZE + 4 * WORDSIZE));
+//    STR(r6, sp, const(SHA_CTXSIZE + 5 * WORDSIZE));
+//    STR(r7, sp, const(SHA_CTXSIZE + 6 * WORDSIZE));
+//    STR(r8, sp, const(SHA_CTXSIZE + 7 * WORDSIZE));
 
     // Arrange the enclave measurement 
     ADD(r1, sp, const(SHA_CTXSIZE + 8 * WORDSIZE)); // Construct a pointer for the next slot on the stack
-    ADD(r2, r11,const(ADDRSPACE_HASH * WORDSIZE));  // Construct a pointer to enclave measurement hash 
-    MOV(r3, const(SHA_CTXSIZE * WORDSIZE));         // Size arg to memcpy
-    memcpy(r1, r2, r3, r4);
+
+    // TODO: Call arrange_real_measurement_in_memory
+
+//    ADD(r2, r11,const(ADDRSPACE_HASH * WORDSIZE));  // Construct a pointer to enclave measurement hash 
+//    MOV(r3, const(SHA_CTXSIZE * WORDSIZE));         // Size arg to memcpy
+//    memcpy(r1, r2, r3, r4);
 
     // Fill in some zeroes
     ADD(r1, r1, const(SHA_CTXSIZE * WORDSIZE)); // Construct a pointer for the next slot on the stack
@@ -529,27 +535,8 @@ procedure svc_returning_attest(
     memset(r1, r2, r3);
 
     // Arrange the key in memory
-    assert ValidGlobal(AttestKeyOp()) by { reveal SaneShaGlobal; }
-    LDRglobaladdr(r2, AttestKeyOp());
 
-    ADD(r4, r1, const(2*SHA_BLOCKSIZE*WORDSIZE)); // key_ptr
-    LDRglobal(r3, AttestKeyOp(), r2, const(0 * WORDSIZE));
-    STR(r3, r4, const(0 * WORDSIZE));
-    LDRglobal(r3, AttestKeyOp(), r2, const(1 * WORDSIZE));
-    STR(r3, r4, const(1 * WORDSIZE));
-    LDRglobal(r3, AttestKeyOp(), r2, const(2 * WORDSIZE));
-    STR(r3, r4, const(2 * WORDSIZE));
-    LDRglobal(r3, AttestKeyOp(), r2, const(3 * WORDSIZE));
-    STR(r3, r4, const(3 * WORDSIZE));
-    LDRglobal(r3, AttestKeyOp(), r2, const(4 * WORDSIZE));
-    STR(r3, r4, const(4 * WORDSIZE));
-    LDRglobal(r3, AttestKeyOp(), r2, const(5 * WORDSIZE));
-    STR(r3, r4, const(5 * WORDSIZE));
-    LDRglobal(r3, AttestKeyOp(), r2, const(6 * WORDSIZE));
-    STR(r3, r4, const(6 * WORDSIZE));
-    LDRglobal(r3, AttestKeyOp(), r2, const(7 * WORDSIZE));
-    STR(r3, r4, const(7 * WORDSIZE));
-    ghost var key := seq(0);    // TODO: Fill in with contents above
+    // TODO: Call load_attestion_key
 
     // Call HMAC
     MOV(r0, sp);                                  // ctx
