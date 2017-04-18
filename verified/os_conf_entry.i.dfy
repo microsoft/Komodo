@@ -263,10 +263,18 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
     
     assert s14.conf.nondet == s24.conf.nondet;
 
+    assert ex1 == ex2 by {
+        // Need to declassify
+        assume false;
+    }
+
+    assert s14.conf.ex == s24.conf.ex;
+
     assert retToEnclave1 == retToEnclave2 by {
         assume false;
         // same s.conf.ex (declassify) 
-        // same R0 after exceptionTakenFn (no idea...) 
+        // whether or not s.regs[R0] == KOM_SVC_EXIT in both states must be the 
+        // same. not sure but possibly also needs to be declassified
     }
 
     assert os_conf_eqpdb(d14, d24) by
@@ -281,10 +289,34 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
         assume r1.conf.nondet == s14.conf.nondet;
         assume r2.conf.nondet == s24.conf.nondet;
     } else {
-        assume false;
+        lemma_exceptionHandled_os_conf(
+            s14, d14, rd1, r1.regs[R0], r1.regs[R1],
+            s24, d24, rd2, r2.regs[R0], r2.regs[R1],
+            dispPg);
     }
 
 }
+
+lemma lemma_exceptionHandled_os_conf(
+    s14:state, d14:PageDb, rd1:PageDb, r01:word, r11:word,
+    s24:state, d24:PageDb, rd2:PageDb, r02:word, r12:word,
+    dispPg:PageNr)
+    requires validStates({s14, s24})
+    requires validPageDbs({d14,d24,rd1,rd2})
+    requires validDispatcherPage(d14, dispPg)
+    requires validDispatcherPage(d24, dispPg)
+    requires mode_of_state(s14) != User
+    requires mode_of_state(s24) != User
+    requires (r01, r11, rd1) == exceptionHandled(s14, d14, dispPg)
+    requires (r02, r12, rd2) == exceptionHandled(s24, d24, dispPg)
+    requires s14.conf.ex == s24.conf.ex
+    requires os_conf_eqpdb(d14, d24)
+    ensures  os_conf_eqpdb(rd1, rd2)
+    ensures  r01 == r02 && r11 == r12
+{
+    assume false;
+}
+    
 
 lemma lemma_updateUserPages_os_conf(
     s14: state, d11: PageDb, d14: PageDb,
