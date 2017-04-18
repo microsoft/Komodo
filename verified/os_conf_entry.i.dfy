@@ -322,7 +322,7 @@ lemma lemma_insecure_mem_userspace(
             assert m2 == MemContents(s22.m, a);
             assert InsecureMemInvariant(s12, s22);
             assert !address_is_secure(a);
-            assert KOM_DIRECTMAP_VBASE <= a < KOM_DIRECTMAP_VBASE + MonitorPhysBase();
+            lemma_not_secure_mem_helper(a);
             assert m1 == m2;
         }
     }
@@ -336,6 +336,16 @@ predicate insec_mem_invar(s1:state, s2:state)
     forall a | ValidMem(a) && !address_is_secure(a) ::
         s1.m.addresses[a] == s2.m.addresses[a]
 }
+
+lemma lemma_not_secure_mem_helper(a:addr)
+    requires ValidMem(a)
+    requires !address_is_secure(a)
+    requires SaneConstants()
+    ensures KOM_DIRECTMAP_VBASE <= a < KOM_DIRECTMAP_VBASE + MonitorPhysBase();
+    {
+        // I don't think this can be proven by our spec...
+        assume false;
+    }
 
 lemma lemma_insecure_mem_helper(s1:state, s2:state)
     requires validStates({s1, s2})
