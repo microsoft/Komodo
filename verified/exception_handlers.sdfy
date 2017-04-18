@@ -260,6 +260,62 @@ procedure svc_returning_default(
     MOV(r8, 0);
 }
 
+procedure load_attestion_key() returns (ghost key:seq(word))
+    reads
+        globals;
+    modifies 
+        mem; r2; r3; r4;
+    requires/ensures
+        SaneState(this);
+        ValidMemRange(r4, r4 + SHA_CTXSIZE * WORDSIZE);
+    ensures
+        AddrMemPreservingExcept(old(mem), mem, r4, r4 + SHA_CTXSIZE * WORDSIZE);
+        AddrMemContentsSeq(mem, r4, SHA_CTXSIZE) == key == AttestKey();
+{
+    assert ValidGlobal(AttestKeyOp()) by { reveal SaneShaGlobal; }
+    LDRglobaladdr(r2, AttestKeyOp());
+
+    LDRglobal(r3, AttestKeyOp(), r2, const(0 * WORDSIZE));
+    STR(r3, r4, const(0 * WORDSIZE));
+    LDRglobal(r3, AttestKeyOp(), r2, const(1 * WORDSIZE));
+    STR(r3, r4, const(1 * WORDSIZE));
+    LDRglobal(r3, AttestKeyOp(), r2, const(2 * WORDSIZE));
+    STR(r3, r4, const(2 * WORDSIZE));
+    LDRglobal(r3, AttestKeyOp(), r2, const(3 * WORDSIZE));
+    STR(r3, r4, const(3 * WORDSIZE));
+    LDRglobal(r3, AttestKeyOp(), r2, const(4 * WORDSIZE));
+    STR(r3, r4, const(4 * WORDSIZE));
+    LDRglobal(r3, AttestKeyOp(), r2, const(5 * WORDSIZE));
+    STR(r3, r4, const(5 * WORDSIZE));
+    LDRglobal(r3, AttestKeyOp(), r2, const(6 * WORDSIZE));
+    STR(r3, r4, const(6 * WORDSIZE));
+    LDRglobal(r3, AttestKeyOp(), r2, const(7 * WORDSIZE));
+    STR(r3, r4, const(7 * WORDSIZE));
+    //key := AttestKey();
+
+    assert WordAligned(r4);
+    WordAlignedAdd(r4, 1*WORDSIZE);
+    WordAlignedAdd(r4, 2*WORDSIZE);
+    WordAlignedAdd(r4, 3*WORDSIZE);
+    WordAlignedAdd(r4, 4*WORDSIZE);
+    WordAlignedAdd(r4, 5*WORDSIZE);
+    WordAlignedAdd(r4, 6*WORDSIZE);
+    WordAlignedAdd(r4, 7*WORDSIZE);
+
+    key := 
+        seq(AddrMemContents(mem, r4 + 0*WORDSIZE),
+            AddrMemContents(mem, r4 + 1*WORDSIZE),
+            AddrMemContents(mem, r4 + 2*WORDSIZE),
+            AddrMemContents(mem, r4 + 3*WORDSIZE),
+            AddrMemContents(mem, r4 + 4*WORDSIZE),
+            AddrMemContents(mem, r4 + 5*WORDSIZE),
+            AddrMemContents(mem, r4 + 6*WORDSIZE),
+            AddrMemContents(mem, r4 + 7*WORDSIZE));
+    lemma_package_hash_result(mem, r4, key);    // Ensures AddMemContentsSeq(mem, r4, SHA_CTXSIZE) == key
+    assert key == GlobalFullContents(this.m, AttestKeyOp());
+    assert GlobalFullContents(this.m, AttestKeyOp()) == AttestKey();
+}
+
 procedure svc_returning_attest(
     ghost exstate: state,
     ghost stack_bytes: int,
@@ -502,7 +558,7 @@ procedure svc_returning_verify_step1(
         validDispatcherPage(pagedb', dispPg);
 {
     ghost var user_words := seq(r1, r2, r3, r4, r5, r6, r7, r8);
-    pagedb' := pagedb[dispPg := pagedb[dispPg].(entry := pagedb[dispPg].entry.(verify_words := user_words))];
+    pagedb' := pagedb[dispPg := pagedb[dispPg].(entry := pagedb[dispPg].entry.(verify_measurement := user_words))];
 
     STR(r1, r10, const(DISP_CTXT_VERIFY_MEASUREMENT + 0 * WORDSIZE));
     STR(r2, r10, const(DISP_CTXT_VERIFY_MEASUREMENT + 1 * WORDSIZE));
@@ -586,8 +642,9 @@ procedure svc_returning(
     // Use r10 to grab DISP_CTXT_USER_WORDS
 
     addrspace_va_for_page_va(r10, r11, r12, dispPg, pagedb);
-
     // Use r11 to grab ADDRSPACE_HASH 
+    
+    assume false;
 
 /*
 ...
