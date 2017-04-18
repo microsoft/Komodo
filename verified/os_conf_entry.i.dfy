@@ -277,6 +277,13 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
         // same. not sure but possibly also needs to be declassified
     }
 
+    assert !retToEnclave1 && s14.conf.ex.ExSVC? ==> 
+        s14.regs[R1] == s24.regs[R1] by
+    {
+        assume false;
+        // R1 needs to be declassified exactly under the conditions above.
+    }
+
     assert os_conf_eqpdb(d14, d24) by
     {
         lemma_updateUserPages_os_conf(s14, d11, d14,
@@ -289,6 +296,7 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
         assume r1.conf.nondet == s14.conf.nondet;
         assume r2.conf.nondet == s24.conf.nondet;
     } else {
+        reveal ValidRegState();
         lemma_exceptionHandled_os_conf(
             s14, d14, rd1, r1.regs[R0], r1.regs[R1],
             s24, d24, rd2, r2.regs[R0], r2.regs[R1],
@@ -311,10 +319,13 @@ lemma lemma_exceptionHandled_os_conf(
     requires (r02, r12, rd2) == exceptionHandled(s24, d24, dispPg)
     requires s14.conf.ex == s24.conf.ex
     requires os_conf_eqpdb(d14, d24)
+    requires R1 in s14.regs && R1 in s24.regs
+    requires s14.conf.ex.ExSVC? ==> 
+        s14.regs[R1] == s24.regs[R1]
     ensures  os_conf_eqpdb(rd1, rd2)
     ensures  r01 == r02 && r11 == r12
 {
-    assume false;
+    reveal os_conf_eqpdb();
 }
     
 
