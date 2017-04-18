@@ -330,6 +330,7 @@ predicate {:opaque} validExceptionTransition(s:state, d:PageDb, s':state,
         ValidState(s) && ValidState(s') && validPageDb(d) && validPageDb(d')
 {
     ValidState(s) && ValidState(s') && validPageDb(d) && validPageDb(d')
+    && InsecureMemInvariant(s, s')
     && mode_of_state(s') == Monitor
     && (d == d' || (
         validPageNr(dispPg) && validDispatcherPage(d, dispPg)

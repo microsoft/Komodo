@@ -215,7 +215,11 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
     
     var (s13, expc1, ex1) := userspaceExecutionFn(s12, pc1);
     var (s23, expc2, ex2) := userspaceExecutionFn(s22, pc2);
-
+   
+    //-------------------------------------------------------------------------
+    // This could be a lemma, but commenting it out and assuming
+    // only shaved off about 5s
+    //-------------------------------------------------------------------------
     assert InsecureMemInvariant(s12, s22) by {
         assert InsecureMemInvariant(s11, s12);
         assert InsecureMemInvariant(s21, s22);
@@ -244,14 +248,61 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
             s22, pc2, s23, expc2, ex2);
     }
 
+    assert InsecureMemInvariant(s14, s24);
+
+    assert InsecureMemInvariant(r1, r2) by
+        { reveal validExceptionTransition(); }
+    //-------------------------------------------------------------------------
+
     assert s13.conf.nondet == s23.conf.nondet by
     {
         reveal userspaceExecutionFn();
         assert s13.conf.nondet == nondet_int(s12.conf.nondet, NONDET_GENERATOR());
         assert s23.conf.nondet == nondet_int(s22.conf.nondet, NONDET_GENERATOR());
     }
-    assume false;
+    
+    assert s14.conf.nondet == s24.conf.nondet;
+
+    assert retToEnclave1 == retToEnclave2 by {
+        assume false;
+        // same s.conf.ex (declassify) 
+        // same R0 after exceptionTakenFn (no idea...) 
+    }
+
+    assert os_conf_eqpdb(d14, d24) by
+    {
+        lemma_updateUserPages_os_conf(s14, d11, d14,
+            s24, d21, d24, dispPg);
+    }
+
+    if(retToEnclave1) {
+        assert os_conf_eqpdb(rd1, rd2);
+        assert same_ret(r1, r2);
+        assume r1.conf.nondet == s14.conf.nondet;
+        assume r2.conf.nondet == s24.conf.nondet;
+    } else {
+        assume false;
+    }
+
 }
+
+lemma lemma_updateUserPages_os_conf(
+    s14: state, d11: PageDb, d14: PageDb,
+    s24: state, d21: PageDb, d24: PageDb,
+    dispPg: PageNr)
+requires validStates({s14, s24}) && SaneConstants()
+requires validPageDbs({d11,d21,d14,d24})
+requires nonStoppedDispatcher(d11, dispPg)
+requires nonStoppedDispatcher(d21, dispPg)
+requires d14 == updateUserPagesFromState(s14, d11, dispPg)
+requires d24 == updateUserPagesFromState(s24, d21, dispPg)
+requires os_conf_eqpdb(d11, d21)
+ensures  os_conf_eqpdb(d14, d24)
+{
+    reveal updateUserPagesFromState();
+    reveal os_conf_eqpdb();
+}
+
 
 function insecureUserspaceMem(s:state, pc:word, a:addr): word
     requires ValidState(s)
