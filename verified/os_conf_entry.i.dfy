@@ -239,20 +239,9 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
     assert s12.conf.nondet == s22.conf.nondet;
 
     assert InsecureMemInvariant(s13, s23) by {
-        reveal userspaceExecutionFn();
-        forall( a | ValidMem(a) && !addrIsSecure(a) )
-            ensures MemContents(s13.m, a) == MemContents(s23.m, a)
-        {
-            var pages := WritablePagesInTable(pt1.v);
-            if( a in pages ) {
-                assert s13.m.addresses[a] == nondet_word(s12.conf.nondet, a);
-                assert s23.m.addresses[a] == nondet_word(s22.conf.nondet, a);
-            } else {
-                assert s13.m.addresses[a] == s12.m.addresses[a];
-                assert s23.m.addresses[a] == s22.m.addresses[a];
-            }
-        }
-        lemma_insecure_mem_helper(s13, s23);
+        lemma_insecure_mem_userspace(
+            s12, pc1, s13, expc1, ex1,
+            s22, pc2, s23, expc2, ex2);
     }
 
     assert s13.conf.nondet == s23.conf.nondet by
@@ -262,6 +251,82 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
         assert s23.conf.nondet == nondet_int(s22.conf.nondet, NONDET_GENERATOR());
     }
     assume false;
+}
+
+function insecureUserspaceMem(s:state, pc:word, a:addr): word
+    requires ValidState(s)
+    requires ValidMem(a) && a in TheValidAddresses()
+    requires !addrIsSecure(a)
+    requires ExtractAbsPageTable(s).Just?
+{
+    var pt := ExtractAbsPageTable(s).v;
+    var user_state := user_visible_state(s, pc, pt);
+    var pages := WritablePagesInTable(pt);
+    if( PageBase(a) in pages ) then nondet_word(s.conf.nondet, a)
+    else MemContents(s.m, a)
+}
+
+lemma lemma_userspace_insecure_addr(s:state, pc: word, s3: state, a:addr)
+    requires validStates({s, s3})
+    requires mode_of_state(s) == User
+    requires ValidMem(a) && a in TheValidAddresses()
+    requires !addrIsSecure(a)
+    requires ExtractAbsPageTable(s).Just?
+    requires userspaceExecutionFn(s, pc).0 == s3
+    ensures  MemContents(s3.m, a) == insecureUserspaceMem(s, pc, a)
+{
+    var pt := ExtractAbsPageTable(s).v;
+    var user_state := user_visible_state(s, pc, pt);
+    var pages := WritablePagesInTable(pt);
+    var newpsr := nondet_psr(s.conf.nondet, user_state, s.conf.cpsr);
+    var hv := havocPages(pages, s, user_state);
+    assert s3.m.addresses == hv by
+        { reveal userspaceExecutionFn(); }
+}
+
+lemma lemma_insecure_mem_userspace(
+    s12: state, pc1: word, s13: state, expc1: word, ex1: exception,
+    s22: state, pc2: word, s23: state, expc2: word, ex2: exception)
+    requires validStates({s12, s13, s22, s23})
+    requires SaneConstants()
+    requires InsecureMemInvariant(s12, s22)
+    requires s12.conf.nondet == s22.conf.nondet
+    requires mode_of_state(s12) == mode_of_state(s22) == User;
+    requires 
+        var pt1 := ExtractAbsPageTable(s12);
+        var pt2 := ExtractAbsPageTable(s22);
+        pt1.Just? && pt2.Just? && pt1 == pt2
+    requires userspaceExecutionFn(s12, pc1) == (s13, expc1, ex1)
+    requires userspaceExecutionFn(s22, pc2) == (s23, expc2, ex2)
+    ensures InsecureMemInvariant(s13, s23)
+{
+    reveal ValidMemState();
+    var pt := ExtractAbsPageTable(s12).v;
+    var pages := WritablePagesInTable(pt);
+
+    forall( a | ValidMem(a) && !addrIsSecure(a) )
+        ensures s13.m.addresses[a] == s23.m.addresses[a]
+    {
+        var m1 := insecureUserspaceMem(s12, pc1, a);
+        var m2 := insecureUserspaceMem(s22, pc2, a);
+        lemma_userspace_insecure_addr(s12, pc1, s13, a);
+        lemma_userspace_insecure_addr(s22, pc2, s23, a);
+        assert s13.m.addresses[a] == m1;
+        assert s23.m.addresses[a] == m2;
+        if(PageBase(a) in pages) {
+            assert m1 == nondet_word(s12.conf.nondet, a);
+            assert m2 == nondet_word(s22.conf.nondet, a);
+            assert s12.conf.nondet == s22.conf.nondet;
+        } else {
+            assert m1 == MemContents(s12.m, a);
+            assert m2 == MemContents(s22.m, a);
+            assert InsecureMemInvariant(s12, s22);
+            assert !address_is_secure(a);
+            assert KOM_DIRECTMAP_VBASE <= a < KOM_DIRECTMAP_VBASE + MonitorPhysBase();
+            assert m1 == m2;
+        }
+    }
+    lemma_insecure_mem_helper(s13, s23);
 }
 
 predicate insec_mem_invar(s1:state, s2:state)
