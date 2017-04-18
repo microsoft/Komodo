@@ -121,18 +121,13 @@ predicate os_ctrl_eq(s1: state, s2: state)
     requires ValidState(s1) && ValidState(s2)
 {
     reveal_ValidSRegState();
-    var spsr_f  := spsr(FIQ);
-    var spsr_i  := spsr(IRQ);
-    var spsr_s  := spsr(Supervisor);
-    var spsr_a  := spsr(Abort);
-    var spsr_u  := spsr(Undefined);
-    var cpsr_   := cpsr;
-    s1.sregs[spsr_f] == s2.sregs[spsr_f] &&
-    s1.sregs[spsr_i] == s2.sregs[spsr_i] &&
-    s1.sregs[spsr_s] == s2.sregs[spsr_s] &&
-    s1.sregs[spsr_a] == s2.sregs[spsr_a] &&
-    s1.sregs[spsr_u] == s2.sregs[spsr_u] &&
-    s1.sregs[cpsr_]  == s2.sregs[cpsr_]
+    forall m | m in {FIQ, IRQ, Supervisor, Abort, Undefined} ::
+        s1.sregs[spsr(m)] == s2.sregs[spsr(m)]
+    // Note: Excluded from the set of registers visible to the OS on output 
+    // since the CPSR gets trashed just after the smc call. This is an 
+    // assumption so perhaps it is better to spec the state just after the smc 
+    // call using evalMOVSPCLR, but for now this will do.
+    // s1.sregs[cpsr_]  == s2.sregs[cpsr_]
 
 }
 

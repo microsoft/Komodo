@@ -37,6 +37,30 @@ lemma lemma_maybeContents_insec_ni(s1: state, s2: state, c1: Maybe<seq<word>>,
     }
 }
 
+lemma lemma_unpack_validEnclaveExecution(s1:state, d1:PageDb,
+    rs:state, rd:PageDb, dispPg:PageNr, steps:nat)
+    returns (retToEnclave:bool, s5:state, d5:PageDb)
+    requires ValidState(s1) && validPageDb(d1) && SaneConstants()
+    requires nonStoppedDispatcher(d1, dispPg)
+    requires validEnclaveExecution(s1, d1, rs, rd, dispPg, steps)
+    ensures retToEnclave == (steps > 0)
+    ensures validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
+    ensures retToEnclave ==> ValidState(s5) && validPageDb(d5)
+    ensures retToEnclave ==> nonStoppedDispatcher(d5, dispPg)
+    ensures retToEnclave ==> validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1)
+    ensures !retToEnclave ==> rs == s5 && rd == d5
+{
+    reveal_validEnclaveExecution();
+    retToEnclave := (steps > 0);
+    s5, d5 :|
+        validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
+        && (if retToEnclave then
+            validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1)
+          else
+            rs == s5 && rd == d5);
+}
+
+
 //-----------------------------------------------------------------------------
 // Enclave Confidentiality
 //-----------------------------------------------------------------------------
@@ -117,4 +141,17 @@ predicate os_ni_reqs(s1: state, d1: PageDb, s1': state, d1': PageDb,
     SaneConstants() //&&
     // pageDbCorresponds(s1.m, d1) && pageDbCorresponds(s1'.m, d1') &&
     // pageDbCorresponds(s2.m, d2) && pageDbCorresponds(s2'.m, d2')
+}
+
+//-----------------------------------------------------------------------------
+// Random Stuff
+//-----------------------------------------------------------------------------
+predicate validStates(states:set<state>)
+{
+    forall s | s in states :: ValidState(s)
+}
+
+predicate validPageDbs(pagedbs:set<PageDb>)
+{
+    forall d | d in pagedbs :: validPageDb(d)
 }

@@ -136,7 +136,8 @@ predicate smc_enter(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb,
     reveal_ValidRegState();
     var err := smc_enter_err(pageDbIn, dispPg, false);
     if err != KOM_ERR_SUCCESS then
-        pageDbOut == pageDbIn && s'.regs[R0] == err && s'.regs[R1] == 0
+        pageDbOut == pageDbIn && s'.regs[R0] == err && s'.regs[R1] == 0 &&
+        InsecureMemInvariant(s, s')
     else
         exists s1, steps:nat :: preEntryEnter(s, s1, pageDbIn, dispPg, arg1, arg2, arg3)
             && validEnclaveExecution(s1, pageDbIn, s', pageDbOut, dispPg, steps)
@@ -150,7 +151,8 @@ predicate smc_resume(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb,
     reveal_ValidRegState();
     var err := smc_enter_err(pageDbIn, dispPg, true);
     if err != KOM_ERR_SUCCESS then
-        pageDbOut == pageDbIn && s'.regs[R0] == err && s'.regs[R1] == 0
+        pageDbOut == pageDbIn && s'.regs[R0] == err && s'.regs[R1] == 0 &&
+            InsecureMemInvariant(s, s')
     else
         exists s1, steps:nat :: preEntryResume(s, s1, pageDbIn, dispPg)
             && validEnclaveExecution(s1, pageDbIn, s', pageDbOut, dispPg, steps)
@@ -188,6 +190,7 @@ predicate preEntryEnter(s:state,s':state,d:PageDb,
     && OperandContents(s', OLR) == d[dispPage].entry.entrypoint
     && (reveal_ValidSRegState();
         s'.sregs[spsr(mode_of_state(s'))] == encode_mode(User))
+    && InsecureMemInvariant(s, s')
 }
 
 predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
@@ -210,6 +213,7 @@ predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
     && OperandContents(s', OLR) == disp.ctxt.pc
     && (reveal_ValidSRegState();
         s'.sregs[spsr(mode_of_state(s'))] == disp.ctxt.cpsr)
+    && InsecureMemInvariant(s, s')
 }
 
 predicate preEntryReturn(exs:state, s:state, retregs:SvcReturnRegs, d:PageDb, dispPg:PageNr)

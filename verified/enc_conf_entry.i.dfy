@@ -658,29 +658,6 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
     }
 }
 
-lemma lemma_unpack_validEnclaveExecution(s1:state, d1:PageDb,
-    rs:state, rd:PageDb, dispPg:PageNr, steps:nat)
-    returns (retToEnclave:bool, s5:state, d5:PageDb)
-    requires ValidState(s1) && validPageDb(d1) && SaneConstants()
-    requires nonStoppedDispatcher(d1, dispPg)
-    requires validEnclaveExecution(s1, d1, rs, rd, dispPg, steps)
-    ensures retToEnclave == (steps > 0)
-    ensures validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
-    ensures retToEnclave ==> ValidState(s5) && validPageDb(d5)
-    ensures retToEnclave ==> nonStoppedDispatcher(d5, dispPg)
-    ensures retToEnclave ==> validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1)
-    ensures !retToEnclave ==> rs == s5 && rd == d5
-{
-    reveal_validEnclaveExecution();
-    retToEnclave := (steps > 0);
-    s5, d5 :|
-        validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
-        && (if retToEnclave then
-            validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1)
-          else
-            rs == s5 && rd == d5);
-}
-
 lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                     s2: state, d2: PageDb, s2':state, d2': PageDb,
                                     dispPg: PageNr, steps1:nat, steps2:nat,

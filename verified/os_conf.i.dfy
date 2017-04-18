@@ -2,14 +2,23 @@ include "sec_prop.s.dfy"
 include "pagedb.s.dfy"
 include "entry.s.dfy"
 include "sec_prop_util.i.dfy"
+include "os_conf_entry.i.dfy"
 
 //-----------------------------------------------------------------------------
 // Confidentiality, Enclave Secrets are NI with OS
 //-----------------------------------------------------------------------------
 
+// Note: we are assuming the CPSR is trashed just after the smc call, which is 
+// true of our implementation
+predicate same_cpsr(s1:state, s2:state)
+    requires ValidState(s1) && ValidState(s2)
+{
+    reveal ValidSRegState();
+    s1.sregs[cpsr] == s2.sregs[cpsr]
+}
+
 lemma lemma_os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
-                 s2: state, d2: PageDb, s2': state, d2': PageDb,
-                 atkr: PageNr)
+                 s2: state, d2: PageDb, s2': state, d2': PageDb)
     requires os_ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2')
     // If smchandler(s1, d1) => (s1', d1')
     requires smchandler(s1, d1, s1', d1')
@@ -17,6 +26,8 @@ lemma lemma_os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     requires smchandler(s2, d2, s2', d2')
     // s.t. (s1, d1) =_{os} (s2, d2)
     requires os_conf_eq(s1, d1, s2, d2)
+    requires same_cpsr(s1, s2)
+    requires s1.conf.nondet == s2.conf.nondet
     // then (s1', d1') =_{os} (s2', d2')
     ensures os_conf_eq(s1', d1', s2', d2')
 {
@@ -24,6 +35,7 @@ lemma lemma_os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     var callno, arg1, arg2, arg3, arg4
         := s1.regs[R0], s1.regs[R1], s1.regs[R2], s1.regs[R3], s1.regs[R4];
     var e1', e2' := s1'.regs[R0], s2'.regs[R0];
+    var val1, val2 := s1'.regs[R1], s2'.regs[R1];
 
     var entry := callno == KOM_SMC_ENTER || callno == KOM_SMC_RESUME;
 
@@ -49,7 +61,7 @@ lemma lemma_os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         var c1 := maybeContentsOfPhysPage(s1, arg4);
         var c2 := maybeContentsOfPhysPage(s2, arg4);
         assert contentsOk(arg4, c1) && contentsOk(arg4, c2) by
-            { reveal_enc_conf_eqpdb(); }
+            { reveal_os_conf_eqpdb(); }
         lemma_maybeContents_insec_ni(s1, s2, c1, c2, arg4);
         assert c1 == c2;
         lemma_mapSecure_os_conf_ni(d1, d1', e1', c1, d2, d2', e2', c2,
@@ -69,10 +81,42 @@ lemma lemma_os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         lemma_integrate_reg_equiv(s1', s2');
     }
     else if(callno == KOM_SMC_ENTER){
-        assume false;
+        lemma_enter_os_conf_ni(
+            s1, d1, s1', d1',
+            s2, d2, s2', d2',
+            arg1, arg2, arg3, arg4);
+        assert os_regs_equiv(s1', s2') by {
+            assume forall m | m != User && m in {FIQ, IRQ} ::
+                s1'.regs[LR(m)] == s2'.regs[LR(m)];
+            assert most_modes_regs_equiv(s1', s2');
+            // This should be provable from entry.s
+            // assume e1' == e2' && val1 == val2;
+            lemma_integrate_reg_equiv(s1', s2');
+        }
+        assert os_ctrl_eq(s1', s2') by {
+            assume forall m | m in {FIQ, IRQ} ::
+                s1'.sregs[spsr(m)] == s2'.sregs[spsr(m)];
+            assert most_modes_ctrl_eq(s1', s2');
+        }
     }
     else if(callno == KOM_SMC_RESUME){
-        assume false;
+        lemma_resume_os_conf_ni(
+            s1, d1, s1', d1',
+            s2, d2, s2', d2',
+            arg1);
+        assert os_regs_equiv(s1', s2') by {
+            assume forall m | m != User && m in {FIQ, IRQ} ::
+                s1'.regs[LR(m)] == s2'.regs[LR(m)];
+            assert most_modes_regs_equiv(s1', s2');
+            // This should be provable from entry.s
+            assume e1' == e2' && val1 == val2;
+            lemma_integrate_reg_equiv(s1', s2');
+        }
+        assert os_ctrl_eq(s1', s2') by {
+            assume forall m | m in {FIQ, IRQ} ::
+                s1'.sregs[spsr(m)] == s2'.sregs[spsr(m)];
+            assert most_modes_ctrl_eq(s1', s2');
+        }
     }
     else if(callno == KOM_SMC_STOP){
         lemma_stop_os_conf_ni(d1, d1', e1', d2, d2', e2', arg1);
@@ -115,6 +159,46 @@ predicate non_ret_os_regs_equiv(s1: state, s2: state)
    s1.regs[SP(Undefined)]  == s2.regs[SP(Undefined)]
 }
 
+predicate most_modes_regs_equiv(s1: state, s2: state)
+    requires ValidState(s1) && ValidState(s2)
+{
+   reveal_ValidRegState();
+   reveal_ValidSRegState();
+   s1.regs[R2]  == s2.regs[R2] &&
+   s1.regs[R3]  == s2.regs[R3] &&
+   s1.regs[R4]  == s2.regs[R4] &&
+   s1.regs[R5]  == s2.regs[R5] &&
+   s1.regs[R6]  == s2.regs[R6] &&
+   s1.regs[R7]  == s2.regs[R7] &&
+   s1.regs[R8]  == s2.regs[R8] &&
+   s1.regs[R9]  == s2.regs[R9] &&
+   s1.regs[R10] == s2.regs[R10] &&
+   s1.regs[R11] == s2.regs[R11] &&
+   s1.regs[R12] == s2.regs[R12] &&
+   s1.regs[LR(User)]       == s2.regs[LR(User)] &&
+   s1.regs[LR(Supervisor)] == s2.regs[LR(Supervisor)] &&
+   s1.regs[LR(Abort)]      == s2.regs[LR(Abort)] &&
+   s1.regs[LR(Undefined)]  == s2.regs[LR(Undefined)] &&
+   s1.regs[SP(User)]       == s2.regs[SP(User)] &&
+   s1.regs[SP(FIQ)]        == s2.regs[SP(FIQ)] &&
+   s1.regs[SP(IRQ)]        == s2.regs[SP(IRQ)] &&
+   s1.regs[SP(Supervisor)] == s2.regs[SP(Supervisor)] &&
+   s1.regs[SP(Abort)]      == s2.regs[SP(Abort)] &&
+   s1.regs[SP(Undefined)]  == s2.regs[SP(Undefined)]
+}
+
+predicate most_modes_ctrl_eq(s1: state, s2: state)
+    requires ValidState(s1) && ValidState(s2)
+{
+    reveal_ValidSRegState();
+    var spsr_s  := spsr(Supervisor);
+    var spsr_a  := spsr(Abort);
+    var spsr_u  := spsr(Undefined);
+    s1.sregs[spsr_s] == s2.sregs[spsr_s] &&
+    s1.sregs[spsr_a] == s2.sregs[spsr_a] &&
+    s1.sregs[spsr_u] == s2.sregs[spsr_u]
+}
+
 predicate ret_regs_equiv(s1:state, s2:state)
     requires ValidState(s1) && ValidState(s2)
 {
@@ -144,6 +228,8 @@ lemma lemma_smchandlerInvariant_regs_ni(
     ensures  !entry ==> os_ctrl_eq(s1', s2')
     ensures  !entry ==> InsecureMemInvariant(s1', s2')
     ensures  !entry ==> non_ret_os_regs_equiv(s1', s2')
+    ensures  entry ==> most_modes_regs_equiv(s1', s2')
+    ensures  entry ==> most_modes_ctrl_eq(s1, s2')
 {
     if(!entry) {
         assert forall m | m != User ::
