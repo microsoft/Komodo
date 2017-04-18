@@ -416,6 +416,9 @@ lemma lemma_insecure_mem_userspace(
             assert m2 == MemContents(s22.m, a);
             assert InsecureMemInvariant(s12, s22);
             assert !address_is_secure(a);
+            // TODO there is probably a reveal needed for the following:
+            assume a > PhysBase(); 
+            // I'm still not sure this lemma is true...
             lemma_not_secure_mem_helper(a);
             assert m1 == m2;
         }
@@ -435,9 +438,15 @@ lemma lemma_not_secure_mem_helper(a:addr)
     requires ValidMem(a)
     requires !address_is_secure(a)
     requires SaneConstants()
+    requires a > PhysBase()
     ensures KOM_DIRECTMAP_VBASE <= a < KOM_DIRECTMAP_VBASE + MonitorPhysBase();
     {
-        // I don't think this can be proven by our spec...
+        assert (a < KOM_DIRECTMAP_VBASE + SecurePhysBase()) ||
+            (a >= KOM_DIRECTMAP_VBASE + SecurePhysBase() + KOM_SECURE_RESERVE);
+        assert MonitorPhysBase() <= SecurePhysBase();
+        assert KOM_DIRECTMAP_VBASE == PhysBase();
+        assume (a < KOM_DIRECTMAP_VBASE + SecurePhysBase());
+        assume !(MonitorPhysBase() < a < SecurePhysBase());
         assume false;
     }
 
