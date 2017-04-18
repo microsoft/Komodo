@@ -50,8 +50,9 @@ const DISP_CTXT_LR:int          := 15*WORDSIZE;
 const DISP_CTXT_SP:int          := 16*WORDSIZE;
 const DISP_CTXT_PC:int          := 17*WORDSIZE;
 const DISP_CTXT_PSR:int         := 18*WORDSIZE;
-const DISP_CTXT_USER_WORDS:int  := 19*WORDSIZE;     // Requires 8 words, hence bump for block count
-const DISP_SIZE:int             := 27*WORDSIZE;
+const DISP_CTXT_USER_WORDS:int  := 19*WORDSIZE;     // Requires 8 words, hence bump for next entry
+const DISP_CTXT_VERIFY_MEASUREMENT:int  := 27*WORDSIZE;     // Requires 8 words, hence bump for block count
+const DISP_SIZE:int             := 35*WORDSIZE;
 
 //-----------------------------------------------------------------------------
 // Page Types
@@ -207,14 +208,14 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
     && page[base + DISP_CTXT_R10] == e.ctxt.regs[R10]
     && page[base + DISP_CTXT_R11] == e.ctxt.regs[R11]
     && page[base + DISP_CTXT_R12] == e.ctxt.regs[R12])
-    && page[base + DISP_CTXT_USER_WORDS + 0*WORDSIZE] == e.verifywords[0]
-    && page[base + DISP_CTXT_USER_WORDS + 1*WORDSIZE] == e.verifywords[1]
-    && page[base + DISP_CTXT_USER_WORDS + 2*WORDSIZE] == e.verifywords[2]
-    && page[base + DISP_CTXT_USER_WORDS + 3*WORDSIZE] == e.verifywords[3]
-    && page[base + DISP_CTXT_USER_WORDS + 4*WORDSIZE] == e.verifywords[4]
-    && page[base + DISP_CTXT_USER_WORDS + 5*WORDSIZE] == e.verifywords[5]
-    && page[base + DISP_CTXT_USER_WORDS + 6*WORDSIZE] == e.verifywords[6]
-    && page[base + DISP_CTXT_USER_WORDS + 7*WORDSIZE] == e.verifywords[7]
+    && page[base + DISP_CTXT_USER_WORDS + 0*WORDSIZE] == e.verify_words[0]
+    && page[base + DISP_CTXT_USER_WORDS + 1*WORDSIZE] == e.verify_words[1]
+    && page[base + DISP_CTXT_USER_WORDS + 2*WORDSIZE] == e.verify_words[2]
+    && page[base + DISP_CTXT_USER_WORDS + 3*WORDSIZE] == e.verify_words[3]
+    && page[base + DISP_CTXT_USER_WORDS + 4*WORDSIZE] == e.verify_words[4]
+    && page[base + DISP_CTXT_USER_WORDS + 5*WORDSIZE] == e.verify_words[5]
+    && page[base + DISP_CTXT_USER_WORDS + 6*WORDSIZE] == e.verify_words[6]
+    && page[base + DISP_CTXT_USER_WORDS + 7*WORDSIZE] == e.verify_words[7]
        )
 }
 
@@ -294,7 +295,7 @@ function pageDbEntryTypeVal(e: PageDbEntry): word
     if e.PageDbEntryFree? then KOM_PAGE_FREE
     else match e.entry {
         case Addrspace(l1pt, ref, state, measurement, shatrace) => KOM_PAGE_ADDRSPACE
-        case Dispatcher(ep, entered, ctxt, verifywords) => KOM_PAGE_DISPATCHER
+        case Dispatcher(ep, entered, ctxt, verify_words, verify_measurement) => KOM_PAGE_DISPATCHER
         case L1PTable(pt) => KOM_PAGE_L1PTABLE
         case L2PTable(pt) => KOM_PAGE_L2PTABLE
         case DataPage(cont) => KOM_PAGE_DATA

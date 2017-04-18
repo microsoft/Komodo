@@ -299,11 +299,17 @@ function svcHandled(s:state, d:PageDb, dispPg:PageNr): (SvcReturnRegs, PageDb)
         // stash user-provided words in pagedb for a subsequent STEP1 call
         // (this is a cheesy workaround to avoid reading enclave memory)
         var regs := (KOM_ERR_SUCCESS, dummy, dummy, dummy, dummy, dummy, dummy, dummy, dummy);
-        var ret_pagedb := d[dispPg := d[dispPg].(entry := d[dispPg].entry.(verifywords := user_words))];
+        var ret_pagedb := d[dispPg := d[dispPg].(entry := d[dispPg].entry.(verify_words := user_words))];
         (regs, ret_pagedb)
     else if OperandContents(s, OReg(R0)) == KOM_SVC_VERIFY_STEP1 then
+        // stash user-provided words in pagedb for a subsequent STEP1 call
+        // (this is a cheesy workaround to avoid reading enclave memory)
+        var regs := (KOM_ERR_SUCCESS, dummy, dummy, dummy, dummy, dummy, dummy, dummy, dummy);
+        var ret_pagedb := d[dispPg := d[dispPg].(entry := d[dispPg].entry.(verify_measurement := user_words))];
+        (regs, ret_pagedb)
+    else if OperandContents(s, OReg(R0)) == KOM_SVC_VERIFY_STEP2 then
         // verify the attestation provided by the previous step0 call plus this
-        var message := d[dispPg].entry.verifywords + enclave_measurement + SeqRepeat(8, 0);
+        var message := d[dispPg].entry.verify_words + d[dispPg].entry.verify_measurement + SeqRepeat(8, 0);
         var hmac := HMAC_SHA256(AttestKey(), WordSeqToBytes(message));
         var ok := if user_words == hmac then 1 else 0;
         var regs := (KOM_ERR_SUCCESS, ok, dummy, dummy, dummy, dummy, dummy, dummy, dummy);

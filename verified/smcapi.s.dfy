@@ -164,6 +164,7 @@ function smc_initDispatcher(pageDbIn: PageDb, page:word, addrspacePage:word,
         (pageDbIn, KOM_ERR_INVALID_ADDRSPACE)
     else
         var initDisp := Dispatcher(entrypoint, false, initDispCtxt(),
+                                  [0, 0, 0, 0, 0, 0, 0, 0],
                                   [0, 0, 0, 0, 0, 0, 0, 0]);
         var (pagedb', err) := allocatePage(pageDbIn, page, addrspacePage, initDisp);
         if err == KOM_ERR_SUCCESS then

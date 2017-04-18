@@ -75,7 +75,7 @@ datatype PageDbEntryTyped
                 // XXX: shatrace is untrusted ghost state... shouldn't be here
                 shatrace:SHA256Trace)
     | Dispatcher(entrypoint:word, entered:bool, ctxt:DispatcherContext,
-                verifywords:seq<word>)
+                verify_words:seq<word>, verify_measurement:seq<word>)
     | L1PTable(l1pt: seq<Maybe<PageNr>>)
     | L2PTable(l2pt: seq<L2PTE>)
     | DataPage(contents: seq<word>)
@@ -111,7 +111,9 @@ predicate wellFormedPageDbEntryTyped(e: PageDbEntryTyped)
 {
     (e.L1PTable? ==> |e.l1pt| == NR_L1PTES)
     && (e.L2PTable? ==> |e.l2pt| == NR_L2PTES)
-    && (e.Dispatcher? ==> wellformedDispatcherContext(e.ctxt) && |e.verifywords| == 8)
+    && (e.Dispatcher? ==> wellformedDispatcherContext(e.ctxt) 
+                      && |e.verify_words| == 8 
+                      && |e.verify_measurement| == 8)
     && (e.DataPage? ==> |e.contents| == PAGESIZE / WORDSIZE)
     && (e.Addrspace? ==>
         |e.measurement| % SHA_BLOCKSIZE == 0

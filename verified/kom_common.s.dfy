@@ -22,6 +22,7 @@ const KOM_SVC_EXIT:int              := 0;
 const KOM_SVC_ATTEST:int            := 1;
 const KOM_SVC_VERIFY_STEP0:int      := 2;
 const KOM_SVC_VERIFY_STEP1:int      := 3;
+const KOM_SVC_VERIFY_STEP2:int      := 4;
 
 //-----------------------------------------------------------------------------
 // Errors
