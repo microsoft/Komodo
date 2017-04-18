@@ -520,6 +520,7 @@ lemma lemma_allocatePage_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
         assert valAddrPage(d1', atkr);
         assert valAddrPage(d2', atkr);
         assert valAddrPage(d1', atkr) <==> valAddrPage(d2', atkr);
+        assert (e1' == KOM_ERR_PAGEINUSE) <==> (e2' == KOM_ERR_PAGEINUSE);
        
         forall(n : PageNr)
             ensures pgInAddrSpc(d1', n, atkr) <==> pgInAddrSpc(d2', n, atkr)
@@ -540,7 +541,6 @@ lemma lemma_allocatePage_enc_conf_ni(d1: PageDb, d1': PageDb, e1':word,
          }
          forall( n : PageNr | pgInAddrSpc(d1', n, atkr)) 
              ensures d1'[n].entry == d2'[n].entry { 
-             assume (e1' == KOM_ERR_PAGEINUSE) <==> (e2' == KOM_ERR_PAGEINUSE);
              if(e1' == KOM_ERR_SUCCESS){
                 assert d1'[atkr].entry == d2'[atkr].entry;
                 assert d1'[page].entry == d2'[page].entry;
