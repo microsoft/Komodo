@@ -13,7 +13,7 @@ procedure {:timeLimitMultiplier 2} memcpy(operand dst:addr, operand src:addr,
         ValidMemRange(dst, dst + size);
         ValidMemRange(src, src + size);
         dst + size <= src || src + size <= dst;
-        dst >= StackBase() || dst + size <= StackLimit();
+        //dst >= StackBase() || dst + size <= StackLimit();
         // no writing to insecure mem
         dst >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || dst + size <= KOM_DIRECTMAP_VBASE;
     ensures

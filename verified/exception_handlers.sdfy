@@ -354,6 +354,100 @@ procedure arrange_user_regs_in_memory() returns (ghost user_words:seq(word))
     lemma_package_hash_result(mem, sp + SHA_CTXSIZE * WORDSIZE, user_words);    
 }
 
+procedure arrange_real_measurement_in_memory(
+    ghost pagedb: PageDb,
+    ghost dispPg: PageNr
+    ) returns (ghost measurement:seq(word))
+    reads
+        globals; sp; r1; r11;
+    modifies 
+        mem; r2; r3; r4;
+    requires/ensures
+        SaneState(this);
+        ValidMemRange(r1, r1 + SHA_CTXSIZE * WORDSIZE);
+    requires
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+        validDispatcherPage(pagedb, dispPg);
+        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+        nonStoppedDispatcher(pagedb, dispPg);
+
+        r11 == page_monvaddr(pagedb[dispPg].addrspace);
+//        sp <= r1 && r1 + SHA_CTXSIZE * WORDSIZE <= StackLimit();           
+//        dst + size <= src || src + size <= dst;
+        sp <= r1 && r1 + SHA_CTXSIZE * WORDSIZE <= StackBase();           
+//        dst >= StackBase() || dst + size <= StackLimit();
+        // no writing to insecure mem
+        r1 >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || r1 + SHA_CTXSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE;
+
+    ensures
+        AddrMemPreservingExcept(old(mem), mem, r1, r1 + SHA_CTXSIZE * WORDSIZE);
+        AddrMemContentsSeq(mem, r1, SHA_CTXSIZE) == measurement;
+        validAddrspacePage(pagedb, pagedb[dispPg].addrspace);
+        let addrsp_pg := pagedb[dispPg].addrspace in
+        let addrsp := pagedb[addrsp_pg].entry in
+            measurement == SHA256(WordSeqToBytes(addrsp.measurement));
+{
+    assert WordAligned(r11);
+    ghost var offset := r11 + ADDRSPACE_HASH * WORDSIZE;
+    WordAlignedAdd(r11, ADDRSPACE_HASH * WORDSIZE);
+    assert WordAligned(offset);
+    WordAlignedAdd(offset, 1*WORDSIZE);
+    WordAlignedAdd(offset, 2*WORDSIZE);
+    WordAlignedAdd(offset, 3*WORDSIZE);
+    WordAlignedAdd(offset, 4*WORDSIZE);
+    WordAlignedAdd(offset, 5*WORDSIZE);
+    WordAlignedAdd(offset, 6*WORDSIZE);
+    WordAlignedAdd(offset, 7*WORDSIZE);
+
+    measurement := 
+        seq(AddrMemContents(mem, offset + 0*WORDSIZE),
+            AddrMemContents(mem, offset + 1*WORDSIZE),
+            AddrMemContents(mem, offset + 2*WORDSIZE),
+            AddrMemContents(mem, offset + 3*WORDSIZE),
+            AddrMemContents(mem, offset + 4*WORDSIZE),
+            AddrMemContents(mem, offset + 5*WORDSIZE),
+            AddrMemContents(mem, offset + 6*WORDSIZE),
+            AddrMemContents(mem, offset + 7*WORDSIZE));
+    lemma_package_hash_result(mem, offset, measurement);    
+    assert AddrMemContentsSeq(mem, offset, SHA_CTXSIZE) == measurement;
+
+    // Arrange the enclave measurement 
+    ADD(r2, r11,const(ADDRSPACE_HASH * WORDSIZE));  // Construct a pointer to enclave measurement hash 
+    MOV(r3, const(SHA_CTXSIZE * WORDSIZE));         // Size arg to memcpy
+    memcpy(r1, r2, r3, r4);
+
+    lemma_memset_result(old(this.m), this.m, offset, r1, SHA_CTXSIZE);
+    assert AddrMemContentsSeq(mem, r1, SHA_CTXSIZE) == measurement;
+    ghost var addrsp_pg := pagedb[dispPg].addrspace;
+    assert validAddrspacePage(pagedb, addrsp_pg) by { reveal_validPageDb(); }
+    ghost var addrsp := pagedb[addrsp_pg].entry;
+
+//    ghost var addr_space_hash := seq(page[base + ADDRSPACE_HASH + 0*WORDSIZE],
+//                                    page[base + ADDRSPACE_HASH + 1*WORDSIZE],
+//                                    page[base + ADDRSPACE_HASH + 2*WORDSIZE],
+//                                    page[base + ADDRSPACE_HASH + 3*WORDSIZE],
+//                                    page[base + ADDRSPACE_HASH + 4*WORDSIZE],
+//                                    page[base + ADDRSPACE_HASH + 5*WORDSIZE],
+//                                    page[base + ADDRSPACE_HASH + 6*WORDSIZE],
+//                                    page[base + ADDRSPACE_HASH + 7*WORDSIZE]);
+
+
+    assert measurement == SHA256(WordSeqToBytes(addrsp.measurement)) by {
+        assert addrsp.state is FinalState by {
+            assume nonStoppedDispatcher(pagedb, dispPg) ==> addrsp.state is FinalState;  // TODO: Remove me!
+        }
+        assert pageDbCorresponds(this.m, pagedb) by {
+           lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
+        }
+        assert validPageNr(addrsp_pg);
+        ghost var page := extractPage(this.m, addrsp_pg);
+        assert pageContentsCorresponds(addrsp_pg, pagedb[addrsp_pg], page);
+        reveal pageContentsCorresponds;
+        assert pageDbAddrspaceCorresponds(addrsp_pg, addrsp, page);
+        reveal pageDbAddrspaceCorresponds;
+    }
+}
 
 procedure svc_returning_attest(
     ghost exstate: state,
@@ -376,6 +470,7 @@ procedure svc_returning_attest(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validDispatcherPage(pagedb, dispPg);
+        nonStoppedDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
         r0 == KOM_SVC_ATTEST;
         r10 == page_monvaddr(dispPg);
@@ -664,6 +759,7 @@ procedure svc_returning(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validDispatcherPage(pagedb, dispPg);
+        nonStoppedDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
         lr == old(lr);
