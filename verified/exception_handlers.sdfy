@@ -262,9 +262,9 @@ procedure svc_returning_default(
 
 procedure load_attestion_key() returns (ghost key:seq(word))
     reads
-        globals;
+        globals; r4;
     modifies 
-        mem; r2; r3; r4;
+        mem; r2; r3; 
     requires/ensures
         SaneState(this);
         ValidMemRange(r4, r4 + SHA_CTXSIZE * WORDSIZE);
@@ -546,7 +546,7 @@ procedure load_memory_into_regs(ghost contents:seq(word))
     LDR(r8, sp, const(7 * WORDSIZE));
 }
 
-procedure arrange_attestation_input(
+procedure{:timeLimitMultiplier 2} arrange_attestation_input(
     ghost pagedb: PageDb,
     ghost dispPg: PageNr
     ) returns (
@@ -580,6 +580,7 @@ procedure arrange_attestation_input(
             measurement == SHA256(WordSeqToBytes(addrsp.measurement));
         AddrMemContentsSeq(mem, sp + SHA_CTXSIZE * WORDSIZE, 3 * SHA_CTXSIZE) == 
             user_words + measurement + SeqRepeat(8, 0);
+        r1 == sp + 3*SHA_CTXSIZE * WORDSIZE; 
 {
     // Arrange the user words in memory after the gap for the MAC output
     user_words := arrange_user_regs_in_memory();
@@ -631,6 +632,23 @@ procedure arrange_attestation_input(
     assert {:split_here} true;
 }
 
+#verbatim
+
+lemma lemma_SaneState_implies_SaneShaGlobal(s:state)
+    requires SaneState(s);
+    ensures  SaneShaGlobal(va_get_globals(s));
+{
+    var globals := va_get_globals(s);
+    reveal_SaneShaGlobal(); 
+    assert ValidGlobalStateOpaque(globals) by {
+        reveal_ValidGlobalStateOpaque(); 
+        assert ValidGlobalState(globals) by {
+            reveal_ValidMemState();   // Which we get from ValidState
+        }
+    }
+}
+
+#endverbatim
 
 procedure svc_returning_attest(
     ghost exstate: state,
@@ -647,7 +665,7 @@ procedure svc_returning_attest(
         StackBytesRemaining(this, stack_bytes);
     requires
         ValidState(exstate) && mode_of_state(exstate) != User;
-        stack_bytes >= STACKSIZE_ATTEST;
+        stack_bytes >= STACKSIZE_ATTEST * WORDSIZE;
         isReturningSvc(exstate);
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
         validPageDb(pagedb);
@@ -658,6 +676,8 @@ procedure svc_returning_attest(
         r0 == KOM_SVC_ATTEST;
         r10 == page_monvaddr(dispPg);
         r11 == page_monvaddr(pagedb[dispPg].addrspace);
+        ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp);
+        sp - STACKSIZE_ATTEST * WORDSIZE >= KOM_DIRECTMAP_VBASE + MonitorPhysBase();
     ensures
         lr == old(lr);
         StackPreserving(old(this), this);
@@ -670,57 +690,35 @@ procedure svc_returning_attest(
     ghost var addrspace := pagedb[dispPg].addrspace;
     assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
 
-    // Need to fetch this from the addrspace
-    ghost var enclave_measurement := SHA256(WordSeqToBytes(pagedb[addrspace].entry.measurement));
-
-    ghost var user_words := seq(r1, r2, r3, r4, r5, r6, r7, r8);
-
-    // produce an attestation
-    ghost var message := user_words + enclave_measurement + SeqRepeat(8, 0);
-//    var hmac := HMAC_SHA256(AttestKey(), WordSeqToBytes(message));
-//    ((KOM_ERR_SUCCESS, hmac[0], hmac[1], hmac[2], hmac[3], hmac[4], hmac[5],
-//        hmac[6], hmac[7]), d)
-
     // Stack layout [size in words]:
     //   sp := mac_output[8] || message [8+16] || gap[1] || tmp_ptr[2*SHA_BLOCKSIZE] || key_ptr[HMAC_KEYSIZE_WORDS]
     // where 
     //   message = user_words[8] || enclave_measurement [8] || 0 [8]
     // Total stack usage == 8 + 24 + 1 + 2 * SHA_BLOCKSIZE + HMAC_KEYSIZE_WORDS
     // Plus STACKSIZE_HMAC
-    SUB(sp, sp, const(STACKSIZE_ATTEST * WORDSIZE));
+    SUB(sp, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE));
     
     // Arrange the user words in memory after the gap for the MAC output
-
-    // TODO: Call arrange_user_regs_in_memory
-
-//    STR(r1, sp, const(SHA_CTXSIZE + 0 * WORDSIZE));
-//    STR(r2, sp, const(SHA_CTXSIZE + 1 * WORDSIZE));
-//    STR(r3, sp, const(SHA_CTXSIZE + 2 * WORDSIZE));
-//    STR(r4, sp, const(SHA_CTXSIZE + 3 * WORDSIZE));
-//    STR(r5, sp, const(SHA_CTXSIZE + 4 * WORDSIZE));
-//    STR(r6, sp, const(SHA_CTXSIZE + 5 * WORDSIZE));
-//    STR(r7, sp, const(SHA_CTXSIZE + 6 * WORDSIZE));
-//    STR(r8, sp, const(SHA_CTXSIZE + 7 * WORDSIZE));
-
-    // Arrange the enclave measurement 
-    ADD(r1, sp, const(SHA_CTXSIZE + 8 * WORDSIZE)); // Construct a pointer for the next slot on the stack
-
-    // TODO: Call arrange_real_measurement_in_memory
-
-//    ADD(r2, r11,const(ADDRSPACE_HASH * WORDSIZE));  // Construct a pointer to enclave measurement hash 
-//    MOV(r3, const(SHA_CTXSIZE * WORDSIZE));         // Size arg to memcpy
-//    memcpy(r1, r2, r3, r4);
-
-    // Fill in some zeroes
-    ADD(r1, r1, const(SHA_CTXSIZE * WORDSIZE)); // Construct a pointer for the next slot on the stack
-//    MOV(r2, 0);
-//    MOV(r3, const(8 * WORDSIZE));
-//    memset(r1, r2, r3);
-    zero_pad_memory();
+    ghost var user_words;
+    ghost var measurement;
+    user_words, measurement := arrange_attestation_input(pagedb, dispPg);
+    ghost var input_mem;
+    input_mem := mem;
 
     // Arrange the key in memory
     ghost var key:seq(word);
-    // TODO: Call load_attestion_key
+    assert ValidMemRange(sp, sp + (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE);
+    lemma_ValidMemRange_offset(sp, STACKSIZE_ATTEST - STACKSIZE_HMAC, 8 + 24 + 1 + 2 * SHA_BLOCKSIZE);
+    assert STACKSIZE_ATTEST - STACKSIZE_HMAC - (8 + 24 + 1 + 2 * SHA_BLOCKSIZE) == HMAC_KEYSIZE_WORDS;
+    ADD(r4, sp, const((8 + 24 + 1 + 2 * SHA_BLOCKSIZE) * WORDSIZE)); 
+    assert ValidMemRange(r4, r4 + HMAC_KEYSIZE_WORDS * WORDSIZE);
+    key := load_attestion_key();
+
+    assert AddrMemContentsSeq(mem, sp + SHA_CTXSIZE * WORDSIZE, 3 * SHA_CTXSIZE)
+        == user_words + measurement + SeqRepeat(8, 0) by {
+        lemma_AddrMemContentsSeq_framing1(input_mem, mem, sp + SHA_CTXSIZE * WORDSIZE, 3 * SHA_CTXSIZE,
+                                          r4, r4 + SHA_CTXSIZE * WORDSIZE);
+    }
 
     // Call HMAC
     MOV(r0, sp);                                  // ctx
@@ -728,8 +726,44 @@ procedure svc_returning_attest(
     MOV(r2, 1);                                   // num_blocks == 1
     ADD(r3, sp, const(SHA_CTXSIZE * WORDSIZE));   // input_ptr
     //ADD(r4, r1, const(2*SHA_BLOCKSIZE*WORDSIZE)); // key_ptr
+    LDRglobaladdr(lr, K_SHA256s());
+
+    assert SaneShaGlobal(globals) by { lemma_SaneState_implies_SaneShaGlobal(this); }
+
+    // Prove that r1 == tmp_ptr points at a valid range of memory
+    assert r1 == old(sp) - (2 * SHA_BLOCKSIZE + HMAC_KEYSIZE_WORDS) * WORDSIZE
+              == old(sp) - STACKSIZE_ATTEST * WORDSIZE + (STACKSIZE_HMAC + 4 * SHA_CTXSIZE + 1) * WORDSIZE;
+    calc {
+        true;
+        ValidMemRange(old(sp) - STACKSIZE_ATTEST * WORDSIZE, old(sp));
+            { lemma_ValidMemRange_offset(old(sp) - STACKSIZE_ATTEST * WORDSIZE, STACKSIZE_ATTEST, 
+                                         STACKSIZE_HMAC + 4 * SHA_CTXSIZE + 1); }
+        ValidMemRange(old(sp) - STACKSIZE_ATTEST * WORDSIZE + (STACKSIZE_HMAC + 4 * SHA_CTXSIZE + 1) * WORDSIZE, old(sp));
+        ValidMemRange(old(sp) + (STACKSIZE_HMAC + 4 * SHA_CTXSIZE + 1 - STACKSIZE_ATTEST) * WORDSIZE, old(sp));
+        ValidMemRange(r1, old(sp));
+            { lemma_ValidMemRange_reduced(r1,
+                                          STACKSIZE_ATTEST - (STACKSIZE_HMAC + 4 * SHA_CTXSIZE + 1),
+                                          HMAC_KEYSIZE_WORDS); }
+        ValidMemRange(r1, r1 + 2 * SHA_BLOCKSIZE * WORDSIZE);
+    }
+
+    // Prove that there is still a valid range of memory below the stack pointer, for use by HMAC
+    calc {
+        true;
+        ValidMemRange(old(sp) - STACKSIZE_ATTEST * WORDSIZE, old(sp));
+        ValidMemRange(sp + (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE - STACKSIZE_ATTEST * WORDSIZE, 
+                      sp + (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE);
+        ValidMemRange(sp - STACKSIZE_HMAC * WORDSIZE, sp + (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE);
+            { lemma_ValidMemRange_reduced(sp - STACKSIZE_HMAC * WORDSIZE, 
+                                          STACKSIZE_ATTEST,
+                                          (STACKSIZE_ATTEST - STACKSIZE_HMAC)); }
+        ValidMemRange(sp - STACKSIZE_HMAC * WORDSIZE, sp);
+    }
+
     ghost var mac;
-    mac := hmac(key, message);
+    mac := hmac(key, user_words + measurement + SeqRepeat(8, 0));
+assume false;
+
 
     // Load the mac into registers
     load_memory_into_regs(mac);

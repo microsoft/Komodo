@@ -865,8 +865,9 @@ requires
      && isUInt32((num_blocks + 1) * (SHA_BLOCKSIZE * WORDSIZE * HMAC_KEYSIZE_WORDS))
 
      // Non-refined requirements
-     && ctx >= StackBase() 
-     && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
+// TODO: Removed these so that attest can call it.  Still need to deal with the consequences
+//     && ctx >= StackBase()    
+//     && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
      && tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() 
 
      // Anti-aliasing via direct layout of  sp, ctx, input, tmp, key
