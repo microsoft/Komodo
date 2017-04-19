@@ -5,6 +5,7 @@ include {:verbatim} "ptebits.i.dfy"
 
 include "ARMdecls.sdfy"
 include "map_secure.sdfy"
+include "sha/sha256-api.sdfy"
 
 procedure mkl2pte_insecure(
     inout operand mapping:reg,
@@ -79,6 +80,142 @@ procedure phys_page_is_insecure_ram(
     }
 }
 
+#verbatim
+const INSECURE_MEASURE_BYTES:int := SHA_BLOCKSIZE * WORDSIZE;
+#endverbatim
+
+procedure kom_smc_map_insecure_measure_zero(ghost input:seq(int))
+    requires/ensures
+        SaneState(this);
+    reads
+        globals;
+        sp;
+    modifies
+        mem; r12;
+    requires
+        SeqLength(input) == 16;
+        forall i :: 2 <= i < 16 ==> input[i] == 0;
+        ValidMemRange(sp + 2 * WORDSIZE, sp + 16 * WORDSIZE);
+    ensures
+        forall i :: ValidMem(i) && !(sp + 2 * WORDSIZE <= i <= sp + 15 * WORDSIZE) ==>
+            MemContents(this.m, i) == MemContents(old(this).m, i);
+        forall i :: 2 <= i < 16 ==>
+            ValidMem(sp + i * WORDSIZE) && AddrMemContents(mem, sp + i * WORDSIZE) == input[i];
+{
+    MOV(r12, 0);
+    STR(r12, sp, const(2 * WORDSIZE));
+    STR(r12, sp, const(3 * WORDSIZE));
+    STR(r12, sp, const(4 * WORDSIZE));
+    STR(r12, sp, const(5 * WORDSIZE));
+    STR(r12, sp, const(6 * WORDSIZE));
+    STR(r12, sp, const(7 * WORDSIZE));
+    STR(r12, sp, const(8 * WORDSIZE));
+    STR(r12, sp, const(9 * WORDSIZE));
+    STR(r12, sp, const(10 * WORDSIZE));
+    STR(r12, sp, const(11 * WORDSIZE));
+    STR(r12, sp, const(12 * WORDSIZE));
+    STR(r12, sp, const(13 * WORDSIZE));
+    STR(r12, sp, const(14 * WORDSIZE));
+    STR(r12, sp, const(15 * WORDSIZE));
+}
+
+procedure{:timeLimitMultiplier 2} kom_smc_map_insecure_measure(
+    operand as_page:reg,
+    inout operand mapping:reg,
+    ghost pagedb_in:PageDb
+    )
+    returns (ghost pagedb:PageDb)
+    requires/ensures
+        SaneState(this);
+    requires
+        StackBytesRemaining(this, INSECURE_MEASURE_BYTES + STACKSIZE_SHA_UPDATE * WORDSIZE);
+        @as_page == OReg(R1);
+        @mapping == OReg(R3);
+        wellFormedPageDb(pagedb_in);
+        validAddrspacePage(pagedb_in, as_page);
+        validPageDb(pagedb_in);
+        pageDbCorresponds(this.m, pagedb_in);
+        pagedb_in[as_page].entry.state is InitState;
+    reads
+        globals;
+    modifies
+        mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
+    ensures
+        SmcProcedureInvariant(old(this), this);
+        pagedb == updateMeasurement(pagedb_in, old(as_page), seq(KOM_SMC_MAP_INSECURE, old(mapping)), seq());
+        wellFormedPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+{
+    assume SaneShaGlobal(globals); // TODO: move to SaneMem
+
+    SUB(sp, sp, const(INSECURE_MEASURE_BYTES));
+
+    (ghost var base), (ghost var ctx), (ghost var metadata), (ghost var input), (ghost var trace_in), (ghost var e), pagedb :=
+        kom_smc_map_insecure_measure_helper1(this, as_page, mapping, pagedb_in);
+
+    page_monvaddr_impl(r0, as_page, r12);
+    assert r0 == base;
+    LDR(r12, r0, const(ADDRSPACE_HASHED_BLOCK_COUNT));
+    ADD(r12, r12, 1);
+    STR(r12, r0, const(ADDRSPACE_HASHED_BLOCK_COUNT));
+
+    ADD(r0, r0, const(ADDRSPACE_HASH));
+    assert r0 == ctx;
+
+    ghost var input_ptr := sp;
+    MOV(r1, sp);
+
+    ghost var num_blocks := 1; // Number of 64-byte blocks to process
+    MOV(r2, 1);
+
+    LDRglobaladdr(lr, K_SHA256s());
+
+    MOV(r12, const(KOM_SMC_MAP_INSECURE));
+    STR(r12, sp, const(0 * WORDSIZE));
+    STR(mapping, sp, const(1 * WORDSIZE));
+    kom_smc_map_insecure_measure_zero(input);
+
+    assert (forall j :: 0 <= j < num_blocks*SHA_BLOCKSIZE ==> AddrMemContents(mem, input_ptr + j*WORDSIZE) == input[j]);
+
+    sha256_incremental(trace_in, input);
+    exists trace_out ::
+    (
+        IsCompleteSHA256Trace(trace_out)
+     && SHA256TraceIsCorrect(trace_out)
+     && SeqLength(trace_out.M) == SeqLength(trace_in.M) + 1
+     && trace_in.M == SeqSlice(trace_out.M, 0, SeqLength(trace_in.M))  // trace_in.M is a prefix of trace_out.M
+     && (forall i {TStep(i)} :: 0 <= i < 1 
+          ==> trace_out.M[SeqLength(trace_in.M) + i] == SeqSlice(input, i*SHA_BLOCKSIZE, (i+1)*SHA_BLOCKSIZE))
+     && last(trace_out.H)[0] == AddrMemContents(mem, ctx + 0*WORDSIZE)
+     && last(trace_out.H)[1] == AddrMemContents(mem, ctx + 1*WORDSIZE)
+     && last(trace_out.H)[2] == AddrMemContents(mem, ctx + 2*WORDSIZE)
+     && last(trace_out.H)[3] == AddrMemContents(mem, ctx + 3*WORDSIZE)
+     && last(trace_out.H)[4] == AddrMemContents(mem, ctx + 4*WORDSIZE)
+     && last(trace_out.H)[5] == AddrMemContents(mem, ctx + 5*WORDSIZE)
+     && last(trace_out.H)[6] == AddrMemContents(mem, ctx + 6*WORDSIZE)
+     && last(trace_out.H)[7] == AddrMemContents(mem, ctx + 7*WORDSIZE)
+    );
+    assert trace_out.M[SeqLength(trace_in.M)] == SeqSlice(input, 0, SHA_BLOCKSIZE) by { assert TStep(0); }
+
+    ghost var p := old(as_page);
+    kom_smc_map_insecure_measure_helper2(pagedb_in, pagedb, e, e.measurement, p, metadata, input, trace_in, trace_out);
+
+    AllButOnePageOrStackPreserving(p, old(this), this);
+
+    ADD(sp, sp, const(INSECURE_MEASURE_BYTES));
+
+    assert pageDbEntryCorresponds(pagedb[p], extractPageDbEntry(this.m, p)) by
+    {
+        reveal pageDbEntryCorresponds;
+    }
+
+    assert pageContentsCorresponds(p, pagedb[p], extractPage(this.m, p)) by
+    {
+        reveal pageContentsCorresponds;
+        reveal pageDbAddrspaceCorresponds;
+    }
+}
+
 procedure kom_smc_map_insecure(
     operand as_page:reg,
     inout operand phys_page:reg,
@@ -90,6 +227,7 @@ procedure kom_smc_map_insecure(
     requires/ensures
         SaneState(this);
     requires
+        StackBytesRemaining(this, INSECURE_MEASURE_BYTES + STACKSIZE_SHA_UPDATE * WORDSIZE);
         @as_page == OReg(R1) && @phys_page == OReg(R2) && @mapping == OReg(R3)
             && @err == OReg(R0);
         @pagedb_base == OReg(R12);
@@ -99,7 +237,7 @@ procedure kom_smc_map_insecure(
     reads
         globals;
     modifies
-        mem; r0; r6; r7; r8; r9; r10; r12;
+        mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
     ensures
         SmcProcedureInvariant(old(this), this);
         tuple(pagedb,err) == smc_mapInsecure_premium(pagedb_in, old(as_page),
@@ -137,15 +275,17 @@ procedure kom_smc_map_insecure(
                     ghost var abs_mapping := wordToMapping(mapping);
                     ghost var l2pte := InsecureMapping(phys_page, 
                         abs_mapping.perm.w);
-
                     assert validL2PTE(d', as_page, l2pte);
                     forall :: wellFormedPageDb(d') { reveal_validPageDb(); }
+                    MOV(r6, mapping);
                     mkl2pte_insecure(mapping, phys_page, abs_mapping, l2pte);
+                    MOV(mapping, r6);
                     assert r10 == mkL1Pte(d'[d'[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
                     assert r10 == mkL1Pte(pagedb[pagedb[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
                     pagedb := update_l2pte(as_page, mapping, phys_page, r10, r8,
                                           r12, d', abs_mapping, l2pte);
                     assert pagedb == updateL2Pte(d', old(as_page), abs_mapping, l2pte);
+                    pagedb := kom_smc_map_insecure_measure(as_page, mapping, pagedb);
                     assert pagedb == specPageDb(specResult);
                     assert pageDbCorresponds(this.m, pagedb);
                     err := const(KOM_ERR_SUCCESS);

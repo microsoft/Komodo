@@ -403,3 +403,92 @@ ensures
   assert IsSHA256(WordSeqToBytes(input), hash);
 }
 
+procedure {:refined}{:bridge} sha256_incremental(
+    ghost trace_in:SHA256Trace,
+    ghost input:seq(word)
+    )
+requires/ensures
+    ValidAddrMemStateOpaque(mem);
+requires {:refined false}
+    !interrupts_enabled(this);
+requires
+    IsCompleteSHA256Trace(trace_in);
+    SHA256TraceIsCorrect(trace_in);
+
+    // Stack is accessible
+    sp >= STACKSIZE_SHA_UPDATE*WORDSIZE;
+    ValidMemRange(sp-STACKSIZE_SHA_UPDATE*WORDSIZE, sp);
+
+    // K table is valid
+    SaneShaGlobal(globals);
+    lr == AddressOfGlobal(K_SHA256s());
+    //ValidGlobalAddr(K_SHA256s(), lr);
+
+    let ctx := r0;
+    let input_ptr := r1;
+    let num_blocks := r2; // Number of 64-byte blocks to process
+
+     // Old H values are laid out in memory pointed at by ctx
+    ValidMemRange(ctx, ctx + SHA_CTXSIZE * WORDSIZE);
+    last(trace_in.H)[0] == AddrMemContents(mem, ctx + 0*WORDSIZE);
+    last(trace_in.H)[1] == AddrMemContents(mem, ctx + 1*WORDSIZE);
+    last(trace_in.H)[2] == AddrMemContents(mem, ctx + 2*WORDSIZE);
+    last(trace_in.H)[3] == AddrMemContents(mem, ctx + 3*WORDSIZE);
+    last(trace_in.H)[4] == AddrMemContents(mem, ctx + 4*WORDSIZE);
+    last(trace_in.H)[5] == AddrMemContents(mem, ctx + 5*WORDSIZE);
+    last(trace_in.H)[6] == AddrMemContents(mem, ctx + 6*WORDSIZE);
+    last(trace_in.H)[7] == AddrMemContents(mem, ctx + 7*WORDSIZE);
+
+     // Ghost input matches in-memory input
+    SeqLength(input) == num_blocks * SHA_BLOCKSIZE;
+    isUInt32(input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE);
+    ValidMemRange(input_ptr, input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE);
+    (forall j :: 0 <= j < num_blocks*SHA_BLOCKSIZE ==> AddrMemContents(mem, input_ptr + j*WORDSIZE) == input[j]);
+
+     // Anti-aliasing
+    (ctx + SHA_CTXSIZE*WORDSIZE < input_ptr || ctx > input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE);   // input_ptr != ctx
+    (ctx + SHA_CTXSIZE*WORDSIZE < sp - STACKSIZE_SHA_UPDATE*WORDSIZE || ctx >= sp);                             // ctx != sp
+    (input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE < sp - STACKSIZE_SHA_UPDATE*WORDSIZE || input_ptr >= sp);   // input_ptr != sp
+
+reads
+    globals;
+modifies
+    mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
+ensures
+    // Calling convention
+    r4 == old(r4);
+    r5 == old(r5);
+    r6 == old(r6);
+    r7 == old(r7);
+    r8 == old(r8);
+    r9 == old(r9);
+    r10== old(r10);
+    r11== old(r11);
+    sp == old(sp);  
+    lr == old(lr);
+
+    // Memory framing:  We only touch the stack and 8 bytes pointed to by ctx_ptr
+    AddrMemPreservingExcept2(old(mem), mem, sp - STACKSIZE_SHA_UPDATE*WORDSIZE, sp, old(r0),
+                            old(r0) + SHA_CTXSIZE * WORDSIZE);
+
+    // SHA results
+    exists trace_out:SHA256Trace ::
+    (
+        IsCompleteSHA256Trace(trace_out)
+     && SHA256TraceIsCorrect(trace_out)
+     && SeqLength(trace_out.M) == SeqLength(trace_in.M) + old(r2)
+     && trace_in.M == SeqSlice(trace_out.M, 0, SeqLength(trace_in.M))  // trace_in.M is a prefix of trace_out.M
+     && (forall i :: 0 <= i < old(r2) 
+          ==> trace_out.M[SeqLength(trace_in.M) + i] == SeqSlice(input, i*SHA_BLOCKSIZE, (i+1)*SHA_BLOCKSIZE))
+     && last(trace_out.H)[0] == AddrMemContents(mem, old(r0) + 0*WORDSIZE)
+     && last(trace_out.H)[1] == AddrMemContents(mem, old(r0) + 1*WORDSIZE)
+     && last(trace_out.H)[2] == AddrMemContents(mem, old(r0) + 2*WORDSIZE)
+     && last(trace_out.H)[3] == AddrMemContents(mem, old(r0) + 3*WORDSIZE)
+     && last(trace_out.H)[4] == AddrMemContents(mem, old(r0) + 4*WORDSIZE)
+     && last(trace_out.H)[5] == AddrMemContents(mem, old(r0) + 5*WORDSIZE)
+     && last(trace_out.H)[6] == AddrMemContents(mem, old(r0) + 6*WORDSIZE)
+     && last(trace_out.H)[7] == AddrMemContents(mem, old(r0) + 7*WORDSIZE)
+    );
+{
+    (ghost var trace_out) := sha256_block_data_order(trace_in, input);
+}

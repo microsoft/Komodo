@@ -652,3 +652,142 @@ lemma lemma_updateL2PtePreservesPageDb(d:PageDb,a:PageNr,mapping:Mapping,l2e:L2P
     assert pageDbEntriesValidRefs(d');
   
 }
+
+lemma kom_smc_map_insecure_measure_helper1(s:state, as_page:PageNr, mapping:word, pagedb_in:PageDb)
+    returns (base:addr, ctx:addr, metadata:seq<word>, input:seq<word>, trace_in:SHA256Trace, e:PageDbEntryTyped, pagedb:PageDb)
+    requires SaneState(s)
+    requires wellFormedPageDb(pagedb_in)
+    requires validAddrspacePage(pagedb_in, as_page)
+    requires validPageDb(pagedb_in)
+    requires pageDbCorresponds(s.m, pagedb_in)
+    ensures metadata == [KOM_SMC_MAP_INSECURE, mapping]
+    ensures input == metadata + [0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0]
+    ensures pagedb == updateMeasurement(pagedb_in, as_page, metadata, [])
+    ensures base == page_monvaddr(as_page)
+    ensures ctx == base + ADDRSPACE_HASH
+    ensures base + ADDRSPACE_HASHED_BLOCK_COUNT in s.m.addresses
+    ensures s.m.addresses[base + ADDRSPACE_HASHED_BLOCK_COUNT] + 1 < 0x1_0000_0000
+    ensures IsCompleteSHA256Trace(trace_in)
+    ensures SHA256TraceIsCorrect(trace_in)
+    ensures
+        forall i :: 0 <= i < 8 ==>
+            ctx + i*WORDSIZE in s.m.addresses && last(trace_in.H)[i] == s.m.addresses[ctx + i*WORDSIZE]
+    ensures as_page in pagedb_in
+    ensures pagedb_in[as_page].PageDbEntryTyped?
+    ensures e == pagedb_in[as_page].entry
+    ensures e.Addrspace?
+    ensures ConcatenateSeqs(trace_in.M) == e.measurement
+    ensures trace_in == e.shatrace
+    ensures WordsToBytes(SeqLength(e.measurement) + 16) < MaxBytesForSHA();
+{
+    metadata := [KOM_SMC_MAP_INSECURE, mapping];
+    input := metadata + [0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0];
+    var p := as_page;
+    var pe := pagedb_in[p];
+    var spe := extractPage(s.m, p);
+    assert pageContentsCorresponds(p, pe, spe);
+    e := pe.entry;
+    assert e.Addrspace?;
+    assert pageDbAddrspaceCorresponds(p, e, spe) by { reveal pageContentsCorresponds(); }
+    assert validAddrspace(pagedb_in, p) by { reveal validPageDb(); }
+
+    assume WordsToBytes(SeqLength(e.measurement) + 16) < MaxBytesForSHA(); // TODO: need an invariant about bounded growth of |e.measurement|
+    assume WordsToBytes(SeqLength(e.shatrace.M) + 1) < 0x1_0000_0000; // TODO: need an invariant about bounded growth of |e.shatrace.M|
+
+    trace_in := e.shatrace;
+    base := page_monvaddr(p);
+    ctx := base + ADDRSPACE_HASH;
+
+    assert forall i :: 0 <= i < 8 ==>
+            ctx + i*WORDSIZE in s.m.addresses && last(trace_in.H)[i] == s.m.addresses[ctx + i*WORDSIZE]
+        by { reveal pageDbAddrspaceCorresponds(); }
+
+    assert base + ADDRSPACE_HASHED_BLOCK_COUNT in s.m.addresses
+        && s.m.addresses[base + ADDRSPACE_HASHED_BLOCK_COUNT] + 1 < 0x1_0000_0000
+        by { reveal pageDbAddrspaceCorresponds(); }
+
+    pagedb := updateMeasurement(pagedb_in, as_page, metadata, []);
+}
+
+// TODO: consolidate with lemma_ConcatenateSeqs_Adds
+lemma lemma_ConcatenateSeqs_Adds'<T>(s:seq<seq<T>>, s':seq<seq<T>>)
+    ensures ConcatenateSeqs(s + s') == ConcatenateSeqs(s) + ConcatenateSeqs(s'); 
+{
+    if s == [] {
+    } else {
+        calc {
+            ConcatenateSeqs(s + s');
+            s[0] + ConcatenateSeqs((s + s')[1..]);
+                { assert (s + s')[1..] == s[1..] + s'; }
+            s[0] + ConcatenateSeqs(s[1..] + s');
+                { lemma_ConcatenateSeqs_Adds'(s[1..], s'); }
+            s[0] + ConcatenateSeqs(s[1..]) + ConcatenateSeqs(s');
+            ConcatenateSeqs(s) + ConcatenateSeqs(s'); 
+        }
+    }
+}
+
+predicate MemPreservingExceptRangeOrStack(s:state, r:state, base:int, limit:int)
+    requires ValidState(s) && ValidState(r);
+    requires limit >= base;
+{
+    forall m:addr :: ValidMem(m) && !(base <= m < limit) && !(StackLimit() < m <= StackBase())
+        ==> MemContents(s.m, m) == MemContents(r.m, m)
+}
+
+lemma AllButOnePageOrStackPreserving(n:PageNr,s:state,r:state)
+    requires SaneState(s) && SaneState(r)
+    requires MemPreservingExceptRangeOrStack(s, r, page_monvaddr(n), page_monvaddr(n) + PAGESIZE)
+    ensures forall p :: validPageNr(p) && p != n
+        ==> extractPage(s.m, p) == extractPage(r.m, p)
+{
+    forall (p, a:addr | validPageNr(p) && p != n && addrInPage(a, p))
+        ensures MemContents(s.m, a) == MemContents(r.m, a)
+        {}
+}
+
+lemma kom_smc_map_insecure_measure_helper2(pagedb_in:PageDb, pagedb:PageDb, e:PageDbEntryTyped,
+    measurement:seq<word>, as_page:PageNr, metadata:seq<word>, input:seq<word>,
+    trace_in:SHA256Trace, trace_out:SHA256Trace)
+    requires wellFormedPageDb(pagedb_in)
+    requires validAddrspacePage(pagedb_in, as_page)
+    requires validPageDb(pagedb_in)
+    requires pagedb_in[as_page].entry.state.InitState?
+    requires |measurement| % SHA_BLOCKSIZE == 0
+    requires ConcatenateSeqs(trace_in.M) == measurement;
+    requires IsCompleteSHA256Trace(trace_out)
+    requires SHA256TraceIsCorrect(trace_out)
+    requires SeqLength(trace_out.M) == SeqLength(trace_in.M) + 1
+    requires trace_in.M == SeqSlice(trace_out.M, 0, SeqLength(trace_in.M))  // trace_in.M is a prefix of trace_out.M
+    requires |metadata| == 2
+    requires input == metadata + [0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0]
+    requires trace_out.M[SeqLength(trace_in.M)] == SeqSlice(input, 0, SHA_BLOCKSIZE)
+    requires pagedb == updateMeasurement(pagedb_in, as_page, metadata, [])
+    requires as_page in pagedb_in
+    requires pagedb_in[as_page].PageDbEntryTyped?
+    requires e == pagedb_in[as_page].entry
+    requires e.Addrspace?
+    requires measurement == e.measurement
+    ensures trace_out == newShaTraceForMeasurement(measurement + input)
+    ensures pagedb[as_page].entry.shatrace == trace_out
+{
+    var padded_metadata := metadata + SeqRepeat(SHA_BLOCKSIZE - SeqLength(metadata), 0);
+    var contents := [];
+    var newmeasurement := measurement + padded_metadata + contents;
+    assert newmeasurement == measurement + input;
+    var trace_new := newShaTraceForMeasurement(newmeasurement);
+
+    assert SeqSlice(input, 0, SHA_BLOCKSIZE) == input;
+
+    assert trace_out.M == trace_in.M + [input];
+    calc
+    {
+        ConcatenateSeqs(trace_out.M);
+        ConcatenateSeqs(trace_in.M + [input]);
+            { lemma_ConcatenateSeqs_Adds'(trace_in.M, [input]); }
+        ConcatenateSeqs(trace_in.M) + ConcatenateSeqs([input]);
+        measurement + ConcatenateSeqs([input]);
+        measurement + input;
+    }
+    lemma_SHATracesAreEqual(trace_out, trace_new);
+}
