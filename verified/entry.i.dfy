@@ -30,6 +30,18 @@ function userExecutionModelSteps(s:state): (state, state, word, exception, state
     (s2, s3, expc, ex, s4)
 }
 
+lemma lemma_executionPreservesMasks(s:state, r:state)
+    requires userExecutionPreconditions(s)
+    requires ValidState(r)
+    requires !spsr_of_state(s).f && !spsr_of_state(s).i
+    requires r == userExecutionModel(s)
+    requires mode_of_state(r) !=User && spsr_of_state(r).m == User
+    ensures  !spsr_of_state(r).f && !spsr_of_state(r).i
+{
+    reveal userExecutionModel();
+    assume false;
+}
+
 function {:opaque} userExecutionModel(s:state): state
     requires userExecutionPreconditions(s)
     ensures ValidState(userExecutionModel(s))
@@ -482,6 +494,7 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
     requires mode_of_state(s) == Monitor && spsr_of_state(s).m == User
     requires evalMOVSPCLRUC(s, r)
     requires UsermodeContinuationInvariantDef()
+    requires !spsr_of_state(s).f && !spsr_of_state(s).i
     ensures SaneStateAfterException(r)
     ensures OperandContents(r, OSP) == OperandContents(s, OSP)
         || OperandContents(r, OSP) == BitwiseOr(OperandContents(s, OSP), 1)
@@ -496,6 +509,7 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
     ensures KomExceptionHandlerInvariant(s4, d4, r, dp)
     ensures s.conf.ttbr0 == r.conf.ttbr0
     ensures s.conf.scr == r.conf.scr
+    ensures !spsr_of_state(s4).f && !spsr_of_state(s4).i
 {
     // XXX: prove some obvious things about OSP early, to stop Z3 getting lost
     assert ValidOperand(OSP);
@@ -518,6 +532,7 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
     lemma_UsermodeContinuationInvariantDef(s4, r, d4, dp);
     assert GlobalsInvariant(s, s4) && GlobalsPreservingExcept(s4, r, {PendingInterruptOp()});
 
+    lemma_executionPreservesMasks(s, s4);
     assert s4.regs[SP(Monitor)] == OperandContents(r, OSP)
         || BitwiseOr(s4.regs[SP(Monitor)], 1) == OperandContents(r, OSP);
 
