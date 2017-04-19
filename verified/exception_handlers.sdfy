@@ -515,6 +515,37 @@ procedure zero_pad_memory()
     lemma_SeqRepeat8();
 }
 
+procedure load_memory_into_regs(ghost contents:seq(word))
+    reads
+        mem; sp;
+    modifies 
+         r1; r2; r3; r4; r5; r6; r7; r8; 
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidMemRange(sp, sp + SHA_CTXSIZE * WORDSIZE);
+        SeqLength(contents) == 8;
+        AddrMemContentsSeq(mem, sp, SHA_CTXSIZE) == contents;
+    ensures
+        r1 == contents[0];
+        r2 == contents[1];
+        r3 == contents[2];
+        r4 == contents[3];
+        r5 == contents[4];
+        r6 == contents[5];
+        r7 == contents[6];
+        r8 == contents[7];
+{
+    LDR(r1, sp, const(0 * WORDSIZE));
+    LDR(r2, sp, const(1 * WORDSIZE));
+    LDR(r3, sp, const(2 * WORDSIZE));
+    LDR(r4, sp, const(3 * WORDSIZE));
+    LDR(r5, sp, const(4 * WORDSIZE));
+    LDR(r6, sp, const(5 * WORDSIZE));
+    LDR(r7, sp, const(6 * WORDSIZE));
+    LDR(r8, sp, const(7 * WORDSIZE));
+}
+
 procedure svc_returning_attest(
     ghost exstate: state,
     ghost stack_bytes: int,
@@ -596,9 +627,10 @@ procedure svc_returning_attest(
 
     // Fill in some zeroes
     ADD(r1, r1, const(SHA_CTXSIZE * WORDSIZE)); // Construct a pointer for the next slot on the stack
-    MOV(r2, 0);
-    MOV(r3, const(8 * WORDSIZE));
-    memset(r1, r2, r3);
+//    MOV(r2, 0);
+//    MOV(r3, const(8 * WORDSIZE));
+//    memset(r1, r2, r3);
+    zero_pad_memory();
 
     // Arrange the key in memory
     ghost var key:seq(word);
@@ -614,15 +646,7 @@ procedure svc_returning_attest(
     mac := hmac(key, message);
 
     // Load the mac into registers
-    LDR(r1, sp, const(0 * WORDSIZE));
-    LDR(r2, sp, const(1 * WORDSIZE));
-    LDR(r3, sp, const(2 * WORDSIZE));
-    LDR(r4, sp, const(3 * WORDSIZE));
-    LDR(r5, sp, const(4 * WORDSIZE));
-    LDR(r6, sp, const(5 * WORDSIZE));
-    LDR(r7, sp, const(6 * WORDSIZE));
-    LDR(r8, sp, const(7 * WORDSIZE));
-
+    load_memory_into_regs(mac);
 
     ADD(sp, sp, const(STACKSIZE_ATTEST * WORDSIZE));
 }
