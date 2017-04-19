@@ -553,8 +553,6 @@ procedure{:timeLimitMultiplier 2} arrange_attestation_input(
     ghost user_words:seq(word),
     ghost measurement:seq(word)
     )
-
-
     reads
         globals; sp; r5; r6; r7; r8; r11;
     modifies
@@ -690,6 +688,8 @@ procedure {:timeLimitMultiplier 2} compute_hmac(
 
     ensures
         //AddrMemPreservingExcept(old(mem), mem, old_sp - STACKSIZE_ATTEST * WORDSIZE, old_sp);
+        sp == old(sp);
+
         AddrMemPreservingExcept(old(mem), mem, StackLimit(), old_sp);
         ValidMemRange(sp, sp + SHA_CTXSIZE * WORDSIZE);
         mac == AddrMemContentsSeq(mem, sp, SHA_CTXSIZE);
@@ -800,6 +800,13 @@ procedure {:timeLimitMultiplier 2} compute_hmac(
     assert {:split_here} true;
 }
 
+//#verbatim
+//function to_word(i:int) : word
+//    requires 0 <= i < 0x1_0000_0000
+//{
+//    i as word
+//}
+//#endverbatim
 
 procedure svc_returning_attest(
     ghost exstate: state,
@@ -831,8 +838,8 @@ procedure svc_returning_attest(
         //sp - STACKSIZE_ATTEST * WORDSIZE >= KOM_DIRECTMAP_VBASE + MonitorPhysBase();
     ensures
         lr == old(lr);
-        StackPreserving(old(this), this);
-        NonStackMemPreserving(old(this), this);
+//        StackPreserving(old(this), this);
+//        NonStackMemPreserving(old(this), this);
         let tuple := svcHandled(exstate, pagedb, dispPg) in
         let retRegs := firstOf2(tuple) in
         let handled_pagedb := secondOf2(tuple) in
@@ -848,11 +855,19 @@ procedure svc_returning_attest(
     // Total stack usage == 8 + 24 + 1 + 2 * SHA_BLOCKSIZE + HMAC_KEYSIZE_WORDS
     // Plus STACKSIZE_HMAC
     SUB(sp, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE));
+    assert StackBytesRemaining(this, STACKSIZE_HMAC * WORDSIZE);
+    //WordAlignedAdd(sp, (0 - 1) * (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE);
     
     // Arrange the user words in memory after the gap for the MAC output
     ghost var user_words;
     ghost var measurement;
+    ghost var pre_input_sp;
+    pre_input_sp := sp;
     user_words, measurement := arrange_attestation_input(pagedb, dispPg);
+    
+    assert pageDbCorresponds(this.m, pagedb) by {
+        lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
+    }
 
     ghost var input;
     input := user_words + measurement + SeqRepeat(8, 0);
@@ -861,12 +876,20 @@ procedure svc_returning_attest(
 //    input_mem := mem;
 //
     ghost var mac;
-    mac := compute_hmac(stack_bytes, pagedb, dispPg, input, old(sp));
+    mac := compute_hmac(STACKSIZE_HMAC * WORDSIZE, pagedb, dispPg, input, old(sp));
+
+//    ghost var retRegs;
+//    retRegs := firstOf2(svcHandled(exstate, pagedb, dispPg));
+//
+//    ghost var t:SvcReturnRegs;
+//    t := tuple(to_word(mac[0]), to_word(mac[1]), to_word(mac[2]), to_word(mac[3]), to_word(mac[4]), to_word(mac[5]), to_word(mac[6]), to_word(mac[7]));
+//    assert t == retRegs;
 
     // Load the mac into registers
     load_memory_into_regs(mac);
 
     ADD(sp, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE));
+    assert sp == old(sp);
 }
 
 procedure svc_returning_verify_step0(
