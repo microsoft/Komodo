@@ -180,6 +180,7 @@ lemma lemma_KomUserEntryPrecond_Preserved(s0:state, s2:state, r:state,
     lemma_userExecutionModel_validity(s0, s2, r);
     lemma_userExecutionPreservesPrivState(s0, r);
     lemma_userExecutionUpdatesPageDb(pagedb0, s0, r, dispPg);
+    lemma_executionPreservesMasks(s0, r);
 
     pagedb := updateUserPagesFromState(r, pagedb0, dispPg);
     assert l1pOfDispatcher(pagedb, dispPg) == l1pOfDispatcher(pagedb0, dispPg)
@@ -191,12 +192,16 @@ lemma lemma_UserExceptionStateSideEffects(s0:state, s2:state, r:state,
     requires KomUserEntryPrecondition(s0, pagedb0, dispPg)
     requires evalUserExecution(s0, s2, r)
     ensures ExceptionStateSideEffects(r) && spsr_of_state(r).m == User
+    ensures !spsr_of_state(r).f && !spsr_of_state(r).i
 {
     lemma_KomUserEntryPrecond_AbsPT(s0, pagedb0, dispPg);
     assert evalEnterUserspace(s0, s2);
     assert mode_of_state(s2) == User;
     assert s2.conf.scr == s0.conf.scr == SCRT(Secure, true, true);
     lemma_evalEnterUserspace_preservesAbsPageTable(s0, s2);
+    lemma_userExecutionModel_validity(s0, s2, r);
+    lemma_userExecutionPreservesPrivState(s0, r);
+    lemma_executionPreservesMasks(s0, r);
 
     var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s0, OLR));
     assert mode_of_state(s3) == mode_of_state(s2) == User
@@ -247,6 +252,8 @@ lemma lemma_evalHandler(s:state, r:state, pagedb:PageDb, dispPg: PageNr)
     requires KomUserEntryPrecondition(s, pagedb, dispPg) && mode_of_state(s) != User
     requires evalCode(exHandler(s.conf.ex), s, r)
     requires spsr_of_state(s).m == User // proofs about PL1 interrupts go elsewhere
+    requires !(s.conf.ex == ExIRQ || s.conf.ex == ExFIQ) ==>
+        !spsr_of_state(s).f && !spsr_of_state(s).i
     ensures KomExceptionHandlerInvariant(s, pagedb, r, dispPg)
 {
     var block := va_CCons(exHandler(s.conf.ex), va_CNil());
