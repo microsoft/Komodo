@@ -38,8 +38,36 @@ lemma lemma_executionPreservesMasks(s:state, r:state)
     requires mode_of_state(r) !=User && spsr_of_state(r).m == User
     ensures  !spsr_of_state(r).f && !spsr_of_state(r).i
 {
-    reveal userExecutionModel();
-    assume false;
+    var (s2, s3, expc, ex, s4) := userExecutionModelSteps(s);
+    assert s4 == r by { reveal_userExecutionModel(); }
+    var newmode := mode_of_exception(s.conf, ex);
+    assert !s2.conf.cpsr.f && !s2.conf.cpsr.i by
+    {
+        reveal userExecutionModel();
+    }
+    assert (s3, expc, ex) == userspaceExecutionFn(s2,
+        OperandContents(s, OLR)) by
+            { reveal userExecutionModel(); }
+    assert ex != ExFIQ && ex != ExIRQ by{
+        reveal userspaceExecutionFn();
+        var pt := ExtractAbsPageTable(s2).v;
+        var user_state := user_visible_state(s2, OperandContents(s, OLR), pt);
+        assert ex == nondet_exception(s2.conf.nondet, user_state,
+            false, false);
+    }
+    assert decode_psr(s3.sregs[cpsr]) == s2.conf.cpsr by
+        { reveal userspaceExecutionFn(); }
+    assert newmode != Monitor;
+    assert s4 == exceptionTakenFn(s3, ex, expc) by
+        { reveal userExecutionModel(); }
+    assert s4.sregs[spsr(newmode)] == s3.sregs[cpsr];
+    // var newpsr := psr_of_exception(s, e);
+    // reveal update_psr();
+    var maskfiq := ex == ExFIQ || newmode == Monitor;
+    // assert s4.sregs[spsr(mode_of_state(s4))] == update_psr(s3.sregs[cpsr], 
+    //     encode_mode(newmode), maskfiq, true); 
+    assert maskfiq == false;
+    lemma_update_psr(s3.sregs[cpsr], encode_mode(newmode), maskfiq, true);
 }
 
 function {:opaque} userExecutionModel(s:state): state
