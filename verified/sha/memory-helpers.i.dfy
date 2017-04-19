@@ -123,6 +123,17 @@ lemma lemma_AddrMemPreservingExcept3_hierarchy(m:memmap, m':memmap,
 {
 }
 
+lemma lemma_AddrMemPreservingExcept3_condensed(m:memmap, m':memmap, 
+                                               l1:nat, h1:nat, 
+                                               l2:nat, h2:nat, 
+                                               l3:nat, h3:nat)
+    requires ValidAddrMemStateOpaque(m) && ValidAddrMemStateOpaque(m');
+    requires l1 <= h1 <= l2 <= h2 <= l3 <= h3;
+    requires AddrMemPreservingExcept3(m, m', l1, h1, l2, h2, l3, h3);
+    ensures  AddrMemPreservingExcept(m, m', l1, h3);
+{
+}
+
 lemma lemma_AddrMemContentsSeq_framing1(m:memmap, m':memmap, begin_ptr:nat, count:nat, l1:nat, h1:nat)
     requires ValidAddrMemStateOpaque(m) && ValidAddrMemStateOpaque(m');
     requires l1 <= h1;

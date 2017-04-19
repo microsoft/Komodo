@@ -906,7 +906,7 @@ ensures
     //lr == old(lr);
     
     // HMAC results
-    mac == AddrMemContentsSeq(mem, r0, SHA_CTXSIZE);
+    mac == AddrMemContentsSeq(mem, old(r0), SHA_CTXSIZE);
 //    //SeqLength(WordSeqToBytes(SeqXor(key, Opad(HMAC_KEYSIZE_WORDS)) + inner_hash)) <= MaxBytesForSHA();
     mac == HMAC_SHA256(key, WordSeqToBytes(input));
 

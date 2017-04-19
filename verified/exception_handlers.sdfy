@@ -650,7 +650,7 @@ lemma lemma_SaneState_implies_SaneShaGlobal(s:state)
 
 #endverbatim
 
-procedure compute_hmac(
+procedure {:timeLimitMultiplier 2} compute_hmac(
     ghost stack_bytes: int,
     ghost pagedb: PageDb,
     ghost dispPg: PageNr,
@@ -664,15 +664,13 @@ procedure compute_hmac(
         globals;
     modifies
          r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
-         spsr_mon; mem;
+         mem;
     requires/ensures
         SaneState(this);
+        StackBytesRemaining(this, stack_bytes);
         ValidMemRange(old_sp - STACKSIZE_ATTEST * WORDSIZE, old_sp);
     requires
-        ValidState(exstate) && mode_of_state(exstate) != User;
-        stack_bytes >= STACKSIZE_ATTEST * WORDSIZE;
-        isReturningSvc(exstate);
-        CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
+        stack_bytes >= STACKSIZE_HMAC * WORDSIZE;
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validDispatcherPage(pagedb, dispPg);
@@ -682,9 +680,20 @@ procedure compute_hmac(
         r10 == page_monvaddr(dispPg);
         r11 == page_monvaddr(pagedb[dispPg].addrspace);
 
+        ValidMemRange(sp + SHA_CTXSIZE, sp + 4 * SHA_CTXSIZE * WORDSIZE);
         input == AddrMemContentsSeq(mem, sp + SHA_CTXSIZE * WORDSIZE, 3 * SHA_CTXSIZE);
         r1 == sp + 3*SHA_CTXSIZE * WORDSIZE; 
-    //ensures
+        sp == old_sp - (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE;
+     
+        sp + (4 * SHA_CTXSIZE + 1) * WORDSIZE >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() 
+     || sp + (4 * SHA_CTXSIZE + 1) * WORDSIZE + 2*SHA_BLOCKSIZE*WORDSIZE <= KOM_DIRECTMAP_VBASE;
+
+    ensures
+        //AddrMemPreservingExcept(old(mem), mem, old_sp - STACKSIZE_ATTEST * WORDSIZE, old_sp);
+        AddrMemPreservingExcept(old(mem), mem, StackLimit(), old_sp);
+        ValidMemRange(sp, sp + SHA_CTXSIZE * WORDSIZE);
+        mac == AddrMemContentsSeq(mem, sp, SHA_CTXSIZE);
+        mac == HMAC_SHA256(AttestKey(), WordSeqToBytes(input));
 {
     ghost var addrspace := pagedb[dispPg].addrspace;
     assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
@@ -696,22 +705,23 @@ procedure compute_hmac(
     // Total stack usage == 8 + 24 + 1 + 2 * SHA_BLOCKSIZE + HMAC_KEYSIZE_WORDS
 
     // Prove that this procedure's local stack region is valid
-    ghost var STACK_LOCAL := 4 * SHA_CTXSIZE + 1 + 2 * SHA_BLOCKSIZE + HMAC_KEYSIZE_WORDS;
+    ghost var STACKSIZE_LOCAL := 4 * SHA_CTXSIZE + 1 + 2 * SHA_BLOCKSIZE + HMAC_KEYSIZE_WORDS;
     calc {
         true; 
         ValidMemRange(old_sp - STACKSIZE_ATTEST * WORDSIZE, old_sp);
             { lemma_ValidMemRange_offset(old_sp - STACKSIZE_ATTEST * WORDSIZE, STACKSIZE_ATTEST, STACKSIZE_ATTEST - STACKSIZE_HMAC); }
         ValidMemRange(old_sp - (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE, old_sp);
-        ValidMemRange(sp, sp + STACK_LOCAL * WORDSIZE);
+        ValidMemRange(sp, sp + STACKSIZE_LOCAL * WORDSIZE);
     }
-assume false;
 
     // Arrange the key in memory
     ghost var key:seq(word);
-    lemma_ValidMemRange_offset(sp, STACK_LOCAL, 4 * SHA_CTXSIZE + 1 + 2 * SHA_BLOCKSIZE);
+    lemma_ValidMemRange_offset(sp, STACKSIZE_LOCAL, 4 * SHA_CTXSIZE + 1 + 2 * SHA_BLOCKSIZE);
     ADD(r4, sp, const((4 * SHA_CTXSIZE + 1 + 2 * SHA_BLOCKSIZE) * WORDSIZE)); 
     assert ValidMemRange(r4, r4 + HMAC_KEYSIZE_WORDS * WORDSIZE);
     key := load_attestion_key();
+    ghost var key_mem;
+    key_mem := mem;
 
     assert AddrMemContentsSeq(mem, sp + SHA_CTXSIZE * WORDSIZE, 3 * SHA_CTXSIZE)
         == input by {
@@ -727,17 +737,20 @@ assume false;
     //ADD(r4, r1, const(2*SHA_BLOCKSIZE*WORDSIZE)); // key_ptr
     LDRglobaladdr(lr, K_SHA256s());
 
+    ghost var pre_hmac_r1;
+    pre_hmac_r1 := r1;
+
     assert SaneShaGlobal(globals) by { lemma_SaneState_implies_SaneShaGlobal(this); }
 
     // Prove that r1 == tmp_ptr points at a valid range of memory
     assert r1 == sp + (4 * SHA_CTXSIZE + 1) * WORDSIZE;
     calc {
         true;
-        ValidMemRange(sp, sp + STACK_LOCAL * WORDSIZE);
-            { lemma_ValidMemRange_offset(sp, STACK_LOCAL,
+        ValidMemRange(sp, sp + STACKSIZE_LOCAL * WORDSIZE);
+            { lemma_ValidMemRange_offset(sp, STACKSIZE_LOCAL,
                                          4 * SHA_CTXSIZE + 1); }
-        ValidMemRange(sp + (4 * SHA_CTXSIZE + 1) * WORDSIZE, sp + STACK_LOCAL * WORDSIZE);
-        ValidMemRange(r1, sp + STACK_LOCAL * WORDSIZE);
+        ValidMemRange(sp + (4 * SHA_CTXSIZE + 1) * WORDSIZE, sp + STACKSIZE_LOCAL * WORDSIZE);
+        ValidMemRange(r1, sp + STACKSIZE_LOCAL * WORDSIZE);
             { lemma_ValidMemRange_reduced(r1,
                                           STACKSIZE_LOCAL - (4 * SHA_CTXSIZE + 1),
                                           HMAC_KEYSIZE_WORDS); }
@@ -758,6 +771,33 @@ assume false;
     }
 
     mac := hmac(key, input);
+    assert mac == AddrMemContentsSeq(mem, sp, SHA_CTXSIZE);
+    assert mac == HMAC_SHA256(AttestKey(), WordSeqToBytes(input));
+
+    // Prove memory preservation
+    calc {
+        true;
+        AddrMemPreservingExcept3(key_mem, mem,
+                                 StackLimit(), sp,
+                                 sp, sp + SHA_CTXSIZE * WORDSIZE,
+                                 pre_hmac_r1, pre_hmac_r1 + 2 * SHA_BLOCKSIZE * WORDSIZE);
+            { assert pre_hmac_r1 == sp + (4*SHA_CTXSIZE + 1) * WORDSIZE; }
+        AddrMemPreservingExcept3(key_mem, mem,
+                                 StackLimit(), sp,
+                                 sp, sp + SHA_CTXSIZE * WORDSIZE,
+                                 sp + (4*SHA_CTXSIZE + 1) * WORDSIZE, 
+                                 sp + (4*SHA_CTXSIZE + 1 + 2 * SHA_BLOCKSIZE) * WORDSIZE); 
+            { 
+                lemma_AddrMemPreservingExcept3_condensed(key_mem, mem,
+                                 StackLimit(), sp,
+                                 sp, sp + SHA_CTXSIZE * WORDSIZE,
+                                 sp + (4*SHA_CTXSIZE + 1) * WORDSIZE, 
+                                 sp + (4*SHA_CTXSIZE + 1 + 2 * SHA_BLOCKSIZE) * WORDSIZE); 
+            }
+        AddrMemPreservingExcept(key_mem, mem, StackLimit(), sp + (4*SHA_CTXSIZE + 1 + 2 * SHA_BLOCKSIZE) * WORDSIZE);
+        AddrMemPreservingExcept(key_mem, mem, StackLimit(), old_sp);
+    }
+    assert {:split_here} true;
 }
 
 
