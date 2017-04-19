@@ -638,11 +638,24 @@ procedure pre_entry_enter(
         assert BitAnd(0x10, 0x1f) == 0x10 by { reveal BitAnd; }
         lemma_WordBitEquiv(0x10, 0x10);
     }
+    assert BitwiseAnd(0x10, ARM_PSR_FIQ) == 0x00 by {
+        assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
+            by { reveal WordAsBits; }
+        assert BitAnd(0x10, 0x40) == 0x00 by { reveal BitAnd; }
+        lemma_WordBitEquiv(0x00, 0x00);
+    }
+    assert BitwiseAnd(0x10, ARM_PSR_IRQ) == 0x00 by {
+        assert WordAsBits(0x10) == 0x10 && WordAsBits(0x80) == 0x80
+            by { reveal WordAsBits; }
+        assert BitAnd(0x10, 0x80) == 0x00 by { reveal BitAnd; }
+        lemma_WordBitEquiv(0x00, 0x00);
+    }
     assert decode_mode(psr_mask_mode(r10)) == User;
     assert ValidModeChange'(this, User);
     assert ValidModeChange(this, r10);
     MSR(spsr_mon, r10);
     assert spsr_of_state(this).m == User;
+    assert !spsr_of_state(this).i && !spsr_of_state(this).f;
     //-------------------------------------------------------------------------
 
     //-------------------------------------------------------------------------
@@ -896,7 +909,7 @@ procedure {:frame false} enclaveexecution_loop(
             if retToEnclave then sp == old(sp) else sp == BitwiseOr(old(sp), 1);
             partialEnclaveExecution(states, dispPg, steps);
             states[0] == tuple(old(this), pagedb_in);
-            retToEnclave ==> !spsr_of_state(this).f && !spsr_of_state(this).i;
+            //retToEnclave ==> !spsr_of_state(this).f && !spsr_of_state(this).i;
             if retToEnclave then states[steps] == tuple(loop1, pagedb)
                 else validEnclaveExecution(old(this), pagedb_in, loop1, pagedb, dispPg, steps);
             equivStates(loop1, this);

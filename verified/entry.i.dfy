@@ -140,6 +140,7 @@ predicate SaneStateAfterException(s:state)
     && SaneMem(s.m)
     && mode_of_state(s) == Monitor
     && !interrupts_enabled(s)
+    && !spsr_of_state(s).f && !spsr_of_state(s).i
 }
 
 // what do we know between the start and end of the exception handler
