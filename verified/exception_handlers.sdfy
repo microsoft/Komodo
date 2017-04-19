@@ -318,7 +318,7 @@ procedure load_attestion_key() returns (ghost key:seq(word))
 
 procedure arrange_user_regs_in_memory() returns (ghost user_words:seq(word))
     reads
-        globals; sp; r1; r2; r3; r4; r5; r6; r7; r8;
+        sp; r1; r2; r3; r4; r5; r6; r7; r8;
     modifies 
         mem; 
     requires/ensures
@@ -545,6 +545,45 @@ procedure load_memory_into_regs(ghost contents:seq(word))
     LDR(r7, sp, const(6 * WORDSIZE));
     LDR(r8, sp, const(7 * WORDSIZE));
 }
+
+procedure arrange_attestation_input(
+    ghost pagedb: PageDb,
+    ghost dispPg: PageNr)
+    reads
+        globals; sp; r5; r6; r7; r8; r11;
+    modifies
+        mem; r1; r2; r3; r4;
+    requires/ensures
+        SaneState(this);
+    requires
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+        validDispatcherPage(pagedb, dispPg);
+        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+        nonStoppedDispatcher(pagedb, dispPg);
+
+        r11 == page_monvaddr(pagedb[dispPg].addrspace);
+        StackLimit() <= sp && sp + (SHA_CTXSIZE + 3 * SHA_CTXSIZE) * WORDSIZE <= StackBase();           
+
+        ValidMemRange(sp + SHA_CTXSIZE * WORDSIZE, sp + (SHA_CTXSIZE + 3 * SHA_CTXSIZE) * WORDSIZE);
+{
+    // Arrange the user words in memory after the gap for the MAC output
+    ghost var user_words;
+    user_words := arrange_user_regs_in_memory();
+
+    lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
+
+    // Arrange the enclave measurement 
+    ADD(r1, sp, const((SHA_CTXSIZE + 8) * WORDSIZE)); // Construct a pointer for the next slot on the stack
+
+    ghost var measurement;
+    measurement := arrange_real_measurement_in_memory(pagedb, dispPg);
+
+    // Fill in some zeroes
+    ADD(r1, r1, const(SHA_CTXSIZE * WORDSIZE)); // Construct a pointer for the next slot on the stack
+    zero_pad_memory();
+}
+
 
 procedure svc_returning_attest(
     ghost exstate: state,
