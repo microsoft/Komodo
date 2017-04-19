@@ -211,6 +211,7 @@ lemma lemma_UsermodeContinuationInvariantDef(s:state, r:state, d:PageDb, dp:Page
 
 lemma lemma_exceptionHandled_validPageDb(s:state, d:PageDb, dispPg:PageNr)
     requires ValidState(s) && mode_of_state(s) != User && spsr_of_state(s).m == User
+    requires !spsr_of_state(s).f && !spsr_of_state(s).i
     requires validPageDb(d) && validDispatcherPage(d, dispPg)
     ensures validPageDb(exceptionHandled(s, d, dispPg).2)
 {
@@ -225,6 +226,8 @@ lemma lemma_exceptionHandled_validPageDb(s:state, d:PageDb, dispPg:PageNr)
         assert dc.cpsr == s.sregs[spsr(mode_of_state(s))];
         assert spsr_of_state(s).m == decode_psr(s.sregs[spsr(mode_of_state(s))]).m;
         assert decode_mode'(psr_mask_mode(dc.cpsr)) == Just(User);
+        assert psr_mask_fiq(dc.cpsr) == 0;
+        assert psr_mask_irq(dc.cpsr) == 0;
         assert validDispatcherContext(dc);
     }
     assert validPageDbEntry(d', dispPg);
@@ -579,6 +582,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     requires s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(sd, dispPg))
     requires evalMOVSPCLRUC(takestep(s), r)
     requires UsermodeContinuationInvariantDef()
+    requires !spsr_of_state(s).f && !spsr_of_state(s).i
     ensures SaneStateAfterException(r)
     ensures ParentStackPreserving(s, r)
     ensures GlobalsPreservingExcept(s, r, {PendingInterruptOp()})
@@ -596,6 +600,8 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
 
     var ssp, rsp := OperandContents(s, OSP), OperandContents(r, OSP);
     assert rsp == r.regs[SP(Monitor)];
+
+    assert !spsr_of_state(s4).f && !spsr_of_state(s4).i;
 
     retToEnclave := isReturningSvc(s4);
     if retToEnclave {

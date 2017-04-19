@@ -257,12 +257,14 @@ predicate userspaceExecutionAndException'(s:state, s1:state, s2:state, r:state)
     && (var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
     evalExceptionTaken(s3, ex, expc, r))
     && mode_of_state(r) != User // known, but we need a lemma to prove it
+    //&& !spsr_of_state(r).f && !spsr_of_state(r).i
 }
 
 predicate {:opaque} userspaceExecutionAndException(s:state, r:state)
     requires ValidState(s)
     ensures userspaceExecutionAndException(s, r)
         ==> ValidState(r) && mode_of_state(r) != User
+
 {
     exists s1, s2 :: userspaceExecutionAndException'(s, s1, s2, r)
 }

@@ -834,6 +834,8 @@ procedure pre_entry_resume(
     }
 
     assert decode_mode'(psr_mask_mode(pagedb[dispPg].entry.ctxt.cpsr)) == Just(User);
+    assert psr_mask_fiq(dc.cpsr) == 0;
+    assert psr_mask_irq(dc.cpsr) == 0;
     MSR(spsr_mon, r0);
     assert this.sregs[spsr(Monitor)] == pagedb[dispPg].entry.ctxt.cpsr;
     assert spsr_of_state(this).m == User;
