@@ -389,8 +389,8 @@ procedure arrange_real_measurement_in_memory(
             measurement == SHA256(WordSeqToBytes(addrsp.measurement));
 {
     assert WordAligned(r11);
-    ghost var offset := r11 + ADDRSPACE_HASH * WORDSIZE;
-    WordAlignedAdd(r11, ADDRSPACE_HASH * WORDSIZE);
+    ghost var offset := r11 + ADDRSPACE_HASH;
+    WordAlignedAdd(r11, ADDRSPACE_HASH);
     assert WordAligned(offset);
     WordAlignedAdd(offset, 1*WORDSIZE);
     WordAlignedAdd(offset, 2*WORDSIZE);
@@ -413,7 +413,7 @@ procedure arrange_real_measurement_in_memory(
     assert AddrMemContentsSeq(mem, offset, SHA_CTXSIZE) == measurement;
 
     // Arrange the enclave measurement 
-    ADD(r2, r11,const(ADDRSPACE_HASH * WORDSIZE));  // Construct a pointer to enclave measurement hash 
+    ADD(r2, r11, const(ADDRSPACE_HASH));  // Construct a pointer to enclave measurement hash 
     MOV(r3, const(SHA_CTXSIZE * WORDSIZE));         // Size arg to memcpy
     memcpy(r1, r2, r3, r4);
 
@@ -422,16 +422,6 @@ procedure arrange_real_measurement_in_memory(
     ghost var addrsp_pg := pagedb[dispPg].addrspace;
     assert validAddrspacePage(pagedb, addrsp_pg) by { reveal_validPageDb(); }
     ghost var addrsp := pagedb[addrsp_pg].entry;
-
-//    ghost var addr_space_hash := seq(page[base + ADDRSPACE_HASH + 0*WORDSIZE],
-//                                    page[base + ADDRSPACE_HASH + 1*WORDSIZE],
-//                                    page[base + ADDRSPACE_HASH + 2*WORDSIZE],
-//                                    page[base + ADDRSPACE_HASH + 3*WORDSIZE],
-//                                    page[base + ADDRSPACE_HASH + 4*WORDSIZE],
-//                                    page[base + ADDRSPACE_HASH + 5*WORDSIZE],
-//                                    page[base + ADDRSPACE_HASH + 6*WORDSIZE],
-//                                    page[base + ADDRSPACE_HASH + 7*WORDSIZE]);
-
 
     assert measurement == SHA256(WordSeqToBytes(addrsp.measurement)) by {
         assert addrsp.state is FinalState by {
@@ -446,6 +436,45 @@ procedure arrange_real_measurement_in_memory(
         reveal pageContentsCorresponds;
         assert pageDbAddrspaceCorresponds(addrsp_pg, addrsp, page);
         reveal pageDbAddrspaceCorresponds;
+
+
+        ghost var base := page_monvaddr(addrsp_pg);
+        assert base == r11;
+        assert memContainsPage(page, addrsp_pg);
+        assert page?[base]; 
+
+        calc {
+          base;
+          page_paddr(addrsp_pg) + KOM_DIRECTMAP_VBASE;
+        <
+          SecurePhysBase() + KOM_SECURE_RESERVE + KOM_DIRECTMAP_VBASE;
+        <=
+          KOM_PHYSMEM_LIMIT - KOM_SECURE_RESERVE + KOM_SECURE_RESERVE + KOM_DIRECTMAP_VBASE;
+          KOM_PHYSMEM_LIMIT + KOM_DIRECTMAP_VBASE;
+          0x4000_0000 + 0x8000_0000;
+          0xc000_0000;
+        }
+        
+        assert WordAligned(base + ADDRSPACE_HASH + 0 * WORDSIZE); 
+        assert addrInPage(base + ADDRSPACE_HASH + 0*WORDSIZE, addrsp_pg);       // OBSERVE
+        assert addrInPage(base + ADDRSPACE_HASH + 1*WORDSIZE, addrsp_pg);       // OBSERVE
+        assert addrInPage(base + ADDRSPACE_HASH + 2*WORDSIZE, addrsp_pg);       // OBSERVE
+        assert addrInPage(base + ADDRSPACE_HASH + 3*WORDSIZE, addrsp_pg);       // OBSERVE
+        assert addrInPage(base + ADDRSPACE_HASH + 4*WORDSIZE, addrsp_pg);       // OBSERVE
+        assert addrInPage(base + ADDRSPACE_HASH + 5*WORDSIZE, addrsp_pg);       // OBSERVE
+        assert addrInPage(base + ADDRSPACE_HASH + 6*WORDSIZE, addrsp_pg);       // OBSERVE
+        assert addrInPage(base + ADDRSPACE_HASH + 7*WORDSIZE, addrsp_pg);       // OBSERVE
+
+        ghost var addr_space_hash := seq(page[base + ADDRSPACE_HASH + 0*WORDSIZE],
+                                         page[base + ADDRSPACE_HASH + 1*WORDSIZE],
+                                         page[base + ADDRSPACE_HASH + 2*WORDSIZE],
+                                         page[base + ADDRSPACE_HASH + 3*WORDSIZE],
+                                         page[base + ADDRSPACE_HASH + 4*WORDSIZE],
+                                         page[base + ADDRSPACE_HASH + 5*WORDSIZE],
+                                         page[base + ADDRSPACE_HASH + 6*WORDSIZE],
+                                         page[base + ADDRSPACE_HASH + 7*WORDSIZE]);
+        assert addr_space_hash == SHA256(WordSeqToBytes(addrsp.measurement));
+        assert addr_space_hash == measurement;
     }
 }
 
@@ -535,7 +564,7 @@ procedure svc_returning_attest(
     memset(r1, r2, r3);
 
     // Arrange the key in memory
-
+    ghost var key:seq(word);
     // TODO: Call load_attestion_key
 
     // Call HMAC
