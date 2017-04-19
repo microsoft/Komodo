@@ -678,7 +678,7 @@ procedure {:timeLimitMultiplier 2} compute_hmac(
         r10 == page_monvaddr(dispPg);
         r11 == page_monvaddr(pagedb[dispPg].addrspace);
 
-        ValidMemRange(sp + SHA_CTXSIZE, sp + 4 * SHA_CTXSIZE * WORDSIZE);
+        ValidMemRange(sp + SHA_CTXSIZE * WORDSIZE, sp + 4 * SHA_CTXSIZE * WORDSIZE);
         input == AddrMemContentsSeq(mem, sp + SHA_CTXSIZE * WORDSIZE, 3 * SHA_CTXSIZE);
         r1 == sp + 3*SHA_CTXSIZE * WORDSIZE; 
         sp == old_sp - (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE;
@@ -808,6 +808,147 @@ procedure {:timeLimitMultiplier 2} compute_hmac(
 //}
 //#endverbatim
 
+procedure svc_returning_attest_inner(
+    ghost exstate: state,
+    ghost stack_bytes: int,
+    ghost pagedb: PageDb,
+    ghost dispPg: PageNr)
+    returns (
+    ghost mac_ptr:word,
+    ghost spec_user_words:seq(word),
+    ghost spec_enclave_measurement:seq(word),
+    ghost mac:seq(word)
+    )
+
+    reads
+        globals;
+    modifies
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
+         mem;
+    requires/ensures
+        SaneState(this);
+        StackBytesRemaining(this, stack_bytes);
+    requires
+        ValidState(exstate) && mode_of_state(exstate) != User;
+        stack_bytes >= STACKSIZE_ATTEST * WORDSIZE;
+        isReturningSvc(exstate);
+        CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+        validDispatcherPage(pagedb, dispPg);
+        nonStoppedDispatcher(pagedb, dispPg);
+        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+        r0 == KOM_SVC_ATTEST;
+        r10 == page_monvaddr(dispPg);
+        r11 == page_monvaddr(pagedb[dispPg].addrspace);
+        ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp);
+    ensures
+        // Framing
+        StackPreserving(old(this), this);
+        NonStackMemPreserving(old(this), this);
+        sp == old(sp);
+
+        // Results
+        spec_user_words == seq(exstate.regs[R1], exstate.regs[R2], exstate.regs[R3], exstate.regs[R4],
+                               exstate.regs[R5], exstate.regs[R6], exstate.regs[R7], exstate.regs[R8]);
+        validAddrspacePage(pagedb, pagedb[dispPg].addrspace);
+        spec_enclave_measurement == SHA256(WordSeqToBytes(pagedb[pagedb[dispPg].addrspace].entry.measurement));
+
+        mac_ptr == sp - (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE;
+        ValidMemRange(mac_ptr, mac_ptr + SHA_CTXSIZE * WORDSIZE);
+        mac == AddrMemContentsSeq(mem, mac_ptr, SHA_CTXSIZE);
+        mac == HMAC_SHA256(AttestKey(), WordSeqToBytes(spec_user_words + spec_enclave_measurement + SeqRepeat(8, 0)));
+{
+    ghost var addrspace := pagedb[dispPg].addrspace;
+    assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
+    spec_enclave_measurement := SHA256(WordSeqToBytes(pagedb[addrspace].entry.measurement));
+    ghost var real_user_words := seq(r1, r2, r3, r4, r5, r6, r7, r8);
+    // Giant OBSERVE to trigger CoreRegPreservingExcept
+    ghost var helper_user_words := seq(OperandContents(this, OReg(R1)), 
+                                       OperandContents(this, OReg(R2)), 
+                                       OperandContents(this, OReg(R3)), 
+                                       OperandContents(this, OReg(R4)), 
+                                       OperandContents(this, OReg(R5)), 
+                                       OperandContents(this, OReg(R6)), 
+                                       OperandContents(this, OReg(R7)), 
+                                       OperandContents(this, OReg(R8)));
+    spec_user_words := seq(exstate.regs[R1], exstate.regs[R2], exstate.regs[R3], exstate.regs[R4],
+                           exstate.regs[R5], exstate.regs[R6], exstate.regs[R7], exstate.regs[R8]);
+    assert real_user_words == helper_user_words == spec_user_words;
+
+    // Stack layout [size in words]:
+    //   sp := mac_output[8] || message [8+16] || gap[1] || tmp_ptr[2*SHA_BLOCKSIZE] || key_ptr[HMAC_KEYSIZE_WORDS]
+    // where 
+    //   message = user_words[8] || enclave_measurement [8] || 0 [8]
+    // Total stack usage == 8 + 24 + 1 + 2 * SHA_BLOCKSIZE + HMAC_KEYSIZE_WORDS
+    // Plus STACKSIZE_HMAC
+    SUB(sp, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE));
+    assert StackBytesRemaining(this, STACKSIZE_HMAC * WORDSIZE);
+    //WordAlignedAdd(sp, (0 - 1) * (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE);
+    
+    // Arrange the user words in memory after the gap for the MAC output
+    ghost var user_words;
+    ghost var measurement;
+    ghost var pre_input_sp;
+    pre_input_sp := sp;
+    user_words, measurement := arrange_attestation_input(pagedb, dispPg);
+
+    assert spec_user_words == user_words;
+    assert spec_enclave_measurement == measurement;
+    
+    assert pageDbCorresponds(this.m, pagedb) by {
+        lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
+    }
+
+    ghost var input;
+    input := user_words + measurement + SeqRepeat(8, 0);
+
+    ghost var spec_message;
+    spec_message := spec_user_words + spec_enclave_measurement + SeqRepeat(8, 0);
+    assert spec_message == input;
+
+    ghost var spec_hmac;
+    spec_hmac := HMAC_SHA256(AttestKey(), WordSeqToBytes(spec_message));
+
+
+    calc {
+        old(sp) - (sp + SHA_CTXSIZE * WORDSIZE);
+        old(sp) - (old(sp) - (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE  + SHA_CTXSIZE * WORDSIZE);
+        (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE - SHA_CTXSIZE * WORDSIZE;
+        (STACKSIZE_ATTEST - STACKSIZE_HMAC - SHA_CTXSIZE) * WORDSIZE;
+    }
+
+    // Prove stack memory is valid
+    ghost var STACKSIZE_LOCAL := STACKSIZE_ATTEST - STACKSIZE_HMAC;
+    ghost var size := STACKSIZE_ATTEST - STACKSIZE_HMAC - SHA_CTXSIZE;
+    calc {
+        true;
+        ValidMemRange(old(sp) - STACKSIZE_ATTEST * WORDSIZE, old(sp));
+            { lemma_ValidMemRange_offset(old(sp) - STACKSIZE_ATTEST * WORDSIZE, STACKSIZE_ATTEST, STACKSIZE_ATTEST - STACKSIZE_HMAC); }
+        ValidMemRange(old(sp) - (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE, old(sp));
+        ValidMemRange(sp, old(sp));
+            { lemma_ValidMemRange_reduced(sp, STACKSIZE_LOCAL, STACKSIZE_LOCAL - SHA_CTXSIZE); }
+        ValidMemRange(sp + SHA_CTXSIZE * WORDSIZE, old(sp));
+            { lemma_ValidMemRange_reduced(sp + SHA_CTXSIZE * WORDSIZE, size, size - 4 * SHA_CTXSIZE); }
+        ValidMemRange(sp + SHA_CTXSIZE * WORDSIZE, sp + 4 * SHA_CTXSIZE * WORDSIZE);
+    }
+
+    mac := compute_hmac(STACKSIZE_HMAC * WORDSIZE, pagedb, dispPg, input, old(sp));
+    assert spec_hmac == mac;
+    mac_ptr := sp;
+
+    calc {
+        sp + (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE;
+        sp + STACKSIZE_LOCAL * WORDSIZE;
+        (old(sp) - STACKSIZE_LOCAL * WORDSIZE) + STACKSIZE_LOCAL * WORDSIZE;  
+        old(sp);
+    }
+    assert isUInt32(old(sp));
+    ADD(sp, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE));
+    assert sp == old(sp);
+}
+
+
 procedure svc_returning_attest(
     ghost exstate: state,
     ghost stack_bytes: int,
@@ -837,9 +978,9 @@ procedure svc_returning_attest(
         ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp);
         //sp - STACKSIZE_ATTEST * WORDSIZE >= KOM_DIRECTMAP_VBASE + MonitorPhysBase();
     ensures
-        lr == old(lr);
-//        StackPreserving(old(this), this);
-//        NonStackMemPreserving(old(this), this);
+//        lr == old(lr);
+        StackPreserving(old(this), this);
+        NonStackMemPreserving(old(this), this);
         let tuple := svcHandled(exstate, pagedb, dispPg) in
         let retRegs := firstOf2(tuple) in
         let handled_pagedb := secondOf2(tuple) in
@@ -848,48 +989,21 @@ procedure svc_returning_attest(
     ghost var addrspace := pagedb[dispPg].addrspace;
     assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
 
-    // Stack layout [size in words]:
-    //   sp := mac_output[8] || message [8+16] || gap[1] || tmp_ptr[2*SHA_BLOCKSIZE] || key_ptr[HMAC_KEYSIZE_WORDS]
-    // where 
-    //   message = user_words[8] || enclave_measurement [8] || 0 [8]
-    // Total stack usage == 8 + 24 + 1 + 2 * SHA_BLOCKSIZE + HMAC_KEYSIZE_WORDS
-    // Plus STACKSIZE_HMAC
-    SUB(sp, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE));
-    assert StackBytesRemaining(this, STACKSIZE_HMAC * WORDSIZE);
-    //WordAlignedAdd(sp, (0 - 1) * (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE);
-    
-    // Arrange the user words in memory after the gap for the MAC output
-    ghost var user_words;
-    ghost var measurement;
-    ghost var pre_input_sp;
-    pre_input_sp := sp;
-    user_words, measurement := arrange_attestation_input(pagedb, dispPg);
-    
-    assert pageDbCorresponds(this.m, pagedb) by {
-        lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
-    }
+    ghost var mac_ptr:word;
+    ghost var spec_user_words:seq(word);
+    ghost var spec_enclave_measurement:seq(word);
+    ghost var mac:seq(word);
 
-    ghost var input;
-    input := user_words + measurement + SeqRepeat(8, 0);
-
-//    ghost var input_mem;
-//    input_mem := mem;
-//
-    ghost var mac;
-    mac := compute_hmac(STACKSIZE_HMAC * WORDSIZE, pagedb, dispPg, input, old(sp));
-
-//    ghost var retRegs;
-//    retRegs := firstOf2(svcHandled(exstate, pagedb, dispPg));
-//
-//    ghost var t:SvcReturnRegs;
-//    t := tuple(to_word(mac[0]), to_word(mac[1]), to_word(mac[2]), to_word(mac[3]), to_word(mac[4]), to_word(mac[5]), to_word(mac[6]), to_word(mac[7]));
-//    assert t == retRegs;
+    mac_ptr, spec_user_words, spec_enclave_measurement, mac 
+        := svc_returning_attest_inner(exstate, stack_bytes, pagedb, dispPg);
 
     // Load the mac into registers
     load_memory_into_regs(mac);
+    
+    MOV(r0, const(encode_mode(User)));
+    MSR(spsr_mon, r0);
 
-    ADD(sp, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE));
-    assert sp == old(sp);
+    MOV(r0, const(KOM_ERR_SUCCESS));
 }
 
 procedure svc_returning_verify_step0(
