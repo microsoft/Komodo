@@ -461,7 +461,7 @@ procedure {:frame false} interrupt_handler(
     modifies
         mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; cpsr; lr; spsr_mon;
     requires
-        KomUserEntryPrecondition(this, pagedb_in, dispPg);
+        PrivKomUserEntryPrecondition(this, pagedb_in, dispPg);
         InterruptContinuationInvariantDef();
         this.conf.ex == ex && (ex == ExFIQ || ex == ExIRQ);
         mode_of_state(this) == Monitor;
@@ -502,8 +502,7 @@ procedure {:frame false} interrupt_handler(
 
     if (r0 == const(encode_mode(User))) { // we came from user-mode
         assert spsr_of_state(old(this)).m == User;
-        assert !spsr_of_state(old(this)).f && !spsr_of_state(old(this)).i &&
-            psr_mask_fiq(r0) == 0 && psr_mask_irq(r0) == 0 by {
+        assert psr_mask_fiq(r0) == 0 && psr_mask_irq(r0) == 0 by {
             assert r0 == 0x10;
             assert BitwiseAnd(0x10, ARM_PSR_FIQ) == 0x00 by {
                 assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
@@ -518,6 +517,7 @@ procedure {:frame false} interrupt_handler(
                 lemma_WordBitEquiv(0x00, 0x00);
             }
         }
+        assert !spsr_of_state(old(this)).f && !spsr_of_state(old(this)).i;
 
         // save dispatcher context
         LDRglobaladdr(r0, CurDispatcherOp());
