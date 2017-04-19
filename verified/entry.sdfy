@@ -614,6 +614,7 @@ procedure pre_entry_enter(
         preEntryEnter(old(this), this, pagedb, old(pagenr), old(arg1), old(arg2), old(arg3));
         spsr_of_state(this).m == User;
         this.conf.scr == SCRT(Secure, true, true);
+        !spsr_of_state(this).i && !spsr_of_state(this).f;
         //sp == old(sp);
 {
     assert validPageNr(pagenr);
@@ -781,6 +782,7 @@ procedure pre_entry_resume(
         preEntryResume(old(this), this, pagedb, old(pagenr));
         spsr_of_state(this).m == User;
         this.conf.scr == SCRT(Secure, true, true);
+        !spsr_of_state(this).i && !spsr_of_state(this).f;
         //sp == old(sp);
 {
     ghost var dispPg := pagenr;
@@ -894,6 +896,7 @@ procedure {:frame false} enclaveexecution_loop(
             if retToEnclave then sp == old(sp) else sp == BitwiseOr(old(sp), 1);
             partialEnclaveExecution(states, dispPg, steps);
             states[0] == tuple(old(this), pagedb_in);
+            retToEnclave ==> !spsr_of_state(this).f && !spsr_of_state(this).i;
             if retToEnclave then states[steps] == tuple(loop1, pagedb)
                 else validEnclaveExecution(old(this), pagedb_in, loop1, pagedb, dispPg, steps);
             equivStates(loop1, this);

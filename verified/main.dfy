@@ -212,6 +212,15 @@ lemma lemma_UserExceptionStateSideEffects(s0:state, s2:state, r:state,
         mode_encodings_are_sane();
         lemma_update_psr(cpsr_of_state(s3), encode_mode(Monitor), true, true);
         assert !interrupts_enabled(r);
+    } else {
+        assert mode_of_state(r) != Monitor;
+        assert ex != ExFIQ;
+        assert !s3.conf.cpsr.f by
+            { reveal userspaceExecutionFn(); }
+        lemma_update_psr(cpsr_of_state(s3),
+            encode_mode(mode_of_state(r)), false, true);
+        assert !r.conf.cpsr.f;
+        assert interrupts_enabled(r);
     }
     assert ExceptionStateSideEffects(r);
 }
