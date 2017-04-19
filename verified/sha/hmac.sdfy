@@ -133,8 +133,8 @@ requires
      && ValidMemRange(tmp_ptr, tmp_ptr + SHA_BLOCKSIZE * WORDSIZE)
 
      // Non-refined requirements
-     && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
-     && tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() //|| tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
+     //&& (tmp_ptr >= StackBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
+     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= KOM_DIRECTMAP_VBASE )
 
      // Anti-aliasing via direct layout of  sp, ctx, input, tmp, key
      && tmp_ptr + SHA_BLOCKSIZE*WORDSIZE <= key_ptr
@@ -160,7 +160,7 @@ ensures
 
     // Copy key to the beginning of the tmp buffer
     MOV(r5, const(HMAC_KEYSIZE_BYTES)); 
-    memcpy(r1 /* tmp_ptr */, r4 /* key_ptr */, r5, r6);
+    memcpy_bare(r1 /* tmp_ptr */, r4 /* key_ptr */, r5, r6);
     lemma_memset_result(old(this.m), this.m, key_ptr, tmp_ptr, HMAC_KEYSIZE_WORDS);
     assert key == AddrMemContentsSeq(mem, tmp_ptr, HMAC_KEYSIZE_WORDS);
 
@@ -192,8 +192,8 @@ requires
      && ValidMemRange(tmp_ptr, tmp_ptr + (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE)
 
      // Non-refined requirements
-     && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
-     && tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() //|| tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
+     //&& (tmp_ptr >= StackBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
+     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || tmp_ptr + (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE <= KOM_DIRECTMAP_VBASE )
 
      // Anti-aliasing via direct layout of  sp, ctx, input, tmp, key
      && input_ptr + (num_blocks*SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE <= tmp_ptr
@@ -224,7 +224,7 @@ ensures
     ADD(r6, r6, r5);  // num_blocks * SHA_BLOCKSIZE * WORDSIZE + SHA_CTXSIZE * WORDSIZE 
     assert r6 == (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE;
 
-    memcpy(r7, r3, r6, r5);
+    memcpy_bare(r7, r3, r6, r5);
     lemma_memset_result(old(this.m), this.m, input_ptr, tmp_ptr, (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE));
 }
 
@@ -262,8 +262,8 @@ requires
 
      // Non-refined requirements
 //     && disjoint(tmp_ptr, tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE, StackBase(), StackLimit())
-     && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
-     && tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() //|| tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
+     //&& (tmp_ptr >= StackBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
+     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
 
      // Anti-aliasing via direct layout of input, tmp, key
      && input_ptr + (num_blocks*SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE <= tmp_ptr
@@ -385,8 +385,8 @@ requires
 
      // Non-refined requirements
 //     && disjoint(tmp_ptr, tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE, StackBase(), StackLimit())
-     && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
-     && tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() //|| tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
+     //&& (tmp_ptr >= StackBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
+     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
 
      // Anti-aliasing via direct layout of  sp, ctx, input, tmp, key
      && sp <= ctx
@@ -498,8 +498,8 @@ requires
      && ValidMemRange(tmp_ptr, tmp_ptr + SHA_BLOCKSIZE * WORDSIZE)
 
      // Non-refined requirements
-     && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
-     && tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() //|| tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
+     //&& (tmp_ptr >= StackBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
+     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= KOM_DIRECTMAP_VBASE )
 
      // Anti-aliasing via direct layout of  sp, ctx, input, tmp, key
      && tmp_ptr + SHA_BLOCKSIZE*WORDSIZE <= key_ptr
@@ -525,7 +525,7 @@ ensures
 
     // Copy key to the beginning of the tmp buffer
     MOV(r5, const(HMAC_KEYSIZE_BYTES)); 
-    memcpy(r1 /* tmp_ptr */, r4 /* key_ptr */, r5, r6);
+    memcpy_bare(r1 /* tmp_ptr */, r4 /* key_ptr */, r5, r6);
     lemma_memset_result(old(this.m), this.m, key_ptr, tmp_ptr, HMAC_KEYSIZE_WORDS);
     assert key == AddrMemContentsSeq(mem, tmp_ptr, HMAC_KEYSIZE_WORDS);
 
@@ -554,8 +554,8 @@ requires
      && ValidMemRange(tmp_ptr, tmp_ptr + SHA_CTXSIZE * WORDSIZE)
 
      // Non-refined requirements
-     && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
-     && tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() //|| tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
+     //&& (tmp_ptr >= StackBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
+     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= KOM_DIRECTMAP_VBASE )
 
      // Anti-aliasing via direct layout of ctx, tmp
      && ctx_ptr + SHA_BLOCKSIZE*WORDSIZE <= tmp_ptr
@@ -580,13 +580,13 @@ ensures
     ghost var tmp_ptr := r7;
 
     MOV(r6, const(SHA_CTXSIZE*WORDSIZE));
-    memcpy(r7, r0, r6, r5);
+    memcpy_bare(r7, r0, r6, r5);
     lemma_memset_result(old(this.m), this.m, ctx_ptr, tmp_ptr, SHA_CTXSIZE);
 }
 
 
 
-procedure hmac_outer_prep_hash(
+procedure {:timeLimitMultiplier 2} hmac_outer_prep_hash(
     ghost key:seq(word),
     ghost inner_hash:seq(word)
     ) 
@@ -614,8 +614,8 @@ requires
      
      // Non-refined requirements
 //     && disjoint(tmp_ptr, tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE, StackBase(), StackLimit())
-     && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
-     && tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() //|| tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
+     //&& (tmp_ptr >= StackBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
+     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || tmp_ptr + SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
 
      // Anti-aliasing via direct layout of ctx, tmp, key
      && ctx_ptr + SHA_CTXSIZE*WORDSIZE <= tmp_ptr
@@ -682,10 +682,11 @@ ensures
     }
     
     MOV(r2, 1);   // Set this up for the outer hash
+    assert {:split_here} true;
 }
 
 
-procedure hmac_outer(
+procedure {:timeLimitMultiplier 2} hmac_outer(
     ghost key:seq(word),
     ghost inner_hash:seq(word)
     ) returns (
@@ -727,8 +728,8 @@ requires
 
      // Non-refined requirements
 //     && disjoint(tmp_ptr, tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE, StackBase(), StackLimit())
-     && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
-     && tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() //|| tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
+     //&& (tmp_ptr >= StackBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
+     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || tmp_ptr + SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
 
      // Anti-aliasing via direct layout of  sp, ctx, input, tmp, key
      && sp <= ctx_ptr
@@ -817,7 +818,7 @@ ensures
 }
 
 
-procedure hmac(
+procedure {:timeLimitMultiplier 2} hmac(
     ghost key:seq(word),
     ghost input:seq(word)
     ) returns (
