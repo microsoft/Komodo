@@ -912,7 +912,7 @@ procedure {:frame false} enclaveexecution_loop(
             if retToEnclave then sp == old(sp) else sp == BitwiseOr(old(sp), 1);
             partialEnclaveExecution(states, dispPg, steps);
             states[0] == tuple(old(this), pagedb_in);
-            //retToEnclave ==> !spsr_of_state(this).f && !spsr_of_state(this).i;
+            retToEnclave ==> !spsr_of_state(this).f && !spsr_of_state(this).i;
             if retToEnclave then states[steps] == tuple(loop1, pagedb)
                 else validEnclaveExecution(old(this), pagedb_in, loop1, pagedb, dispPg, steps);
             equivStates(loop1, this);

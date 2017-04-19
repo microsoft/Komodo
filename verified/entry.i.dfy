@@ -152,7 +152,7 @@ predicate SaneStateAfterException(s:state)
     && SaneMem(s.m)
     && mode_of_state(s) == Monitor
     && !interrupts_enabled(s)
-    && !spsr_of_state(s).f && !spsr_of_state(s).i
+    //&& !spsr_of_state(s).f && !spsr_of_state(s).i
 }
 
 // what do we know between the start and end of the exception handler
@@ -610,6 +610,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     ensures validPageDb(rd) && SaneMem(r.m) && pageDbCorresponds(r.m, rd)
     ensures validEnclaveExecutionStep(s, sd, r, rd, dispPg, retToEnclave)
     ensures retToEnclave ==> spsr_of_state(r).m == User
+    ensures retToEnclave ==> !spsr_of_state(r).f && !spsr_of_state(r).i
 {
     var s4, d4 := lemma_evalMOVSPCLRUC_inner(takestep(s), r, sd, dispPg);
 
@@ -640,6 +641,23 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
         lemma_exceptionHandled_validPageDb(s4, d4, dispPg);
     }
 
+    if(retToEnclave) {
+       assert !spsr_of_state(r).f && !spsr_of_state(r).i by {
+           assert psr_mask_fiq(encode_mode(User)) == 0 by {
+               assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
+                   by { reveal_WordAsBits(); }
+               lemma_BitsAndWordConversions();
+               reveal_BitAnd();
+           }
+           assert psr_mask_irq(encode_mode(User)) == 0 by {
+               assert WordAsBits(0x10) == 0x10 && WordAsBits(0x80) == 0x80
+                   by { reveal_WordAsBits(); }
+               lemma_BitsAndWordConversions();
+               reveal_BitAnd();
+           }
+       }
+    }
+
     assert validEnclaveExecutionStep(s, sd, r, rd, dispPg, retToEnclave) by {
         reveal_validEnclaveExecutionStep();
         lemma_userspaceExecutionAndException_pre(s, takestep(s), s4);
@@ -647,6 +665,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
         assert validEnclaveExecutionStep'(s, sd, s4, d4, r, rd,
                                           dispPg, retToEnclave);
     }
+    assert retToEnclave ==> !spsr_of_state(r).f && !spsr_of_state(r).i;
 }
 
 lemma lemma_ValidEntryPre(s0:state, s1:state, sd:PageDb, r:state, rd:PageDb, dp:word,
