@@ -677,7 +677,7 @@ procedure svc_returning_attest(
         r10 == page_monvaddr(dispPg);
         r11 == page_monvaddr(pagedb[dispPg].addrspace);
         ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp);
-        sp - STACKSIZE_ATTEST * WORDSIZE >= KOM_DIRECTMAP_VBASE + MonitorPhysBase();
+        //sp - STACKSIZE_ATTEST * WORDSIZE >= KOM_DIRECTMAP_VBASE + MonitorPhysBase();
     ensures
         lr == old(lr);
         StackPreserving(old(this), this);
@@ -763,7 +763,6 @@ procedure svc_returning_attest(
     ghost var mac;
     mac := hmac(key, user_words + measurement + SeqRepeat(8, 0));
 assume false;
-
 
     // Load the mac into registers
     load_memory_into_regs(mac);

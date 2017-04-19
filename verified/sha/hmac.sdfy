@@ -868,7 +868,7 @@ requires
 // TODO: Removed these so that attest can call it.  Still need to deal with the consequences
 //     && ctx >= StackBase()    
 //     && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
-     && tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() 
+     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || tmp_ptr + (num_blocks + 1)*SHA_BLOCKSIZE*WORDSIZE <= KOM_DIRECTMAP_VBASE)
 
      // Anti-aliasing via direct layout of  sp, ctx, input, tmp, key
      && sp <= ctx
