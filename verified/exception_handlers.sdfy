@@ -548,13 +548,20 @@ procedure load_memory_into_regs(ghost contents:seq(word))
 
 procedure arrange_attestation_input(
     ghost pagedb: PageDb,
-    ghost dispPg: PageNr)
+    ghost dispPg: PageNr
+    ) returns (
+    ghost user_words:seq(word),
+    ghost measurement:seq(word)
+    )
+
+
     reads
         globals; sp; r5; r6; r7; r8; r11;
     modifies
         mem; r1; r2; r3; r4;
     requires/ensures
         SaneState(this);
+        ValidMemRange(sp + SHA_CTXSIZE * WORDSIZE, sp + (SHA_CTXSIZE + 3 * SHA_CTXSIZE) * WORDSIZE);
     requires
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
@@ -564,11 +571,17 @@ procedure arrange_attestation_input(
 
         r11 == page_monvaddr(pagedb[dispPg].addrspace);
         StackLimit() <= sp && sp + (SHA_CTXSIZE + 3 * SHA_CTXSIZE) * WORDSIZE <= StackBase();           
-
-        ValidMemRange(sp + SHA_CTXSIZE * WORDSIZE, sp + (SHA_CTXSIZE + 3 * SHA_CTXSIZE) * WORDSIZE);
+    ensures
+        AddrMemPreservingExcept(old(mem), mem, sp + SHA_CTXSIZE * WORDSIZE, sp + (SHA_CTXSIZE + 3 * SHA_CTXSIZE) * WORDSIZE);
+        validAddrspacePage(pagedb, pagedb[dispPg].addrspace);
+        user_words == old(seq(r1, r2, r3, r4, r5, r6, r7, r8));
+        let addrsp_pg := pagedb[dispPg].addrspace in
+        let addrsp := pagedb[addrsp_pg].entry in
+            measurement == SHA256(WordSeqToBytes(addrsp.measurement));
+        AddrMemContentsSeq(mem, sp + SHA_CTXSIZE * WORDSIZE, 3 * SHA_CTXSIZE) == 
+            user_words + measurement + SeqRepeat(8, 0);
 {
     // Arrange the user words in memory after the gap for the MAC output
-    ghost var user_words;
     user_words := arrange_user_regs_in_memory();
 
     lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
@@ -576,12 +589,46 @@ procedure arrange_attestation_input(
     // Arrange the enclave measurement 
     ADD(r1, sp, const((SHA_CTXSIZE + 8) * WORDSIZE)); // Construct a pointer for the next slot on the stack
 
-    ghost var measurement;
     measurement := arrange_real_measurement_in_memory(pagedb, dispPg);
+    ghost var measurement_mem;
+    measurement_mem := mem;
 
     // Fill in some zeroes
     ADD(r1, r1, const(SHA_CTXSIZE * WORDSIZE)); // Construct a pointer for the next slot on the stack
     zero_pad_memory();
+
+    ghost var offset_sp := sp + SHA_CTXSIZE * WORDSIZE;
+    calc {
+        AddrMemContentsSeq(mem, offset_sp, 3 * SHA_CTXSIZE);
+            { lemma_AddrMemContentsSeq_adds(mem, offset_sp, 3 * SHA_CTXSIZE, SHA_CTXSIZE); }
+        AddrMemContentsSeq(mem, offset_sp, SHA_CTXSIZE) 
+      + AddrMemContentsSeq(mem, offset_sp + SHA_CTXSIZE * WORDSIZE, 2 * SHA_CTXSIZE);
+
+        user_words + AddrMemContentsSeq(mem, offset_sp + SHA_CTXSIZE * WORDSIZE, 2 * SHA_CTXSIZE);
+            { lemma_AddrMemContentsSeq_adds(mem, offset_sp + SHA_CTXSIZE * WORDSIZE, 2 * SHA_CTXSIZE, SHA_CTXSIZE); }
+        user_words 
+      + AddrMemContentsSeq(mem, offset_sp + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE) 
+      + AddrMemContentsSeq(mem, offset_sp + SHA_CTXSIZE * WORDSIZE + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE);
+
+        user_words 
+      + AddrMemContentsSeq(mem, offset_sp + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE) 
+      + AddrMemContentsSeq(mem, offset_sp + 2 * SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE);
+            { 
+                lemma_AddrMemContentsSeq_framing1(measurement_mem, mem, 
+                                                  offset_sp + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE,
+                                                  offset_sp + 2 * SHA_CTXSIZE * WORDSIZE, 
+                                                  offset_sp + 3 * SHA_CTXSIZE * WORDSIZE);
+                assert measurement == AddrMemContentsSeq(mem, offset_sp + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE);
+            }
+        user_words 
+      + measurement
+      + AddrMemContentsSeq(mem, offset_sp + 2 * SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE);
+
+        user_words 
+      + measurement
+      + SeqRepeat(8, 0);
+    }
+    assert {:split_here} true;
 }
 
 
