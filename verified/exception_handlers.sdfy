@@ -705,6 +705,11 @@ procedure svc_returning_attest(
     ghost var input_mem;
     input_mem := mem;
 
+
+/////////////////////////////////////////////////////////////////////////////
+// TODO: Factor from here down to HMAC call into a separate procedure
+/////////////////////////////////////////////////////////////////////////////
+
     // Arrange the key in memory
     ghost var key:seq(word);
     assert ValidMemRange(sp, sp + (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE);
@@ -762,7 +767,6 @@ procedure svc_returning_attest(
 
     ghost var mac;
     mac := hmac(key, user_words + measurement + SeqRepeat(8, 0));
-assume false;
 
     // Load the mac into registers
     load_memory_into_regs(mac);
