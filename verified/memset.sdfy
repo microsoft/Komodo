@@ -1,6 +1,50 @@
 include {:verbatim} "kom_common.i.dfy"
 include "ARMdecls.sdfy"
 
+procedure {:timeLimitMultiplier 2} memcpy_bare(operand dst:addr, operand src:addr,
+                                          inout operand size:reg, out operand tmp:reg)
+    modifies
+        mem;
+    requires/ensures
+        SaneState(this);
+    requires
+        DistinctRegOperands(set(@dst, @src, @size, @tmp), 4);
+        WordAligned(size);
+        ValidMemRange(dst, dst + size);
+        ValidMemRange(src, src + size);
+        dst + size <= src || src + size <= dst;
+        // no writing to insecure mem
+        dst >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || dst + size <= KOM_DIRECTMAP_VBASE;
+    ensures
+        MemPreservingExcept(old(this), this, old(dst), old(dst + size));
+        forall a:addr :: old(dst) <= a < old(dst + size)
+            ==> MemContents(this.m, a) == old(MemContents(this.m, a - dst + src));
+{
+    assert @dst != @src && @dst != @size && @dst != @tmp && @src != @size
+        && @src != @tmp && @size != @tmp && @size != OSP && @tmp != OSP;
+
+    while (size > 0)
+        invariant
+            SaneState(this);
+            GlobalsInvariant(old(this),this);
+            WordAligned(size) && 0 <= size <= old(size);
+            dst == old(dst) && src == old(src);
+            MemPreservingExcept(old(this), this, dst + size, dst + old(size));
+            forall a:addr :: dst + size <= a < dst + old(size)
+                ==> MemContents(this.m, a) == old(MemContents(this.m, a - dst + src));
+        decreases
+            size;
+    {
+        ghost var prevThis := this;
+        SUB(size, size, 4);
+        assert WordAligned(size);
+        LDR(tmp, src, size);
+        assert tmp == MemContents(old(this.m), src + size);
+        STR(tmp, dst, size);
+        assert MemContents(this.m, dst + size) == MemContents(old(this.m), src + size);
+    }
+}
+
 procedure {:timeLimitMultiplier 2} memcpy(operand dst:addr, operand src:addr,
                                           inout operand size:reg, out operand tmp:reg)
     modifies
@@ -13,7 +57,7 @@ procedure {:timeLimitMultiplier 2} memcpy(operand dst:addr, operand src:addr,
         ValidMemRange(dst, dst + size);
         ValidMemRange(src, src + size);
         dst + size <= src || src + size <= dst;
-        //dst >= StackBase() || dst + size <= StackLimit();
+        dst >= StackBase() || dst + size <= StackLimit();
         // no writing to insecure mem
         dst >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || dst + size <= KOM_DIRECTMAP_VBASE;
     ensures
