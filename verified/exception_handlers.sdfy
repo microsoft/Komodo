@@ -536,6 +536,15 @@ procedure load_memory_into_regs(ghost contents:seq(word))
         r7 == contents[6];
         r8 == contents[7];
 {
+    assert WordAligned(r0);
+    WordAlignedAdd(r0, 1*WORDSIZE);
+    WordAlignedAdd(r0, 2*WORDSIZE);
+    WordAlignedAdd(r0, 3*WORDSIZE);
+    WordAlignedAdd(r0, 4*WORDSIZE);
+    WordAlignedAdd(r0, 5*WORDSIZE);
+    WordAlignedAdd(r0, 6*WORDSIZE);
+    WordAlignedAdd(r0, 7*WORDSIZE);
+
     LDR(r1, r0, const(0 * WORDSIZE));
     LDR(r2, r0, const(1 * WORDSIZE));
     LDR(r3, r0, const(2 * WORDSIZE));
