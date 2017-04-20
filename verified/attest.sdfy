@@ -350,6 +350,7 @@ procedure svc_returning_attest(
         ValidMemRange(sp - (STACKSIZE_ATTEST + 10) * WORDSIZE, sp);
         //sp - STACKSIZE_ATTEST * WORDSIZE >= KOM_DIRECTMAP_VBASE + MonitorPhysBase();
     ensures
+        pageDbCorresponds(this.m, pagedb);
         StackPreserving(old(this), this);
         NonStackMemPreserving(old(this), this);
         let tuple := svcHandled(exstate, pagedb, dispPg) in
@@ -403,5 +404,10 @@ procedure svc_returning_attest(
     MOV(r0, const(KOM_ERR_SUCCESS));
     assert old(lr) == lr;
     assert OperandContents(this, OLR) == OperandContents(old(this), OLR);
+
+    assert pageDbCorresponds(this.m, pagedb) by {
+        lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
+    }
+
     assert {:split_here} true;
 }

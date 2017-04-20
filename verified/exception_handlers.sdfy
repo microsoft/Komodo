@@ -410,6 +410,8 @@ procedure svc_returning(
     ensures
         lr == old(lr);
         StackPreserving(old(this), this);
+        wellFormedPageDb(pagedb');
+        pageDbCorresponds(this.m, pagedb');
         if old(r0) == KOM_SVC_ATTEST || old(r0) > KOM_SVC_VERIFY_STEP2 then
             NonStackMemPreserving(old(this), this)
         else if old(r0) == KOM_SVC_VERIFY_STEP0 then 
@@ -431,12 +433,18 @@ procedure svc_returning(
         // Create an attestation
         svc_returning_attest(exstate, stack_bytes, pagedb, dispPg);
         pagedb' := pagedb;
+        assert wellFormedPageDb(pagedb');
+        assert pageDbCorresponds(this.m, pagedb');
     } else if (r0 == const(KOM_SVC_VERIFY_STEP0)) {
         // Store the user provided words to verify
         pagedb' := svc_returning_verify_step0(exstate, stack_bytes, pagedb, dispPg);
+        assert wellFormedPageDb(pagedb');
+        assert pageDbCorresponds(this.m, pagedb');
     } else if (r0 == const(KOM_SVC_VERIFY_STEP1)) {
         // Store the user provided measurement to verify
         pagedb' := svc_returning_verify_step1(exstate, stack_bytes, pagedb, dispPg);
+        assert wellFormedPageDb(pagedb');
+        assert pageDbCorresponds(this.m, pagedb');
     } else if (r0 == const(KOM_SVC_VERIFY_STEP2)) {
         // Do some verification
         assume false;
@@ -444,6 +452,8 @@ procedure svc_returning(
         // Fall back position
         svc_returning_default(exstate, stack_bytes, pagedb, dispPg);
         pagedb' := pagedb;
+        assert wellFormedPageDb(pagedb');
+        assert pageDbCorresponds(this.m, pagedb');
     }
 }
 
