@@ -424,7 +424,7 @@ procedure arrange_real_measurement_in_memory(
     ADD(r2, r11, const(ADDRSPACE_HASH));  // Construct a pointer to enclave measurement hash 
     MOV(r3, const(SHA_CTXSIZE * WORDSIZE));         // Size arg to memcpy
     memcpy_bare(r1, r2, r3, r4);
-
+    
     lemma_memset_result(old(this.m), this.m, offset, r1, SHA_CTXSIZE);
     assert AddrMemContentsSeq(mem, r1, SHA_CTXSIZE) == measurement;
     ghost var addrsp_pg := pagedb[dispPg].addrspace;
@@ -451,18 +451,20 @@ procedure arrange_real_measurement_in_memory(
         assert memContainsPage(page, addrsp_pg);
         assert page?[base]; 
 
-        calc {
-          base;
-          page_paddr(addrsp_pg) + KOM_DIRECTMAP_VBASE;
-        <
-          SecurePhysBase() + KOM_SECURE_RESERVE + KOM_DIRECTMAP_VBASE;
-        <=
-          KOM_PHYSMEM_LIMIT - KOM_SECURE_RESERVE + KOM_SECURE_RESERVE + KOM_DIRECTMAP_VBASE;
-          KOM_PHYSMEM_LIMIT + KOM_DIRECTMAP_VBASE;
-          0x4000_0000 + 0x8000_0000;
-          0xc000_0000;
-        }
+//        calc {
+//          base;
+//          page_paddr(addrsp_pg) + KOM_DIRECTMAP_VBASE;
+//        <
+//          SecurePhysBase() + KOM_SECURE_RESERVE + KOM_DIRECTMAP_VBASE;
+//        <=
+//          KOM_PHYSMEM_LIMIT - KOM_SECURE_RESERVE + KOM_SECURE_RESERVE + KOM_DIRECTMAP_VBASE;
+//          KOM_PHYSMEM_LIMIT + KOM_DIRECTMAP_VBASE;
+//          0x4000_0000 + 0x8000_0000;
+//          0xc000_0000;
+//        }
         
+        assert {:split_here} true;
+
         assert WordAligned(base + ADDRSPACE_HASH + 0 * WORDSIZE); 
         assert addrInPage(base + ADDRSPACE_HASH + 0*WORDSIZE, addrsp_pg);       // OBSERVE
         assert addrInPage(base + ADDRSPACE_HASH + 1*WORDSIZE, addrsp_pg);       // OBSERVE
