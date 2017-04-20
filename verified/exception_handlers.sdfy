@@ -1237,7 +1237,23 @@ procedure svc_returning(
     ensures
         lr == old(lr);
         StackPreserving(old(this), this);
-        //NonStackMemPreserving(old(this), this);
+        if old(r0) == KOM_SVC_ATTEST || old(r0) > KOM_SVC_VERIFY_STEP2 then
+            NonStackMemPreserving(old(this), this)
+        else if old(r0) == KOM_SVC_VERIFY_STEP0 then 
+            MemPreservingExcept(old(this), this, 
+                                page_monvaddr(dispPg), 
+                                page_monvaddr(dispPg) + DISP_CTXT_USER_WORDS + 8 * WORDSIZE)
+        else if old(r0) == KOM_SVC_VERIFY_STEP1 then
+            MemPreservingExcept(old(this), this, 
+                                page_monvaddr(dispPg), 
+                                page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT + 8 * WORDSIZE)
+        else
+            mem == old(mem);
+//        AddrMemPreservingExcept2(old(mem), mem, 
+//                             page_monvaddr(dispPg), 
+//                             page_monvaddr(dispPg) + DISP_CTXT_USER_WORDS + 8 * WORDSIZE,
+//                             page_monvaddr(dispPg),
+//                             page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT + 8 * WORDSIZE);
         let tuple := svcHandled(exstate, pagedb, dispPg) in
         let retRegs := firstOf2(tuple) in
         let handled_pagedb := secondOf2(tuple) in
