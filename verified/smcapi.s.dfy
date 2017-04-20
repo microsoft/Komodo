@@ -107,7 +107,13 @@ function initDispCtxt() : DispatcherContext
     assert psr == 0x10;
     assert BitwiseAnd(0x10, 0x1f) == 0x10
         by { reveal_BitAnd(); reveal_WordAsBits(); reveal_BitsAsWord(); }
+    assert BitwiseAnd(0x10, 0x40) == 0x00
+        by { reveal_BitAnd(); reveal_WordAsBits(); reveal_BitsAsWord(); }
+    assert BitwiseAnd(0x10, 0x80) == 0x00
+        by { reveal_BitAnd(); reveal_WordAsBits(); reveal_BitsAsWord(); }
     assert psr_mask_mode(psr) == 0x10;
+    assert psr_mask_fiq(psr) == 0;
+    assert psr_mask_irq(psr) == 0;
     assert decode_mode'(psr_mask_mode(psr)) == Just(User);
     DispatcherContext(
         map[R0 := 0, R1 := 0, R2 := 0, R3 := 0, R4 := 0, R5 := 0, R6 := 0, R7 := 0,
