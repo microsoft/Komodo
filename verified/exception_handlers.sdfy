@@ -517,15 +517,15 @@ procedure zero_pad_memory()
 
 procedure load_memory_into_regs(ghost contents:seq(word))
     reads
-        mem; sp;
+        mem; r0;
     modifies 
          r1; r2; r3; r4; r5; r6; r7; r8; 
     requires/ensures
         SaneState(this);
     requires
-        ValidMemRange(sp, sp + SHA_CTXSIZE * WORDSIZE);
+        ValidMemRange(r0, r0 + SHA_CTXSIZE * WORDSIZE);
         SeqLength(contents) == 8;
-        AddrMemContentsSeq(mem, sp, SHA_CTXSIZE) == contents;
+        AddrMemContentsSeq(mem, r0, SHA_CTXSIZE) == contents;
     ensures
         r1 == contents[0];
         r2 == contents[1];
@@ -536,14 +536,14 @@ procedure load_memory_into_regs(ghost contents:seq(word))
         r7 == contents[6];
         r8 == contents[7];
 {
-    LDR(r1, sp, const(0 * WORDSIZE));
-    LDR(r2, sp, const(1 * WORDSIZE));
-    LDR(r3, sp, const(2 * WORDSIZE));
-    LDR(r4, sp, const(3 * WORDSIZE));
-    LDR(r5, sp, const(4 * WORDSIZE));
-    LDR(r6, sp, const(5 * WORDSIZE));
-    LDR(r7, sp, const(6 * WORDSIZE));
-    LDR(r8, sp, const(7 * WORDSIZE));
+    LDR(r1, r0, const(0 * WORDSIZE));
+    LDR(r2, r0, const(1 * WORDSIZE));
+    LDR(r3, r0, const(2 * WORDSIZE));
+    LDR(r4, r0, const(3 * WORDSIZE));
+    LDR(r5, r0, const(4 * WORDSIZE));
+    LDR(r6, r0, const(5 * WORDSIZE));
+    LDR(r7, r0, const(6 * WORDSIZE));
+    LDR(r8, r0, const(7 * WORDSIZE));
 }
 
 procedure{:timeLimitMultiplier 2} arrange_attestation_input(
@@ -808,15 +808,13 @@ procedure {:timeLimitMultiplier 2} compute_hmac(
 //}
 //#endverbatim
 
-procedure svc_returning_attest_inner(
+procedure {:timeLimitMultiplier 2} svc_returning_attest_inner(
     ghost exstate: state,
     ghost stack_bytes: int,
     ghost pagedb: PageDb,
     ghost dispPg: PageNr)
     returns (
     ghost mac_ptr:word,
-    ghost spec_user_words:seq(word),
-    ghost spec_enclave_measurement:seq(word),
     ghost mac:seq(word)
     )
 
@@ -849,19 +847,14 @@ procedure svc_returning_attest_inner(
         sp == old(sp);
 
         // Results
-        spec_user_words == seq(exstate.regs[R1], exstate.regs[R2], exstate.regs[R3], exstate.regs[R4],
-                               exstate.regs[R5], exstate.regs[R6], exstate.regs[R7], exstate.regs[R8]);
-        validAddrspacePage(pagedb, pagedb[dispPg].addrspace);
-        spec_enclave_measurement == SHA256(WordSeqToBytes(pagedb[pagedb[dispPg].addrspace].entry.measurement));
-
         mac_ptr == sp - (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE;
         ValidMemRange(mac_ptr, mac_ptr + SHA_CTXSIZE * WORDSIZE);
         mac == AddrMemContentsSeq(mem, mac_ptr, SHA_CTXSIZE);
-        mac == HMAC_SHA256(AttestKey(), WordSeqToBytes(spec_user_words + spec_enclave_measurement + SeqRepeat(8, 0)));
+        mac == svcHmac(exstate, pagedb, dispPg);
 {
     ghost var addrspace := pagedb[dispPg].addrspace;
     assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
-    spec_enclave_measurement := SHA256(WordSeqToBytes(pagedb[addrspace].entry.measurement));
+    ghost var spec_enclave_measurement := SHA256(WordSeqToBytes(pagedb[addrspace].entry.measurement));
     ghost var real_user_words := seq(r1, r2, r3, r4, r5, r6, r7, r8);
     // Giant OBSERVE to trigger CoreRegPreservingExcept
     ghost var helper_user_words := seq(OperandContents(this, OReg(R1)), 
@@ -872,8 +865,8 @@ procedure svc_returning_attest_inner(
                                        OperandContents(this, OReg(R6)), 
                                        OperandContents(this, OReg(R7)), 
                                        OperandContents(this, OReg(R8)));
-    spec_user_words := seq(exstate.regs[R1], exstate.regs[R2], exstate.regs[R3], exstate.regs[R4],
-                           exstate.regs[R5], exstate.regs[R6], exstate.regs[R7], exstate.regs[R8]);
+    ghost var spec_user_words := seq(exstate.regs[R1], exstate.regs[R2], exstate.regs[R3], exstate.regs[R4],
+                                     exstate.regs[R5], exstate.regs[R6], exstate.regs[R7], exstate.regs[R8]);
     assert real_user_words == helper_user_words == spec_user_words;
 
     // Stack layout [size in words]:
@@ -935,6 +928,7 @@ procedure svc_returning_attest_inner(
 
     mac := compute_hmac(STACKSIZE_HMAC * WORDSIZE, pagedb, dispPg, input, old(sp));
     assert spec_hmac == mac;
+    assert mac == svcHmac(exstate, pagedb, dispPg);
     mac_ptr := sp;
 
     calc {
@@ -990,14 +984,12 @@ procedure svc_returning_attest(
     assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
 
     ghost var mac_ptr:word;
-    ghost var spec_user_words:seq(word);
-    ghost var spec_enclave_measurement:seq(word);
     ghost var mac:seq(word);
+    mac_ptr, mac := svc_returning_attest_inner(exstate, stack_bytes, pagedb, dispPg);
 
-    mac_ptr, spec_user_words, spec_enclave_measurement, mac 
-        := svc_returning_attest_inner(exstate, stack_bytes, pagedb, dispPg);
-
+    // mac_ptr == sp - (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE;
     // Load the mac into registers
+    SUB(r0, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE));
     load_memory_into_regs(mac);
     
     MOV(r0, const(encode_mode(User)));

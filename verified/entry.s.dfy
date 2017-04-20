@@ -277,6 +277,23 @@ predicate isReturningSvc(s:state)
 // SVCs return 9 registers
 type SvcReturnRegs = (word, word, word, word, word, word, word, word, word)
 
+function svcHmac(s:state, d:PageDb, dispPg:PageNr): seq<word>
+    requires validPageDb(d) && validDispatcherPage(d, dispPg)
+    requires ValidState(s) && mode_of_state(s) != User
+    requires isReturningSvc(s)
+{
+    var addrspace := d[dispPg].addrspace;
+    assert validAddrspacePage(d, addrspace) by { reveal_validPageDb(); }
+    var enclave_measurement := SHA256(WordSeqToBytes(d[addrspace].entry.measurement));
+    var user_words := [s.regs[R1], s.regs[R2], s.regs[R3], s.regs[R4],
+        s.regs[R5], s.regs[R6], s.regs[R7], s.regs[R8]];
+
+    // produce an attestation
+    var message := user_words + enclave_measurement + SeqRepeat(8, 0);
+    var hmac := HMAC_SHA256(AttestKey(), WordSeqToBytes(message));
+    hmac
+}
+
 function svcHandled(s:state, d:PageDb, dispPg:PageNr): (SvcReturnRegs, PageDb)
     requires validPageDb(d) && validDispatcherPage(d, dispPg)
     requires ValidState(s) && mode_of_state(s) != User
@@ -291,8 +308,8 @@ function svcHandled(s:state, d:PageDb, dispPg:PageNr): (SvcReturnRegs, PageDb)
 
     if OperandContents(s, OReg(R0)) == KOM_SVC_ATTEST then
         // produce an attestation
-        var message := user_words + enclave_measurement + SeqRepeat(8, 0);
-        var hmac := HMAC_SHA256(AttestKey(), WordSeqToBytes(message));
+        //var message := user_words + enclave_measurement + SeqRepeat(8, 0);
+        var hmac := svcHmac(s, d, dispPg); //HMAC_SHA256(AttestKey(), WordSeqToBytes(message));
         ((KOM_ERR_SUCCESS, hmac[0], hmac[1], hmac[2], hmac[3], hmac[4], hmac[5],
             hmac[6], hmac[7]), d)
     else if OperandContents(s, OReg(R0)) == KOM_SVC_VERIFY_STEP0 then
