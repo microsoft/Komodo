@@ -69,7 +69,10 @@ function isValidMappingTarget(d: PageDb, a: PageNr, mapping: word)
             var l1 := d[addrspace.l1ptnr].entry;
             var l1pte := l1.l1pt[l1index];
             if(l1pte.Nothing?) then KOM_ERR_INVALID_MAPPING
-            else KOM_ERR_SUCCESS
+            else
+                var l2pt := d[fromJust(l1pte)].entry.l2pt;
+                if(!l2pt[l2index].NoMapping?) then KOM_ERR_INVALID_MAPPING
+                else KOM_ERR_SUCCESS
 }
 
 //============================================================================
@@ -350,9 +353,11 @@ function smc_mapInsecure(pageDbIn: PageDb, addrspacePage: word,
             assert validInsecurePageNr(physPage);
             var l2pte := InsecureMapping( physPage,  abs_mapping.perm.w);
             var pageDb' := updateL2Pte(pageDbIn, addrspacePage, abs_mapping, l2pte);
-            var pageDbOut := updateMeasurement(pageDb', addrspacePage,
-                               [KOM_SMC_MAP_INSECURE, mapping], []);
-            (pageDbOut, KOM_ERR_SUCCESS)
+            // FUTURE WORK: also measure insecure mappings
+            // var pageDbOut := updateMeasurement(pageDb', addrspacePage,
+            //                    [KOM_SMC_MAP_INSECURE, mapping], []);
+            // (pageDbOut, KOM_ERR_SUCCESS)
+            (pageDb', KOM_ERR_SUCCESS)
 }
 
 function smc_finalise(pageDbIn: PageDb, addrspacePage: word) : (PageDb, word)
@@ -504,9 +509,13 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
             var oldRefs := addrspaceRefs(pageDbIn, addrspacePage);
             assert addrspaceRefs(pageDbOut, addrspacePage ) == oldRefs + {securePage};
             
+            var addrspace_ := pageDbIn[addrspacePage].entry;
             var addrspace := pageDbOut[addrspacePage].entry;
             assert addrspace.refcount == |addrspaceRefs(pageDbOut, addrspacePage)|;
             assert validAddrspacePage(pageDbOut, addrspacePage);
+
+            assert 1 + PAGESIZE / (WORDSIZE * SHA_BLOCKSIZE) == 65;
+            assert addrspace_.refcount * 65 <= addrspace.refcount * 65;
         }
 
         forall ( n | validPageNr(n) && n != addrspacePage && n != securePage )

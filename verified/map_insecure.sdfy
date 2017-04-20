@@ -119,6 +119,7 @@ procedure kom_smc_map_insecure_measure_zero(ghost input:seq(int))
     STR(r12, sp, const(15 * WORDSIZE));
 }
 
+/* FUTURE WORK:
 procedure{:timeLimitMultiplier 2} kom_smc_map_insecure_measure(
     operand as_page:reg,
     inout operand mapping:reg,
@@ -215,6 +216,7 @@ procedure{:timeLimitMultiplier 2} kom_smc_map_insecure_measure(
         reveal pageDbAddrspaceCorresponds;
     }
 }
+*/
 
 procedure kom_smc_map_insecure(
     operand as_page:reg,
@@ -285,7 +287,7 @@ procedure kom_smc_map_insecure(
                     pagedb := update_l2pte(as_page, mapping, phys_page, r10, r8,
                                           r12, d', abs_mapping, l2pte);
                     assert pagedb == updateL2Pte(d', old(as_page), abs_mapping, l2pte);
-                    pagedb := kom_smc_map_insecure_measure(as_page, mapping, pagedb);
+                    // FUTURE WORK: pagedb := kom_smc_map_insecure_measure(as_page, mapping, pagedb);
                     assert pagedb == specPageDb(specResult);
                     assert pageDbCorresponds(this.m, pagedb);
                     err := const(KOM_ERR_SUCCESS);

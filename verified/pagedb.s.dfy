@@ -227,6 +227,8 @@ predicate validAddrspace(d: PageDb, n: PageNr)
         // XXX: sha trace invariants don't need to be trusted... move out of spec
         && IsCompleteSHA256Trace(addrspace.shatrace)
         && SHA256TraceIsCorrect(addrspace.shatrace)
+        && (stoppedAddrspace(d[n]) ||
+            |addrspace.shatrace.M| <= addrspace.refcount * (1 + PAGESIZE / (WORDSIZE * SHA_BLOCKSIZE)))
         && ConcatenateSeqs(addrspace.shatrace.M) == addrspace.measurement
 }
 
