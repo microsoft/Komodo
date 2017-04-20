@@ -1,0 +1,157 @@
+include {:verbatim} "kom_common.i.dfy"
+include {:verbatim} "pagedb.i.dfy"
+include {:verbatim} "smcapi.i.dfy"
+include {:verbatim} "entry.i.dfy"
+include {:verbatim} "exceptions.i.dfy"
+
+include "ARMdecls.sdfy"
+include "kom_utils.sdfy"
+include "sha/hmac.sdfy"
+
+#verbatim
+//const STACKSIZE_ATTEST:int := 8 + 24 + 1 + 2 * SHA_BLOCKSIZE + HMAC_KEYSIZE_WORDS + STACKSIZE_HMAC;
+// workaround Dafny const-bug which results in stack overflow
+const T1:int := HMAC_KEYSIZE_WORDS + STACKSIZE_HMAC;
+const T2:int := 2 * SHA_BLOCKSIZE;
+const T3:int := 33;
+const T4:int := T1 + T2;
+const STACKSIZE_ATTEST:int := T3 + T4;
+#endverbatim
+
+procedure addrspace_va_for_page_va(
+    operand page_va: reg,
+    out operand as_va: reg,
+    out operand tmp: reg,
+    ghost pagenr:PageNr,
+    ghost pagedb:PageDb)
+    reads
+        globals;
+    requires/ensures
+        SaneState(this);
+    requires
+        @as_va != @tmp; @as_va != OSP; @tmp != OSP;
+        page_va == page_monvaddr(pagenr);
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
+        pagedb[pagenr] is PageDbEntryTyped;
+    ensures
+        as_va == page_monvaddr(pagedb[pagenr].addrspace);
+{
+    // compute page number
+    SUB(as_va, page_va, const(KOM_DIRECTMAP_VBASE));
+    LDRglobaladdr(tmp, SecurePhysBaseOp());
+    LDRglobal(tmp, SecurePhysBaseOp(), tmp, 0);
+    SUB(as_va, as_va, tmp);
+    lemma_RightShift12(as_va);
+    LSR(as_va, as_va, const(PAGEBITS));
+    assert as_va == monvaddr_page(old(page_va)) == pagenr;
+
+    // retrieve addrspace field from pagedb
+    // TODO: avoid pointless double-shift
+    lemma_LeftShift3(as_va);
+    LSL(as_va, as_va, const(PAGEDB_ENTRY_SHIFT));
+    ADD(as_va, as_va, const(PAGEDB_ENTRY_ADDRSPACE));
+    assert as_va == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE;
+    LDRglobaladdr(tmp, PageDb());
+    LDRglobal(as_va, PageDb(), tmp, as_va);
+
+    reveal pageDbEntryCorresponds;
+    PageDbCorrespondsImpliesEntryCorresponds(this.m, pagedb, pagenr);
+    extractPageDbToAbstractOne(this.m, pagenr, PAGEDB_ENTRY_ADDRSPACE);
+}
+procedure load_attestion_key() returns (ghost key:seq(word))
+    reads
+        globals; r4;
+    modifies 
+        mem; r2; r3; 
+    requires/ensures
+        SaneState(this);
+        ValidMemRange(r4, r4 + SHA_CTXSIZE * WORDSIZE);
+    ensures
+        AddrMemPreservingExcept(old(mem), mem, r4, r4 + SHA_CTXSIZE * WORDSIZE);
+        AddrMemContentsSeq(mem, r4, SHA_CTXSIZE) == key == AttestKey();
+{
+    assert ValidGlobal(AttestKeyOp()) by { reveal SaneShaGlobal; }
+    LDRglobaladdr(r2, AttestKeyOp());
+
+    LDRglobal(r3, AttestKeyOp(), r2, const(0 * WORDSIZE));
+    STR(r3, r4, const(0 * WORDSIZE));
+    LDRglobal(r3, AttestKeyOp(), r2, const(1 * WORDSIZE));
+    STR(r3, r4, const(1 * WORDSIZE));
+    LDRglobal(r3, AttestKeyOp(), r2, const(2 * WORDSIZE));
+    STR(r3, r4, const(2 * WORDSIZE));
+    LDRglobal(r3, AttestKeyOp(), r2, const(3 * WORDSIZE));
+    STR(r3, r4, const(3 * WORDSIZE));
+    LDRglobal(r3, AttestKeyOp(), r2, const(4 * WORDSIZE));
+    STR(r3, r4, const(4 * WORDSIZE));
+    LDRglobal(r3, AttestKeyOp(), r2, const(5 * WORDSIZE));
+    STR(r3, r4, const(5 * WORDSIZE));
+    LDRglobal(r3, AttestKeyOp(), r2, const(6 * WORDSIZE));
+    STR(r3, r4, const(6 * WORDSIZE));
+    LDRglobal(r3, AttestKeyOp(), r2, const(7 * WORDSIZE));
+    STR(r3, r4, const(7 * WORDSIZE));
+    //key := AttestKey();
+
+    assert WordAligned(r4);
+    WordAlignedAdd(r4, 1*WORDSIZE);
+    WordAlignedAdd(r4, 2*WORDSIZE);
+    WordAlignedAdd(r4, 3*WORDSIZE);
+    WordAlignedAdd(r4, 4*WORDSIZE);
+    WordAlignedAdd(r4, 5*WORDSIZE);
+    WordAlignedAdd(r4, 6*WORDSIZE);
+    WordAlignedAdd(r4, 7*WORDSIZE);
+
+    key := 
+        seq(AddrMemContents(mem, r4 + 0*WORDSIZE),
+            AddrMemContents(mem, r4 + 1*WORDSIZE),
+            AddrMemContents(mem, r4 + 2*WORDSIZE),
+            AddrMemContents(mem, r4 + 3*WORDSIZE),
+            AddrMemContents(mem, r4 + 4*WORDSIZE),
+            AddrMemContents(mem, r4 + 5*WORDSIZE),
+            AddrMemContents(mem, r4 + 6*WORDSIZE),
+            AddrMemContents(mem, r4 + 7*WORDSIZE));
+    lemma_package_hash_result(mem, r4, key);    // Ensures AddMemContentsSeq(mem, r4, SHA_CTXSIZE) == key
+    assert key == GlobalFullContents(this.m, AttestKeyOp());
+    assert GlobalFullContents(this.m, AttestKeyOp()) == AttestKey();
+    assert {:split_here} true;
+}
+
+procedure load_memory_into_regs(ghost contents:seq(word))
+    reads
+        mem; r0;
+    modifies 
+         r1; r2; r3; r4; r5; r6; r7; r8; 
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidMemRange(r0, r0 + SHA_CTXSIZE * WORDSIZE);
+        SeqLength(contents) == 8;
+        AddrMemContentsSeq(mem, r0, SHA_CTXSIZE) == contents;
+    ensures
+        r1 == contents[0];
+        r2 == contents[1];
+        r3 == contents[2];
+        r4 == contents[3];
+        r5 == contents[4];
+        r6 == contents[5];
+        r7 == contents[6];
+        r8 == contents[7];
+{
+    assert WordAligned(r0);
+    WordAlignedAdd(r0, 1*WORDSIZE);
+    WordAlignedAdd(r0, 2*WORDSIZE);
+    WordAlignedAdd(r0, 3*WORDSIZE);
+    WordAlignedAdd(r0, 4*WORDSIZE);
+    WordAlignedAdd(r0, 5*WORDSIZE);
+    WordAlignedAdd(r0, 6*WORDSIZE);
+    WordAlignedAdd(r0, 7*WORDSIZE);
+
+    LDR(r1, r0, const(0 * WORDSIZE));
+    LDR(r2, r0, const(1 * WORDSIZE));
+    LDR(r3, r0, const(2 * WORDSIZE));
+    LDR(r4, r0, const(3 * WORDSIZE));
+    LDR(r5, r0, const(4 * WORDSIZE));
+    LDR(r6, r0, const(5 * WORDSIZE));
+    LDR(r7, r0, const(6 * WORDSIZE));
+    LDR(r8, r0, const(7 * WORDSIZE));
+}
+
