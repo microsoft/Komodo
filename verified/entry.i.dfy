@@ -149,7 +149,8 @@ predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr)
 {
     reveal_ValidRegState();
     var retToEnclave := isReturningSvc(s);
-    var rd := if retToEnclave then sd else exceptionHandled(s, sd, dp).2;
+    var rd := if retToEnclave    then svcHandled(s, sd, dp).1
+                                else exceptionHandled(s, sd, dp).2;
     validExceptionTransition(s, sd, r, rd, dp)
     // sp unaltered except it may have the low bit set to signify !retToEnclave
     && var ssp, rsp := s.regs[SP(Monitor)], r.regs[SP(Monitor)];
@@ -163,7 +164,7 @@ predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr)
     && pageDbCorresponds(r.m, rd)
     && (if retToEnclave
        then rsp == ssp
-        && var (regs, sd') := svcHandled(s, sd, dp); preEntryReturn(s, r, regs)
+        && var (regs, rd) := svcHandled(s, sd, dp); preEntryReturn(s, r, regs)
        else rsp == BitwiseOr(ssp, 1)
         && (r.regs[R0], r.regs[R1], rd) == exceptionHandled(s, sd, dp))
 }
@@ -575,12 +576,22 @@ lemma lemma_svcHandled_pageDbCorresponds(s4:state, d4:PageDb, r:state, dispPg:Pa
     requires validPageDb(d4) && validDispatcherPage(d4, dispPg)
     requires isReturningSvc(s4)
     requires (regs, rd) == svcHandled(s4, d4, dispPg)
-    ensures (regs, rd) == svcHandled(s4, d4, dispPg)
+    //ensures (regs, rd) == svcHandled(s4, d4, dispPg)
     ensures pageDbCorresponds(r.m, rd)
 {
-    reveal pageDbEntryCorresponds();
-    reveal pageContentsCorresponds();
-    reveal pageDbDispatcherCorresponds();
+    assert GlobalFullContents(s4.m, PageDb()) == GlobalFullContents(r.m, PageDb());
+    forall p:PageNr 
+        ensures pageDbEntryCorresponds(rd[p], extractPageDbEntry(r.m, p))
+    {
+        reveal pageDbEntryCorresponds();
+    }
+
+    forall p:PageNr 
+        ensures pageContentsCorresponds(p, rd[p], extractPage(r.m, p))
+    {
+        reveal pageContentsCorresponds();
+        reveal pageDbDispatcherCorresponds();
+    }
 }
 
 lemma lemma_svcHandled_validPageDb(s4:state, d4:PageDb, r:state, dispPg:PageNr, regs:SvcReturnRegs, rd:PageDb)
