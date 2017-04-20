@@ -563,9 +563,9 @@ procedure{:timeLimitMultiplier 2} arrange_attestation_input(
     ghost measurement:seq(word)
     )
     reads
-        globals; sp; r5; r6; r7; r8; r11;
+        globals; sp; r5; r6; r7; r8;
     modifies
-        mem; r1; r2; r3; r4;
+        mem; r1; r2; r3; r4; r10; r11; r12;
     requires/ensures
         SaneState(this);
         ValidMemRange(sp + SHA_CTXSIZE * WORDSIZE, sp + (SHA_CTXSIZE + 3 * SHA_CTXSIZE) * WORDSIZE);
@@ -596,6 +596,14 @@ procedure{:timeLimitMultiplier 2} arrange_attestation_input(
 
     // Arrange the enclave measurement 
     ADD(r1, sp, const((SHA_CTXSIZE + 8) * WORDSIZE)); // Construct a pointer for the next slot on the stack
+
+    LDRglobaladdr(r10, CurDispatcherOp());
+    LDRglobal(r10, CurDispatcherOp(), r10, 0);
+    assert r10 == page_monvaddr(dispPg);
+    // Use r10 to grab DISP_CTXT_USER_WORDS
+
+    addrspace_va_for_page_va(r10, r11, r12, dispPg, pagedb);
+    // Use r11 to grab ADDRSPACE_HASH 
 
     measurement := arrange_real_measurement_in_memory(pagedb, dispPg);
     ghost var measurement_mem;
@@ -853,8 +861,8 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest_inner(
         nonStoppedDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
         r0 == KOM_SVC_ATTEST;
-        r10 == page_monvaddr(dispPg);
-        r11 == page_monvaddr(pagedb[dispPg].addrspace);
+//        r10 == page_monvaddr(dispPg);
+//        r11 == page_monvaddr(pagedb[dispPg].addrspace);
         ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp);
     ensures
         // Framing
@@ -1013,15 +1021,6 @@ procedure svc_returning_attest(
         ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp);
     }
 
-    LDRglobaladdr(r10, CurDispatcherOp());
-    LDRglobal(r10, CurDispatcherOp(), r10, 0);
-    assert r10 == page_monvaddr(dispPg);
-    // Use r10 to grab DISP_CTXT_USER_WORDS
-
-    addrspace_va_for_page_va(r10, r11, r12, dispPg, pagedb);
-    // Use r11 to grab ADDRSPACE_HASH 
-    
-
     ghost var mac_ptr:word;
     ghost var mac:seq(word);
     mac_ptr, mac := svc_returning_attest_inner(exstate, remaining_stack_bytes, pagedb, dispPg);
@@ -1050,6 +1049,7 @@ procedure svc_returning_attest(
     MOV(r0, const(KOM_ERR_SUCCESS));
     assert old(lr) == lr;
     assert OperandContents(this, OLR) == OperandContents(old(this), OLR);
+    assert {:split_here} true;
 }
 
 procedure svc_returning_verify_step0(
