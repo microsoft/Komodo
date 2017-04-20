@@ -150,6 +150,53 @@ procedure unstack_lr()
     LDR(lr, sp, 36);
 }
 
+procedure unstack_nonvolatiles(ghost stack_bytes:int)
+    returns (ghost stack_bytes_ret:int)
+    reads
+        mem;
+    modifies
+        r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
+    requires/ensures
+        SaneState(this);
+    requires
+        isUInt32(sp + 40);
+        sp + 40 <= StackBase();
+        StackBytesRemaining(this, stack_bytes);
+    ensures
+        sp == old(sp+40);
+
+        // pop lr, r4-r12 from stack.
+        lr  == old(MemContents(this.m, sp+36));
+        r4  == old(MemContents(this.m, sp+32));
+        r5  == old(MemContents(this.m, sp+28));
+        r6  == old(MemContents(this.m, sp+24));
+        r7  == old(MemContents(this.m, sp+20));
+        r8  == old(MemContents(this.m, sp+16));
+        r9  == old(MemContents(this.m, sp+12));
+        r10 == old(MemContents(this.m, sp+8));
+        r11 == old(MemContents(this.m, sp+4));
+        r12 == old(MemContents(this.m, sp));
+
+        stack_bytes_ret == stack_bytes + 40;
+        StackBytesRemaining(this, stack_bytes_ret);
+{
+    //pop r12 down to r4 from stack
+    LDR(r12, sp, 0);
+    LDR(r11, sp, 4);
+    LDR(r10, sp, 8);
+    LDR(r9,  sp, 12);
+    LDR(r8,  sp, 16);
+    LDR(r7,  sp, 20);
+    LDR(r6,  sp, 24);
+    LDR(r5,  sp, 28);
+    LDR(r4,  sp, 32);
+    LDR(lr, sp, 36);
+    ADD(sp, sp, 40);
+
+    stack_bytes_ret := stack_bytes + 40;
+}
+
+
 procedure unstack_nonvolatiles_except_lr(ghost stack_bytes:int)
     returns (ghost stack_bytes_ret:int)
     reads

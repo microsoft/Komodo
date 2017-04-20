@@ -958,7 +958,7 @@ procedure svc_returning_attest(
         StackBytesRemaining(this, stack_bytes);
     requires
         ValidState(exstate) && mode_of_state(exstate) != User;
-        stack_bytes >= STACKSIZE_ATTEST * WORDSIZE;
+        stack_bytes >= (STACKSIZE_ATTEST + 10) * WORDSIZE;  // +10 to store volatile reigsters
         isReturningSvc(exstate);
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
         validPageDb(pagedb);
@@ -969,10 +969,9 @@ procedure svc_returning_attest(
         r0 == KOM_SVC_ATTEST;
         r10 == page_monvaddr(dispPg);
         r11 == page_monvaddr(pagedb[dispPg].addrspace);
-        ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp);
+        ValidMemRange(sp - (STACKSIZE_ATTEST + 10) * WORDSIZE, sp);
         //sp - STACKSIZE_ATTEST * WORDSIZE >= KOM_DIRECTMAP_VBASE + MonitorPhysBase();
     ensures
-//        lr == old(lr);
         StackPreserving(old(this), this);
         NonStackMemPreserving(old(this), this);
         let tuple := svcHandled(exstate, pagedb, dispPg) in
@@ -983,19 +982,49 @@ procedure svc_returning_attest(
     ghost var addrspace := pagedb[dispPg].addrspace;
     assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
 
+    ghost var remaining_stack_bytes;
+    remaining_stack_bytes := stack_nonvolatiles(stack_bytes);
+    lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
+    
+    // Prove we still have a valid stack region after pushing registers onto the stack
+    assert sp == old(sp) - 40;
+    calc {
+        true;
+        ValidMemRange(old(sp) - (STACKSIZE_ATTEST + 10) * WORDSIZE, old(sp));
+        ValidMemRange(sp + 40 - (STACKSIZE_ATTEST + 10) * WORDSIZE, sp + 40);
+        ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp + 40);
+            { lemma_ValidMemRange_reduced(sp - STACKSIZE_ATTEST * WORDSIZE, 10 + STACKSIZE_ATTEST, 10); }
+        ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp);
+    }
+
     ghost var mac_ptr:word;
     ghost var mac:seq(word);
-    mac_ptr, mac := svc_returning_attest_inner(exstate, stack_bytes, pagedb, dispPg);
+    mac_ptr, mac := svc_returning_attest_inner(exstate, remaining_stack_bytes, pagedb, dispPg);
 
-    // mac_ptr == sp - (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE;
+    assert WordAligned(sp);
+    WordAlignedAdd(sp, 36);
+    WordAlignedAdd(sp, 32);
+    WordAlignedAdd(sp, 28);
+    WordAlignedAdd(sp, 24);
+    WordAlignedAdd(sp, 20);
+    WordAlignedAdd(sp, 16);
+    WordAlignedAdd(sp, 12);
+    WordAlignedAdd(sp,  8);
+    WordAlignedAdd(sp,  4);
+
+    remaining_stack_bytes := unstack_nonvolatiles(remaining_stack_bytes);
+
+    assert mac_ptr == sp - (STACKSIZE_ATTEST - STACKSIZE_HMAC + 10) * WORDSIZE;
     // Load the mac into registers
-    SUB(r0, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE));
+    SUB(r0, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC + 10) * WORDSIZE));
     load_memory_into_regs(mac);
     
     MOV(r0, const(encode_mode(User)));
     MSR(spsr_mon, r0);
 
     MOV(r0, const(KOM_ERR_SUCCESS));
+    assert old(lr) == lr;
+    assert OperandContents(this, OLR) == OperandContents(old(this), OLR);
 }
 
 procedure svc_returning_verify_step0(
