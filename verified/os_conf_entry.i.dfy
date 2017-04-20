@@ -319,8 +319,9 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
     if(retToEnclave1) {
         assert os_conf_eqpdb(rd1, rd2);
         assert same_ret(r1, r2);
-        assume r1.conf.nondet == s14.conf.nondet;
-        assume r2.conf.nondet == s24.conf.nondet;
+        assert r1.conf.nondet == r2.conf.nondet by {
+            assert s14.conf.nondet == s24.conf.nondet; 
+        }
     } else {
         reveal ValidRegState();
         lemma_exceptionHandled_os_conf(
