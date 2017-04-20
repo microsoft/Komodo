@@ -44,6 +44,22 @@ lemma lemma_enter_os_conf_ni(
             validEnclaveExecution(s21, d2, s2', d2', dispPage, steps2);
         
         assert s11.conf.nondet == s21.conf.nondet;
+
+        assert !spsr_of_state(s11).f && !spsr_of_state(s11).i
+            && !spsr_of_state(s21).f && !spsr_of_state(s21).i by {
+            assert psr_mask_fiq(encode_mode(User)) == 0 by {
+                assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
+                    by { reveal_WordAsBits(); }
+                lemma_BitsAndWordConversions();
+                reveal_BitAnd();
+            }
+            assert psr_mask_irq(encode_mode(User)) == 0 by {
+                assert WordAsBits(0x10) == 0x10 && WordAsBits(0x80) == 0x80
+                    by { reveal_WordAsBits(); }
+                lemma_BitsAndWordConversions();
+                reveal_BitAnd();
+            }
+        }
         
         lemma_validEnclaveEx_os_conf(s11, d1, s1', d1', s21, d2, s2', d2',
                                              dispPage, steps1, steps2);
@@ -92,7 +108,7 @@ lemma lemma_validEnclaveEx_os_conf(
     s1: state, d1: PageDb, s1': state, d1': PageDb,
     s2: state, d2: PageDb, s2': state, d2': PageDb,
     dispPg:PageNr, steps1:nat, steps2:nat)
-    requires SaneConstants()
+    requires SaneConstants() && do_declassify()
     requires ValidState(s1) && ValidState(s2) &&
         ValidState(s1') && ValidState(s2')
     requires validPageDb(d1) && validPageDb(d2) &&
@@ -104,6 +120,9 @@ lemma lemma_validEnclaveEx_os_conf(
     requires os_conf_eqpdb(d1, d2)
     requires InsecureMemInvariant(s1, s2)
     requires s1.conf.nondet == s2.conf.nondet
+    requires mode_of_state(s1) != User && mode_of_state(s2) != User
+    requires !spsr_of_state(s1).f && !spsr_of_state(s1).i
+    requires !spsr_of_state(s2).f && !spsr_of_state(s2).i
     ensures  os_conf_eqpdb(d1', d2')
     ensures  same_ret(s1', s2')
     ensures  InsecureMemInvariant(s1', s2')
@@ -144,7 +163,8 @@ lemma lemma_validEnclaveStep_os_conf(s1: state, d1: PageDb, s1':state, d1': Page
     requires ValidState(s1) && ValidState(s2) &&
              ValidState(s1') && ValidState(s2') &&
              validPageDb(d1) && validPageDb(d2) && 
-             validPageDb(d1') && validPageDb(d2') && SaneConstants()
+             validPageDb(d1') && validPageDb(d2') 
+    requires SaneConstants() && do_declassify()
     requires s1.conf.nondet == s2.conf.nondet
     requires nonStoppedDispatcher(d1, dispPage)
     requires nonStoppedDispatcher(d2, dispPage)
@@ -157,6 +177,7 @@ lemma lemma_validEnclaveStep_os_conf(s1: state, d1: PageDb, s1':state, d1': Page
     ensures  same_ret(s1', s2')
     ensures  ret1 == ret2
     ensures  ret1 ==> s1'.conf.nondet == s2'.conf.nondet;
+    ensures  ret1 ==> do_declassify()
 {
     reveal validEnclaveExecutionStep();
     var s14, d14 :|
@@ -173,7 +194,8 @@ lemma lemma_validEnclaveStep_os_conf(s1: state, d1: PageDb, s1':state, d1': Page
         dispPage, ret1, ret2);
 }
 
-lemma lemma_validEnclaveStepPrime_os_conf(
+lemma {:timeLimitMultiplier 2}
+lemma_validEnclaveStepPrime_os_conf(
 s11: state, d11: PageDb, s14:state, d14:PageDb, r1:state, rd1:PageDb,
 s21: state, d21: PageDb, s24:state, d24:PageDb, r2:state, rd2:PageDb,
 dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
@@ -182,6 +204,7 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
              ValidState(r1)  && ValidState(r2)  &&
              validPageDb(d11) && validPageDb(d21) &&
              validPageDb(rd1) && validPageDb(rd2) && SaneConstants()
+    requires do_declassify()
     requires s11.conf.nondet == s21.conf.nondet
     requires nonStoppedDispatcher(d11, dispPg)
     requires nonStoppedDispatcher(d21, dispPg)
@@ -263,25 +286,28 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
     
     assert s14.conf.nondet == s24.conf.nondet;
 
-    assert ex1 == ex2 by {
-        // Need to declassify
-        assume false;
+    assert ex1 == ex2 == declassified_ex() by {
+        reveal userspaceExecutionFn();
+        lemma_decl_ex();
     }
 
-    assert s14.conf.ex == s24.conf.ex;
+    assert s14.conf.ex == s24.conf.ex == declassified_ex();
 
-    assert retToEnclave1 == retToEnclave2 by {
-        assume false;
-        // same s.conf.ex (declassify) 
-        // whether or not s.regs[R0] == KOM_SVC_EXIT in both states must be the 
-        // same. not sure but possibly also needs to be declassified
-    }
-
-    assert !retToEnclave1 && s14.conf.ex.ExSVC? ==> 
-        s14.regs[R1] == s24.regs[R1] by
+    assert retToEnclave1 == retToEnclave2 &&
+        (!retToEnclave1 && declassified_ex() == ExSVC ==>
+            s14.regs[R1] == s24.regs[R1]) by
     {
-        assume false;
-        // R1 needs to be declassified exactly under the conditions above.
+        assert s14.regs[R0] == s13.regs[R0];
+        assert s24.regs[R0] == s23.regs[R0];
+        reveal userspaceExecutionFn();
+        if(declassified_ex() == ExSVC()) {
+            lemma_decl_r0(s14);
+            lemma_decl_r0(s24);
+            if(declassified_reg(R0) == KOM_SVC_EXIT) {
+                lemma_decl_r1(s14);
+                lemma_decl_r1(s24);
+            }
+        }
     }
 
     assert os_conf_eqpdb(d14, d24) by
@@ -346,7 +372,6 @@ ensures  os_conf_eqpdb(d14, d24)
     reveal os_conf_eqpdb();
 }
 
-
 function insecureUserspaceMem(s:state, pc:word, a:addr): word
     requires ValidState(s)
     requires ValidMem(a) && a in TheValidAddresses()
@@ -398,7 +423,7 @@ lemma lemma_insecure_mem_userspace(
     var pt := ExtractAbsPageTable(s12).v;
     var pages := WritablePagesInTable(pt);
 
-    forall( a | ValidMem(a) && !addrIsSecure(a) )
+    forall( a | ValidMem(a) && address_is_insecure(a) )
         ensures s13.m.addresses[a] == s23.m.addresses[a]
     {
         var m1 := insecureUserspaceMem(s12, pc1, a);
@@ -412,51 +437,14 @@ lemma lemma_insecure_mem_userspace(
             assert m2 == nondet_word(s22.conf.nondet, a);
             assert s12.conf.nondet == s22.conf.nondet;
         } else {
-            assert m1 == MemContents(s12.m, a);
-            assert m2 == MemContents(s22.m, a);
-            assert InsecureMemInvariant(s12, s22);
-            assert !address_is_secure(a);
-            // TODO there is probably a reveal needed for the following:
-            assume a > PhysBase(); 
-            // I'm still not sure this lemma is true...
-            lemma_not_secure_mem_helper(a);
-            assert m1 == m2;
         }
     }
-    lemma_insecure_mem_helper(s13, s23);
 }
 
-predicate insec_mem_invar(s1:state, s2:state)
-    requires validStates({s1, s2})
+// Range used by InsecureMemInvariant
+predicate address_is_insecure(m:addr) 
 {
-    reveal ValidMemState();
-    forall a | ValidMem(a) && !address_is_secure(a) ::
-        s1.m.addresses[a] == s2.m.addresses[a]
-}
-
-lemma lemma_not_secure_mem_helper(a:addr)
-    requires ValidMem(a)
-    requires !address_is_secure(a)
-    requires SaneConstants()
-    requires a > PhysBase()
-    ensures KOM_DIRECTMAP_VBASE <= a < KOM_DIRECTMAP_VBASE + MonitorPhysBase();
-    {
-        assert (a < KOM_DIRECTMAP_VBASE + SecurePhysBase()) ||
-            (a >= KOM_DIRECTMAP_VBASE + SecurePhysBase() + KOM_SECURE_RESERVE);
-        assert MonitorPhysBase() <= SecurePhysBase();
-        assert KOM_DIRECTMAP_VBASE == PhysBase();
-        assume (a < KOM_DIRECTMAP_VBASE + SecurePhysBase());
-        assume !(MonitorPhysBase() < a < SecurePhysBase());
-        assume false;
-    }
-
-lemma lemma_insecure_mem_helper(s1:state, s2:state)
-    requires validStates({s1, s2})
-    requires insec_mem_invar(s1, s2)
-    requires SaneConstants()
-    ensures InsecureMemInvariant(s1, s2)
-{
-    reveal ValidMemState();
+    KOM_DIRECTMAP_VBASE <= m < KOM_DIRECTMAP_VBASE + MonitorPhysBase()
 }
 
 lemma lemma_eqpdb_pt_coresp(d1: PageDb, d2: PageDb, s1: state, s2: state, l1p:PageNr)
@@ -476,6 +464,3 @@ lemma lemma_eqpdb_pt_coresp(d1: PageDb, d2: PageDb, s1: state, s2: state, l1p:Pa
         reveal mkAbsPTable();
     }
 }
-
-// lemma lemma_userspaceInsecureMem_os_conf(
-// s12:state, s13:state, 

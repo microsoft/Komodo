@@ -183,6 +183,7 @@ lemma lemma_enter_enc_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
 
 lemma 
 {:fuel outside_world_same, 0}
+{:timeLimitMultiplier 2}
 lemma_enter_enc_conf_eqpdb_not_atkr(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                  s2: state, d2: PageDb, s2':state, d2': PageDb,
                                  disp: word, arg1: word, arg2: word, arg3: word,
@@ -243,30 +244,18 @@ lemma_enter_enc_conf_eqpdb_not_atkr(s1: state, d1: PageDb, s1':state, d1': PageD
     assert forall n : PageNr | pgInAddrSpc(d1', n, atkr) ::
         d1'[n].entry == d2'[n].entry by {reveal enc_conf_eqpdb();}
 
+    // This times out without DAFNYPROC :(
+    // The assert also should not be necessary...
     assert enc_conf_eqpdb(d1', d2', atkr) by {
         reveal enc_conf_eqpdb();
 
         assert d1'[atkr].PageDbEntryTyped? <==> d2'[atkr].PageDbEntryTyped? &&
         (d1'[atkr].PageDbEntryTyped? ==>
         (valAddrPage(d1', atkr) && valAddrPage(d2', atkr) &&
-        // The set of pages that belong to the enclave is the same in both 
-        // states.
         (forall n : PageNr :: pgInAddrSpc(d1', n, atkr) <==>
             pgInAddrSpc(d2', n, atkr)) &&
-        // This together with two concrete states that refine d1', d2' ensure that 
-        // the contents of the pages that belong to the enclave are the same in 
-        // both states.
         (forall n : PageNr | pgInAddrSpc(d1', n, atkr) ::
             d1'[n].entry == d2'[n].entry)));
-
-        // assert d1'[atkr].PageDbEntryTyped? <==> d2'[atkr].PageDbEntryTyped?;
-        // if(d1'[atkr].PageDbEntryTyped?) {
-        //     assert valAddrPage(d1', atkr) && valAddrPage(d2', atkr);
-        //     assert (forall n : PageNr :: pgInAddrSpc(d1', n, atkr) <==>
-        //         pgInAddrSpc(d2', n, atkr));
-        //     assert forall n : PageNr | pgInAddrSpc(d1', n, atkr) ::
-        //         d1'[n].entry == d2'[n].entry;
-        // }
     }
 }
 

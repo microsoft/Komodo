@@ -608,27 +608,3 @@ lemma lemma_updateL2Pte_enc_conf_ni(d1: PageDb, d1': PageDb,
     assert d1'[l1pte1].addrspace == a;
     assert d2'[l1pte2].addrspace == a;
 }
-
-//-----------------------------------------------------------------------------
-// Integrity, Enclaves are NI with other Enclaves
-//-----------------------------------------------------------------------------
-
-/*
-lemma lemma_enter_enc_integ_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
-                               s2: state, d2: PageDb, s2':state, d2': PageDb,
-                               dispPage: word, arg1: word, arg2: word, arg3: word,
-                               atkr: PageNr)
-    requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
-    requires smc_enter(s1, d1, s1', d1', dispPage, arg1, arg2, arg3)
-    requires smc_enter(s2, d2, s2', d2', dispPage, arg1, arg2, arg3)
-    requires enc_integ_eqpdb(d1, d2, atkr)
-    requires entering_atkr(d1, d2, dispPage, atkr, true) ==>
-        enc_integ_eq(s1, s2, d1, d2, atkr)
-    ensures enc_integ_eqpdb(d1', d2', atkr)
-    ensures entering_atkr(d1, d2, dispPage, atkr, true) ==>
-        enc_integ_eq(s1', s2', d1', d2', atkr)
-{
-    // TODO proveme
-    assume false;
-}
-*/

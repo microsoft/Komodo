@@ -2,6 +2,7 @@ include "sec_prop.s.dfy"
 include "pagedb.s.dfy"
 include "entry.s.dfy"
 include "sec_prop_util.i.dfy"
+include "os_declass.s.dfy"
 
 predicate contentsOk(physPage: word, contents: Maybe<seq<word>>)
 {
@@ -138,9 +139,7 @@ predicate os_ni_reqs(s1: state, d1: PageDb, s1': state, d1': PageDb,
 {
     ValidState(s1) && validPageDb(d1) && ValidState(s1') && validPageDb(d1') &&
     ValidState(s2) && validPageDb(d2) && ValidState(s2') && validPageDb(d2') &&
-    SaneConstants() //&&
-    // pageDbCorresponds(s1.m, d1) && pageDbCorresponds(s1'.m, d1') &&
-    // pageDbCorresponds(s2.m, d2) && pageDbCorresponds(s2'.m, d2')
+    SaneConstants() && do_declassify()
 }
 
 //-----------------------------------------------------------------------------
