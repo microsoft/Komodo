@@ -712,6 +712,7 @@ lemma lemma_ValidEntryPre(s0:state, s1:state, sd:PageDb, r:state, rd:PageDb, dp:
     requires ValidState(s0) && ValidState(s1) && ValidState(r) && validPageDb(sd)
     requires SaneConstants()
     requires s0.conf.nondet == s1.conf.nondet
+    requires InsecureMemInvariant(s0, s1)
     ensures smc_enter(s1, sd, r, rd, dp, a1, a2, a3)
         ==> smc_enter(s0, sd, r, rd, dp, a1, a2, a3)
     ensures smc_resume(s1, sd, r, rd, dp) ==> smc_resume(s0, sd, r, rd, dp)
