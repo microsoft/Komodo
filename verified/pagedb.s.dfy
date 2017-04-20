@@ -131,6 +131,8 @@ predicate validDispatcherContext(dc:DispatcherContext)
 {
     wellformedDispatcherContext(dc)
     && decode_mode'(psr_mask_mode(dc.cpsr)) == Just(User)
+    && psr_mask_fiq(dc.cpsr) == 0
+    && psr_mask_irq(dc.cpsr) == 0
 }
 
 predicate pageDbEntriesValid(d:PageDb)

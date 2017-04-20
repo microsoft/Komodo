@@ -1028,9 +1028,9 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
     if(retToEnclave) {
         assert rd1 == d14;
         assert rd2 == d24;
-        // XXX Can't prove this from entry.s:
-        assume r1.conf.nondet == s14.conf.nondet;
-        assume r2.conf.nondet == s24.conf.nondet;
+        assert r1.conf.nondet == r2.conf.nondet by {
+            assert s14.conf.nondet == s24.conf.nondet; 
+        }
         assert enc_conf_eqpdb(rd1, rd2, atkr);
         assert enc_conf_eq_entry(r1, r2, rd1, rd2, atkr);
         var ret1 := svcHandled(s14, d14, dispPg);
