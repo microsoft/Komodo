@@ -779,7 +779,6 @@ procedure{:timeLimitMultiplier 2} arrange_attestation_input(
 }
 
 #verbatim
-
 lemma lemma_SaneState_implies_SaneShaGlobal(s:state)
     requires SaneState(s);
     ensures  SaneShaGlobal(va_get_globals(s));
@@ -792,16 +791,7 @@ lemma lemma_SaneState_implies_SaneShaGlobal(s:state)
             reveal_ValidMemState();   // Which we get from ValidState
         }
     }
-    // TODO: ab
-assume false;
-    assert  ValidGlobalStateOpaque(globals)
- && ValidGlobal(K_SHA256s())
- && SizeOfGlobal(K_SHA256s()) == K_SHA256_BYTES
- && isUInt32(AddressOfGlobal(K_SHA256s()) + K_SHA256_BYTES) // We won't wrap around while accessing K_SHA256s
- && (forall j :: 0 <= j < K_SHA256_WORDS ==> GlobalContents(globals, K_SHA256s(), AddressOfGlobal(K_SHA256s()) + j * WORDSIZE) == K_SHA256(j));
-
 }
-
 #endverbatim
 
 procedure {:timeLimitMultiplier 2} compute_hmac(

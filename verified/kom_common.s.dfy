@@ -1,4 +1,5 @@
 include "ARMdef.dfy"
+include "sha/sha256.s.dfy" // for K_SHA256
 
 const KOM_MAGIC:int := 0x4b6d646f;
 
@@ -147,6 +148,8 @@ function method {:axiom} SecurePhysBase(): addr
 function AttestKey(): seq<word>
     ensures |AttestKey()| == 8
 
+const K_SHA256_WORDS:int := 64;
+
 function method KomGlobalDecls(): globaldecls
     ensures ValidGlobalDecls(KomGlobalDecls());
 {
@@ -155,7 +158,7 @@ function method KomGlobalDecls(): globaldecls
         SecurePhysBaseOp() := WORDSIZE,
         CurDispatcherOp() := WORDSIZE,
         PendingInterruptOp() := WORDSIZE,
-        K_SHA256s() := 256,
+        K_SHA256s() := K_SHA256_WORDS * WORDSIZE,
         AttestKeyOp() := 8*WORDSIZE
         ]
 }
@@ -187,6 +190,11 @@ predicate SaneMem(s:memstate)
     && GlobalFullContents(s, MonitorPhysBaseOp()) == [MonitorPhysBase()]
     && GlobalFullContents(s, SecurePhysBaseOp()) == [SecurePhysBase()]
     && GlobalFullContents(s, AttestKeyOp()) == AttestKey()
+    // SHA const table is valie
+    && forall j :: 0 <= j < K_SHA256_WORDS
+        ==> GlobalWord(s, K_SHA256s(), WordsToBytes(j)) == K_SHA256(j)
+    // extra-tight requirement for SHA spec to avoid wraparound
+    && AddressOfGlobal(K_SHA256s()) + SizeOfGlobal(K_SHA256s()) < UINT32_LIM
 }
 
 predicate SaneConstants()

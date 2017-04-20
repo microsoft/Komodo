@@ -472,6 +472,8 @@ predicate ValidGlobalOffset(g:symbol, offset:int)
 
 // globals have an unknown (uint32) address, only establised by LDR-reloc
 function {:axiom} AddressOfGlobal(g:symbol): addr
+    requires ValidGlobal(g)
+    ensures AddressOfGlobal(g) + SizeOfGlobal(g) <= UINT32_LIM
 
 function SizeOfGlobal(g:symbol): word
     requires ValidGlobal(g)
