@@ -60,6 +60,25 @@ assume ValidMemRange(dp, dp + SHA_CTXSIZE * WORDSIZE);
             AddrMemContents(s.m.addresses, dp + i * WORDSIZE);
             page[dp + i*WORDSIZE]; 
 { assume false; }           // TODO: Remove me!
+//                { assert if i == 0 then 
+//                           page[dp + 0*WORDSIZE] == pagedb[dispPg].entry.verify_words[0]
+//                         else if i == 1 then 
+//                           page[dp + 1*WORDSIZE] == pagedb[dispPg].entry.verify_words[1]
+//                         else if i == 2 then 
+//                           page[dp + 2*WORDSIZE] == pagedb[dispPg].entry.verify_words[2]
+//                         else if i == 3 then 
+//                           page[dp + 3*WORDSIZE] == pagedb[dispPg].entry.verify_words[3]
+//                         else if i == 4 then 
+//                           page[dp + 4*WORDSIZE] == pagedb[dispPg].entry.verify_words[4]
+//                         else if i == 5 then 
+//                           page[dp + 5*WORDSIZE] == pagedb[dispPg].entry.verify_words[5]
+//                         else if i == 6 then 
+//                           page[dp + 6*WORDSIZE] == pagedb[dispPg].entry.verify_words[6]
+//                         else //if i == 7 then 
+//                           page[dp + 7*WORDSIZE] == pagedb[dispPg].entry.verify_words[7]
+//                         ;
+//                }
+
             pagedb[dispPg].entry.verify_words[i];
         }
     }
