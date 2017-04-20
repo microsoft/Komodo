@@ -228,7 +228,7 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest_inner(
         mac_ptr == sp - (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE;
         ValidMemRange(mac_ptr, mac_ptr + SHA_CTXSIZE * WORDSIZE);
         mac == AddrMemContentsSeq(mem, mac_ptr, SHA_CTXSIZE);
-        mac == svcHmac(exstate, pagedb, dispPg);
+        mac == svcHmacAttest(exstate, pagedb, dispPg);
 {
     ghost var addrspace := pagedb[dispPg].addrspace;
     assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
@@ -306,7 +306,7 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest_inner(
 
     mac := compute_hmac(STACKSIZE_HMAC * WORDSIZE, pagedb, dispPg, input, old(sp));
     assert spec_hmac == mac;
-    assert mac == svcHmac(exstate, pagedb, dispPg);
+    assert mac == svcHmacAttest(exstate, pagedb, dispPg);
     mac_ptr := sp;
 
     calc {

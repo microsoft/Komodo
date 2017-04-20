@@ -191,23 +191,23 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
     assert wellformedDispatcherContext(e.ctxt);
     page[base + DISPATCHER_ENTERED] == to_i(e.entered)
     && page[base + DISPATCHER_ENTRYPOINT] == e.entrypoint
-    && (e.entered ==> (page[base + DISP_CTXT_PC] == e.ctxt.pc
-    && page[base + DISP_CTXT_PSR] == e.ctxt.cpsr
-    && page[base + DISP_CTXT_LR]  == e.ctxt.regs[LR(User)]
-    && page[base + DISP_CTXT_SP]  == e.ctxt.regs[SP(User)]
-    && page[base + DISP_CTXT_R0]  == e.ctxt.regs[R0]
-    && page[base + DISP_CTXT_R1]  == e.ctxt.regs[R1]
-    && page[base + DISP_CTXT_R2]  == e.ctxt.regs[R2]
-    && page[base + DISP_CTXT_R3]  == e.ctxt.regs[R3]
-    && page[base + DISP_CTXT_R4]  == e.ctxt.regs[R4]
-    && page[base + DISP_CTXT_R5]  == e.ctxt.regs[R5]
-    && page[base + DISP_CTXT_R6]  == e.ctxt.regs[R6]
-    && page[base + DISP_CTXT_R7]  == e.ctxt.regs[R7]
-    && page[base + DISP_CTXT_R8]  == e.ctxt.regs[R8]
-    && page[base + DISP_CTXT_R9]  == e.ctxt.regs[R9]
-    && page[base + DISP_CTXT_R10] == e.ctxt.regs[R10]
-    && page[base + DISP_CTXT_R11] == e.ctxt.regs[R11]
-    && page[base + DISP_CTXT_R12] == e.ctxt.regs[R12])
+    && (e.entered ==> page[base + DISP_CTXT_PC] == e.ctxt.pc
+    &&  page[base + DISP_CTXT_PSR] == e.ctxt.cpsr
+    &&  page[base + DISP_CTXT_LR]  == e.ctxt.regs[LR(User)]
+    &&  page[base + DISP_CTXT_SP]  == e.ctxt.regs[SP(User)]
+    &&  page[base + DISP_CTXT_R0]  == e.ctxt.regs[R0]
+    &&  page[base + DISP_CTXT_R1]  == e.ctxt.regs[R1]
+    &&  page[base + DISP_CTXT_R2]  == e.ctxt.regs[R2]
+    &&  page[base + DISP_CTXT_R3]  == e.ctxt.regs[R3]
+    &&  page[base + DISP_CTXT_R4]  == e.ctxt.regs[R4]
+    &&  page[base + DISP_CTXT_R5]  == e.ctxt.regs[R5]
+    &&  page[base + DISP_CTXT_R6]  == e.ctxt.regs[R6]
+    &&  page[base + DISP_CTXT_R7]  == e.ctxt.regs[R7]
+    &&  page[base + DISP_CTXT_R8]  == e.ctxt.regs[R8]
+    &&  page[base + DISP_CTXT_R9]  == e.ctxt.regs[R9]
+    &&  page[base + DISP_CTXT_R10] == e.ctxt.regs[R10]
+    &&  page[base + DISP_CTXT_R11] == e.ctxt.regs[R11]
+    &&  page[base + DISP_CTXT_R12] == e.ctxt.regs[R12])
     && page[base + DISP_CTXT_USER_WORDS + 0*WORDSIZE] == e.verify_words[0]
     && page[base + DISP_CTXT_USER_WORDS + 1*WORDSIZE] == e.verify_words[1]
     && page[base + DISP_CTXT_USER_WORDS + 2*WORDSIZE] == e.verify_words[2]
@@ -216,7 +216,14 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
     && page[base + DISP_CTXT_USER_WORDS + 5*WORDSIZE] == e.verify_words[5]
     && page[base + DISP_CTXT_USER_WORDS + 6*WORDSIZE] == e.verify_words[6]
     && page[base + DISP_CTXT_USER_WORDS + 7*WORDSIZE] == e.verify_words[7]
-       )
+    && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 0*WORDSIZE] == e.verify_measurement[0]
+    && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 1*WORDSIZE] == e.verify_measurement[1]
+    && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 2*WORDSIZE] == e.verify_measurement[2]
+    && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 3*WORDSIZE] == e.verify_measurement[3]
+    && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 4*WORDSIZE] == e.verify_measurement[4]
+    && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 5*WORDSIZE] == e.verify_measurement[5]
+    && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 6*WORDSIZE] == e.verify_measurement[6]
+    && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 7*WORDSIZE] == e.verify_measurement[7]
 }
 
 function ARM_L1PTE(paddr: word): word
