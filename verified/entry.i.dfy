@@ -82,7 +82,7 @@ lemma lemma_userExecutionModel_sufficiency(s:state, r:state)
 // Exception handler invariants
 //-----------------------------------------------------------------------------
 
-const EXCEPTION_STACK_BYTES:int := 100*WORDSIZE;
+const EXCEPTION_STACK_BYTES:int := 150*WORDSIZE;
 
 predicate KomUserEntryPrecondition(s:state, pagedb:PageDb, dispPg:PageNr)
 {

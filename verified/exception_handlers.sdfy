@@ -314,6 +314,7 @@ procedure load_attestion_key() returns (ghost key:seq(word))
     lemma_package_hash_result(mem, r4, key);    // Ensures AddMemContentsSeq(mem, r4, SHA_CTXSIZE) == key
     assert key == GlobalFullContents(this.m, AttestKeyOp());
     assert GlobalFullContents(this.m, AttestKeyOp()) == AttestKey();
+    assert {:split_here} true;
 }
 
 procedure arrange_user_regs_in_memory() returns (ghost user_words:seq(word))
@@ -830,8 +831,8 @@ procedure {:timeLimitMultiplier 2} compute_hmac(
         nonStoppedDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
         r0 == KOM_SVC_ATTEST;
-        r10 == page_monvaddr(dispPg);
-        r11 == page_monvaddr(pagedb[dispPg].addrspace);
+//        r10 == page_monvaddr(dispPg);
+//        r11 == page_monvaddr(pagedb[dispPg].addrspace);
 
         ValidMemRange(sp + SHA_CTXSIZE * WORDSIZE, sp + 4 * SHA_CTXSIZE * WORDSIZE);
         input == AddrMemContentsSeq(mem, sp + SHA_CTXSIZE * WORDSIZE, 3 * SHA_CTXSIZE);
@@ -1446,6 +1447,7 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
         InterruptContinuationInvariantDef();
         mode_of_state(this) == Supervisor && spsr_of_state(this).m == User;
         this.conf.ex == ExSVC;
+        exists stack_bytes :: StackBytesRemaining(this, stack_bytes) && stack_bytes >= (STACKSIZE_ATTEST + 10) * WORDSIZE;
     ensures
         KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
         validPageDb(pagedb);
