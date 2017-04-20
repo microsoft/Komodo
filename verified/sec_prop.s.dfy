@@ -42,18 +42,14 @@ predicate usr_regs_equiv(s1:state, s2:state)
 }
 
 //-----------------------------------------------------------------------------
-//  Confidentiality, Malicious Enclave
+// Enclaves are NI with other Enclaves 
 //-----------------------------------------------------------------------------
-// A malicious enclave can observe:
-// 1. Pages it owns.
-// 2. Public pages.
-// 3. (A subset of the) registers *only* when the malicious enclave is executing.
 
 // Our equivalent of an enclave number is a dispatcher page.
 
 // Low-equivalence relation that relates two PageDbs that appear equivalent to 
 // an attacker that controls an enclave "atkr". 
-predicate {:opaque} enc_conf_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
+predicate {:opaque} enc_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
     requires validPageDb(d1) && validPageDb(d2)
 {
     d1[atkr].PageDbEntryTyped? <==> d2[atkr].PageDbEntryTyped? &&
@@ -70,21 +66,11 @@ predicate {:opaque} enc_conf_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
         d1[n].entry == d2[n].entry)))
 }
 
-// TODO: this is no longer a function of anything other than the states...
-predicate enc_conf_eq_entry(s1:state, s2:state, d1:PageDb, d2:PageDb, 
-    atkr:PageNr)
-    requires ValidState(s1) && ValidState(s2)
-    //requires validPageDb(d1) && validPageDb(d2)
-    // requires pageDbCorresponds(s1.m, d1) && pageDbCorresponds(s2.m, d2)
-{
-    s1.conf.nondet == s2.conf.nondet
-}
-
 //-----------------------------------------------------------------------------
 // Confidentiality, Malicious OS
 //-----------------------------------------------------------------------------
 
-predicate os_conf_eqentry(e1:PageDbEntryTyped, e2:PageDbEntryTyped)
+predicate os_eqentry(e1:PageDbEntryTyped, e2:PageDbEntryTyped)
 {
     match e1
         case Addrspace(_,_,_) => e1 == e2
@@ -95,17 +81,17 @@ predicate os_conf_eqentry(e1:PageDbEntryTyped, e2:PageDbEntryTyped)
         case DataPage(_) => e2.DataPage?
 }
 
-predicate {:opaque} os_conf_eqpdb(d1:PageDb, d2:PageDb)
+predicate {:opaque} os_eqpdb(d1:PageDb, d2:PageDb)
     requires validPageDb(d1) && validPageDb(d2)
 {
     (forall n: PageNr ::
         d1[n].PageDbEntryTyped? <==> d2[n].PageDbEntryTyped?) &&
     (forall n : PageNr | d1[n].PageDbEntryTyped? ::
-        os_conf_eqentry(d1[n].entry, d2[n].entry) &&
+        os_eqentry(d1[n].entry, d2[n].entry) &&
         d1[n].addrspace == d2[n].addrspace)
 }
 
-predicate os_conf_eq(s1: state, d1: PageDb, s2: state, d2: PageDb)
+predicate os_eq(s1: state, d1: PageDb, s2: state, d2: PageDb)
     requires ValidState(s1) && ValidState(s2)
     requires validPageDb(d1) && validPageDb(d2)
 {
@@ -114,7 +100,7 @@ predicate os_conf_eq(s1: state, d1: PageDb, s2: state, d2: PageDb)
     os_regs_equiv(s1, s2) &&
     os_ctrl_eq(s1, s2) &&
     InsecureMemInvariant(s1, s2) &&
-    os_conf_eqpdb(d1, d2)
+    os_eqpdb(d1, d2)
 }
 
 predicate os_ctrl_eq(s1: state, s2: state)
@@ -161,24 +147,4 @@ predicate os_regs_equiv(s1: state, s2: state)
    s1.regs[SP(Supervisor)] == s2.regs[SP(Supervisor)] &&
    s1.regs[SP(Abort)]      == s2.regs[SP(Abort)] &&
    s1.regs[SP(Undefined)]  == s2.regs[SP(Undefined)]
-}
-
-//-----------------------------------------------------------------------------
-// Integrity, Malicious Enclave
-//-----------------------------------------------------------------------------
-// These relate states if the parts that the attacker cannot modify are the 
-// same in both.
-predicate enc_integ_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
-    requires validPageDb(d1) && validPageDb(d2)
-{
-    valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
-    (forall n : PageNr :: pgInAddrSpc(d1, n, atkr) <==>
-        pgInAddrSpc(d2, n, atkr)) &&
-    // The pages outside of the attacker's address space are the same
-    (forall n : PageNr | !pgInAddrSpc(d1, n, atkr) :: 
-        d1[n].PageDbEntryTyped? <==> d2[n].PageDbEntryTyped?) &&
-    (forall n : PageNr | !pgInAddrSpc(d1, n, atkr) && 
-        d1[n].PageDbEntryTyped? ::
-            d1[n].addrspace == d2[n].addrspace &&
-            d1[n].entry == d2[n].entry)
 }

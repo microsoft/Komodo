@@ -12,26 +12,26 @@ predicate same_ret(s1:state, s2:state)
     s1.regs[R1] == s2.regs[R1]
 }
 
-lemma lemma_enter_os_conf_ni(
+lemma lemma_enter_os_ni(
     s1: state, d1: PageDb, s1':state, d1': PageDb,
     s2: state, d2: PageDb, s2':state, d2': PageDb,
     dispPage: word, arg1: word, arg2: word, arg3: word)
     requires os_ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2')
     requires s1.conf.nondet == s2.conf.nondet
-    requires os_conf_eq(s1, d1, s2, d2)
+    requires os_eq(s1, d1, s2, d2)
     requires smc_enter(s1, d1, s1', d1', dispPage, arg1, arg2, arg3)
     requires smc_enter(s2, d2, s2', d2', dispPage, arg1, arg2, arg3)
-    ensures  os_conf_eqpdb(d1', d2')
+    ensures  os_eqpdb(d1', d2')
     ensures  same_ret(s1', s2')
     ensures  InsecureMemInvariant(s1', s2')
 {
     var e1', e2' := smc_enter_err(d1, dispPage, false), 
         smc_enter_err(d2, dispPage, false);
     assert e1' == e2' by {
-        reveal os_conf_eqpdb();
+        reveal os_eqpdb();
     }
     if(e1' != KOM_ERR_SUCCESS) {
-        assert os_conf_eqpdb(d1', d2');
+        assert os_eqpdb(d1', d2');
         assert same_ret(s1', s2');
         assert InsecureMemInvariant(s1', s2');
     } else {
@@ -61,12 +61,12 @@ lemma lemma_enter_os_conf_ni(
             }
         }
         
-        lemma_validEnclaveEx_os_conf(s11, d1, s1', d1', s21, d2, s2', d2',
+        lemma_validEnclaveEx_os(s11, d1, s1', d1', s21, d2, s2', d2',
                                              dispPage, steps1, steps2);
     }
 }
 
-lemma lemma_resume_os_conf_ni(
+lemma lemma_resume_os_ni(
     s1: state, d1: PageDb, s1':state, d1': PageDb,
     s2: state, d2: PageDb, s2':state, d2': PageDb,
     dispPage: word)
@@ -74,18 +74,18 @@ lemma lemma_resume_os_conf_ni(
     requires s1.conf.nondet == s2.conf.nondet
     requires smc_resume(s1, d1, s1', d1', dispPage)
     requires smc_resume(s2, d2, s2', d2', dispPage)
-    requires os_conf_eq(s1, d1, s2, d2)
-    ensures  os_conf_eqpdb(d1', d2')
+    requires os_eq(s1, d1, s2, d2)
+    ensures  os_eqpdb(d1', d2')
     ensures  same_ret(s1', s2')
     ensures  InsecureMemInvariant(s1', s2')
 {
     var e1', e2' := smc_enter_err(d1, dispPage, true), 
         smc_enter_err(d2, dispPage, true);
     assert e1' == e2' by {
-        reveal os_conf_eqpdb();
+        reveal os_eqpdb();
     }
     if(e1' != KOM_ERR_SUCCESS) {
-        assert os_conf_eqpdb(d1', d2');
+        assert os_eqpdb(d1', d2');
         assert same_ret(s1', s2');
         assert InsecureMemInvariant(s1', s2');
     } else {
@@ -99,12 +99,12 @@ lemma lemma_resume_os_conf_ni(
         
         assert s11.conf.nondet == s21.conf.nondet;
        
-        lemma_validEnclaveEx_os_conf(s11, d1, s1', d1', s21, d2, s2', d2',
+        lemma_validEnclaveEx_os(s11, d1, s1', d1', s21, d2, s2', d2',
             dispPage, steps1, steps2);
     }
 }
 
-lemma lemma_validEnclaveEx_os_conf(
+lemma lemma_validEnclaveEx_os(
     s1: state, d1: PageDb, s1': state, d1': PageDb,
     s2: state, d2: PageDb, s2': state, d2': PageDb,
     dispPg:PageNr, steps1:nat, steps2:nat)
@@ -117,13 +117,13 @@ lemma lemma_validEnclaveEx_os_conf(
     requires nonStoppedDispatcher(d2, dispPg)
     requires validEnclaveExecution(s1, d1, s1', d1', dispPg, steps1);
     requires validEnclaveExecution(s2, d2, s2', d2', dispPg, steps2);
-    requires os_conf_eqpdb(d1, d2)
+    requires os_eqpdb(d1, d2)
     requires InsecureMemInvariant(s1, s2)
     requires s1.conf.nondet == s2.conf.nondet
     requires mode_of_state(s1) != User && mode_of_state(s2) != User
     requires !spsr_of_state(s1).f && !spsr_of_state(s1).i
     requires !spsr_of_state(s2).f && !spsr_of_state(s2).i
-    ensures  os_conf_eqpdb(d1', d2')
+    ensures  os_eqpdb(d1', d2')
     ensures  same_ret(s1', s2')
     ensures  InsecureMemInvariant(s1', s2')
     decreases steps1, steps2
@@ -137,7 +137,7 @@ lemma lemma_validEnclaveEx_os_conf(
 
     lemma_validEnclaveExecutionStep_validPageDb(s1, d1, s15, d15, dispPg, retToEnclave1);
     lemma_validEnclaveExecutionStep_validPageDb(s2, d2, s25, d25, dispPg, retToEnclave2);
-    lemma_validEnclaveStep_os_conf(s1, d1, s15, d15, s2, d2, s25, d25,
+    lemma_validEnclaveStep_os(s1, d1, s15, d15, s2, d2, s25, d25,
         dispPg, retToEnclave1, retToEnclave2);
 
     assert retToEnclave1 == retToEnclave2;
@@ -145,19 +145,19 @@ lemma lemma_validEnclaveEx_os_conf(
     if(retToEnclave1) {
         lemma_validEnclaveExecution(s15, d15, s1', d1', dispPg, steps1 - 1);
         lemma_validEnclaveExecution(s25, d25, s2', d2', dispPg, steps2 - 1);
-        lemma_validEnclaveEx_os_conf(s15, d15, s1', d1', s25, d25, s2', d2',
+        lemma_validEnclaveEx_os(s15, d15, s1', d1', s25, d25, s2', d2',
                                          dispPg, steps1 - 1, steps2 - 1);
-        assert os_conf_eqpdb(d1', d2');
+        assert os_eqpdb(d1', d2');
     } else {
         assert s2' == s25;
         assert s1' == s15;
         assert d1' == d15;
         assert d2' == d25;
-        assert os_conf_eqpdb(d1', d2');
+        assert os_eqpdb(d1', d2');
     }
 }
 
-lemma lemma_validEnclaveStep_os_conf(s1: state, d1: PageDb, s1':state, d1': PageDb,
+lemma lemma_validEnclaveStep_os(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                      s2: state, d2: PageDb, s2':state, d2': PageDb,
                                      dispPage:PageNr, ret1:bool, ret2:bool)
     requires ValidState(s1) && ValidState(s2) &&
@@ -170,9 +170,9 @@ lemma lemma_validEnclaveStep_os_conf(s1: state, d1: PageDb, s1':state, d1': Page
     requires nonStoppedDispatcher(d2, dispPage)
     requires validEnclaveExecutionStep(s1, d1, s1', d1', dispPage, ret1);
     requires validEnclaveExecutionStep(s2, d2, s2', d2', dispPage, ret2);
-    requires os_conf_eqpdb(d1, d2)
+    requires os_eqpdb(d1, d2)
     requires InsecureMemInvariant(s1, s2)
-    ensures  os_conf_eqpdb(d1', d2')
+    ensures  os_eqpdb(d1', d2')
     ensures  InsecureMemInvariant(s1', s2')
     ensures  same_ret(s1', s2')
     ensures  ret1 == ret2
@@ -188,14 +188,14 @@ lemma lemma_validEnclaveStep_os_conf(s1: state, d1: PageDb, s1':state, d1': Page
         validEnclaveExecutionStep'(s2, d2, s24, d24, s2', d2',
             dispPage, ret2);
 
-    lemma_validEnclaveStepPrime_os_conf(
+    lemma_validEnclaveStepPrime_os(
         s1, d1, s14, d14, s1', d1',
         s2, d2, s24, d24, s2', d2',
         dispPage, ret1, ret2);
 }
 
 lemma {:timeLimitMultiplier 2}
-lemma_validEnclaveStepPrime_os_conf(
+lemma_validEnclaveStepPrime_os(
 s11: state, d11: PageDb, s14:state, d14:PageDb, r1:state, rd1:PageDb,
 s21: state, d21: PageDb, s24:state, d24:PageDb, r2:state, rd2:PageDb,
 dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
@@ -211,15 +211,15 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
     requires validEnclaveExecutionStep'(s11,d11,s14,d14,r1,rd1,dispPg,retToEnclave1)
     requires validEnclaveExecutionStep'(s21,d21,s24,d24,r2,rd2,dispPg,retToEnclave2)
     requires InsecureMemInvariant(s11, s21)
-    requires os_conf_eqpdb(d11, d21)
+    requires os_eqpdb(d11, d21)
     ensures  InsecureMemInvariant(r1, r2)
-    ensures  os_conf_eqpdb(rd1, rd2)
+    ensures  os_eqpdb(rd1, rd2)
     ensures  same_ret(r1, r2)
     ensures  retToEnclave1 == retToEnclave2
     ensures  retToEnclave1 ==> r1.conf.nondet == r2.conf.nondet
 {
     assert l1pOfDispatcher(d11, dispPg) == l1pOfDispatcher(d21, dispPg) by
-        { reveal os_conf_eqpdb(); }
+        { reveal os_eqpdb(); }
     var l1p := l1pOfDispatcher(d11, dispPg);
 
     assert dataPagesCorrespond(s11.m, d11);
@@ -310,21 +310,21 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
         }
     }
 
-    assert os_conf_eqpdb(d14, d24) by
+    assert os_eqpdb(d14, d24) by
     {
-        lemma_updateUserPages_os_conf(s14, d11, d14,
+        lemma_updateUserPages_os(s14, d11, d14,
             s24, d21, d24, dispPg);
     }
 
     if(retToEnclave1) {
-        assert os_conf_eqpdb(rd1, rd2);
+        assert os_eqpdb(rd1, rd2);
         assert same_ret(r1, r2);
         assert r1.conf.nondet == r2.conf.nondet by {
             assert s14.conf.nondet == s24.conf.nondet; 
         }
     } else {
         reveal ValidRegState();
-        lemma_exceptionHandled_os_conf(
+        lemma_exceptionHandled_os(
             s14, d14, rd1, r1.regs[R0], r1.regs[R1],
             s24, d24, rd2, r2.regs[R0], r2.regs[R1],
             dispPg);
@@ -332,7 +332,7 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
 
 }
 
-lemma lemma_exceptionHandled_os_conf(
+lemma lemma_exceptionHandled_os(
     s14:state, d14:PageDb, rd1:PageDb, r01:word, r11:word,
     s24:state, d24:PageDb, rd2:PageDb, r02:word, r12:word,
     dispPg:PageNr)
@@ -345,18 +345,18 @@ lemma lemma_exceptionHandled_os_conf(
     requires (r01, r11, rd1) == exceptionHandled(s14, d14, dispPg)
     requires (r02, r12, rd2) == exceptionHandled(s24, d24, dispPg)
     requires s14.conf.ex == s24.conf.ex
-    requires os_conf_eqpdb(d14, d24)
+    requires os_eqpdb(d14, d24)
     requires R1 in s14.regs && R1 in s24.regs
     requires s14.conf.ex.ExSVC? ==> 
         s14.regs[R1] == s24.regs[R1]
-    ensures  os_conf_eqpdb(rd1, rd2)
+    ensures  os_eqpdb(rd1, rd2)
     ensures  r01 == r02 && r11 == r12
 {
-    reveal os_conf_eqpdb();
+    reveal os_eqpdb();
 }
     
 
-lemma lemma_updateUserPages_os_conf(
+lemma lemma_updateUserPages_os(
     s14: state, d11: PageDb, d14: PageDb,
     s24: state, d21: PageDb, d24: PageDb,
     dispPg: PageNr)
@@ -366,11 +366,11 @@ requires nonStoppedDispatcher(d11, dispPg)
 requires nonStoppedDispatcher(d21, dispPg)
 requires d14 == updateUserPagesFromState(s14, d11, dispPg)
 requires d24 == updateUserPagesFromState(s24, d21, dispPg)
-requires os_conf_eqpdb(d11, d21)
-ensures  os_conf_eqpdb(d14, d24)
+requires os_eqpdb(d11, d21)
+ensures  os_eqpdb(d14, d24)
 {
     reveal updateUserPagesFromState();
-    reveal os_conf_eqpdb();
+    reveal os_eqpdb();
 }
 
 function insecureUserspaceMem(s:state, pc:word, a:addr): word
@@ -452,7 +452,7 @@ lemma lemma_eqpdb_pt_coresp(d1: PageDb, d2: PageDb, s1: state, s2: state, l1p:Pa
     requires validPageDb(d1) && validPageDb(d2)
     requires ValidState(s1) && ValidState(s2)
     requires ValidState(s1) && ValidState(s2) && SaneConstants()
-    requires os_conf_eqpdb(d1, d2)
+    requires os_eqpdb(d1, d2)
     requires nonStoppedL1(d1, l1p) && nonStoppedL1(d2, l1p)
     requires pageTableCorresponds(s1, d1, l1p)
     requires pageTableCorresponds(s2, d2, l1p)
@@ -460,7 +460,7 @@ lemma lemma_eqpdb_pt_coresp(d1: PageDb, d2: PageDb, s1: state, s2: state, l1p:Pa
 {
     reveal pageTableCorresponds();
     assert mkAbsPTable(d1, l1p) == mkAbsPTable(d2, l1p) by {
-        reveal os_conf_eqpdb();
+        reveal os_eqpdb();
         reveal validPageDb();
         reveal mkAbsPTable();
     }

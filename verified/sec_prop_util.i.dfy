@@ -63,7 +63,7 @@ lemma lemma_unpack_validEnclaveExecution(s1:state, d1:PageDb,
 
 
 //-----------------------------------------------------------------------------
-// Enclave Confidentiality
+// Enclave NI
 //-----------------------------------------------------------------------------
 
 predicate ni_reqs(s1: state, d1: PageDb, s1': state, d1': PageDb,
@@ -131,7 +131,7 @@ predicate entering_atkr(d1: PageDb, d2: PageDb, disp: word, atkr: PageNr, is_res
 }
 
 //-----------------------------------------------------------------------------
-// OS Confidentiality
+// OS NI
 //-----------------------------------------------------------------------------
 
 predicate os_ni_reqs(s1: state, d1: PageDb, s1': state, d1': PageDb,

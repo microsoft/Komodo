@@ -2,10 +2,10 @@ include "sec_prop.s.dfy"
 include "pagedb.s.dfy"
 include "entry.s.dfy"
 include "sec_prop_util.i.dfy"
-include "os_conf_entry.i.dfy"
+include "os_ni_entry.i.dfy"
 
 //-----------------------------------------------------------------------------
-// Confidentiality, Enclave Secrets are NI with OS
+// Proof that enclave contents are NI with the OS 
 //-----------------------------------------------------------------------------
 
 // Note: we are assuming the CPSR is trashed just after the smc call, which is 
@@ -17,7 +17,7 @@ predicate same_cpsr(s1:state, s2:state)
     s1.sregs[cpsr] == s2.sregs[cpsr]
 }
 
-lemma lemma_os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
+lemma lemma_os_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
                  s2: state, d2: PageDb, s2': state, d2': PageDb)
     requires os_ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2')
     // If smchandler(s1, d1) => (s1', d1')
@@ -25,11 +25,11 @@ lemma lemma_os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     // and smchandler(s2, d2) => (s2', d2')
     requires smchandler(s2, d2, s2', d2')
     // s.t. (s1, d1) =_{os} (s2, d2)
-    requires os_conf_eq(s1, d1, s2, d2)
+    requires os_eq(s1, d1, s2, d2)
     requires same_cpsr(s1, s2)
     requires s1.conf.nondet == s2.conf.nondet
     // then (s1', d1') =_{os} (s2', d2')
-    ensures os_conf_eq(s1', d1', s2', d2')
+    ensures os_eq(s1', d1', s2', d2')
 {
     reveal_ValidRegState();
     var callno, arg1, arg2, arg3, arg4
@@ -46,42 +46,42 @@ lemma lemma_os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         // assert s2'.m == s2.m;
     }
     else if(callno == KOM_SMC_INIT_ADDRSPACE){
-        lemma_initAddrspace_os_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2);
+        lemma_initAddrspace_os_ni(d1, d1', e1', d2, d2', e2', arg1, arg2);
         lemma_integrate_reg_equiv(s1', s2');
     }
     else if(callno == KOM_SMC_INIT_DISPATCHER){
-        lemma_initDispatcher_os_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3);
+        lemma_initDispatcher_os_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3);
         lemma_integrate_reg_equiv(s1', s2');
     }
     else if(callno == KOM_SMC_INIT_L2PTABLE){
-        lemma_initL2PTable_os_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3);
+        lemma_initL2PTable_os_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3);
         lemma_integrate_reg_equiv(s1', s2');
     }
     else if(callno == KOM_SMC_MAP_SECURE){
         var c1 := maybeContentsOfPhysPage(s1, arg4);
         var c2 := maybeContentsOfPhysPage(s2, arg4);
         assert contentsOk(arg4, c1) && contentsOk(arg4, c2) by
-            { reveal_os_conf_eqpdb(); }
+            { reveal_os_eqpdb(); }
         lemma_maybeContents_insec_ni(s1, s2, c1, c2, arg4);
         assert c1 == c2;
-        lemma_mapSecure_os_conf_ni(d1, d1', e1', c1, d2, d2', e2', c2,
+        lemma_mapSecure_os_ni(d1, d1', e1', c1, d2, d2', e2', c2,
             arg1, arg2, arg3, arg4);
         lemma_integrate_reg_equiv(s1', s2');
     }
     else if(callno == KOM_SMC_MAP_INSECURE){
-        lemma_mapInsecure_os_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3);
+        lemma_mapInsecure_os_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3);
         lemma_integrate_reg_equiv(s1', s2');
     }
     else if(callno == KOM_SMC_REMOVE){
-        lemma_remove_os_conf_ni(d1, d1', e1', d2, d2', e2', arg1);
+        lemma_remove_os_ni(d1, d1', e1', d2, d2', e2', arg1);
         lemma_integrate_reg_equiv(s1', s2');
     }
     else if(callno == KOM_SMC_FINALISE){
-        lemma_finalise_os_conf_ni(d1, d1', e1', d2, d2', e2', arg1);
+        lemma_finalise_os_ni(d1, d1', e1', d2, d2', e2', arg1);
         lemma_integrate_reg_equiv(s1', s2');
     }
     else if(callno == KOM_SMC_ENTER){
-        lemma_enter_os_conf_ni(
+        lemma_enter_os_ni(
             s1, d1, s1', d1',
             s2, d2, s2', d2',
             arg1, arg2, arg3, arg4);
@@ -100,7 +100,7 @@ lemma lemma_os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         }
     }
     else if(callno == KOM_SMC_RESUME){
-        lemma_resume_os_conf_ni(
+        lemma_resume_os_ni(
             s1, d1, s1', d1',
             s2, d2, s2', d2',
             arg1);
@@ -119,7 +119,7 @@ lemma lemma_os_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         }
     }
     else if(callno == KOM_SMC_STOP){
-        lemma_stop_os_conf_ni(d1, d1', e1', d2, d2', e2', arg1);
+        lemma_stop_os_ni(d1, d1', e1', d2, d2', e2', arg1);
         lemma_integrate_reg_equiv(s1', s2');
     }
     else {
@@ -240,7 +240,7 @@ lemma lemma_smchandlerInvariant_regs_ni(
     }
 }
 
-lemma lemma_initAddrspace_os_conf_ni(
+lemma lemma_initAddrspace_os_ni(
     d1: PageDb, d1': PageDb, e1': word,
     d2: PageDb, d2': PageDb, e2': word,
     addrspacePage: word, l1PTPage: word)
@@ -248,14 +248,14 @@ lemma lemma_initAddrspace_os_conf_ni(
     requires validPageDb(d1') && validPageDb(d2')
     requires smc_initAddrspace(d1, addrspacePage, l1PTPage) == (d1', e1')
     requires smc_initAddrspace(d2, addrspacePage, l1PTPage) == (d2', e2')
-    requires os_conf_eqpdb(d1, d2)
-    ensures  os_conf_eqpdb(d1', d2')
+    requires os_eqpdb(d1, d2)
+    ensures  os_eqpdb(d1', d2')
     ensures  e1' == e2'
 {
-    reveal os_conf_eqpdb();
+    reveal os_eqpdb();
 }
 
-lemma lemma_initDispatcher_os_conf_ni(
+lemma lemma_initDispatcher_os_ni(
     d1: PageDb, d1': PageDb, e1': word,
     d2: PageDb, d2': PageDb, e2': word,
     page:word, addrspacePage:word, entrypoint:word)
@@ -263,14 +263,14 @@ lemma lemma_initDispatcher_os_conf_ni(
     requires validPageDb(d1') && validPageDb(d2')
     requires smc_initDispatcher(d1, page, addrspacePage, entrypoint) == (d1', e1')
     requires smc_initDispatcher(d2, page, addrspacePage, entrypoint) == (d2', e2')
-    requires os_conf_eqpdb(d1, d2)
-    ensures  os_conf_eqpdb(d1', d2')
+    requires os_eqpdb(d1, d2)
+    ensures  os_eqpdb(d1', d2')
     ensures  e1' == e2'
 {
-    reveal os_conf_eqpdb();
+    reveal os_eqpdb();
 }
 
-lemma lemma_initL2PTable_os_conf_ni(
+lemma lemma_initL2PTable_os_ni(
     d1: PageDb, d1': PageDb, e1': word,
     d2: PageDb, d2': PageDb, e2': word,
     page: word, addrspacePage: word, l1index:word)
@@ -278,14 +278,14 @@ lemma lemma_initL2PTable_os_conf_ni(
     requires validPageDb(d1') && validPageDb(d2')
     requires smc_initL2PTable(d1, page, addrspacePage, l1index) == (d1', e1')
     requires smc_initL2PTable(d2, page, addrspacePage, l1index) == (d2', e2')
-    requires os_conf_eqpdb(d1, d2)
-    ensures  os_conf_eqpdb(d1', d2')
+    requires os_eqpdb(d1, d2)
+    ensures  os_eqpdb(d1', d2')
     ensures  e1' == e2'
 {
-    reveal os_conf_eqpdb();
+    reveal os_eqpdb();
 }
 
-lemma lemma_mapSecure_os_conf_ni(
+lemma lemma_mapSecure_os_ni(
     d1: PageDb, d1': PageDb, e1': word, c1: Maybe<seq<word>>,
     d2: PageDb, d2': PageDb, e2': word, c2: Maybe<seq<word>>,
     page: word, addrspacePage: word,
@@ -296,14 +296,14 @@ lemma lemma_mapSecure_os_conf_ni(
     requires c1 == c2;
     requires smc_mapSecure(d1, page, addrspacePage, mapping, physPage, c1) == (d1', e1')
     requires smc_mapSecure(d2, page, addrspacePage, mapping, physPage, c2) == (d2', e2')
-    requires os_conf_eqpdb(d1, d2)
-    ensures  os_conf_eqpdb(d1', d2')
+    requires os_eqpdb(d1, d2)
+    ensures  os_eqpdb(d1', d2')
     ensures  e1' == e2'
 {
-    reveal os_conf_eqpdb();
+    reveal os_eqpdb();
 }
 
-lemma lemma_mapInsecure_os_conf_ni(
+lemma lemma_mapInsecure_os_ni(
     d1: PageDb, d1': PageDb, e1': word,
     d2: PageDb, d2': PageDb, e2': word,
     addrspacePage: word, mapping: word, physPage: word)
@@ -311,14 +311,14 @@ lemma lemma_mapInsecure_os_conf_ni(
     requires validPageDb(d1') && validPageDb(d2')
     requires smc_mapInsecure(d1, addrspacePage, mapping, physPage) == (d1', e1')
     requires smc_mapInsecure(d2, addrspacePage, mapping, physPage) == (d2', e2')
-    requires os_conf_eqpdb(d1, d2)
-    ensures  os_conf_eqpdb(d1', d2')
+    requires os_eqpdb(d1, d2)
+    ensures  os_eqpdb(d1', d2')
     ensures  e1' == e2'
 {
-    reveal os_conf_eqpdb();
+    reveal os_eqpdb();
 }
 
-lemma lemma_remove_os_conf_ni(
+lemma lemma_remove_os_ni(
     d1: PageDb, d1': PageDb, e1': word,
     d2: PageDb, d2': PageDb, e2': word,
     page: word)
@@ -326,14 +326,14 @@ lemma lemma_remove_os_conf_ni(
     requires validPageDb(d1') && validPageDb(d2')
     requires smc_remove(d1, page) == (d1', e1')
     requires smc_remove(d2, page) == (d2', e2')
-    requires os_conf_eqpdb(d1, d2)
-    ensures  os_conf_eqpdb(d1', d2')
+    requires os_eqpdb(d1, d2)
+    ensures  os_eqpdb(d1', d2')
     ensures  e1' == e2'
 {
-    reveal os_conf_eqpdb();
+    reveal os_eqpdb();
 }
 
-lemma lemma_finalise_os_conf_ni(
+lemma lemma_finalise_os_ni(
     d1: PageDb, d1': PageDb, e1': word,
     d2: PageDb, d2': PageDb, e2': word,
     addrspacePage: word)
@@ -341,14 +341,14 @@ lemma lemma_finalise_os_conf_ni(
     requires validPageDb(d1') && validPageDb(d2')
     requires smc_finalise(d1, addrspacePage) == (d1', e1')
     requires smc_finalise(d2, addrspacePage) == (d2', e2')
-    requires os_conf_eqpdb(d1, d2)
-    ensures  os_conf_eqpdb(d1', d2')
+    requires os_eqpdb(d1, d2)
+    ensures  os_eqpdb(d1', d2')
     ensures  e1' == e2'
 {
-    reveal os_conf_eqpdb();
+    reveal os_eqpdb();
 }
 
-lemma lemma_stop_os_conf_ni(
+lemma lemma_stop_os_ni(
     d1: PageDb, d1': PageDb, e1': word,
     d2: PageDb, d2': PageDb, e2': word,
     addrspacePage: word)
@@ -356,9 +356,9 @@ lemma lemma_stop_os_conf_ni(
     requires validPageDb(d1') && validPageDb(d2')
     requires smc_stop(d1, addrspacePage) == (d1', e1')
     requires smc_stop(d2, addrspacePage) == (d2', e2')
-    requires os_conf_eqpdb(d1, d2)
-    ensures  os_conf_eqpdb(d1', d2')
+    requires os_eqpdb(d1, d2)
+    ensures  os_eqpdb(d1', d2')
     ensures  e1' == e2'
 {
-    reveal os_conf_eqpdb();
+    reveal os_eqpdb();
 }
