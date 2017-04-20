@@ -18,7 +18,7 @@ function {:opaque} smc_initDispatcher_premium(pageDbIn: PageDb, page:word,
     requires validPageDb(pageDbIn);
     ensures  validPageDb(smc_initDispatcher_premium(pageDbIn, page, addrspacePage, entrypoint).0);
 {
-    reveal_validPageDb();
+    initDispatcherPreservesPageDBValidity(pageDbIn, page, addrspacePage, entrypoint);
     smc_initDispatcher(pageDbIn, page, addrspacePage, entrypoint)
 }
 
@@ -85,6 +85,117 @@ function {:opaque} smc_stop_premium(pageDbIn: PageDb, addrspacePage: word)
 }
 
 //=============================================================================
+// Utilities
+//=============================================================================
+
+lemma lemma_sha256_length_helper(m:seq<seq<word>>)
+    requires (forall i :: 0 <= i < |m| ==> |m[i]| == SHA_BLOCKSIZE)
+    ensures |ConcatenateSeqs(m)| == SHA_BLOCKSIZE * |m|
+{
+    if (|m| != 0)
+    {
+        lemma_sha256_length_helper(m[1..]);
+    }
+}
+
+lemma lemma_sha256_length(z:SHA256Trace)
+    requires IsCompleteSHA256Trace(z)
+    ensures |ConcatenateSeqs(z.M)| == SHA_BLOCKSIZE * |z.M|
+{
+    lemma_sha256_length_helper(z.M);
+}
+
+// TODO: merge this with BoundedAddrspaceRefs in allocate_page.sdfy
+lemma BoundedAddrspaceRefs'(d:PageDb, n:PageNr)
+    requires validPageDb(d)
+    requires isAddrspace(d, n)
+    ensures d[n].entry.refcount <= KOM_SECURE_NPAGES
+{
+    reveal_validPageNrs();
+    reveal_validPageDb();
+    assert addrspaceRefs(d,n) <= validPageNrs();
+    assert d[n].entry.refcount == |addrspaceRefs(d,n)|;
+    SubsetCardinality(addrspaceRefs(d,n), validPageNrs());
+}
+
+lemma BoundedShaLength(d:PageDb, n:PageNr)
+    requires validPageDb(d)
+    requires isAddrspace(d, n)
+    requires IsCompleteSHA256Trace(d[n].entry.shatrace)
+    requires !stoppedAddrspace(d[n])
+    ensures |d[n].entry.shatrace.M| < 0x1000_0000
+    ensures |d[n].entry.measurement| < 0x1000_0000
+{
+    assert validAddrspace(d, n) by { reveal validPageDb(); }
+    BoundedAddrspaceRefs'(d, n);
+    lemma_sha256_length(d[n].entry.shatrace);
+    assert |d[n].entry.shatrace.M| <= KOM_SECURE_NPAGES * (1 + 64);
+}
+
+lemma GrowShaLength(d:PageDb, n:PageNr, metadata:seq<word>, contents:seq<word>)
+    requires validPageDb(d)
+    requires isAddrspace(d, n)
+    requires IsCompleteSHA256Trace(d[n].entry.shatrace)
+    requires !stoppedAddrspace(d[n])
+    requires |metadata| <= SHA_BLOCKSIZE
+    requires |contents| % SHA_BLOCKSIZE == 0
+    requires |contents| <= PAGESIZE / WORDSIZE
+    ensures
+        var u := updateMeasurement(d, n, metadata, contents);
+        |u[n].entry.shatrace.M| <= (d[n].entry.refcount + 1) * (1 + PAGESIZE / (WORDSIZE * SHA_BLOCKSIZE))
+{
+    var u := updateMeasurement(d, n, metadata, contents);
+    assert |d[n].entry.shatrace.M| <= d[n].entry.refcount * (1 + PAGESIZE / (WORDSIZE * SHA_BLOCKSIZE))
+        by { reveal validPageDb(); }
+    assert SHA_BLOCKSIZE * |d[n].entry.shatrace.M| == |d[n].entry.measurement| by
+    {
+        reveal validPageDb();
+        lemma_sha256_length(d[n].entry.shatrace);
+    }
+    lemma_sha256_length(u[n].entry.shatrace);
+
+    assert (d[n].entry.refcount + 1) * (1 + PAGESIZE / (WORDSIZE * SHA_BLOCKSIZE))
+        == d[n].entry.refcount * (1 + PAGESIZE / (WORDSIZE * SHA_BLOCKSIZE)) + 65;
+}
+
+// TODO: consolidate with lemma_ConcatenateSeqs_Adds
+lemma lemma_ConcatenateSeqs_Adds'<T>(s:seq<seq<T>>, s':seq<seq<T>>)
+    ensures ConcatenateSeqs(s + s') == ConcatenateSeqs(s) + ConcatenateSeqs(s'); 
+{
+    if s == [] {
+    } else {
+        calc {
+            ConcatenateSeqs(s + s');
+            s[0] + ConcatenateSeqs((s + s')[1..]);
+                { assert (s + s')[1..] == s[1..] + s'; }
+            s[0] + ConcatenateSeqs(s[1..] + s');
+                { lemma_ConcatenateSeqs_Adds'(s[1..], s'); }
+            s[0] + ConcatenateSeqs(s[1..]) + ConcatenateSeqs(s');
+            ConcatenateSeqs(s) + ConcatenateSeqs(s'); 
+        }
+    }
+}
+
+predicate MemPreservingExceptRangeOrStack(s:state, r:state, base:int, limit:int)
+    requires ValidState(s) && ValidState(r);
+    requires limit >= base;
+{
+    forall m:addr :: ValidMem(m) && !(base <= m < limit) && !(StackLimit() < m <= StackBase())
+        ==> MemContents(s.m, m) == MemContents(r.m, m)
+}
+
+lemma AllButOnePageOrStackPreserving(n:PageNr,s:state,r:state)
+    requires SaneState(s) && SaneState(r)
+    requires MemPreservingExceptRangeOrStack(s, r, page_monvaddr(n), page_monvaddr(n) + PAGESIZE)
+    ensures forall p :: validPageNr(p) && p != n
+        ==> extractPage(s.m, p) == extractPage(r.m, p)
+{
+    forall (p, a:addr | validPageNr(p) && p != n && addrInPage(a, p))
+        ensures MemContents(s.m, a) == MemContents(r.m, a)
+        {}
+}
+
+//=============================================================================
 // Properties of Monitor Calls
 //=============================================================================
 
@@ -123,6 +234,31 @@ lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
               
         assert pageDbEntriesValid(pageDbOut);
         assert validPageDb(pageDbOut);
+    }
+}
+
+lemma initDispatcherPreservesPageDBValidity(pageDbIn:PageDb, page:word, addrspacePage:word,
+    entrypoint:word)
+    requires validPageDb(pageDbIn)
+    ensures validPageDb(smc_initDispatcher(pageDbIn, page, addrspacePage, entrypoint).0)
+{
+    reveal_validPageDb();
+    var result := smc_initDispatcher(pageDbIn, page, addrspacePage, entrypoint);
+    var pageDbOut := result.0;
+    var errOut := result.1;
+
+    if (errOut == KOM_ERR_SUCCESS) {
+        BoundedShaLength(pageDbIn, addrspacePage);
+        GrowShaLength(pageDbIn, addrspacePage, [KOM_SMC_INIT_DISPATCHER, entrypoint], []);
+        var initDisp := Dispatcher(entrypoint, false, initDispCtxt(),
+                                  [0, 0, 0, 0, 0, 0, 0, 0],
+                                  [0, 0, 0, 0, 0, 0, 0, 0]);
+        var (pagedb', err) := allocatePage(pageDbIn, page, addrspacePage, initDisp);
+        forall p | validPageNr(p) && pageDbOut[p].PageDbEntryTyped? && pageDbOut[p].entry.Addrspace?
+            ensures validPageDbEntry(pageDbOut, p)
+        {
+            assert addrspaceRefs(pagedb', p) == addrspaceRefs(pageDbOut, p); // set equality
+        }
     }
 }
 
@@ -286,6 +422,8 @@ lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: word,
 
     if( err != KOM_ERR_SUCCESS ){
     } else {
+        BoundedShaLength(pageDbIn, addrspacePage);
+        GrowShaLength(pageDbIn, addrspacePage, [KOM_SMC_MAP_SECURE, map_word], fromJust(contents));
         assert validPageDbEntryTyped(pageDbOut, page);
         var pageDbA := allocatePage(pageDbIn, page,
             addrspacePage, DataPage(fromJust(contents))).0;
@@ -337,7 +475,7 @@ lemma mapInsecurePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word,
         pageDbIn, addrspacePage, physPage, map_word).1;
 
     if( err != KOM_ERR_SUCCESS ){
-    } else {        
+    } else {
         forall( n | validPageNr(n) && pageDbOut[n].PageDbEntryTyped?)
             ensures validPageDbEntryTyped(pageDbOut, n);
         {
@@ -548,11 +686,10 @@ lemma smchandlerPreservesPageDbValidity(s: state, pageDbIn: PageDb, s':state,
         := s.regs[R0], s.regs[R1], s.regs[R2], s.regs[R3], s.regs[R4];
     var err, val := s'.regs[R0], s'.regs[R1];
 
-    reveal_validPageDb();
-
     if (callno == KOM_SMC_INIT_ADDRSPACE) {
         initAddrspacePreservesPageDBValidity(pageDbIn, arg1, arg2);
     } else if(callno == KOM_SMC_INIT_DISPATCHER) {
+        initDispatcherPreservesPageDBValidity(pageDbIn, arg1, arg2, arg3);
     } else if(callno == KOM_SMC_INIT_L2PTABLE) {
         initL2PTablePreservesPageDBValidity(pageDbIn, arg1, arg2, arg3);
     } else if(callno == KOM_SMC_MAP_SECURE) {
@@ -653,14 +790,15 @@ lemma lemma_updateL2PtePreservesPageDb(d:PageDb,a:PageNr,mapping:Mapping,l2e:L2P
   
 }
 
-lemma kom_smc_map_insecure_measure_helper1(s:state, as_page:PageNr, mapping:word, pagedb_in:PageDb)
-    returns (base:addr, ctx:addr, metadata:seq<word>, input:seq<word>, trace_in:SHA256Trace, e:PageDbEntryTyped, pagedb:PageDb)
+lemma kom_smc_map_measure_helper1(s:state, as_page:PageNr, metadata:seq<word>, pagedb_in:PageDb)
+    returns (base:addr, ctx:addr, input:seq<word>, trace_in:SHA256Trace, e:PageDbEntryTyped, pagedb:PageDb)
     requires SaneState(s)
     requires wellFormedPageDb(pagedb_in)
     requires validAddrspacePage(pagedb_in, as_page)
     requires validPageDb(pagedb_in)
     requires pageDbCorresponds(s.m, pagedb_in)
-    ensures metadata == [KOM_SMC_MAP_INSECURE, mapping]
+    requires !stoppedAddrspace(pagedb_in[as_page])
+    requires |metadata| == 2
     ensures input == metadata + [0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0]
     ensures pagedb == updateMeasurement(pagedb_in, as_page, metadata, [])
     ensures base == page_monvaddr(as_page)
@@ -680,7 +818,6 @@ lemma kom_smc_map_insecure_measure_helper1(s:state, as_page:PageNr, mapping:word
     ensures trace_in == e.shatrace
     ensures WordsToBytes(SeqLength(e.measurement) + 16) < MaxBytesForSHA();
 {
-    metadata := [KOM_SMC_MAP_INSECURE, mapping];
     input := metadata + [0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0];
     var p := as_page;
     var pe := pagedb_in[p];
@@ -691,8 +828,7 @@ lemma kom_smc_map_insecure_measure_helper1(s:state, as_page:PageNr, mapping:word
     assert pageDbAddrspaceCorresponds(p, e, spe) by { reveal pageContentsCorresponds(); }
     assert validAddrspace(pagedb_in, p) by { reveal validPageDb(); }
 
-    assume WordsToBytes(SeqLength(e.measurement) + 16) < MaxBytesForSHA(); // TODO: need an invariant about bounded growth of |e.measurement|
-    assume WordsToBytes(SeqLength(e.shatrace.M) + 1) < 0x1_0000_0000; // TODO: need an invariant about bounded growth of |e.shatrace.M|
+    BoundedShaLength(pagedb_in, as_page);
 
     trace_in := e.shatrace;
     base := page_monvaddr(p);
@@ -709,44 +845,7 @@ lemma kom_smc_map_insecure_measure_helper1(s:state, as_page:PageNr, mapping:word
     pagedb := updateMeasurement(pagedb_in, as_page, metadata, []);
 }
 
-// TODO: consolidate with lemma_ConcatenateSeqs_Adds
-lemma lemma_ConcatenateSeqs_Adds'<T>(s:seq<seq<T>>, s':seq<seq<T>>)
-    ensures ConcatenateSeqs(s + s') == ConcatenateSeqs(s) + ConcatenateSeqs(s'); 
-{
-    if s == [] {
-    } else {
-        calc {
-            ConcatenateSeqs(s + s');
-            s[0] + ConcatenateSeqs((s + s')[1..]);
-                { assert (s + s')[1..] == s[1..] + s'; }
-            s[0] + ConcatenateSeqs(s[1..] + s');
-                { lemma_ConcatenateSeqs_Adds'(s[1..], s'); }
-            s[0] + ConcatenateSeqs(s[1..]) + ConcatenateSeqs(s');
-            ConcatenateSeqs(s) + ConcatenateSeqs(s'); 
-        }
-    }
-}
-
-predicate MemPreservingExceptRangeOrStack(s:state, r:state, base:int, limit:int)
-    requires ValidState(s) && ValidState(r);
-    requires limit >= base;
-{
-    forall m:addr :: ValidMem(m) && !(base <= m < limit) && !(StackLimit() < m <= StackBase())
-        ==> MemContents(s.m, m) == MemContents(r.m, m)
-}
-
-lemma AllButOnePageOrStackPreserving(n:PageNr,s:state,r:state)
-    requires SaneState(s) && SaneState(r)
-    requires MemPreservingExceptRangeOrStack(s, r, page_monvaddr(n), page_monvaddr(n) + PAGESIZE)
-    ensures forall p :: validPageNr(p) && p != n
-        ==> extractPage(s.m, p) == extractPage(r.m, p)
-{
-    forall (p, a:addr | validPageNr(p) && p != n && addrInPage(a, p))
-        ensures MemContents(s.m, a) == MemContents(r.m, a)
-        {}
-}
-
-lemma kom_smc_map_insecure_measure_helper2(pagedb_in:PageDb, pagedb:PageDb, e:PageDbEntryTyped,
+lemma kom_smc_map_measure_helper2(pagedb_in:PageDb, pagedb:PageDb, e:PageDbEntryTyped,
     measurement:seq<word>, as_page:PageNr, metadata:seq<word>, input:seq<word>,
     trace_in:SHA256Trace, trace_out:SHA256Trace)
     requires wellFormedPageDb(pagedb_in)

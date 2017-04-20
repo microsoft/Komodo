@@ -9,6 +9,16 @@ include "allocate_page.sdfy"
 include "map_utils.sdfy"
 include "memset.sdfy"
 
+#verbatim
+lemma lemma_read_l2pte_zero(pte:L2PTE)
+    requires PhysBase() == KOM_DIRECTMAP_VBASE
+    ensures BitwiseAnd(mkL2Pte(pte), 3) == 0 <==> mkAbsPTE(pte).Nothing?
+{
+    assert WordAsBits(3) == 3 by { reveal WordAsBits(); }
+    lemma_l2ptesmatch(pte);
+}
+#endverbatim
+
 procedure update_l2pte(
     operand as_page:reg,
     operand mapping:reg,
@@ -132,7 +142,7 @@ procedure update_l2pte(
     lemma_updateL2PtePreservesPageDb(d, a, abs_mapping, l2pte_abs);
 }
 
-procedure is_valid_mapping_target(
+procedure{:timeLimitMultiplier 2} is_valid_mapping_target(
     operand addr:reg,
     operand mapping:reg,
     out operand l1pte:reg,
@@ -246,7 +256,47 @@ procedure is_valid_mapping_target(
                     if( l1pte == 0 ) {
                         err := const(KOM_ERR_INVALID_MAPPING);
                     } else {
-                        err := const(KOM_ERR_SUCCESS);
+                        ghost var l1pte_abs := fromJust(d[l1p].entry.l1pt[abs_mapping.l1index]);
+                        assert l1pte == ARM_L1PTE(page_paddr(l1pte_abs));
+                        ghost var l2pt := d[l1pte_abs].entry.l2pt;
+                        ghost var l2index := l2indexFromMapping(old(mapping));
+                        // ARM_L1PTE(page_paddr(l1pte_abs)) = BitwiseOr(page_paddr(l1pte_abs), 1)
+                        // 
+                        lemma_ARM_L1PTE_Dual(page_paddr(l1pte_abs));
+                        SUB(r9, l1pte, 1);
+                        assert r9 == page_paddr(l1pte_abs);
+                        ADD(r9, r9, const(KOM_DIRECTMAP_VBASE));
+                        assert r9 == page_monvaddr(l1pte_abs);
+
+                        assert mapping == old(mapping);
+                        LSR(r8, mapping, 12);
+                        AND(r8, r8, 0xff);
+                        assert r8 == abs_mapping.l2index by {
+                            reveal wordToMapping;
+                            assert r8 == l2indexFromMapping(mapping);
+                        }
+                        lemma_LeftShift2(r8);
+                        LSL(r8, r8, 2);
+                        assert r8 == WordsToBytes(abs_mapping.l2index);
+                        assert addrInPage(r9 + r8, l1pte_abs);
+                        LDR(r7, r9, r8);
+                        ghost var l2pte_abs := l2pt[l2index];
+                        assert r7 == mkL2Pte(l2pte_abs) by {
+                            assert pageDbCorresponds(this.m, d);
+                            assert pageContentsCorresponds(l1pte_abs, d[l1pte_abs], extractPage(this.m, l1pte_abs));
+                            assert pageDbL2PTableCorresponds(l1pte_abs, d[l1pte_abs].entry, extractPage(this.m, l1pte_abs)) by
+                                { reveal pageContentsCorresponds; }
+                            assert d[l1pte_abs].entry.l2pt[l2index] == l2pte_abs;
+                            assert r7 == mkL2Pte(l2pte_abs) by
+                                { reveal pageDbL2PTableCorresponds; }
+                        }
+                        AND(r7, r7, 3);
+                        lemma_read_l2pte_zero(l2pte_abs);
+                        if( r7 != 0 ) {
+                            err := const(KOM_ERR_INVALID_MAPPING);
+                        } else {
+                            err := const(KOM_ERR_SUCCESS);
+                        }
                     }
 
                 }
@@ -550,6 +600,7 @@ procedure map_secure_success(
             mapping, phys_page, maybeContentsOfPhysPage(this, phys_page)));
         pageDbCorresponds(this.m, pagedb);
 {
+assume false; // TODO
     reveal smc_mapSecure_premium;
     ghost var contents := maybeContentsOfPhysPage(this, phys_page);
     ghost var specResult := smc_mapSecure_premium(pagedb_in, page, as_page,
