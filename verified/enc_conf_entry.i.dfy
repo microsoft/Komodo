@@ -448,6 +448,21 @@ lemma lemma_enter_only_affects_entered(s: state, d: PageDb, s': state, d': PageD
             validEnclaveExecution(s1, d, s', d', disp, steps))
             ensures outside_world_same(d, d', disp, asp)
         {
+            assert mode_of_state(s1) != User;
+            assert !spsr_of_state(s1).f && !spsr_of_state(s1).i by {
+                assert psr_mask_fiq(encode_mode(User)) == 0 by {
+                    assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
+                        by { reveal_WordAsBits(); }
+                    lemma_BitsAndWordConversions();
+                    reveal_BitAnd();
+                }
+                assert psr_mask_irq(encode_mode(User)) == 0 by {
+                    assert WordAsBits(0x10) == 0x10 && WordAsBits(0x80) == 0x80
+                        by { reveal_WordAsBits(); }
+                    lemma_BitsAndWordConversions();
+                    reveal_BitAnd();
+                }
+            }
             lemma_validEnclaveEx_oae(s1, d, s', d', disp, steps, asp);
         }
     } else {
@@ -470,6 +485,8 @@ lemma lemma_validEnclaveEx_oae(
     requires validPageNr(asp) && valAddrPage(d, asp)
     requires d[disp].addrspace == asp
     requires nonStoppedDispatcher(d, disp)
+    requires mode_of_state(s) != User
+    requires !spsr_of_state(s).f && !spsr_of_state(s).i
     requires validEnclaveExecution(s, d, s', d', disp, steps);
     ensures outside_world_same(d, d', disp, asp)
     decreases steps;
@@ -604,6 +621,22 @@ lemma lemma_enter_enc_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': Pag
             assert s11.sregs[spsr(mode1)] == encode_mode(User);
             assert s21.sregs[spsr(mode2)] == encode_mode(User);
         }
+
+        assert !spsr_of_state(s11).f && !spsr_of_state(s11).i &&
+            !spsr_of_state(s21).f && !spsr_of_state(s21).i by {
+            assert psr_mask_fiq(encode_mode(User)) == 0 by {
+                assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
+                    by { reveal_WordAsBits(); }
+                lemma_BitsAndWordConversions();
+                reveal_BitAnd();
+            }
+            assert psr_mask_irq(encode_mode(User)) == 0 by {
+                assert WordAsBits(0x10) == 0x10 && WordAsBits(0x80) == 0x80
+                    by { reveal_WordAsBits(); }
+                lemma_BitsAndWordConversions();
+                reveal_BitAnd();
+            }
+        }
         lemma_validEnclaveEx_enc_conf(s11, d1, s1', d1', s21, d2, s2', d2',
                                              dispPage, steps1, steps2, atkr);
     } else {
@@ -675,6 +708,8 @@ lemma lemma_validEnclaveEx_enc_conf(s1: state, d1: PageDb, s1':state, d1': PageD
     requires OperandContents(s1, OLR) == OperandContents(s2, OLR)
     requires user_regs(s1.regs) == user_regs(s2.regs)
     requires mode_of_state(s1) != User && mode_of_state(s2) != User
+    requires !spsr_of_state(s1).f && !spsr_of_state(s1).i
+    requires !spsr_of_state(s2).f && !spsr_of_state(s2).i
     requires spsr_same(s1, s2)
     requires s1.conf.scr == s2.conf.scr;
     ensures  atkr_entry(d1', d2', dispPg, atkr)
