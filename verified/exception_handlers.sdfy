@@ -121,7 +121,7 @@ procedure fault_exit(
         SaneMem(exstate.m);
         pageDbCorresponds(exstate.m, pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
-        nonStoppedDispatcher(pagedb_in, dispPg);
+        finalDispatcher(pagedb_in, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
         tuple(r0, r1, pagedb) == exceptionHandled(exstate, pagedb_in, dispPg);
@@ -405,7 +405,7 @@ procedure svc_returning(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validDispatcherPage(pagedb, dispPg);
-        nonStoppedDispatcher(pagedb, dispPg);
+        finalDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
         lr == old(lr);

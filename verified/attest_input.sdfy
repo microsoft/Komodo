@@ -54,7 +54,7 @@ procedure arrange_real_measurement_in_memory(
         pageDbCorresponds(this.m, pagedb);
         validDispatcherPage(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
-        nonStoppedDispatcher(pagedb, dispPg);
+        finalDispatcher(pagedb, dispPg);
 
 //        r11 == page_monvaddr(pagedb[dispPg].addrspace);
 //        sp <= r1 && r1 + SHA_CTXSIZE * WORDSIZE <= StackLimit();           
@@ -116,9 +116,7 @@ procedure arrange_real_measurement_in_memory(
     ghost var addrsp := pagedb[addrsp_pg].entry;
 
     assert measurement == SHA256(WordSeqToBytes(addrsp.measurement)) by {
-        assert addrsp.state is FinalState by {
-            assume nonStoppedDispatcher(pagedb, dispPg) ==> addrsp.state is FinalState;  // TODO: ab: Remove me!
-        }
+        assert addrsp.state is FinalState;
         assert pageDbCorresponds(this.m, pagedb) by {
            lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
         }
@@ -328,7 +326,7 @@ procedure{:timeLimitMultiplier 2} arrange_attestation_input(
         pageDbCorresponds(this.m, pagedb);
         validDispatcherPage(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
-        nonStoppedDispatcher(pagedb, dispPg);
+        finalDispatcher(pagedb, dispPg);
 
         //r11 == page_monvaddr(pagedb[dispPg].addrspace);
         StackLimit() <= sp && sp + (SHA_CTXSIZE + 3 * SHA_CTXSIZE) * WORDSIZE <= StackBase();           

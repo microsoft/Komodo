@@ -40,7 +40,7 @@ procedure {:timeLimitMultiplier 2} compute_hmac(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validDispatcherPage(pagedb, dispPg);
-        nonStoppedDispatcher(pagedb, dispPg);
+        finalDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
         r0 == KOM_SVC_ATTEST;
 //        r10 == page_monvaddr(dispPg);
@@ -202,7 +202,7 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest_inner(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validDispatcherPage(pagedb, dispPg);
-        nonStoppedDispatcher(pagedb, dispPg);
+        finalDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
         r0 == KOM_SVC_ATTEST;
 //        r10 == page_monvaddr(dispPg);
@@ -332,7 +332,7 @@ procedure svc_returning_attest(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validDispatcherPage(pagedb, dispPg);
-        nonStoppedDispatcher(pagedb, dispPg);
+        finalDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
         r0 == KOM_SVC_ATTEST;
 //        r10 == page_monvaddr(dispPg);
