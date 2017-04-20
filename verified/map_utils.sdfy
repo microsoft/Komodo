@@ -79,6 +79,23 @@ procedure kom_smc_map_measure_zero(ghost input:seq(int))
     STR(r12, sp, const(15 * WORDSIZE));
 }
 
+#verbatim
+// XXX: cleanmeup: copy-and-paste from exception_handlers.sdfy
+lemma lemma_SaneState_implies_SaneShaGlobal(s:state)
+    requires SaneState(s);
+    ensures  SaneShaGlobal(va_get_globals(s));
+{
+    var globals := va_get_globals(s);
+    reveal_SaneShaGlobal(); 
+    assert ValidGlobalStateOpaque(globals) by {
+        reveal_ValidGlobalStateOpaque(); 
+        assert ValidGlobalState(globals) by {
+            reveal_ValidMemState();   // Which we get from ValidState
+        }
+    }
+}
+#endverbatim
+
 procedure{:timeLimitMultiplier 2} kom_smc_map_measure(
     operand as_page:reg,
     inout operand metadata0:reg,
@@ -108,7 +125,7 @@ procedure{:timeLimitMultiplier 2} kom_smc_map_measure(
         wellFormedPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
-    assume SaneShaGlobal(globals); // TODO: move to SaneMem
+    lemma_SaneState_implies_SaneShaGlobal(this);
 
     SUB(sp, sp, const(MEASURE_STACK_BYTES));
 

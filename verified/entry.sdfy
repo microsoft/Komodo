@@ -858,7 +858,7 @@ procedure {:frame false} enclaveexecution_loop(
         pageDbCorresponds(this.m, pagedb_in);
         UsermodeContinuationInvariantDef();
         UsermodeContinuationPreconditionDef();
-        nonStoppedDispatcher(pagedb_in, dispPg);
+        finalDispatcher(pagedb_in, dispPg);
         spsr_of_state(this).m == User;
         this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb_in, dispPg));
         GlobalWord(this.m, CurDispatcherOp(), 0) == page_monvaddr(dispPg);
@@ -887,7 +887,7 @@ procedure {:frame false} enclaveexecution_loop(
             ParentStackPreserving(old(this), this);
             GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp()));
             validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
-            nonStoppedDispatcher(pagedb, dispPg);
+            finalDispatcher(pagedb, dispPg);
             this.conf.scr == old(this).conf.scr;
             this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, dispPg));
             retToEnclave ==> spsr_of_state(this).m == User;
@@ -1022,7 +1022,7 @@ procedure {:frame false} {:timeLimitMultiplier 2} smc_enterresume_success(
 {
     pagedb := pagedb_in;
     ghost var dispPg := old(pagenr);
-    assert nonStoppedDispatcher(pagedb, dispPg);
+    assert finalDispatcher(pagedb, dispPg);
 
     ghost var stack_bytes_local;
     stack_bytes_local := stack_banked_regs(r0, stack_bytes);

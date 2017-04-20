@@ -1,5 +1,5 @@
 DAFNYTIMELIMIT ?= 60
-VALEDIRECT ?= 1
+VALEDIRECT ?= 0
 DAFNYFLAGS = /trace /errorTrace:0 /timeLimit:$(DAFNYTIMELIMIT) \
     /ironDafny /allocated:1 /induction:1 \
     $(call mkdafnyflags,$(notdir $(*))) $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")

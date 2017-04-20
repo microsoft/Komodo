@@ -346,6 +346,14 @@ predicate nonStoppedDispatcher(d:PageDb, p:PageNr)
         !hasStoppedAddrspace(d,p))
 }
 
+predicate finalDispatcher(d:PageDb, p:PageNr)
+{
+    validDispatcherPage(d,p) && (
+        validPageDbImpliesWellFormed(d);
+        var a := d[p].addrspace;
+        isAddrspace(d, a) && d[a].entry.state == FinalState)
+}
+
 function l1pOfDispatcher(d:PageDb, p:PageNr) : PageNr
     requires nonStoppedDispatcher(d, p)
     ensures  nonStoppedL1(d,l1pOfDispatcher(d,p))

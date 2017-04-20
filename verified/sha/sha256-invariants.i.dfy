@@ -4,10 +4,10 @@ include "../kom_common.s.dfy"
 include "../sha/sha256.i.dfy"
 include "../sha/bit-vector-lemmas.i.dfy"
 
-const K_SHA256_WORDS:int := 64;
 const K_SHA256_BYTES:int := K_SHA256_WORDS * WORDSIZE;
 
 predicate {:opaque} SaneShaGlobal(gm: globalsmap)
+    ensures SaneShaGlobal(gm) ==> ValidGlobal(K_SHA256s())
 {
  ValidGlobalStateOpaque(gm)
  && ValidGlobal(K_SHA256s())

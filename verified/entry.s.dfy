@@ -160,7 +160,7 @@ predicate smc_resume(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb,
 predicate preEntryCommon(s:state, d:PageDb, dispPage:PageNr)
     //requires smc_enter_err(d, dispPage, false) == KOM_ERR_SUCCESS
 {
-    ValidState(s) && validPageDb(d) && nonStoppedDispatcher(d, dispPage)
+    ValidState(s) && validPageDb(d) && finalDispatcher(d, dispPage)
         && priv_of_state(s) == PL1
         && s.conf.scr.ns == Secure
         && s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(d, dispPage))
@@ -390,7 +390,7 @@ predicate {:opaque} validExceptionTransition(s:state, d:PageDb, s':state,
     && (d == d' || (
         validPageNr(dispPg) && validDispatcherPage(d, dispPg)
         && equivalentExceptPage(d, d', dispPg)
-        && nonStoppedDispatcher(d', dispPg)))
+        && finalDispatcher(d', dispPg)))
 }
 
 predicate WSMemInvariantExceptAddrspaceAtPage(hw:state, hw':state, 
