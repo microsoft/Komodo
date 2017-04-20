@@ -967,8 +967,8 @@ procedure svc_returning_attest(
         nonStoppedDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
         r0 == KOM_SVC_ATTEST;
-        r10 == page_monvaddr(dispPg);
-        r11 == page_monvaddr(pagedb[dispPg].addrspace);
+//        r10 == page_monvaddr(dispPg);
+//        r11 == page_monvaddr(pagedb[dispPg].addrspace);
         ValidMemRange(sp - (STACKSIZE_ATTEST + 10) * WORDSIZE, sp);
         //sp - STACKSIZE_ATTEST * WORDSIZE >= KOM_DIRECTMAP_VBASE + MonitorPhysBase();
     ensures
@@ -996,6 +996,15 @@ procedure svc_returning_attest(
             { lemma_ValidMemRange_reduced(sp - STACKSIZE_ATTEST * WORDSIZE, 10 + STACKSIZE_ATTEST, 10); }
         ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp);
     }
+
+    LDRglobaladdr(r10, CurDispatcherOp());
+    LDRglobal(r10, CurDispatcherOp(), r10, 0);
+    assert r10 == page_monvaddr(dispPg);
+    // Use r10 to grab DISP_CTXT_USER_WORDS
+
+    addrspace_va_for_page_va(r10, r11, r12, dispPg, pagedb);
+    // Use r11 to grab ADDRSPACE_HASH 
+    
 
     ghost var mac_ptr:word;
     ghost var mac:seq(word);
@@ -1036,9 +1045,9 @@ procedure svc_returning_verify_step0(
     ghost pagedb': PageDb
     )
     reads
-        globals; r10; lr;
+        globals; lr;
     modifies
-         r0; r1; r2; r3; r4; r5; r6; r7; r8;
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; r10;
          spsr_mon; mem;
     requires/ensures
         SaneState(this);
@@ -1052,10 +1061,10 @@ procedure svc_returning_verify_step0(
         validDispatcherPage(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
         r0 == KOM_SVC_VERIFY_STEP0;
-        r10 == page_monvaddr(dispPg);
+        //r10 == page_monvaddr(dispPg);
     ensures
         StackPreserving(old(this), this);
-        MemPreservingExcept(old(this), this, r10, r10 + DISP_CTXT_USER_WORDS + 8 * WORDSIZE);
+        MemPreservingExcept(old(this), this, page_monvaddr(dispPg), page_monvaddr(dispPg) + DISP_CTXT_USER_WORDS + 8 * WORDSIZE);
         let tuple := svcHandled(exstate, pagedb, dispPg) in
         let retRegs := firstOf2(tuple) in
         let handled_pagedb := secondOf2(tuple) in
@@ -1065,6 +1074,11 @@ procedure svc_returning_verify_step0(
 {
     ghost var user_words := seq(r1, r2, r3, r4, r5, r6, r7, r8);
     pagedb' := pagedb[dispPg := pagedb[dispPg].(entry := pagedb[dispPg].entry.(verify_words := user_words))];
+
+    LDRglobaladdr(r10, CurDispatcherOp());
+    LDRglobal(r10, CurDispatcherOp(), r10, 0);
+    assert r10 == page_monvaddr(dispPg);
+    // Use r10 to grab DISP_CTXT_USER_WORDS
 
     STR(r1, r10, const(DISP_CTXT_USER_WORDS + 0 * WORDSIZE));
     STR(r2, r10, const(DISP_CTXT_USER_WORDS + 1 * WORDSIZE));
@@ -1117,9 +1131,9 @@ procedure svc_returning_verify_step1(
     ghost pagedb': PageDb
     )
     reads
-        globals; r10; lr;
+        globals; lr;
     modifies
-         r0; r1; r2; r3; r4; r5; r6; r7; r8;
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; r10;
          spsr_mon; mem;
     requires/ensures
         SaneState(this);
@@ -1133,10 +1147,10 @@ procedure svc_returning_verify_step1(
         validDispatcherPage(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
         r0 == KOM_SVC_VERIFY_STEP1;
-        r10 == page_monvaddr(dispPg);
+        //r10 == page_monvaddr(dispPg);
     ensures
         StackPreserving(old(this), this);
-        MemPreservingExcept(old(this), this, r10, r10 + DISP_CTXT_VERIFY_MEASUREMENT + 8 * WORDSIZE);
+        MemPreservingExcept(old(this), this, page_monvaddr(dispPg), page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT + 8 * WORDSIZE);
         let tuple := svcHandled(exstate, pagedb, dispPg) in
         let retRegs := firstOf2(tuple) in
         let handled_pagedb := secondOf2(tuple) in
@@ -1147,6 +1161,11 @@ procedure svc_returning_verify_step1(
     ghost var user_words := seq(r1, r2, r3, r4, r5, r6, r7, r8);
     pagedb' := pagedb[dispPg := pagedb[dispPg].(entry := pagedb[dispPg].entry.(verify_measurement := user_words))];
 
+    LDRglobaladdr(r10, CurDispatcherOp());
+    LDRglobal(r10, CurDispatcherOp(), r10, 0);
+    assert r10 == page_monvaddr(dispPg);
+    // Use r10 to grab DISP_CTXT_VERIFY_MEASUREMENT
+ 
     STR(r1, r10, const(DISP_CTXT_VERIFY_MEASUREMENT + 0 * WORDSIZE));
     STR(r2, r10, const(DISP_CTXT_VERIFY_MEASUREMENT + 1 * WORDSIZE));
     STR(r3, r10, const(DISP_CTXT_VERIFY_MEASUREMENT + 2 * WORDSIZE));
@@ -1206,6 +1225,7 @@ procedure svc_returning(
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
     requires
+        stack_bytes >= (STACKSIZE_ATTEST + 10) * WORDSIZE;  
         ValidState(exstate) && mode_of_state(exstate) != User;
         isReturningSvc(exstate);
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
@@ -1217,40 +1237,40 @@ procedure svc_returning(
     ensures
         lr == old(lr);
         StackPreserving(old(this), this);
-        NonStackMemPreserving(old(this), this);
+        //NonStackMemPreserving(old(this), this);
         let tuple := svcHandled(exstate, pagedb, dispPg) in
         let retRegs := firstOf2(tuple) in
         let handled_pagedb := secondOf2(tuple) in
         pagedb' == handled_pagedb && preEntryReturn(old(this), this, retRegs);
 {
-
-    LDRglobaladdr(r10, CurDispatcherOp());
-    LDRglobal(r10, CurDispatcherOp(), r10, 0);
-    assert r10 == page_monvaddr(dispPg);
-    // Use r10 to grab DISP_CTXT_USER_WORDS
-
-    addrspace_va_for_page_va(r10, r11, r12, dispPg, pagedb);
-    // Use r11 to grab ADDRSPACE_HASH 
-    
-    assume false;
+    if (r0 == const(KOM_SVC_ATTEST)) {
+        // Create an attestation
+        svc_returning_attest(exstate, stack_bytes, pagedb, dispPg);
+        pagedb' := pagedb;
+    } else if (r0 == const(KOM_SVC_VERIFY_STEP0)) {
+        // Store the user provided words to verify
+        pagedb' := svc_returning_verify_step0(exstate, stack_bytes, pagedb, dispPg);
+    } else if (r0 == const(KOM_SVC_VERIFY_STEP1)) {
+        // Store the user provided measurement to verify
+        pagedb' := svc_returning_verify_step1(exstate, stack_bytes, pagedb, dispPg);
+    } else if (r0 == const(KOM_SVC_VERIFY_STEP2)) {
+        // Do some verification
+        assume false;
+    } else {
+        // Fall back position
+        svc_returning_default(exstate, stack_bytes, pagedb, dispPg);
+        pagedb' := pagedb;
+    }
 
 /*
 ...
-
-    MOV(r0, 0);
-    STR(r0, r2, const(DISPATCHER_ENTERED));
-
     TODO: Add more stack space
         - precondition on stack_bytes
         - In entry.i.dfy, increase 
             const EXCEPTION_STACK_BYTES:int := 100*WORDSIZE;
 */
-    // Store the user provided words to verify
-    pagedb' := svc_returning_verify_step0(exstate, stack_bytes, pagedb, dispPg);
 
-    // Fall back position
-    svc_returning_default(exstate, stack_bytes, pagedb, dispPg);
-    pagedb' := pagedb;
+    
 }
 
 procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: PageNr)
