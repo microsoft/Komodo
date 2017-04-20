@@ -84,6 +84,26 @@ assume ValidMemRange(dp, dp + SHA_CTXSIZE * WORDSIZE);
     }
 }
 
+lemma lemma_grab_measurement(
+    pagedb: PageDb,
+    dispPg: PageNr,
+    base:word,
+    s:state)
+    requires SaneState(s);
+    requires ValidAddrMemStateOpaque(s.m.addresses);
+    requires wellFormedPageDb(pagedb);
+    requires validPageDb(pagedb);
+    requires pageDbCorresponds(s.m, pagedb);
+    requires memContainsPage(extractPage(s.m, dispPg), dispPg);
+    requires validDispatcherPage(pagedb, dispPg);
+    requires GlobalFullContents(s.m, CurDispatcherOp()) == [page_monvaddr(dispPg)];
+    requires ValidMemRange(base, base + SHA_CTXSIZE * WORDSIZE);
+
+    requires AddrMemContentsSeq(s.m.addresses, base, SHA_CTXSIZE) 
+          == AddrMemContentsSeq(s.m.addresses, page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT, SHA_CTXSIZE);
+
+    ensures AddrMemContentsSeq(s.m.addresses, base, SHA_CTXSIZE) == pagedb[dispPg].entry.verify_measurement;
+
 #endverbatim
 
 procedure arrange_user_words_in_memory(
@@ -145,6 +165,68 @@ procedure arrange_user_words_in_memory(
 
     assert {:split_here} true;
 }
+
+
+procedure arrange_verify_measurement_in_memory(
+    ghost pagedb: PageDb,
+    ghost dispPg: PageNr)
+    reads
+        sp; globals;
+    modifies 
+        mem; r1; r2; r3; r4; r10;
+    requires/ensures
+        SaneState(this);
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+        validDispatcherPage(pagedb, dispPg);
+        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+        ValidMemRange(sp + 2*SHA_CTXSIZE * WORDSIZE, sp + 3 * SHA_CTXSIZE * WORDSIZE);
+        sp + 3 * SHA_CTXSIZE * WORDSIZE <= StackBase();           
+    requires
+        validDispatcherPage(pagedb, dispPg);
+    ensures
+        AddrMemPreservingExcept(old(mem), mem, sp + 2 * SHA_CTXSIZE * WORDSIZE, sp + 3 * SHA_CTXSIZE * WORDSIZE);
+        AddrMemContentsSeq(mem, sp + 2 * SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE) == pagedb[dispPg].entry.verify_measurement;
+        r1 == sp + 2 * SHA_CTXSIZE * WORDSIZE;
+{
+    assert ValidAddrMemStateOpaque(mem);
+    ghost var base := page_monvaddr(dispPg);
+    ghost var page := extractPage(this.m, dispPg);
+
+    LDRglobaladdr(r10, CurDispatcherOp());
+    LDRglobal(r10, CurDispatcherOp(), r10, 0);
+    assert r10 == page_monvaddr(dispPg);
+    // Use r10 to grab DISP_CTXT_USER_WORDS
+
+    ghost var offset := r10 + DISP_CTXT_VERIFY_MEASUREMENT;
+
+    // Arrange the measurement on the stack
+    WordAlignedAdd(sp, 2 * SHA_CTXSIZE * WORDSIZE);
+    ADD(r1, sp, const(2 * SHA_CTXSIZE * WORDSIZE));
+    ADD(r2, r10, const(DISP_CTXT_VERIFY_MEASUREMENT));  // Construct a pointer to measurement 
+    MOV(r3, const(SHA_CTXSIZE * WORDSIZE));         // Size arg to memcpy
+    ghost var pre_memcpy_state := this;
+    memcpy_bare(r1, r2, r3, r4);
+    lemma_memset_result(old(this.m), this.m, offset, r1, SHA_CTXSIZE);
+
+    assert AddrMemContentsSeq(mem, r1, SHA_CTXSIZE) 
+          == AddrMemContentsSeq(old(mem), page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT, SHA_CTXSIZE);
+    assert AddrMemContentsSeq(old(mem), page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT, SHA_CTXSIZE)
+        == AddrMemContentsSeq(mem, page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT, SHA_CTXSIZE) by {
+            lemma_MemPreservingExcept_implies_AddrMemPreservingExcept(pre_memcpy_state, this, r1, r1 + SHA_CTXSIZE * WORDSIZE);
+            lemma_AddrMemContentsSeq_framing1(pre_memcpy_state.m.addresses, mem,
+                                              page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT, SHA_CTXSIZE, 
+                                              r1, r1 + SHA_CTXSIZE * WORDSIZE);
+           }
+
+    lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
+
+    assert r10 == page_monvaddr(dispPg);
+    lemma_grab_measurement(pagedb, dispPg, r1, this);
+
+    assert {:split_here} true;
+}
+
 /*
 procedure arrange_real_measurement_in_memory(
     ghost pagedb: PageDb,
