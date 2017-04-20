@@ -372,7 +372,7 @@ procedure arrange_real_measurement_in_memory(
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
         nonStoppedDispatcher(pagedb, dispPg);
 
-        r11 == page_monvaddr(pagedb[dispPg].addrspace);
+//        r11 == page_monvaddr(pagedb[dispPg].addrspace);
 //        sp <= r1 && r1 + SHA_CTXSIZE * WORDSIZE <= StackLimit();           
 //        dst + size <= src || src + size <= dst;
         sp <= r1 && r1 + SHA_CTXSIZE * WORDSIZE <= StackBase();           
