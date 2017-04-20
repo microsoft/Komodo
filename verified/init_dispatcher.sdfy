@@ -5,6 +5,7 @@ include {:verbatim} "smcapi.i.dfy"
 include "ARMdecls.sdfy"
 include "kom_utils.sdfy"
 include "allocate_page.sdfy"
+include "map_utils.sdfy"
 include "memset.sdfy"
 
 procedure init_dispatcher_page(
@@ -25,9 +26,10 @@ procedure init_dispatcher_page(
         MemPreservingExcept(old(this), this, page_monvaddr(old(disp_page)),
                             page_monvaddr(old(disp_page)) + PAGESIZE);
         SmcProcedureInvariant(old(this), this);
-        pageDbDispatcherCorresponds(old(disp_page),
-            Dispatcher(old(entrypoint), false, initDispCtxt()),
-            extractPage(this.m, old(disp_page)));
+        let vzeros := seq(0, 0, 0, 0, 0, 0, 0, 0);
+        let e := Dispatcher(old(entrypoint), false, initDispCtxt(), vzeros, vzeros);
+        wellFormedPageDbEntryTyped(e);
+        pageDbDispatcherCorresponds(old(disp_page), e, extractPage(this.m, old(disp_page)));
 {
     ghost var dispva := page_monvaddr(old(disp_page));
     assert dispva >= KOM_DIRECTMAP_VBASE + MonitorPhysBase();
@@ -42,9 +44,10 @@ procedure init_dispatcher_page(
 
     assert MemPreservingExcept(old(this), this, dispva, dispva + DISP_SIZE);
 
+    ghost var vzeros := seq(0, 0, 0, 0, 0, 0, 0, 0);
+    ghost var e := Dispatcher(old(entrypoint), false, initDispCtxt(), vzeros, vzeros);
     ghost var pg := extractPage(this.m, old(disp_page));
-    assert pageDbDispatcherCorresponds(old(disp_page),
-            Dispatcher(old(entrypoint), false, initDispCtxt()), pg)
+    assert pageDbDispatcherCorresponds(old(disp_page), e, pg)
     by {
         reveal pageDbDispatcherCorresponds;
         assert pg[dispva + DISPATCHER_ENTRYPOINT] == old(entrypoint);
@@ -76,6 +79,7 @@ procedure {:frame false} kom_smc_init_dispatcher(
             && @err != @pagedb_base && @err != OSP;
         @tmp != @as_page && @tmp != @entrypoint && @tmp != @tmp2 && @tmp != @pagedb_base && @tmp != OSP;
         @tmp2 != @as_page && @tmp2 != @entrypoint && @tmp2 != @pagedb_base && @tmp2 != OSP;
+        StackBytesRemaining(this, MEASURE_STACK_BYTES + STACKSIZE_SHA_UPDATE * WORDSIZE);
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
     modifies
@@ -100,18 +104,16 @@ procedure {:frame false} kom_smc_init_dispatcher(
             err := const(KOM_ERR_INVALID_ADDRSPACE);
         } else {
             assert isAddrspace(pagedb, as_page);
-            ghost var entry := PageDbEntryTyped(as_page,
-                            Dispatcher(entrypoint, false, initDispCtxt()));
+            ghost var vzeros := seq(0, 0, 0, 0, 0, 0, 0, 0);
+            ghost var e := Dispatcher(entrypoint, false, initDispCtxt(), vzeros, vzeros);
+            ghost var entry := PageDbEntryTyped(as_page, e);
             pagedb := allocate_page(disp_page, as_page,
                                     const(KOM_PAGE_DISPATCHER),
                                     pagedb_base, tmp, tmp2, err, pagedb, entry);
 
             if (err == const(KOM_ERR_SUCCESS)) {
                 assert err == specErr(specResult);
-                assert pagedb
-                    == specPageDb(allocatePage(pagedb_in, disp_page, as_page,
-                                    Dispatcher(entrypoint, false, initDispCtxt())))
-                    == specPageDb(specResult);
+                assert pagedb == specPageDb(allocatePage(pagedb_in, disp_page, as_page, e));
 
                 assert pageDbCorrespondsExcluding(this.m, pagedb, disp_page);
                 assert pageDbEntryCorresponds(pagedb[disp_page],
@@ -125,6 +127,13 @@ procedure {:frame false} kom_smc_init_dispatcher(
                     by { reveal pageContentsCorresponds; }
                 AllButOnePagePreserving(old(disp_page), tmpstate, this);
                 assert pageDbCorresponds(this.m, pagedb);
+
+                MOV(r1, as_page);
+                MOV(r2, const(KOM_SMC_INIT_DISPATCHER));
+                assert entrypoint == old(entrypoint);
+                pagedb := kom_smc_map_measure(r1, r2, entrypoint, pagedb);
+                assert pagedb == specPageDb(specResult);
+                err := const(KOM_ERR_SUCCESS);
             } else {
                 assert pagedb == pagedb_in;
                 assert pageDbCorresponds(this.m, pagedb);

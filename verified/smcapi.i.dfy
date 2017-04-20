@@ -790,16 +790,15 @@ lemma lemma_updateL2PtePreservesPageDb(d:PageDb,a:PageNr,mapping:Mapping,l2e:L2P
   
 }
 
-/* FUTURE WORK:
-lemma kom_smc_map_insecure_measure_helper1(s:state, as_page:PageNr, mapping:word, pagedb_in:PageDb)
-    returns (base:addr, ctx:addr, metadata:seq<word>, input:seq<word>, trace_in:SHA256Trace, e:PageDbEntryTyped, pagedb:PageDb)
+lemma kom_smc_map_measure_helper1(s:state, as_page:PageNr, metadata:seq<word>, pagedb_in:PageDb)
+    returns (base:addr, ctx:addr, input:seq<word>, trace_in:SHA256Trace, e:PageDbEntryTyped, pagedb:PageDb)
     requires SaneState(s)
     requires wellFormedPageDb(pagedb_in)
     requires validAddrspacePage(pagedb_in, as_page)
     requires validPageDb(pagedb_in)
     requires pageDbCorresponds(s.m, pagedb_in)
     requires !stoppedAddrspace(pagedb_in[as_page])
-    ensures metadata == [KOM_SMC_MAP_INSECURE, mapping]
+    requires |metadata| == 2
     ensures input == metadata + [0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0]
     ensures pagedb == updateMeasurement(pagedb_in, as_page, metadata, [])
     ensures base == page_monvaddr(as_page)
@@ -819,7 +818,6 @@ lemma kom_smc_map_insecure_measure_helper1(s:state, as_page:PageNr, mapping:word
     ensures trace_in == e.shatrace
     ensures WordsToBytes(SeqLength(e.measurement) + 16) < MaxBytesForSHA();
 {
-    metadata := [KOM_SMC_MAP_INSECURE, mapping];
     input := metadata + [0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0];
     var p := as_page;
     var pe := pagedb_in[p];
@@ -847,7 +845,7 @@ lemma kom_smc_map_insecure_measure_helper1(s:state, as_page:PageNr, mapping:word
     pagedb := updateMeasurement(pagedb_in, as_page, metadata, []);
 }
 
-lemma kom_smc_map_insecure_measure_helper2(pagedb_in:PageDb, pagedb:PageDb, e:PageDbEntryTyped,
+lemma kom_smc_map_measure_helper2(pagedb_in:PageDb, pagedb:PageDb, e:PageDbEntryTyped,
     measurement:seq<word>, as_page:PageNr, metadata:seq<word>, input:seq<word>,
     trace_in:SHA256Trace, trace_out:SHA256Trace)
     requires wellFormedPageDb(pagedb_in)
@@ -892,4 +890,3 @@ lemma kom_smc_map_insecure_measure_helper2(pagedb_in:PageDb, pagedb:PageDb, e:Pa
     }
     lemma_SHATracesAreEqual(trace_out, trace_new);
 }
-*/
