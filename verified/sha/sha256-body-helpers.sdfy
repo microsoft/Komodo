@@ -1,0 +1,49 @@
+include {:verbatim} "sha256.i.dfy"
+include {:verbatim} "sha256-helpers.i.dfy"
+include {:verbatim} "sha256-invariants.i.dfy"
+
+include "../ARMdecls.sdfy"
+
+procedure {:refined} LDRPostInc(
+    out operand dst:reg,
+    inout operand src:reg)
+reads
+    mem;
+requires {:refined false}
+    !interrupts_enabled(this);
+    @dst != @src;
+requires
+    ValidAddrMemStateOpaque(mem);
+    ValidMem(src);
+    isUInt32(src + WORDSIZE);
+ensures
+    dst == AddrMemContents(mem, old(src));
+    src == old(src) + WORDSIZE;
+{
+    // TODO: OpenSSL does this in one instruction with a load-and-increment.
+    LDR(dst, src, 0);    // Prefetch
+    ADD(src, src, const(WORDSIZE));    // Advance to the next input
+}
+
+procedure {:refined} LDRglobalPostInc(
+    out operand dst:reg,
+    inout operand base:reg,
+    ghost j:int)
+reads
+    globals;
+requires {:refined false}
+    !interrupts_enabled(this);
+    @dst != @base;
+requires
+    SaneShaGlobal(globals);
+    0 <= j < K_SHA256_WORDS;
+    base == AddressOfGlobal(K_SHA256s()) + j * WORDSIZE;
+ensures
+    dst == K_SHA256(j);
+    base == AddressOfGlobal(K_SHA256s()) + (j + 1) * WORDSIZE;
+{
+    reveal SaneShaGlobal;
+    // TODO: OpenSSL does this in one instruction with a load-and-increment.
+    LDRglobal(dst, K_SHA256s(), base, 0);
+    ADD(base, base, const(WORDSIZE));
+}

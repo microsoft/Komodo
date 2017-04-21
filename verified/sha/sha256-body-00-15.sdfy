@@ -5,57 +5,9 @@
 ///////////////////////////////////////////////////
 
 
-include {:verbatim} "sha256.i.dfy"
-include {:verbatim} "sha256-helpers.i.dfy"
-include {:verbatim} "sha256-invariants.i.dfy"
+include "sha256-body-helpers.sdfy"
 
-include "../ARMdecls.sdfy"
-
-procedure {:refined} LDRPostInc(
-    out operand dst:reg,
-    inout operand src:reg)
-reads
-    mem;
-requires {:refined false}
-    !interrupts_enabled(this);
-    @dst != @src;
-requires
-    ValidAddrMemStateOpaque(mem);
-    ValidMem(src);
-    isUInt32(src + WORDSIZE);
-ensures
-    dst == AddrMemContents(mem, old(src));
-    src == old(src) + WORDSIZE;
-{
-    // TODO: OpenSSL does this in one instruction with a load-and-increment.
-    LDR(dst, src, 0);    // Prefetch
-    ADD(src, src, const(WORDSIZE));    // Advance to the next input
-}
-
-procedure {:refined} LDRglobalPostInc(
-    out operand dst:reg,
-    inout operand base:reg,
-    ghost j:int)
-reads
-    globals;
-requires {:refined false}
-    !interrupts_enabled(this);
-    @dst != @base;
-requires
-    SaneShaGlobal(globals);
-    0 <= j < K_SHA256_WORDS;
-    base == AddressOfGlobal(K_SHA256s()) + j * WORDSIZE;
-ensures
-    dst == K_SHA256(j);
-    base == AddressOfGlobal(K_SHA256s()) + (j + 1) * WORDSIZE;
-{
-    reveal SaneShaGlobal;
-    // TODO: OpenSSL does this in one instruction with a load-and-increment.
-    LDRglobal(dst, K_SHA256s(), base, 0);
-    ADD(base, base, const(WORDSIZE));
-}
-
-procedure {:refined} {:timeLimitMultiplier 2} Body_00_15(
+procedure {:refined} {:timeLimitMultiplier 4} Body_00_15(
     inline i:SHA_step,
     inline perm:perm_index,
     inline input_slot:word,
@@ -233,6 +185,7 @@ ensures
     EOR(t1, t1, g);     // Ch(e,f,g)
     
     assert t1 == Ch(e, f, g) by { lemma_Ch(e, f, g, t1); }
+assert {:split_here}{:refined} true;
 
     EORShift(t0, a, a, RORShift(Sigma0(1) - Sigma0(0)));
     ADDWrap(h, h, t1);  // h += Ch(e,f,g)
@@ -278,6 +231,7 @@ ensures
         assert t3 == BitwiseXor(t3', b);
         lemma_Maj(a, b, c, t3);
     }
+assert {:split_here}{:refined} true;
     old_h := h;
     ADDWrapShift(h,h,t0, RORShift(Sigma0(0)));   // h+=Sigma0(a)
 
@@ -319,6 +273,7 @@ ensures
     assert mem == finalmem;
     //lemma_ValidAddrsPreservation(old(mem), mem, sp, 19, sp + 68, sp + input_slot);
 
+assert {:split_here}{:refined} true;
     // Help prove that the input is still intact
     //assert mem == AddrMemUpdate(AddrMemUpdate(old(mem), sp + 17*WORDSIZE,
     //                                          AddrMemContents(mem, sp + 17*WORDSIZE)),
@@ -334,10 +289,10 @@ ensures
    
     // Prove we updated the Ws correctly
     lemma_WsIncrement(old(mem), mem, trace_in, trace_out, sp, i, sp + 17*WORDSIZE, sp + input_slot);
-    assert {:split_here}{:refined} true;
     assert ValidMem(sp + 16*WORDSIZE); // OBSERVE
     assert ValidMem(sp + 18*WORDSIZE); // OBSERVE
     assert AddrMemContents(mem, sp + 18*WORDSIZE) == AddrMemContents(old(mem), sp + 18*WORDSIZE);
+assert {:split_here}{:refined} true;
 }
 
 #verbatim
