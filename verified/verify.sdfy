@@ -116,7 +116,8 @@ predicate {:opaque} comparison_invariant(r1:word, index:nat, regs:seq<word>, con
     requires 0 <= index <= |regs|;
     requires |regs| == |contents|;
 {
-    r1 == index <==> regs[..index] == contents[..index]
+    r1 <= index
+ && (r1 == index <==> regs[..index] == contents[..index])
 }
 
 lemma lemma_comparison_invariant_implies(r1:word, regs:seq<word>, contents:seq<word>)
@@ -127,6 +128,36 @@ lemma lemma_comparison_invariant_implies(r1:word, regs:seq<word>, contents:seq<w
     reveal_comparison_invariant();
     assert SeqDrop(regs, |regs|) == regs;
     assert SeqDrop(contents, |regs|) == contents;
+}
+
+lemma lemma_extend_comparison_invariant(old_r1:word, r1:word, index:nat, regs:seq<word>, contents:seq<word>)
+    requires |regs| == |contents|;
+    requires 0 <= index < |regs|;
+    requires comparison_invariant(old_r1, index, regs, contents);
+    requires old_r1 == r1 ==> regs[index] != contents[index];
+    requires old_r1 != r1 ==> r1 == old_r1 + 1 && regs[index] == contents[index];
+    ensures  comparison_invariant(r1, index + 1, regs, contents);
+{
+    reveal_comparison_invariant();
+//    
+//    if old_r1 == index {
+//        if old_r1 == r1 {
+//            assert comparison_invariant(r1, index + 1, regs, contents);
+//        } else {
+//            assert comparison_invariant(r1, index + 1, regs, contents);
+//        }
+//    } else {
+//        if old_r1 == r1 {
+//            assert regs[..index] != contents[..index];
+//            assert regs[..index + 1] == regs[..index] + [regs[index]];
+//            assert contents[..index + 1] == contents[..index] + [contents[index]];
+//            assert r1 != index + 1;
+//            assert contents[..index + 1] != regs[..index + 1];
+//            assert comparison_invariant(r1, index + 1, regs, contents);
+//        } else {
+//            assert comparison_invariant(r1, index + 1, regs, contents);
+//        }
+//    }
 }
 
 type uint16 = x:int | 0 <= x < 0x1_0000_0000
@@ -163,10 +194,11 @@ procedure compare_mem_to_reg(
 
     LDR(r0, sp, const(index * WORDSIZE));
     assert r0 == contents[index];
+
     if (r0 == reg) {
         ADD(r1, r1, 1);
     }
-    reveal comparison_invariant;
+    lemma_extend_comparison_invariant(old(r1), r1, index, regs, contents);
 }
 
 procedure {:timeLimitMultiplier 2} compare_memory_to_regs(ghost contents:seq(word))
