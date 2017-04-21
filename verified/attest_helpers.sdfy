@@ -394,5 +394,6 @@ procedure unstack_all_regs(ghost stack_bytes:int)
     LDR(r0,  sp, 48);
     LDR(lr,  sp, 52);
 
+    ADD(sp, sp, 56);
     stack_bytes_ret := stack_bytes + 56;
 }
