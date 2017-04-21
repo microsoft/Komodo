@@ -238,6 +238,7 @@ procedure {:timeLimitMultiplier 2} compare_memory_to_regs(ghost contents:seq(wor
     compare_mem_to_reg(r8, 7, regs, contents);
 
     lemma_comparison_invariant_implies(r1, regs, contents);
+    assert {:split_here} true;
     if (r1 == 8) {
         assert regs == contents;
         MOV(r1, 1);
@@ -245,7 +246,7 @@ procedure {:timeLimitMultiplier 2} compare_memory_to_regs(ghost contents:seq(wor
         assert regs != contents;
         MOV(r1, 0);
     }
-    assert {:split_here} true;
+    //assert {:split_here} true;
 }
 
 procedure {:timeLimitMultiplier 2} svc_returning_verify_inner'(
