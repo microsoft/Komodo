@@ -227,285 +227,11 @@ procedure arrange_verify_measurement_in_memory(
     assert {:split_here} true;
 }
 
-/*
-procedure arrange_real_measurement_in_memory(
+
+procedure{:timeLimitMultiplier 2} arrange_verification_input(
     ghost pagedb: PageDb,
     ghost dispPg: PageNr
-    ) returns (ghost measurement:seq(word))
-    reads
-        globals; sp; r1; 
-    modifies 
-        mem; r2; r3; r4; r10; r11; r12;
-    requires/ensures
-        SaneState(this);
-        ValidMemRange(r1, r1 + SHA_CTXSIZE * WORDSIZE);
-    requires
-        validPageDb(pagedb);
-        pageDbCorresponds(this.m, pagedb);
-        validDispatcherPage(pagedb, dispPg);
-        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
-        nonStoppedDispatcher(pagedb, dispPg);
-
-//        r11 == page_monvaddr(pagedb[dispPg].addrspace);
-//        sp <= r1 && r1 + SHA_CTXSIZE * WORDSIZE <= StackLimit();           
-//        dst + size <= src || src + size <= dst;
-        sp <= r1 && r1 + SHA_CTXSIZE * WORDSIZE <= StackBase();           
-//        dst >= StackBase() || dst + size <= StackLimit();
-        // no writing to insecure mem
-        r1 >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || r1 + SHA_CTXSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE;
-
-    ensures
-        AddrMemPreservingExcept(old(mem), mem, r1, r1 + SHA_CTXSIZE * WORDSIZE);
-        AddrMemContentsSeq(mem, r1, SHA_CTXSIZE) == measurement;
-        validAddrspacePage(pagedb, pagedb[dispPg].addrspace);
-        let addrsp_pg := pagedb[dispPg].addrspace in
-        let addrsp := pagedb[addrsp_pg].entry in
-            measurement == SHA256(WordSeqToBytes(addrsp.measurement));
-{
-    LDRglobaladdr(r10, CurDispatcherOp());
-    LDRglobal(r10, CurDispatcherOp(), r10, 0);
-    assert r10 == page_monvaddr(dispPg);
-    // Use r10 to grab DISP_CTXT_USER_WORDS
-
-    addrspace_va_for_page_va(r10, r11, r12, dispPg, pagedb);
-    // Use r11 to grab ADDRSPACE_HASH 
- 
-    assert WordAligned(r11);
-    ghost var offset := r11 + ADDRSPACE_HASH;
-    WordAlignedAdd(r11, ADDRSPACE_HASH);
-    assert WordAligned(offset);
-    WordAlignedAdd(offset, 1*WORDSIZE);
-    WordAlignedAdd(offset, 2*WORDSIZE);
-    WordAlignedAdd(offset, 3*WORDSIZE);
-    WordAlignedAdd(offset, 4*WORDSIZE);
-    WordAlignedAdd(offset, 5*WORDSIZE);
-    WordAlignedAdd(offset, 6*WORDSIZE);
-    WordAlignedAdd(offset, 7*WORDSIZE);
-
-    measurement := 
-        seq(AddrMemContents(mem, offset + 0*WORDSIZE),
-            AddrMemContents(mem, offset + 1*WORDSIZE),
-            AddrMemContents(mem, offset + 2*WORDSIZE),
-            AddrMemContents(mem, offset + 3*WORDSIZE),
-            AddrMemContents(mem, offset + 4*WORDSIZE),
-            AddrMemContents(mem, offset + 5*WORDSIZE),
-            AddrMemContents(mem, offset + 6*WORDSIZE),
-            AddrMemContents(mem, offset + 7*WORDSIZE));
-    lemma_package_hash_result(mem, offset, measurement);    
-    assert AddrMemContentsSeq(mem, offset, SHA_CTXSIZE) == measurement;
-
-    // Arrange the enclave measurement 
-    ADD(r2, r11, const(ADDRSPACE_HASH));  // Construct a pointer to enclave measurement hash 
-    MOV(r3, const(SHA_CTXSIZE * WORDSIZE));         // Size arg to memcpy
-    memcpy_bare(r1, r2, r3, r4);
-    
-    lemma_memset_result(old(this.m), this.m, offset, r1, SHA_CTXSIZE);
-    assert AddrMemContentsSeq(mem, r1, SHA_CTXSIZE) == measurement;
-    ghost var addrsp_pg := pagedb[dispPg].addrspace;
-    assert validAddrspacePage(pagedb, addrsp_pg) by { reveal_validPageDb(); }
-    ghost var addrsp := pagedb[addrsp_pg].entry;
-
-    assert measurement == SHA256(WordSeqToBytes(addrsp.measurement)) by {
-        assert addrsp.state is FinalState by {
-            assume nonStoppedDispatcher(pagedb, dispPg) ==> addrsp.state is FinalState;  // TODO: ab: Remove me!
-        }
-        assert pageDbCorresponds(this.m, pagedb) by {
-           lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
-        }
-        assert validPageNr(addrsp_pg);
-        ghost var page := extractPage(this.m, addrsp_pg);
-        assert pageContentsCorresponds(addrsp_pg, pagedb[addrsp_pg], page);
-        reveal pageContentsCorresponds;
-        assert pageDbAddrspaceCorresponds(addrsp_pg, addrsp, page);
-        reveal pageDbAddrspaceCorresponds;
-
-
-        ghost var base := page_monvaddr(addrsp_pg);
-        assert base == r11;
-        assert memContainsPage(page, addrsp_pg);
-        assert page?[base]; 
-
-//        calc {
-//          base;
-//          page_paddr(addrsp_pg) + KOM_DIRECTMAP_VBASE;
-//        <
-//          SecurePhysBase() + KOM_SECURE_RESERVE + KOM_DIRECTMAP_VBASE;
-//        <=
-//          KOM_PHYSMEM_LIMIT - KOM_SECURE_RESERVE + KOM_SECURE_RESERVE + KOM_DIRECTMAP_VBASE;
-//          KOM_PHYSMEM_LIMIT + KOM_DIRECTMAP_VBASE;
-//          0x4000_0000 + 0x8000_0000;
-//          0xc000_0000;
-//        }
-        
-        assert {:split_here} true;
-
-        assert WordAligned(base + ADDRSPACE_HASH + 0 * WORDSIZE); 
-        assert addrInPage(base + ADDRSPACE_HASH + 0*WORDSIZE, addrsp_pg);       // OBSERVE
-        assert addrInPage(base + ADDRSPACE_HASH + 1*WORDSIZE, addrsp_pg);       // OBSERVE
-        assert addrInPage(base + ADDRSPACE_HASH + 2*WORDSIZE, addrsp_pg);       // OBSERVE
-        assert addrInPage(base + ADDRSPACE_HASH + 3*WORDSIZE, addrsp_pg);       // OBSERVE
-        assert addrInPage(base + ADDRSPACE_HASH + 4*WORDSIZE, addrsp_pg);       // OBSERVE
-        assert addrInPage(base + ADDRSPACE_HASH + 5*WORDSIZE, addrsp_pg);       // OBSERVE
-        assert addrInPage(base + ADDRSPACE_HASH + 6*WORDSIZE, addrsp_pg);       // OBSERVE
-        assert addrInPage(base + ADDRSPACE_HASH + 7*WORDSIZE, addrsp_pg);       // OBSERVE
-
-        ghost var addr_space_hash := seq(page[base + ADDRSPACE_HASH + 0*WORDSIZE],
-                                         page[base + ADDRSPACE_HASH + 1*WORDSIZE],
-                                         page[base + ADDRSPACE_HASH + 2*WORDSIZE],
-                                         page[base + ADDRSPACE_HASH + 3*WORDSIZE],
-                                         page[base + ADDRSPACE_HASH + 4*WORDSIZE],
-                                         page[base + ADDRSPACE_HASH + 5*WORDSIZE],
-                                         page[base + ADDRSPACE_HASH + 6*WORDSIZE],
-                                         page[base + ADDRSPACE_HASH + 7*WORDSIZE]);
-        assert addr_space_hash == SHA256(WordSeqToBytes(addrsp.measurement));
-        assert addr_space_hash == measurement;
-    }
-    assert {:split_here} true;
-}
-
-#verbatim
-lemma lemma_SeqRepeat8()
-    ensures SeqRepeat(8, 0) == [0, 0, 0, 0, 0, 0, 0, 0];
-{
-}
-#endverbatim
-
-procedure zero_pad_memory() 
-    reads
-        r1;
-    modifies 
-        mem; r2; 
-    requires/ensures
-        SaneState(this);
-        ValidMemRange(r1, r1 + SHA_CTXSIZE * WORDSIZE);
-    ensures
-        AddrMemPreservingExcept(old(mem), mem, r1, r1 + SHA_CTXSIZE * WORDSIZE);
-        AddrMemContentsSeq(mem, r1, SHA_CTXSIZE) == SeqRepeat(8, 0);
-{
-    MOV(r2, 0);
-    STR(r2, r1, const(0 * WORDSIZE));
-    STR(r2, r1, const(1 * WORDSIZE));
-    STR(r2, r1, const(2 * WORDSIZE));
-    STR(r2, r1, const(3 * WORDSIZE));
-    STR(r2, r1, const(4 * WORDSIZE));
-    STR(r2, r1, const(5 * WORDSIZE));
-    STR(r2, r1, const(6 * WORDSIZE));
-    STR(r2, r1, const(7 * WORDSIZE));
-    
-    ghost var zeroes := seq(0, 0, 0, 0, 0, 0, 0, 0);
-    lemma_package_hash_result(mem, r1, zeroes);    
-    lemma_SeqRepeat8();
-}
-
-
-#verbatim
-
-lemma lemma_arrange_attestation_input_helper(
-        user_words_mem:memmap,
-        measurement_mem:memmap,
-        mem:memmap,
-        base:nat,
-        user_words:seq<word>,
-        measurement:seq<word>)
-    requires ValidMemRange(base, base + 3 * SHA_CTXSIZE * WORDSIZE);
-    requires ValidAddrMemStateOpaque(user_words_mem)
-          && ValidAddrMemStateOpaque(measurement_mem)
-          && ValidAddrMemStateOpaque(mem);
-
-    requires user_words      == AddrMemContentsSeq(user_words_mem,  base,                              SHA_CTXSIZE);
-    requires measurement     == AddrMemContentsSeq(measurement_mem, base + SHA_CTXSIZE * WORDSIZE,     SHA_CTXSIZE);
-    requires SeqRepeat(8, 0) == AddrMemContentsSeq(mem,             base + 2 * SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE);
-
-    requires AddrMemPreservingExcept(user_words_mem, measurement_mem, 
-                                     base +     SHA_CTXSIZE * WORDSIZE, 
-                                     base + 2 * SHA_CTXSIZE * WORDSIZE)
-    requires AddrMemPreservingExcept(measurement_mem, mem,
-                                     base + 2 * SHA_CTXSIZE * WORDSIZE, 
-                                     base + 3 * SHA_CTXSIZE * WORDSIZE)
-    ensures AddrMemContentsSeq(mem, base, 3 * SHA_CTXSIZE) == user_words + measurement + SeqRepeat(8, 0);
-{
-    calc {
-        true;
-        ValidMemRange(base, base + 3 * SHA_CTXSIZE * WORDSIZE);
-            { lemma_ValidMemRange_reduced(base, 3 * SHA_CTXSIZE, 2 * SHA_CTXSIZE); }
-        ValidMemRange(base, base + SHA_CTXSIZE * WORDSIZE);
-    }
-    
-    calc {
-        true;
-        ValidMemRange(base, base + 3 * SHA_CTXSIZE * WORDSIZE);
-            { lemma_ValidMemRange_offset(base, 3 * SHA_CTXSIZE, SHA_CTXSIZE); }
-        ValidMemRange(base + SHA_CTXSIZE * WORDSIZE, base + 2 * SHA_CTXSIZE * WORDSIZE);
-    }
-    
-    calc {
-        true;
-        ValidMemRange(base, base + 3 * SHA_CTXSIZE * WORDSIZE);
-            { lemma_ValidMemRange_offset(base, 3 * SHA_CTXSIZE, 2 * SHA_CTXSIZE); }
-        ValidMemRange(base + 2 * SHA_CTXSIZE * WORDSIZE, base + 3 * SHA_CTXSIZE * WORDSIZE);
-    }
-
-    // Propagate memory contents to latest version of memory
-    calc {
-        user_words;
-        AddrMemContentsSeq(user_words_mem, base, SHA_CTXSIZE);
-            { lemma_AddrMemContentsSeq_framing1(user_words_mem, measurement_mem, 
-                                     base, SHA_CTXSIZE, 
-                                     base +     SHA_CTXSIZE * WORDSIZE, 
-                                     base + 2 * SHA_CTXSIZE * WORDSIZE); }
-        AddrMemContentsSeq(measurement_mem, base, SHA_CTXSIZE);
-            { lemma_AddrMemContentsSeq_framing1(measurement_mem, mem,
-                                     base, SHA_CTXSIZE, 
-                                     base + 2 * SHA_CTXSIZE * WORDSIZE, 
-                                     base + 3 * SHA_CTXSIZE * WORDSIZE); }
-        AddrMemContentsSeq(mem, base, SHA_CTXSIZE);
-    }
-
-    calc {
-        measurement;
-        AddrMemContentsSeq(measurement_mem, base + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE);
-            { lemma_AddrMemContentsSeq_framing1(measurement_mem, mem, 
-                                                base + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE,
-                                                base + 2 * SHA_CTXSIZE * WORDSIZE, 
-                                                base + 3 * SHA_CTXSIZE * WORDSIZE);
-            }
-        AddrMemContentsSeq(mem, base + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE);
-    }
-
-
-    calc {
-        AddrMemContentsSeq(mem, base, 3 * SHA_CTXSIZE);
-            { lemma_AddrMemContentsSeq_adds(mem, base, 3 * SHA_CTXSIZE, SHA_CTXSIZE); }
-        AddrMemContentsSeq(mem, base, SHA_CTXSIZE) 
-      + AddrMemContentsSeq(mem, base + SHA_CTXSIZE * WORDSIZE, 2 * SHA_CTXSIZE);
-        user_words + AddrMemContentsSeq(mem, base + SHA_CTXSIZE * WORDSIZE, 2 * SHA_CTXSIZE);
-            { lemma_AddrMemContentsSeq_adds(mem, base + SHA_CTXSIZE * WORDSIZE, 2 * SHA_CTXSIZE, SHA_CTXSIZE); }
-        user_words 
-      + AddrMemContentsSeq(mem, base + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE) 
-      + AddrMemContentsSeq(mem, base + SHA_CTXSIZE * WORDSIZE + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE);
-
-        user_words 
-      + AddrMemContentsSeq(mem, base + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE) 
-      + AddrMemContentsSeq(mem, base + 2 * SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE);
-
-        user_words 
-      + measurement
-      + AddrMemContentsSeq(mem, base + 2 * SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE);
-
-        user_words 
-      + measurement
-      + SeqRepeat(8, 0);
-    }
-}
-#endverbatim
-
-procedure{:timeLimitMultiplier 2} arrange_attestation_input(
-    ghost pagedb: PageDb,
-    ghost dispPg: PageNr
-    ) returns (
-    ghost user_words:seq(word),
-    ghost measurement:seq(word)
-    )
+    ) 
     reads
         globals; sp; r5; r6; r7; r8;
     modifies
@@ -524,83 +250,45 @@ procedure{:timeLimitMultiplier 2} arrange_attestation_input(
         StackLimit() <= sp && sp + (SHA_CTXSIZE + 3 * SHA_CTXSIZE) * WORDSIZE <= StackBase();           
     ensures
         AddrMemPreservingExcept(old(mem), mem, sp + SHA_CTXSIZE * WORDSIZE, sp + (SHA_CTXSIZE + 3 * SHA_CTXSIZE) * WORDSIZE);
-        validAddrspacePage(pagedb, pagedb[dispPg].addrspace);
-        user_words == old(seq(r1, r2, r3, r4, r5, r6, r7, r8));
-        let addrsp_pg := pagedb[dispPg].addrspace in
-        let addrsp := pagedb[addrsp_pg].entry in
-            measurement == SHA256(WordSeqToBytes(addrsp.measurement));
         AddrMemContentsSeq(mem, sp + SHA_CTXSIZE * WORDSIZE, 3 * SHA_CTXSIZE) == 
-            user_words + measurement + SeqRepeat(8, 0);
+            pagedb[dispPg].entry.verify_words
+          + pagedb[dispPg].entry.verify_measurement
+          + SeqRepeat(8, 0);
         r1 == sp + 3*SHA_CTXSIZE * WORDSIZE; 
 {
     ghost var offset_sp := sp + SHA_CTXSIZE * WORDSIZE;
 
     // Arrange the user words in memory after the gap for the MAC output
-    user_words := arrange_user_regs_in_memory();
+    arrange_user_words_in_memory(pagedb, dispPg);
     ghost var user_words_mem;
     user_words_mem := mem;
-//    assert user_words == AddrMemContentsSeq(mem, offset_sp, SHA_CTXSIZE);
     lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
 
     // Arrange the enclave measurement 
-    ADD(r1, sp, const((SHA_CTXSIZE + 8) * WORDSIZE)); // Construct a pointer for the next slot on the stack
-
-//    LDRglobaladdr(r10, CurDispatcherOp());
-//    LDRglobal(r10, CurDispatcherOp(), r10, 0);
-//    assert r10 == page_monvaddr(dispPg);
-//    // Use r10 to grab DISP_CTXT_USER_WORDS
-//
-//    addrspace_va_for_page_va(r10, r11, r12, dispPg, pagedb);
-//    // Use r11 to grab ADDRSPACE_HASH 
-
-    measurement := arrange_real_measurement_in_memory(pagedb, dispPg);
+    arrange_verify_measurement_in_memory(pagedb, dispPg);
     ghost var measurement_mem;
     measurement_mem := mem;
-//    // Re-establish user_words in mem
-//    assert user_words == AddrMemContentsSeq(mem, offset_sp, SHA_CTXSIZE) by {
-//        lemma_AddrMemContentsSeq_framing1(user_words_mem, mem, offset_sp, SHA_CTXSIZE, r1, r1 + SHA_CTXSIZE * WORDSIZE);
-//    }
 
     // Fill in some zeroes
     ADD(r1, r1, const(SHA_CTXSIZE * WORDSIZE)); // Construct a pointer for the next slot on the stack
+    assert r1 == sp + 3 * SHA_CTXSIZE * WORDSIZE;
+    calc {
+        true;
+        ValidMemRange(sp + SHA_CTXSIZE * WORDSIZE, sp + (SHA_CTXSIZE + 3 * SHA_CTXSIZE) * WORDSIZE);
+            { lemma_ValidMemRange_offset(sp + SHA_CTXSIZE * WORDSIZE, 3 * SHA_CTXSIZE, 2 * SHA_CTXSIZE); }
+        ValidMemRange(sp + 3 * SHA_CTXSIZE * WORDSIZE, sp + 4 * SHA_CTXSIZE * WORDSIZE);
+        ValidMemRange(r1, r1 + SHA_CTXSIZE * WORDSIZE);
+    }
     zero_pad_memory();
     
-//    // Re-establish user_words in mem
-//    assert user_words == AddrMemContentsSeq(mem, offset_sp, SHA_CTXSIZE) by {
-//        lemma_AddrMemContentsSeq_framing1(measurement_mem, mem, offset_sp, SHA_CTXSIZE, r1, r1 + SHA_CTXSIZE * WORDSIZE);
-//    }
-
     calc {
         AddrMemContentsSeq(mem, offset_sp, 3 * SHA_CTXSIZE);
-//            { lemma_AddrMemContentsSeq_adds(mem, offset_sp, 3 * SHA_CTXSIZE, SHA_CTXSIZE); }
-//        AddrMemContentsSeq(mem, offset_sp, SHA_CTXSIZE) 
-//      + AddrMemContentsSeq(mem, offset_sp + SHA_CTXSIZE * WORDSIZE, 2 * SHA_CTXSIZE);
-//        user_words + AddrMemContentsSeq(mem, offset_sp + SHA_CTXSIZE * WORDSIZE, 2 * SHA_CTXSIZE);
-//            { lemma_AddrMemContentsSeq_adds(mem, offset_sp + SHA_CTXSIZE * WORDSIZE, 2 * SHA_CTXSIZE, SHA_CTXSIZE); }
-//        user_words 
-//      + AddrMemContentsSeq(mem, offset_sp + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE) 
-//      + AddrMemContentsSeq(mem, offset_sp + SHA_CTXSIZE * WORDSIZE + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE);
-//
-//        user_words 
-//      + AddrMemContentsSeq(mem, offset_sp + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE) 
-//      + AddrMemContentsSeq(mem, offset_sp + 2 * SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE);
-//            { 
-//                lemma_AddrMemContentsSeq_framing1(measurement_mem, mem, 
-//                                                  offset_sp + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE,
-//                                                  offset_sp + 2 * SHA_CTXSIZE * WORDSIZE, 
-//                                                  offset_sp + 3 * SHA_CTXSIZE * WORDSIZE);
-//                assert measurement == AddrMemContentsSeq(mem, offset_sp + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE);
-//            }
-//        user_words 
-//      + measurement
-//      + AddrMemContentsSeq(mem, offset_sp + 2 * SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE);
-            { lemma_arrange_attestation_input_helper(user_words_mem, measurement_mem, mem,  
-                                                     offset_sp, user_words, measurement); }
-
-        user_words 
-      + measurement
+            { lemma_arrange_attestation_input_helper(user_words_mem, measurement_mem, mem, offset_sp,
+                                                      pagedb[dispPg].entry.verify_words,
+                                                      pagedb[dispPg].entry.verify_measurement); }
+        pagedb[dispPg].entry.verify_words
+      + pagedb[dispPg].entry.verify_measurement
       + SeqRepeat(8, 0);
     }
     assert {:split_here} true;
 }
-*/
