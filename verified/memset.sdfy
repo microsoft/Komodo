@@ -86,6 +86,7 @@ procedure {:timeLimitMultiplier 2} memcpy(operand dst:addr, operand src:addr,
         ghost var prevThis := this;
         SUB(size, size, 4);
         assert WordAligned(size);
+        WordAlignedAdd(dst, size);
         LDR(tmp, src, size);
         assert tmp == MemContents(old(this.m), src + size);
         STR(tmp, dst, size);
