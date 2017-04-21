@@ -8,7 +8,77 @@ include "allocate_page.sdfy"
 include "map_utils.sdfy"
 include "memset.sdfy"
 
-procedure init_dispatcher_page(
+procedure init_dispatcher_page_zero(operand ptr:reg, operand tmp:reg)
+    requires/ensures
+        SaneState(this);
+    modifies
+        mem;
+    requires
+        ValidMemRange(ptr, ptr + 8 * WORDSIZE);
+    ensures
+        forall i :: ValidMem(i) && !(ptr <= i <= ptr + 7 * WORDSIZE) ==>
+            MemContents(this.m, i) == MemContents(old(this).m, i);
+        ValidMem(ptr + 0 * WORDSIZE) && AddrMemContents(mem, ptr + 0 * WORDSIZE) == tmp;
+        ValidMem(ptr + 1 * WORDSIZE) && AddrMemContents(mem, ptr + 1 * WORDSIZE) == tmp;
+        ValidMem(ptr + 2 * WORDSIZE) && AddrMemContents(mem, ptr + 2 * WORDSIZE) == tmp;
+        ValidMem(ptr + 3 * WORDSIZE) && AddrMemContents(mem, ptr + 3 * WORDSIZE) == tmp;
+        ValidMem(ptr + 4 * WORDSIZE) && AddrMemContents(mem, ptr + 4 * WORDSIZE) == tmp;
+        ValidMem(ptr + 5 * WORDSIZE) && AddrMemContents(mem, ptr + 5 * WORDSIZE) == tmp;
+        ValidMem(ptr + 6 * WORDSIZE) && AddrMemContents(mem, ptr + 6 * WORDSIZE) == tmp;
+        ValidMem(ptr + 7 * WORDSIZE) && AddrMemContents(mem, ptr + 7 * WORDSIZE) == tmp;
+{
+    STR(tmp, ptr, const(0 * WORDSIZE));
+    STR(tmp, ptr, const(1 * WORDSIZE));
+    STR(tmp, ptr, const(2 * WORDSIZE));
+    STR(tmp, ptr, const(3 * WORDSIZE));
+    STR(tmp, ptr, const(4 * WORDSIZE));
+    STR(tmp, ptr, const(5 * WORDSIZE));
+    STR(tmp, ptr, const(6 * WORDSIZE));
+    STR(tmp, ptr, const(7 * WORDSIZE));
+}
+
+procedure{:timeLimitMultiplier 2} init_dispatcher_page_zeros(inout operand ptr:reg, operand tmp:reg)
+    requires/ensures
+        SaneState(this);
+    modifies
+        mem;
+    requires
+        ValidMemRange(ptr + DISP_CTXT_USER_WORDS, ptr + DISP_CTXT_USER_WORDS + 8 * WORDSIZE);
+        ValidMemRange(ptr + DISP_CTXT_VERIFY_MEASUREMENT, ptr + DISP_CTXT_VERIFY_MEASUREMENT + 8 * WORDSIZE);
+        @ptr != @tmp;
+        @ptr != OSP;
+        @tmp != OSP;
+    ensures
+        forall i :: ValidMem(i)
+            && !(old(ptr) + DISP_CTXT_USER_WORDS <= i <= old(ptr) + DISP_CTXT_USER_WORDS + 7 * WORDSIZE)
+            && !(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT <= i <= old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 7 * WORDSIZE)
+            ==>
+            MemContents(this.m, i) == MemContents(old(this).m, i);
+        ValidMem(old(ptr) + DISP_CTXT_USER_WORDS + 0 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_USER_WORDS + 0 * WORDSIZE) == tmp;
+        ValidMem(old(ptr) + DISP_CTXT_USER_WORDS + 1 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_USER_WORDS + 1 * WORDSIZE) == tmp;
+        ValidMem(old(ptr) + DISP_CTXT_USER_WORDS + 2 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_USER_WORDS + 2 * WORDSIZE) == tmp;
+        ValidMem(old(ptr) + DISP_CTXT_USER_WORDS + 3 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_USER_WORDS + 3 * WORDSIZE) == tmp;
+        ValidMem(old(ptr) + DISP_CTXT_USER_WORDS + 4 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_USER_WORDS + 4 * WORDSIZE) == tmp;
+        ValidMem(old(ptr) + DISP_CTXT_USER_WORDS + 5 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_USER_WORDS + 5 * WORDSIZE) == tmp;
+        ValidMem(old(ptr) + DISP_CTXT_USER_WORDS + 6 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_USER_WORDS + 6 * WORDSIZE) == tmp;
+        ValidMem(old(ptr) + DISP_CTXT_USER_WORDS + 7 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_USER_WORDS + 7 * WORDSIZE) == tmp;
+        ValidMem(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 0 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 0 * WORDSIZE) == tmp;
+        ValidMem(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 1 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 1 * WORDSIZE) == tmp;
+        ValidMem(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 2 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 2 * WORDSIZE) == tmp;
+        ValidMem(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 3 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 3 * WORDSIZE) == tmp;
+        ValidMem(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 4 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 4 * WORDSIZE) == tmp;
+        ValidMem(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 5 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 5 * WORDSIZE) == tmp;
+        ValidMem(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 6 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 6 * WORDSIZE) == tmp;
+        ValidMem(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 7 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 7 * WORDSIZE) == tmp;
+{
+    ADD(ptr, ptr, const(DISP_CTXT_USER_WORDS));
+    init_dispatcher_page_zero(ptr, tmp);
+    SUB(ptr, ptr, const(DISP_CTXT_USER_WORDS));
+    ADD(ptr, ptr, const(DISP_CTXT_VERIFY_MEASUREMENT));
+    init_dispatcher_page_zero(ptr, tmp);
+}
+
+procedure{:timeLimitMultiplier 3} init_dispatcher_page(
     inout operand disp_page:reg,
     operand entrypoint:reg,
     out operand tmp:reg)
@@ -41,6 +111,7 @@ procedure init_dispatcher_page(
 
     tmp := 0;
     STR(tmp, disp_page, const(DISPATCHER_ENTERED));
+    init_dispatcher_page_zeros(disp_page, tmp);
 
     assert MemPreservingExcept(old(this), this, dispva, dispva + DISP_SIZE);
 
