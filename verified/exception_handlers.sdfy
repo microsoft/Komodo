@@ -8,6 +8,7 @@ include "ARMdecls.sdfy"
 include "kom_utils.sdfy"
 include "sha/hmac.sdfy"
 include "attest.sdfy"
+include "verify.sdfy"
 
 #verbatim
 function cpsr_of_state(s:state): word
@@ -381,7 +382,7 @@ procedure svc_returning_verify_step1(
 }
 
 
-procedure svc_returning(
+procedure {:frame false} svc_returning(
     ghost exstate: state,
     ghost stack_bytes: int,
     ghost pagedb: PageDb,
@@ -398,7 +399,7 @@ procedure svc_returning(
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
     requires
-        stack_bytes >= (STACKSIZE_ATTEST + 10) * WORDSIZE;  
+        stack_bytes >= (STACKSIZE_ATTEST + 14) * WORDSIZE;  
         ValidState(exstate) && mode_of_state(exstate) != User;
         isReturningSvc(exstate);
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
@@ -423,7 +424,7 @@ procedure svc_returning(
                                 page_monvaddr(dispPg), 
                                 page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT + 8 * WORDSIZE)
         else
-            mem == old(mem);
+            NonStackMemPreserving(old(this), this);
         let tuple := svcHandled(exstate, pagedb, dispPg) in
         let retRegs := firstOf2(tuple) in
         let handled_pagedb := secondOf2(tuple) in
@@ -447,7 +448,8 @@ procedure svc_returning(
         assert pageDbCorresponds(this.m, pagedb');
     } else if (r0 == const(KOM_SVC_VERIFY_STEP2)) {
         // Do some verification
-        assume false;
+        svc_returning_verify(exstate, stack_bytes, pagedb, dispPg);
+        pagedb' := pagedb;
     } else {
         // Fall back position
         svc_returning_default(exstate, stack_bytes, pagedb, dispPg);
@@ -469,7 +471,7 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
         InterruptContinuationInvariantDef();
         mode_of_state(this) == Supervisor && spsr_of_state(this).m == User;
         this.conf.ex == ExSVC;
-        exists stack_bytes :: StackBytesRemaining(this, stack_bytes) && stack_bytes >= (STACKSIZE_ATTEST + 10) * WORDSIZE;
+        exists stack_bytes :: StackBytesRemaining(this, stack_bytes) && stack_bytes >= (STACKSIZE_ATTEST + 14) * WORDSIZE;
     ensures
         KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
         validPageDb(pagedb);
