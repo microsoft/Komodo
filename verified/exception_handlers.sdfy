@@ -425,10 +425,12 @@ procedure {:frame false} svc_returning(
                                 page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT + 8 * WORDSIZE)
         else
             NonStackMemPreserving(old(this), this);
-        let tuple := svcHandled(exstate, pagedb, dispPg) in
-        let retRegs := firstOf2(tuple) in
-        let handled_pagedb := secondOf2(tuple) in
-        pagedb' == handled_pagedb && preEntryReturn(old(this), this, retRegs);
+        let tuple := svcHandled(exstate, pagedb, dispPg);
+        let retRegs := firstOf2(tuple);
+        let handled_pagedb := secondOf2(tuple);
+        pagedb' == handled_pagedb;
+        validPageDb(pagedb');
+        preEntryReturn(old(this), this, retRegs);
 {
     if (r0 == const(KOM_SVC_ATTEST)) {
         // Create an attestation
