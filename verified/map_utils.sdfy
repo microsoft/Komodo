@@ -81,7 +81,7 @@ procedure kom_smc_map_measure_zero(ghost input:seq(int))
 
 #verbatim
 // XXX: cleanmeup: copy-and-paste from exception_handlers.sdfy
-lemma lemma_SaneState_implies_SaneShaGlobal(s:state)
+lemma lemma_SaneState_implies_SaneShaGlobal3(s:state)
     requires SaneState(s);
     ensures  SaneShaGlobal(va_get_globals(s));
 {
@@ -270,7 +270,7 @@ procedure{:timeLimitMultiplier 2} kom_smc_map_measure_hash(
         SmcProcedureInvariant(old(this), this);
         pageDbCorresponds(this.m, pagedb);
 {
-    lemma_SaneState_implies_SaneShaGlobal(this);
+    lemma_SaneState_implies_SaneShaGlobal3(this);
 
     LDR(r12, r3, const(ADDRSPACE_HASHED_BLOCK_COUNT));
     ADD(r12, r12, const(if has_contents then 65 else 1));
