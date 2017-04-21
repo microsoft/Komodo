@@ -427,16 +427,10 @@ predicate smchandlerInvariant(s:state, s':state, entry:bool)
         && decode_mode(psr_mask_mode(s.sregs[spsr(Monitor)])) != Monitor
         // most banked regs are preserved -- carve-outs for IRQ/FIQ injection 
         && (forall m :: s.regs[SP(m)] == s'.regs[SP(m)])
-        && (if entry then 
-            (forall m | m !in {Monitor, IRQ, FIQ} ::
-                (m != User ==> s.sregs[spsr(m)] == s'.sregs[spsr(m)])
-                && s.regs[LR(m)] == s'.regs[LR(m)])
-            else
-                (InsecureMemInvariant(s, s')
-                && (forall m :: s.regs[LR(m)] == s'.regs[LR(m)])
-                && (forall m | m != User :: s.sregs[spsr(m)] == s'.sregs[spsr(m)])
-                && s.sregs[cpsr] == s'.sregs[cpsr])
-           )
+        && (forall m | m !in {Monitor, IRQ, FIQ} ::
+            (m != User ==> s.sregs[spsr(m)] == s'.sregs[spsr(m)])
+            && s.regs[LR(m)] == s'.regs[LR(m)])
+        && !entry ==> InsecureMemInvariant(s, s')
 }
 
 predicate smchandler(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb)

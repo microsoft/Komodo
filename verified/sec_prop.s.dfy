@@ -96,7 +96,6 @@ predicate os_eq(s1: state, d1: PageDb, s2: state, d2: PageDb)
     requires validPageDb(d1) && validPageDb(d2)
 {
     reveal_ValidMemState();
-    //s1.conf.nondet == s2.conf.nondet &&
     os_regs_equiv(s1, s2) &&
     os_ctrl_eq(s1, s2) &&
     InsecureMemInvariant(s1, s2) &&
@@ -109,11 +108,6 @@ predicate os_ctrl_eq(s1: state, s2: state)
     reveal_ValidSRegState();
     forall m | m in {FIQ, IRQ, Supervisor, Abort, Undefined} ::
         s1.sregs[spsr(m)] == s2.sregs[spsr(m)]
-    // Note: Excluded from the set of registers visible to the OS on output 
-    // since the CPSR gets trashed just after the smc call. This is an 
-    // assumption so perhaps it is better to spec the state just after the smc 
-    // call using evalMOVSPCLR, but for now this will do.
-    // s1.sregs[cpsr_]  == s2.sregs[cpsr_]
 
 }
 
@@ -136,8 +130,8 @@ predicate os_regs_equiv(s1: state, s2: state)
    s1.regs[R11] == s2.regs[R11] &&
    s1.regs[R12] == s2.regs[R12] &&
    s1.regs[LR(User)]       == s2.regs[LR(User)] &&
-   s1.regs[LR(FIQ)]        == s2.regs[LR(FIQ)] &&
-   s1.regs[LR(IRQ)]        == s2.regs[LR(IRQ)] &&
+   // s1.regs[LR(FIQ)]        == s2.regs[LR(FIQ)] &&
+   // s1.regs[LR(IRQ)]        == s2.regs[LR(IRQ)] &&
    s1.regs[LR(Supervisor)] == s2.regs[LR(Supervisor)] &&
    s1.regs[LR(Abort)]      == s2.regs[LR(Abort)] &&
    s1.regs[LR(Undefined)]  == s2.regs[LR(Undefined)] &&

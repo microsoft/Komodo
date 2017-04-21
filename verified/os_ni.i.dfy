@@ -86,16 +86,16 @@ lemma lemma_os_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
             s2, d2, s2', d2',
             arg1, arg2, arg3, arg4);
         assert os_regs_equiv(s1', s2') by {
-            assume forall m | m != User && m in {FIQ, IRQ} ::
-                s1'.regs[LR(m)] == s2'.regs[LR(m)];
-            assert most_modes_regs_equiv(s1', s2');
+            // assume forall m | m != User && m in {FIQ, IRQ} ::
+            //     s1'.regs[LR(m)] == s2'.regs[LR(m)];
+            // assert most_modes_regs_equiv(s1', s2');
             // This should be provable from entry.s
             // assume e1' == e2' && val1 == val2;
             lemma_integrate_reg_equiv(s1', s2');
         }
         assert os_ctrl_eq(s1', s2') by {
-            assume forall m | m in {FIQ, IRQ} ::
-                s1'.sregs[spsr(m)] == s2'.sregs[spsr(m)];
+            // assume forall m | m in {FIQ, IRQ} ::
+            //     s1'.sregs[spsr(m)] == s2'.sregs[spsr(m)];
             assert most_modes_ctrl_eq(s1', s2');
         }
     }
@@ -105,16 +105,16 @@ lemma lemma_os_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
             s2, d2, s2', d2',
             arg1);
         assert os_regs_equiv(s1', s2') by {
-            assume forall m | m != User && m in {FIQ, IRQ} ::
-                s1'.regs[LR(m)] == s2'.regs[LR(m)];
-            assert most_modes_regs_equiv(s1', s2');
+            // assume forall m | m != User && m in {FIQ, IRQ} ::
+            //     s1'.regs[LR(m)] == s2'.regs[LR(m)];
+            // assert most_modes_regs_equiv(s1', s2');
             // This should be provable from entry.s
             assume e1' == e2' && val1 == val2;
             lemma_integrate_reg_equiv(s1', s2');
         }
         assert os_ctrl_eq(s1', s2') by {
-            assume forall m | m in {FIQ, IRQ} ::
-                s1'.sregs[spsr(m)] == s2'.sregs[spsr(m)];
+            // assume forall m | m in {FIQ, IRQ} ::
+            //     s1'.sregs[spsr(m)] == s2'.sregs[spsr(m)];
             assert most_modes_ctrl_eq(s1', s2');
         }
     }
@@ -146,8 +146,8 @@ predicate non_ret_os_regs_equiv(s1: state, s2: state)
    s1.regs[R11] == s2.regs[R11] &&
    s1.regs[R12] == s2.regs[R12] &&
    s1.regs[LR(User)]       == s2.regs[LR(User)] &&
-   s1.regs[LR(FIQ)]        == s2.regs[LR(FIQ)] &&
-   s1.regs[LR(IRQ)]        == s2.regs[LR(IRQ)] &&
+   // s1.regs[LR(FIQ)]        == s2.regs[LR(FIQ)] &&
+   // s1.regs[LR(IRQ)]        == s2.regs[LR(IRQ)] &&
    s1.regs[LR(Supervisor)] == s2.regs[LR(Supervisor)] &&
    s1.regs[LR(Abort)]      == s2.regs[LR(Abort)] &&
    s1.regs[LR(Undefined)]  == s2.regs[LR(Undefined)] &&
@@ -225,19 +225,20 @@ lemma lemma_smchandlerInvariant_regs_ni(
     requires os_regs_equiv(s1, s2)
     requires os_ctrl_eq(s1, s2)
     requires InsecureMemInvariant(s1, s2)
-    ensures  !entry ==> os_ctrl_eq(s1', s2')
+    ensures  os_ctrl_eq(s1', s2')
+    ensures  non_ret_os_regs_equiv(s1', s2')
     ensures  !entry ==> InsecureMemInvariant(s1', s2')
-    ensures  !entry ==> non_ret_os_regs_equiv(s1', s2')
-    ensures  entry ==> most_modes_regs_equiv(s1', s2')
-    ensures  entry ==> most_modes_ctrl_eq(s1, s2')
 {
-    if(!entry) {
-        assert forall m | m != User ::
-            s1.sregs[spsr(m)] == s1'.sregs[spsr(m)];
-        assert forall m | m != User ::
-            s2.sregs[spsr(m)] == s2'.sregs[spsr(m)];
-        assert os_ctrl_eq(s1', s2');
-    }
+
+    assert smcNonvolatileRegInvariant(s1, s1');
+    assert smcNonvolatileRegInvariant(s2, s2');
+    // if(!entry) {
+    //     assert forall m | m != User ::
+    //         s1.sregs[spsr(m)] == s1'.sregs[spsr(m)];
+    //     assert forall m | m != User ::
+    //         s2.sregs[spsr(m)] == s2'.sregs[spsr(m)];
+    //     assert os_ctrl_eq(s1', s2');
+    // }
 }
 
 lemma lemma_initAddrspace_os_ni(
