@@ -111,6 +111,101 @@ procedure {:timeLimitMultiplier 2} svc_returning_verify_inner(
     assert sp == old(sp);
 }
 
+procedure compare_mem_to_reg(operand reg:word, inline offset:byte, inline index:byte)
+    reads
+        mem; sp;
+    modifies 
+        r0; r1;
+    requires/ensures
+        SaneState(this);
+    requires
+        @reg != OReg(R0) && @reg != OReg(R1);
+        WordAligned(offset);
+        ValidMemRange(sp + offset, sp + offset + SHA_CTXSIZE * WORDSIZE);
+        0 <= index < 8;
+        0 <= r1 < 8;
+    ensures
+        ValidMem(sp + offset + index * WORDSIZE);
+        r1 == (if (AddrMemContents(mem, sp + offset + index * WORDSIZE) == reg) then old(r1) + 1 else old(r1));
+{
+    assert WordAligned(sp);
+    WordAlignedAdd(sp, offset);
+    WordAlignedAdd(sp + offset, index*WORDSIZE);
+
+    LDR(r0, sp, const(offset + index * WORDSIZE));
+    if (r0 == reg) {
+        ADD(r1, r1, 1);
+    }
+}
+
+procedure {:timeLimitMultiplier 2} compare_memory_to_regs(
+        ghost contents:seq(word),
+        inline offset:byte
+        )
+    reads
+        mem; r1; r2; r3; r4; r5; r6; r7; r8; sp;
+    modifies 
+        r0; r1;
+    requires/ensures
+        SaneState(this);
+    requires
+        WordAligned(offset);
+        ValidMemRange(sp + offset, sp + offset + SHA_CTXSIZE * WORDSIZE);
+        SeqLength(contents) == 8;
+        AddrMemContentsSeq(mem, sp + offset, SHA_CTXSIZE) == contents;
+    ensures
+        r1 == (if (old(seq(r1, r2, r3, r4, r5, r6, r7, r8)) == contents) then 1 else 0);
+{
+    assert WordAligned(sp);
+    WordAlignedAdd(sp, offset);
+
+    LDR(r0, sp, const(offset + 0 * WORDSIZE));
+    if (r0 == r1) {
+        MOV(r1, 1); 
+    } else {
+        MOV(r1, 0);
+    }
+
+    compare_mem_to_reg(r2, offset, 1);
+    compare_mem_to_reg(r3, offset, 2);
+    compare_mem_to_reg(r4, offset, 3);
+    compare_mem_to_reg(r5, offset, 4);
+    compare_mem_to_reg(r6, offset, 5);
+    compare_mem_to_reg(r7, offset, 6);
+    compare_mem_to_reg(r8, offset, 7);
+
+    if (r1 == 8) {
+        assert old(r1) == AddrMemContents(mem, sp + offset + 0 * WORDSIZE) == contents[0];
+        assert old(r2) == AddrMemContents(mem, sp + offset + 1 * WORDSIZE) == contents[1];
+        assert old(r3) == AddrMemContents(mem, sp + offset + 2 * WORDSIZE) == contents[2];
+        assert old(r4) == AddrMemContents(mem, sp + offset + 3 * WORDSIZE) == contents[3];
+        assert old(r5) == AddrMemContents(mem, sp + offset + 4 * WORDSIZE) == contents[4];
+        assert old(r6) == AddrMemContents(mem, sp + offset + 5 * WORDSIZE) == contents[5];
+        assert old(r7) == AddrMemContents(mem, sp + offset + 6 * WORDSIZE) == contents[6];
+        assert old(r8) == AddrMemContents(mem, sp + offset + 7 * WORDSIZE) == contents[7];
+        MOV(r1, 1);
+    } else {
+        assert old(r1) != AddrMemContents(mem, sp + offset + 0 * WORDSIZE) 
+            || old(r2) != AddrMemContents(mem, sp + offset + 1 * WORDSIZE) 
+            || old(r3) != AddrMemContents(mem, sp + offset + 2 * WORDSIZE) 
+            || old(r4) != AddrMemContents(mem, sp + offset + 3 * WORDSIZE) 
+            || old(r5) != AddrMemContents(mem, sp + offset + 4 * WORDSIZE) 
+            || old(r6) != AddrMemContents(mem, sp + offset + 5 * WORDSIZE) 
+            || old(r7) != AddrMemContents(mem, sp + offset + 6 * WORDSIZE) 
+            || old(r8) != AddrMemContents(mem, sp + offset + 7 * WORDSIZE) ;
+
+        assert AddrMemContents(mem, sp + offset + 0 * WORDSIZE) == contents[0];
+        assert AddrMemContents(mem, sp + offset + 1 * WORDSIZE) == contents[1];
+        assert AddrMemContents(mem, sp + offset + 2 * WORDSIZE) == contents[2];
+        assert AddrMemContents(mem, sp + offset + 3 * WORDSIZE) == contents[3];
+        assert AddrMemContents(mem, sp + offset + 4 * WORDSIZE) == contents[4];
+        assert AddrMemContents(mem, sp + offset + 5 * WORDSIZE) == contents[5];
+        assert AddrMemContents(mem, sp + offset + 6 * WORDSIZE) == contents[6];
+        assert AddrMemContents(mem, sp + offset + 7 * WORDSIZE) == contents[7];
+
+        MOV(r1, 0);
+    }
+}
 
 procedure svc_returning_verify(
     ghost exstate: state,
@@ -188,11 +283,20 @@ procedure svc_returning_verify(
     // Load the mac into registers
     SUB(r0, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC + 10) * WORDSIZE));
     load_memory_into_regs(mac);
+
+    compare_memory_to_regs(mac, (0 - 1) * (STACKSIZE_ATTEST - STACKSIZE_HMAC + 10) * WORDSIZE);
     
     MOV(r0, const(encode_mode(User)));
     MSR(spsr_mon, r0);
 
     MOV(r0, const(KOM_ERR_SUCCESS));
+    MOV(r2, 0);
+    MOV(r3, 0);
+    MOV(r4, 0);
+    MOV(r5, 0);
+    MOV(r6, 0);
+    MOV(r7, 0);
+    MOV(r8, 0);
     assert old(lr) == lr;
     assert OperandContents(this, OLR) == OperandContents(old(this), OLR);
 
