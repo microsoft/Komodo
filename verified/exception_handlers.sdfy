@@ -466,6 +466,8 @@ procedure {:frame false} interrupt_handler(
         this.conf.ex == ex && (ex == ExFIQ || ex == ExIRQ);
         mode_of_state(this) == Monitor;
         !interrupts_enabled(this);
+        spsr_of_state(this).m  == User ==>
+            !spsr_of_state(this).f && !spsr_of_state(this).i;
     ensures
         KomInterruptHandlerInvariant(old(this), pagedb_in, this, dispPg);
         validPageDb(pagedb);
@@ -502,21 +504,21 @@ procedure {:frame false} interrupt_handler(
 
     if (r0 == const(encode_mode(User))) { // we came from user-mode
         assert spsr_of_state(old(this)).m == User;
-        assert psr_mask_fiq(r0) == 0 && psr_mask_irq(r0) == 0 by {
-            assert r0 == 0x10;
-            assert BitwiseAnd(0x10, ARM_PSR_FIQ) == 0x00 by {
-                assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
-                    by { reveal WordAsBits; }
-                assert BitAnd(0x10, 0x40) == 0x00 by { reveal BitAnd; }
-                lemma_WordBitEquiv(0x00, 0x00);
-            }
-            assert BitwiseAnd(0x10, ARM_PSR_IRQ) == 0x00 by {
-                assert WordAsBits(0x10) == 0x10 && WordAsBits(0x80) == 0x80
-                    by { reveal WordAsBits; }
-                assert BitAnd(0x10, 0x80) == 0x00 by { reveal BitAnd; }
-                lemma_WordBitEquiv(0x00, 0x00);
-            }
-        }
+        // assert psr_mask_fiq(r0) == 0 && psr_mask_irq(r0) == 0 by {
+        //     assert r0 == 0x10;
+        //     assert BitwiseAnd(0x10, ARM_PSR_FIQ) == 0x00 by {
+        //         assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
+        //             by { reveal WordAsBits; }
+        //         assert BitAnd(0x10, 0x40) == 0x00 by { reveal BitAnd; }
+        //         lemma_WordBitEquiv(0x00, 0x00);
+        //     }
+        //     assert BitwiseAnd(0x10, ARM_PSR_IRQ) == 0x00 by {
+        //         assert WordAsBits(0x10) == 0x10 && WordAsBits(0x80) == 0x80
+        //             by { reveal WordAsBits; }
+        //         assert BitAnd(0x10, 0x80) == 0x00 by { reveal BitAnd; }
+        //         lemma_WordBitEquiv(0x00, 0x00);
+        //     }
+        // }
         assert !spsr_of_state(old(this)).f && !spsr_of_state(old(this)).i;
 
         // save dispatcher context

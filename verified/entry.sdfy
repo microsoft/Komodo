@@ -975,6 +975,7 @@ lemma lemma_ValidEntryPost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp
     requires validExceptionTransition(r1, rd, r2, rd, dp)
     requires OperandContents(r1, OReg(R0)) == OperandContents(r2, OReg(R0))
     requires OperandContents(r1, OReg(R1)) == OperandContents(r2, OReg(R1))
+    requires InsecureMemInvariant(r1, r2)
     ensures smc_enter(s, sd, r1, rd, dp, a1, a2, a3)
         ==> smc_enter(s, sd, r2, rd, dp, a1, a2, a3)
     ensures smc_resume(s, sd, r1, rd, dp) ==> smc_resume(s, sd, r2, rd, dp)

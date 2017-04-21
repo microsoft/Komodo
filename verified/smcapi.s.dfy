@@ -431,11 +431,12 @@ predicate smchandlerInvariant(s:state, s':state, entry:bool)
             (forall m | m !in {Monitor, IRQ, FIQ} ::
                 (m != User ==> s.sregs[spsr(m)] == s'.sregs[spsr(m)])
                 && s.regs[LR(m)] == s'.regs[LR(m)])
-        else
-            InsecureMemInvariant(s, s')
-            && (forall m :: s.regs[LR(m)] == s'.regs[LR(m)])
-            && (forall m | m != User :: s.sregs[spsr(m)] == s'.sregs[spsr(m)]))
-            && s.sregs[cpsr] == s'.sregs[cpsr]
+            else
+                (InsecureMemInvariant(s, s')
+                && (forall m :: s.regs[LR(m)] == s'.regs[LR(m)])
+                && (forall m | m != User :: s.sregs[spsr(m)] == s'.sregs[spsr(m)])
+                && s.sregs[cpsr] == s'.sregs[cpsr])
+           )
 }
 
 predicate smchandler(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb)
