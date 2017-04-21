@@ -145,7 +145,7 @@ function method {:axiom} SecurePhysBase(): addr
     ensures 0 < SecurePhysBase() <= KOM_PHYSMEM_LIMIT - KOM_SECURE_RESERVE
     ensures PageAligned(SecurePhysBase())
 
-function AttestKey(): seq<word>
+function {:axiom} AttestKey(): seq<word>
     ensures |AttestKey()| == 8
 
 const K_SHA256_WORDS:int := 64;
