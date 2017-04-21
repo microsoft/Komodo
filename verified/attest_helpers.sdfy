@@ -289,3 +289,110 @@ lemma lemma_arrange_attestation_input_helper(
     }
 }
 #endverbatim
+
+
+procedure stack_all_regs(ghost stack_bytes:int)
+    returns (ghost stack_bytes_ret:int)
+    reads
+        r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
+    modifies
+        sp; mem;
+    requires/ensures
+        SaneState(this);
+    requires
+        stack_bytes >= 56;
+        StackBytesRemaining(this,stack_bytes);
+    ensures
+        sp == old(sp-56);
+ 
+        MemContents(this.m, sp)    == old(r12);
+        MemContents(this.m, sp+4)  == old(r11);
+        MemContents(this.m, sp+8)  == old(r10);
+        MemContents(this.m, sp+12) == old(r9);
+        MemContents(this.m, sp+16) == old(r8);
+        MemContents(this.m, sp+20) == old(r7);
+        MemContents(this.m, sp+24) == old(r6);
+        MemContents(this.m, sp+28) == old(r5);
+        MemContents(this.m, sp+32) == old(r4);
+        MemContents(this.m, sp+36) == old(r3);
+        MemContents(this.m, sp+40) == old(r2);
+        MemContents(this.m, sp+44) == old(r1);
+        MemContents(this.m, sp+48) == old(r0);
+        MemContents(this.m, sp+52) == old(lr);
+
+        NonStackMemPreserving(old(this),this);
+        ParentStackPreserving(old(this),this);
+
+        stack_bytes_ret == stack_bytes-56;
+        StackBytesRemaining(this,stack_bytes_ret);
+{
+    SUB(sp, sp, 56);
+
+    STR(lr,  sp, 52);
+    STR(r0,  sp, 48);
+    STR(r1,  sp, 44);
+    STR(r2,  sp, 40);
+    STR(r3,  sp, 36);
+    STR(r4,  sp, 32);
+    STR(r5,  sp, 28);
+    STR(r6,  sp, 24);
+    STR(r7,  sp, 20);
+    STR(r8,  sp, 16);
+    STR(r9,  sp, 12);
+    STR(r10, sp, 8);
+    STR(r11, sp, 4);
+    STR(r12, sp, 0);
+
+    stack_bytes_ret := stack_bytes - 56;
+}
+
+procedure unstack_all_regs(ghost stack_bytes:int)
+    returns (ghost stack_bytes_ret:int)
+    reads
+        mem;
+    modifies
+        r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr; sp;
+    requires/ensures
+        SaneState(this);
+    requires
+        isUInt32(sp + 56);
+        sp + 56 <= StackBase();
+        StackBytesRemaining(this, stack_bytes);
+    ensures
+        sp == old(sp+56);
+        
+        old(MemContents(this.m, sp))    == r12;
+        old(MemContents(this.m, sp+4))  == r11;
+        old(MemContents(this.m, sp+8))  == r10;
+        old(MemContents(this.m, sp+12)) == r9;
+        old(MemContents(this.m, sp+16)) == r8;
+        old(MemContents(this.m, sp+20)) == r7;
+        old(MemContents(this.m, sp+24)) == r6;
+        old(MemContents(this.m, sp+28)) == r5;
+        old(MemContents(this.m, sp+32)) == r4;
+        old(MemContents(this.m, sp+36)) == r3;
+        old(MemContents(this.m, sp+40)) == r2;
+        old(MemContents(this.m, sp+44)) == r1;
+        old(MemContents(this.m, sp+48)) == r0;
+        old(MemContents(this.m, sp+52)) == lr;
+
+        stack_bytes_ret == stack_bytes + 56;
+        StackBytesRemaining(this, stack_bytes_ret);
+{
+    LDR(r12, sp, 0);
+    LDR(r11, sp, 4);
+    LDR(r10, sp, 8);
+    LDR(r9,  sp, 12);
+    LDR(r8,  sp, 16);
+    LDR(r7,  sp, 20);
+    LDR(r6,  sp, 24);
+    LDR(r5,  sp, 28);
+    LDR(r4,  sp, 32);
+    LDR(r3,  sp, 36);
+    LDR(r2,  sp, 40);
+    LDR(r1,  sp, 44);
+    LDR(r0,  sp, 48);
+    LDR(lr,  sp, 52);
+
+    stack_bytes_ret := stack_bytes + 56;
+}

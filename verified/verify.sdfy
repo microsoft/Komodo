@@ -29,7 +29,6 @@ procedure {:timeLimitMultiplier 2} svc_returning_verify_inner(
         validDispatcherPage(pagedb, dispPg);
         finalDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
-        r0 == KOM_SVC_ATTEST;
 //        r10 == page_monvaddr(dispPg);
 //        r11 == page_monvaddr(pagedb[dispPg].addrspace);
         ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp);
@@ -136,7 +135,6 @@ type uint16 = x:int | 0 <= x < 0x1_0000_0000
 
 procedure compare_mem_to_reg(
         operand reg:word, 
-        inline offset:uint16, 
         inline index:byte,
         ghost regs:seq(word),
         ghost contents:seq(word))
@@ -148,29 +146,22 @@ procedure compare_mem_to_reg(
         SaneState(this);
     requires
         @reg != OReg(R0) && @reg != OReg(R1);
-        WordAligned((0 - 1) * offset);
-        ValidMemRange(sp - offset, sp - offset + SHA_CTXSIZE * WORDSIZE);
+        ValidMemRange(sp, sp + SHA_CTXSIZE * WORDSIZE);
         0 <= index < 8;
         0 <= r1 < 8;
         SeqLength(regs) == 8;
         SeqLength(contents) == 8;
         regs[index] == reg;
-        contents[index] == AddrMemContents(mem, sp - offset + index * WORDSIZE);
+        contents[index] == AddrMemContents(mem, sp + index * WORDSIZE);
         comparison_invariant(r1, index, regs, contents);
-        //r1 == index <==> SeqDrop(regs, index) == SeqDrop(contents, index);
     ensures
         comparison_invariant(r1, index + 1, regs, contents);
-        //r1 == index + 1 <==> SeqDrop(regs, index + 1) == SeqDrop(contents, index + 1);
         r1 == old(r1) || r1 == old(r1) + 1;
-//        ValidMem(sp + offset + index * WORDSIZE);
-//        r1 == (if (AddrMemContents(mem, sp + offset + index * WORDSIZE) == reg) then old(r1) + 1 else old(r1));
-//        r1 == old(r1) <==> contents[index] != regs[index];
 {
     assert WordAligned(sp);
-    WordAlignedAdd(sp, (0 - 1) * offset);
-    WordAlignedAdd(sp - offset, index*WORDSIZE);
+    WordAlignedAdd(sp, index*WORDSIZE);
 
-    LDR(r0, sp, const(offset + index * WORDSIZE));
+    LDR(r0, sp, const(index * WORDSIZE));
     assert r0 == contents[index];
     if (r0 == reg) {
         ADD(r1, r1, 1);
@@ -178,10 +169,8 @@ procedure compare_mem_to_reg(
     reveal comparison_invariant;
 }
 
-procedure {:timeLimitMultiplier 2} compare_memory_to_regs(
-        ghost contents:seq(word),
-        inline offset:uint16
-        ) returns (ghost regs:seq(word))
+procedure {:timeLimitMultiplier 2} compare_memory_to_regs(ghost contents:seq(word))
+    returns (ghost regs:seq(word))
     reads
         mem; r1; r2; r3; r4; r5; r6; r7; r8; sp;
     modifies 
@@ -189,10 +178,9 @@ procedure {:timeLimitMultiplier 2} compare_memory_to_regs(
     requires/ensures
         SaneState(this);
     requires
-        WordAligned(offset);
-        ValidMemRange(sp + offset, sp + offset + SHA_CTXSIZE * WORDSIZE);
+        ValidMemRange(sp, sp + SHA_CTXSIZE * WORDSIZE);
         SeqLength(contents) == 8;
-        AddrMemContentsSeq(mem, sp + offset, SHA_CTXSIZE) == contents;
+        AddrMemContentsSeq(mem, sp, SHA_CTXSIZE) == contents;
     ensures
         r1 == (if (regs == contents) then 1 else 0);
         regs == old(seq(r1, r2, r3, r4, r5, r6, r7, r8));
@@ -200,9 +188,7 @@ procedure {:timeLimitMultiplier 2} compare_memory_to_regs(
     regs := seq(r1, r2, r3, r4, r5, r6, r7, r8);
 
     assert WordAligned(sp);
-    WordAlignedAdd(sp, offset);
-
-    LDR(r0, sp, const(offset + 0 * WORDSIZE));
+    LDR(r0, sp, 0);
     assert r0 == contents[0];
     if (r0 == r1) {
         MOV(r1, 1); 
@@ -211,13 +197,13 @@ procedure {:timeLimitMultiplier 2} compare_memory_to_regs(
     }
     assert comparison_invariant(r1, 1, regs, contents) by { reveal comparison_invariant; }
 
-    compare_mem_to_reg(r2, offset, 1, regs, contents);
-    compare_mem_to_reg(r3, offset, 2, regs, contents);
-    compare_mem_to_reg(r4, offset, 3, regs, contents);
-    compare_mem_to_reg(r5, offset, 4, regs, contents);
-    compare_mem_to_reg(r6, offset, 5, regs, contents);
-    compare_mem_to_reg(r7, offset, 6, regs, contents);
-    compare_mem_to_reg(r8, offset, 7, regs, contents);
+    compare_mem_to_reg(r2, 1, regs, contents);
+    compare_mem_to_reg(r3, 2, regs, contents);
+    compare_mem_to_reg(r4, 3, regs, contents);
+    compare_mem_to_reg(r5, 4, regs, contents);
+    compare_mem_to_reg(r6, 5, regs, contents);
+    compare_mem_to_reg(r7, 6, regs, contents);
+    compare_mem_to_reg(r8, 7, regs, contents);
 
     lemma_comparison_invariant_implies(r1, regs, contents);
     if (r1 == 8) {
@@ -227,6 +213,7 @@ procedure {:timeLimitMultiplier 2} compare_memory_to_regs(
         assert regs != contents;
         MOV(r1, 0);
     }
+    assert {:split_here} true;
 }
 
 procedure svc_returning_verify(
@@ -244,7 +231,7 @@ procedure svc_returning_verify(
         StackBytesRemaining(this, stack_bytes);
     requires
         ValidState(exstate) && mode_of_state(exstate) != User;
-        stack_bytes >= (STACKSIZE_ATTEST + 10) * WORDSIZE;  // +10 to store volatile reigsters
+        stack_bytes >= (STACKSIZE_ATTEST + 14) * WORDSIZE;  // +14 to store reigsters
         isReturningSvc(exstate);
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
         validPageDb(pagedb);
@@ -252,10 +239,10 @@ procedure svc_returning_verify(
         validDispatcherPage(pagedb, dispPg);
         finalDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
-        r0 == KOM_SVC_ATTEST;
+        r0 == KOM_SVC_VERIFY_STEP2;
 //        r10 == page_monvaddr(dispPg);
 //        r11 == page_monvaddr(pagedb[dispPg].addrspace);
-        ValidMemRange(sp - (STACKSIZE_ATTEST + 10) * WORDSIZE, sp);
+        ValidMemRange(sp - (STACKSIZE_ATTEST + 14) * WORDSIZE, sp);
         //sp - STACKSIZE_ATTEST * WORDSIZE >= KOM_DIRECTMAP_VBASE + MonitorPhysBase();
     ensures
         pageDbCorresponds(this.m, pagedb);
@@ -272,17 +259,17 @@ procedure svc_returning_verify(
     assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
 
     ghost var remaining_stack_bytes;
-    remaining_stack_bytes := stack_nonvolatiles(stack_bytes);
+    remaining_stack_bytes := stack_all_regs(stack_bytes);
     lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
     
     // Prove we still have a valid stack region after pushing registers onto the stack
-    assert sp == old(sp) - 40;
+    assert sp == old(sp) - 56;
     calc {
         true;
-        ValidMemRange(old(sp) - (STACKSIZE_ATTEST + 10) * WORDSIZE, old(sp));
-        ValidMemRange(sp + 40 - (STACKSIZE_ATTEST + 10) * WORDSIZE, sp + 40);
-        ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp + 40);
-            { lemma_ValidMemRange_reduced(sp - STACKSIZE_ATTEST * WORDSIZE, 10 + STACKSIZE_ATTEST, 10); }
+        ValidMemRange(old(sp) - (STACKSIZE_ATTEST + 14) * WORDSIZE, old(sp));
+        ValidMemRange(sp + 56 - (STACKSIZE_ATTEST + 14) * WORDSIZE, sp + 56);
+        ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp + 56);
+            { lemma_ValidMemRange_reduced(sp - STACKSIZE_ATTEST * WORDSIZE, 14 + STACKSIZE_ATTEST, 14); }
         ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp);
     }
 
@@ -291,6 +278,9 @@ procedure svc_returning_verify(
     mac_ptr, mac := svc_returning_verify_inner(exstate, remaining_stack_bytes, pagedb, dispPg);
 
     assert WordAligned(sp);
+    WordAlignedAdd(sp, 48);
+    WordAlignedAdd(sp, 44);
+    WordAlignedAdd(sp, 40);
     WordAlignedAdd(sp, 36);
     WordAlignedAdd(sp, 32);
     WordAlignedAdd(sp, 28);
@@ -301,16 +291,17 @@ procedure svc_returning_verify(
     WordAlignedAdd(sp,  8);
     WordAlignedAdd(sp,  4);
 
-    remaining_stack_bytes := unstack_nonvolatiles(remaining_stack_bytes);
+    remaining_stack_bytes := unstack_all_regs(remaining_stack_bytes);
 
-    assert mac_ptr == sp - (STACKSIZE_ATTEST - STACKSIZE_HMAC + 10) * WORDSIZE;
+    assert mac_ptr == sp - (STACKSIZE_ATTEST - STACKSIZE_HMAC + 14) * WORDSIZE;
 //    // Load the mac into registers
-//    SUB(r0, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC + 10) * WORDSIZE));
+    SUB(sp, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC + 14) * WORDSIZE));
 //    load_memory_into_regs(mac);
 
     ghost var regs_orig;
-    regs_orig := compare_memory_to_regs(mac, (0 - 1) * (STACKSIZE_ATTEST - STACKSIZE_HMAC + 10) * WORDSIZE);
+    regs_orig := compare_memory_to_regs(mac);
     assert regs == regs_orig;
+    ADD(sp, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC + 14) * WORDSIZE));
     
     MOV(r0, const(encode_mode(User)));
     MSR(spsr_mon, r0);
