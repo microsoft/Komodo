@@ -112,7 +112,7 @@ procedure load_attestion_key() returns (ghost key:seq(word))
     lemma_package_hash_result(mem, r4, key);    // Ensures AddMemContentsSeq(mem, r4, SHA_CTXSIZE) == key
     assert key == GlobalFullContents(this.m, AttestKeyOp());
     assert GlobalFullContents(this.m, AttestKeyOp()) == AttestKey();
-    assert {:split_here} true;
+    //assert {:split_here} true;
 }
 
 procedure load_memory_into_regs(ghost contents:seq(word))
