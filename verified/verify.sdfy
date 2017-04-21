@@ -216,7 +216,105 @@ procedure {:timeLimitMultiplier 2} compare_memory_to_regs(ghost contents:seq(wor
     assert {:split_here} true;
 }
 
-procedure svc_returning_verify(
+procedure {:timeLimitMultiplier 2} svc_returning_verify_inner'(
+    ghost exstate: state,
+    ghost stack_bytes: int,
+    ghost pagedb: PageDb,
+    ghost dispPg: PageNr
+    ) returns (
+    ghost regs:seq(word),
+    ghost mac:seq(word)
+    )
+    reads
+        globals;
+    modifies
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
+         spsr_mon; mem;
+    requires/ensures
+        SaneState(this);
+        StackBytesRemaining(this, stack_bytes);
+    requires
+        ValidState(exstate) && mode_of_state(exstate) != User;
+        stack_bytes >= (STACKSIZE_ATTEST + 14) * WORDSIZE;  // +14 to store reigsters
+        isReturningSvc(exstate);
+        CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+        validDispatcherPage(pagedb, dispPg);
+        finalDispatcher(pagedb, dispPg);
+        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+        r0 == KOM_SVC_VERIFY_STEP2;
+        ValidMemRange(sp - (STACKSIZE_ATTEST + 14) * WORDSIZE, sp);
+    ensures
+        pageDbCorresponds(this.m, pagedb);
+        StackPreserving(old(this), this);
+        NonStackMemPreserving(old(this), this);
+        r2 == old(r2);
+        r3 == old(r3);
+        r4 == old(r4);
+        r5 == old(r5);
+        r6 == old(r6);
+        r7 == old(r7);
+        r8 == old(r8);
+        r9 == old(r9);
+        r10 == old(r10);
+        r11 == old(r11);
+        r12 == old(r12);
+        lr == old(lr);
+
+        regs == old(seq(r1, r2, r3, r4, r5, r6, r7, r8));
+        mac == svcHmacVerify(exstate, pagedb, dispPg);
+        r1 == (if (regs == mac) then 1 else 0);
+{
+    regs := seq(r1, r2, r3, r4, r5, r6, r7, r8);
+
+    ghost var addrspace := pagedb[dispPg].addrspace;
+    assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
+
+    ghost var remaining_stack_bytes;
+    remaining_stack_bytes := stack_all_regs(stack_bytes);
+    lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
+    
+    // Prove we still have a valid stack region after pushing registers onto the stack
+    assert sp == old(sp) - 56;
+    calc {
+        true;
+        ValidMemRange(old(sp) - (STACKSIZE_ATTEST + 14) * WORDSIZE, old(sp));
+        ValidMemRange(sp + 56 - (STACKSIZE_ATTEST + 14) * WORDSIZE, sp + 56);
+        ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp + 56);
+            { lemma_ValidMemRange_reduced(sp - STACKSIZE_ATTEST * WORDSIZE, 14 + STACKSIZE_ATTEST, 14); }
+        ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp);
+    }
+
+    ghost var mac_ptr:word;
+    mac_ptr, mac := svc_returning_verify_inner(exstate, remaining_stack_bytes, pagedb, dispPg);
+
+    assert WordAligned(sp);
+    WordAlignedAdd(sp, 48);
+    WordAlignedAdd(sp, 44);
+    WordAlignedAdd(sp, 40);
+    WordAlignedAdd(sp, 36);
+    WordAlignedAdd(sp, 32);
+    WordAlignedAdd(sp, 28);
+    WordAlignedAdd(sp, 24);
+    WordAlignedAdd(sp, 20);
+    WordAlignedAdd(sp, 16);
+    WordAlignedAdd(sp, 12);
+    WordAlignedAdd(sp,  8);
+    WordAlignedAdd(sp,  4);
+
+    remaining_stack_bytes := unstack_all_regs(remaining_stack_bytes);
+
+    assert mac_ptr == sp - (STACKSIZE_ATTEST - STACKSIZE_HMAC + 14) * WORDSIZE;
+    SUB(sp, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC + 14) * WORDSIZE));
+
+    ghost var regs_orig;
+    regs_orig := compare_memory_to_regs(mac);
+    assert regs == regs_orig;
+    ADD(sp, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC + 14) * WORDSIZE));
+}
+
+procedure {:frame false} svc_returning_verify(
     ghost exstate: state,
     ghost stack_bytes: int,
     ghost pagedb: PageDb,
@@ -255,54 +353,30 @@ procedure svc_returning_verify(
 {
     ghost var regs := seq(r1, r2, r3, r4, r5, r6, r7, r8);
 
+   // Giant OBSERVE to trigger CoreRegPreservingExcept
+    ghost var helper_user_words := seq(OperandContents(this, OReg(R1)), 
+                                       OperandContents(this, OReg(R2)), 
+                                       OperandContents(this, OReg(R3)), 
+                                       OperandContents(this, OReg(R4)), 
+                                       OperandContents(this, OReg(R5)), 
+                                       OperandContents(this, OReg(R6)), 
+                                       OperandContents(this, OReg(R7)), 
+                                       OperandContents(this, OReg(R8)));
+    ghost var spec_user_words := seq(exstate.regs[R1], exstate.regs[R2], exstate.regs[R3], exstate.regs[R4],
+                                     exstate.regs[R5], exstate.regs[R6], exstate.regs[R7], exstate.regs[R8]);
+    assert regs == helper_user_words == spec_user_words;
+
+
     ghost var addrspace := pagedb[dispPg].addrspace;
     assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
+    ghost var dummy:word := 0;
+    ghost var hmac := svcHmacVerify(exstate, pagedb, dispPg);
+    ghost var ok := if regs == hmac then 1 else 0;
 
-    ghost var remaining_stack_bytes;
-    remaining_stack_bytes := stack_all_regs(stack_bytes);
-    lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
-    
-    // Prove we still have a valid stack region after pushing registers onto the stack
-    assert sp == old(sp) - 56;
-    calc {
-        true;
-        ValidMemRange(old(sp) - (STACKSIZE_ATTEST + 14) * WORDSIZE, old(sp));
-        ValidMemRange(sp + 56 - (STACKSIZE_ATTEST + 14) * WORDSIZE, sp + 56);
-        ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp + 56);
-            { lemma_ValidMemRange_reduced(sp - STACKSIZE_ATTEST * WORDSIZE, 14 + STACKSIZE_ATTEST, 14); }
-        ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp);
-    }
+    ghost var regs';
+    ghost var mac;
+    regs', mac := svc_returning_verify_inner'(exstate, stack_bytes, pagedb, dispPg);
 
-    ghost var mac_ptr:word;
-    ghost var mac:seq(word);
-    mac_ptr, mac := svc_returning_verify_inner(exstate, remaining_stack_bytes, pagedb, dispPg);
-
-    assert WordAligned(sp);
-    WordAlignedAdd(sp, 48);
-    WordAlignedAdd(sp, 44);
-    WordAlignedAdd(sp, 40);
-    WordAlignedAdd(sp, 36);
-    WordAlignedAdd(sp, 32);
-    WordAlignedAdd(sp, 28);
-    WordAlignedAdd(sp, 24);
-    WordAlignedAdd(sp, 20);
-    WordAlignedAdd(sp, 16);
-    WordAlignedAdd(sp, 12);
-    WordAlignedAdd(sp,  8);
-    WordAlignedAdd(sp,  4);
-
-    remaining_stack_bytes := unstack_all_regs(remaining_stack_bytes);
-
-    assert mac_ptr == sp - (STACKSIZE_ATTEST - STACKSIZE_HMAC + 14) * WORDSIZE;
-//    // Load the mac into registers
-    SUB(sp, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC + 14) * WORDSIZE));
-//    load_memory_into_regs(mac);
-
-    ghost var regs_orig;
-    regs_orig := compare_memory_to_regs(mac);
-    assert regs == regs_orig;
-    ADD(sp, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC + 14) * WORDSIZE));
-    
     MOV(r0, const(encode_mode(User)));
     MSR(spsr_mon, r0);
 
@@ -314,12 +388,26 @@ procedure svc_returning_verify(
     MOV(r6, 0);
     MOV(r7, 0);
     MOV(r8, 0);
-    assert old(lr) == lr;
-    assert OperandContents(this, OLR) == OperandContents(old(this), OLR);
+    //assert old(lr) == lr;
+    //assert OperandContents(this, OLR) == OperandContents(old(this), OLR);
 
     assert pageDbCorresponds(this.m, pagedb) by {
         lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
     }
 
-    assert {:split_here} true;
+//    
+//    assert mac == hmac;
+//    assert r1 == ok;
+//    
+//    calc {
+//        firstOf2(svcHandled(exstate, pagedb, dispPg));
+//        tuple(KOM_ERR_SUCCESS, ok, dummy, dummy, dummy, dummy, dummy, dummy, dummy);
+//        tuple(r0, r1, r2, r3, r4, r5, r6, r7, r8);
+//    }
+//    assert {:split_here} true;
+
+//        var regs := (KOM_ERR_SUCCESS, ok, dummy, dummy, dummy, dummy, dummy, dummy, dummy);
+//        (regs, d)
+//assume false;
+
 }

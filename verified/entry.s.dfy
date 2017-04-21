@@ -341,7 +341,7 @@ function svcHandled(s:state, d:PageDb, dispPg:PageNr): (SvcReturnRegs, PageDb)
         (regs, ret_pagedb)
     else if OperandContents(s, OReg(R0)) == KOM_SVC_VERIFY_STEP2 then
         // verify the attestation provided by the previous step0 call plus this
-        var hmac := svcHmacAttest(s, d, dispPg);
+        var hmac := svcHmacVerify(s, d, dispPg);
         var ok := if user_words == hmac then 1 else 0;
         var regs := (KOM_ERR_SUCCESS, ok, dummy, dummy, dummy, dummy, dummy, dummy, dummy);
         (regs, d)
