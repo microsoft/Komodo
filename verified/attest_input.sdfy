@@ -237,6 +237,14 @@ procedure{:timeLimitMultiplier 2} arrange_attestation_input(
 
     // Fill in some zeroes
     ADD(r1, r1, const(SHA_CTXSIZE * WORDSIZE)); // Construct a pointer for the next slot on the stack
+    assert r1 == sp + 3 * SHA_CTXSIZE * WORDSIZE;
+    calc {
+        true;
+        ValidMemRange(sp + SHA_CTXSIZE * WORDSIZE, sp + (SHA_CTXSIZE + 3 * SHA_CTXSIZE) * WORDSIZE);
+            { lemma_ValidMemRange_offset(sp + SHA_CTXSIZE * WORDSIZE, 3 * SHA_CTXSIZE, 2 * SHA_CTXSIZE); }
+        ValidMemRange(sp + 3 * SHA_CTXSIZE * WORDSIZE, sp + 4 * SHA_CTXSIZE * WORDSIZE);
+        ValidMemRange(r1, r1 + SHA_CTXSIZE * WORDSIZE);
+    }
     zero_pad_memory();
     
 //    // Re-establish user_words in mem
