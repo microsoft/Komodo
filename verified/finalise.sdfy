@@ -4,6 +4,181 @@ include {:verbatim} "smcapi.i.dfy"
 
 include "ARMdecls.sdfy"
 include "kom_utils.sdfy"
+include "sha/sha256-api.sdfy"
+
+#verbatim
+// XXX: cleanmeup: copy-and-paste from exception_handlers.sdfy
+lemma lemma_SaneState_implies_SaneShaGlobal2(s:state)
+    requires SaneState(s);
+    ensures  SaneShaGlobal(va_get_globals(s));
+{
+    var globals := va_get_globals(s);
+    reveal_SaneShaGlobal(); 
+    assert ValidGlobalStateOpaque(globals) by {
+        reveal_ValidGlobalStateOpaque(); 
+        assert ValidGlobalState(globals) by {
+            reveal_ValidMemState();   // Which we get from ValidState
+        }
+    }
+}
+
+// XXX: cleanmeup: copy-and-paste from smcapi.dfy
+lemma BoundedShaLength2(d:PageDb, n:PageNr)
+    requires validPageDb(d)
+    requires isAddrspace(d, n)
+    requires IsCompleteSHA256Trace(d[n].entry.shatrace)
+    requires !stoppedAddrspace(d[n])
+    ensures |d[n].entry.shatrace.M| < 0x10_0000
+{
+    assert validAddrspace(d, n) by { reveal validPageDb(); }
+    BoundedAddrspaceRefs'(d, n);
+//    lemma_sha256_length(d[n].entry.shatrace);
+    assert |d[n].entry.shatrace.M| <= KOM_SECURE_NPAGES * (1 + 64);
+}
+
+lemma lemma_kom_smc_finalise_success_helper1(s:state, as_page:word,
+    pagedb:PageDb, trace_in:SHA256Trace, base:word, ctx:word, mem:memmap)
+    requires SaneState(s)
+    requires validPageNr(as_page)
+    requires validPageDb(pagedb)
+    requires isAddrspace(pagedb, as_page)
+    requires pageDbCorresponds(s.m, pagedb)
+    requires pagedb[as_page].entry.state == InitState
+    requires trace_in == pagedb[as_page].entry.shatrace
+    requires base == page_monvaddr(as_page)
+    requires ctx == base + ADDRSPACE_HASH
+    requires mem == va_get_mem(s)
+    ensures IsCompleteSHA256Trace(trace_in) && SHA256TraceIsCorrect(trace_in)
+    ensures forall i :: 0 <= i < 8 ==> last(trace_in.H)[i] == AddrMemContents(mem, ctx + i * WORDSIZE)
+    ensures SeqLength(trace_in.M) == AddrMemContents(mem, base + ADDRSPACE_HASHED_BLOCK_COUNT)
+    ensures |trace_in.M| < 0x10_0000
+{
+    assert IsCompleteSHA256Trace(trace_in) && SHA256TraceIsCorrect(trace_in) by
+    {
+        reveal validPageDb();
+    }
+    assert forall i :: 0 <= i < 8 ==> last(trace_in.H)[i] == AddrMemContents(mem, ctx + i * WORDSIZE) by
+    {
+        reveal validPageDb();
+        reveal pageContentsCorresponds();
+        reveal pageDbAddrspaceCorresponds();
+    }
+    assert SeqLength(trace_in.M) == AddrMemContents(mem, base + ADDRSPACE_HASHED_BLOCK_COUNT) by
+    {
+        reveal validPageDb();
+        reveal pageContentsCorresponds();
+        reveal pageDbAddrspaceCorresponds();
+    }
+    BoundedShaLength2(pagedb, as_page);
+}
+
+lemma lemma_kom_smc_finalise_success_helper2(s1:state, s2:state, as_page:word,
+    pagedb_in:PageDb, pagedb:PageDb, base:word)
+    requires SaneState(s1)
+    requires SaneState(s2)
+    requires validPageNr(as_page)
+    requires validPageDb(pagedb_in)
+    requires validPageDb(pagedb)
+    requires isAddrspace(pagedb_in, as_page)
+    requires pageDbCorresponds(s1.m, pagedb_in)
+    requires forall i :: i != as_page && i in pagedb && i in pagedb_in ==> pagedb[i] == pagedb_in[i]
+    requires base == page_monvaddr(as_page)
+    requires MemPreservingExceptRangeOrStack(s1, s2, base, base + PAGESIZE)
+    requires s1.m.globals == s2.m.globals
+    ensures pageDbCorrespondsExcluding(s2.m, pagedb, as_page)
+{
+    var p := as_page;
+
+    assert pageDbCorrespondsExcluding(s2.m, pagedb, p) by
+    {
+        var d1 := pagedb_in;
+        var d2 := pagedb;
+        forall n {:trigger validPageNr(n)} | validPageNr(n) && n != p
+            ensures pageDbEntryCorresponds(d2[n], extractPageDbEntry(s2.m, n))
+            ensures pageContentsCorresponds(n, d2[n], extractPage(s2.m, n))
+        {
+            assert pageDbEntryCorresponds(d1[n], extractPageDbEntry(s1.m, n)) by
+            {
+                reveal validPageDb();
+                reveal pageContentsCorresponds();
+                reveal pageDbAddrspaceCorresponds();
+            }
+            assert extractPageDbEntry(s1.m, n) == extractPageDbEntry(s2.m, n);
+            AllButOnePageOrStackPreserving(p, s1, s2);
+        }
+    }
+}
+#endverbatim
+
+procedure kom_smc_finalise_success(
+    operand as_page:reg,
+    out operand err:reg,
+    ghost pagedb_in:PageDb)
+    returns (ghost pagedb:PageDb)
+    requires/ensures
+        SaneState(this);
+    requires
+        StackBytesRemaining(this, STACKSIZE_SHA_FINALIZE * WORDSIZE);
+        @as_page == OReg(R1) && @err == OReg(R0);
+        validPageNr(as_page);
+        r2 == page_monvaddr(as_page);
+        validPageDb(pagedb_in);
+        isAddrspace(pagedb_in, as_page);
+        pageDbCorresponds(this.m, pagedb_in);
+        pagedb_in[as_page].entry.state == InitState;
+        err == pageDbAddrspaceStateVal(FinalState);
+    reads
+        globals;
+    modifies
+        mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
+    ensures
+        SmcProcedureInvariant(old(this), this);
+        tuple(pagedb, err) == smc_finalise_premium(pagedb_in, old(as_page));
+        pageDbCorresponds(this.m, pagedb);
+{
+    pagedb := pagedb_in;
+    ghost var specResult := smc_finalise_premium(pagedb, as_page);
+    ghost var trace_in := pagedb[as_page].entry.shatrace;
+    ghost var base := r2;
+    ghost var ctx := base + ADDRSPACE_HASH;
+    ghost var p := as_page;
+
+    lemma_kom_smc_finalise_success_helper1(this, as_page, pagedb, trace_in, base, ctx, mem);
+    lemma_SaneState_implies_SaneShaGlobal2(this);
+
+    STR(err, r2, const(ADDRSPACE_STATE));
+    assert MemContents(this.m, page_monvaddr(as_page) + 
+        ADDRSPACE_STATE) == pageDbAddrspaceStateVal(FinalState);
+
+    LDRglobaladdr(lr, K_SHA256s());
+    ADD(r0, r2, const(ADDRSPACE_HASH));
+    LDR(r2, r2, const(ADDRSPACE_HASHED_BLOCK_COUNT));
+    MOV(r3, const(16 * 32));
+    MUL(r2, r2, r3);
+    sha256_finalize(trace_in);
+
+    reveal smc_finalise_premium;
+
+    assert pageDbCorrespondsExcluding(this.m, specPageDb(specResult), p) by
+    {
+        lemma_kom_smc_finalise_success_helper2(old(this), this, p, pagedb_in, specPageDb(specResult), base);
+    }
+
+    assert pageDbCorrespondsOnly(this.m, specPageDb(specResult), p) by
+    {
+        ghost var d' := specPageDb(specResult);
+        reveal validPageDb;
+        reveal pageContentsCorresponds;
+        reveal pageDbAddrspaceCorresponds;
+        ghost var page := extractPage(this.m, p);
+        ghost var e := d'[p];
+        assert pageContentsCorresponds(p, e, page);
+        reveal pageDbEntryCorresponds;
+        assert pageDbEntryCorresponds(d'[p], extractPageDbEntry(this.m, p));
+    }
+    pagedb := specPageDb(specResult);
+    err := const(KOM_ERR_SUCCESS);
+}
 
 procedure kom_smc_finalise(
     operand as_page:reg,
@@ -14,6 +189,7 @@ procedure kom_smc_finalise(
     requires/ensures
         SaneState(this);
     requires
+        StackBytesRemaining(this, STACKSIZE_SHA_FINALIZE * WORDSIZE);
         @as_page == OReg(R1) && @err == OReg(R0) && @pagedb_base == OReg(R12);
         pagedb_base == AddressOfGlobal(PageDb());
         validPageDb(pagedb_in);
@@ -21,7 +197,7 @@ procedure kom_smc_finalise(
     reads
         globals;
     modifies
-        mem; r2;
+        mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
     ensures
         SmcProcedureInvariant(old(this), this);
         tuple(pagedb, err) == smc_finalise_premium(pagedb_in, old(as_page));
@@ -60,41 +236,7 @@ procedure kom_smc_finalise(
                 assert pagedb[as_page].entry.state == InitState;
                 err := const(KOM_ADDRSPACE_FINAL);
                 assert err == pageDbAddrspaceStateVal(FinalState);
-                STR(err, r2, const(ADDRSPACE_STATE));
-                assert MemContents(this.m, page_monvaddr(as_page) + 
-                    ADDRSPACE_STATE) == pageDbAddrspaceStateVal(FinalState);
-                forall :: pageDbCorrespondsOnly(this.m, specPageDb(specResult), as_page)
-                {
-                    ghost var d' := specPageDb(specResult);
-                    reveal_validPageDb();
-                    reveal_pageContentsCorresponds();
-                    reveal_pageDbAddrspaceCorresponds();
-                    assert pageContentsCorresponds(as_page, d'[as_page], 
-                        extractPage(this.m, as_page));
-                    reveal_pageDbEntryCorresponds();
-                    assert pageDbEntryCorresponds(d'[as_page], 
-                        extractPageDbEntry(this.m, as_page));
-                
-                }
-                forall :: pageDbCorrespondsExcluding(this.m, specPageDb(specResult), as_page)
-                {
-                    reveal_validPageDb();
-                    reveal_pageContentsCorresponds();
-                    reveal_pageDbAddrspaceCorresponds();
-                    ghost var d' := specPageDb(specResult);
-                    assert pageDbCorrespondsExcluding(old(this).m, pagedb, as_page);
-                    forall :: pageDbCorrespondsExcluding(this.m, pagedb, as_page)
-                    {
-                        forall p :| validPageNr(p) && p != as_page ::
-                            extractPage(this.m, p) ==
-                                extractPage(old(this).m, p) {}
-                                
-                    }
-                    forall p :| validPageNr(p) && p != as_page ::
-                        pagedb[p] == d'[p] {}
-                }
-                pagedb := specPageDb(specResult);
-                err := const(KOM_ERR_SUCCESS);
+                pagedb := kom_smc_finalise_success(as_page, err, pagedb_in);
             }
         }
     }

@@ -797,7 +797,7 @@ lemma kom_smc_map_measure_helper1(s:state, as_page:PageNr, metadata:seq<word>, c
     requires validAddrspacePage(pagedb_in, as_page)
     requires validPageDb(pagedb_in)
     requires pageDbCorresponds(s.m, pagedb_in)
-    requires !stoppedAddrspace(pagedb_in[as_page])
+    requires pagedb_in[as_page].entry.state == InitState
     requires |metadata| == 2
     requires |contents| % SHA_BLOCKSIZE == 0
     ensures input == metadata + [0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0]

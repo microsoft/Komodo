@@ -176,7 +176,7 @@ predicate {:opaque} pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, pag
     && page[base + ADDRSPACE_REF] == e.refcount
     && page[base + ADDRSPACE_STATE] == pageDbAddrspaceStateVal(e.state)
     && page[base + ADDRSPACE_HASHED_BLOCK_COUNT] == |e.shatrace.M|
-    && addr_space_hash == last(e.shatrace.H)
+    && (e.state.InitState? ==> addr_space_hash == last(e.shatrace.H))
     && (e.state.FinalState? ==> addr_space_hash == SHA256(WordSeqToBytes(e.measurement)))
 }
 
