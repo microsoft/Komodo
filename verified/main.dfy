@@ -182,6 +182,7 @@ lemma lemma_KomUserEntryPrecond_Preserved(s0:state, s2:state, r:state,
 
     pagedb := updateUserPagesFromState(r, pagedb0, dispPg);
     assert l1pOfDispatcher(pagedb, dispPg) == l1pOfDispatcher(pagedb0, dispPg)
+        && finalDispatcher(pagedb, dispPg)
         by { reveal updateUserPagesFromState(); }
 }
 
