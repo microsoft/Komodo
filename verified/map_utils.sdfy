@@ -96,92 +96,194 @@ lemma lemma_SaneState_implies_SaneShaGlobal(s:state)
 }
 #endverbatim
 
-procedure{:timeLimitMultiplier 2} kom_smc_map_measure(
-    operand as_page:reg,
-    inout operand metadata0:reg,
-    inout operand metadata1:reg,
-    ghost pagedb_in:PageDb
+procedure{:timeLimitMultiplier 2} kom_smc_map_measure_sha(
+    inline has_contents:bool,
+    ghost trace1:SHA256Trace,
+    ghost input:seq(word),
+    ghost contents:seq(word),
+    ghost input_ptr:word,
+    ghost contents_ptr:word,
+    ghost ctx:word
     )
-    returns (ghost pagedb:PageDb)
+    returns (ghost trace2:SHA256Trace, ghost trace3:SHA256Trace)
     requires/ensures
         SaneState(this);
     requires
-        StackBytesRemaining(this, MEASURE_STACK_BYTES + STACKSIZE_SHA_UPDATE * WORDSIZE);
-        @as_page == OReg(R1);
-        @metadata0 == OReg(R2);
-        @metadata1 == OReg(R3);
-        wellFormedPageDb(pagedb_in);
-        validAddrspacePage(pagedb_in, as_page);
-        validPageDb(pagedb_in);
-        pageDbCorresponds(this.m, pagedb_in);
-        pagedb_in[as_page].entry.state is InitState;
+        StackBytesRemaining(this, STACKSIZE_SHA_UPDATE * WORDSIZE);
+        input_ptr == sp;
+        sp + SHA_BLOCKSIZE * WORDSIZE <= StackBase();
+        r4 == ctx;
+        has_contents ==> r5 == contents_ptr;
+        isUInt32(ctx) && WordAligned(ctx);
+        address_is_secure(ctx);
+        address_is_secure(ctx + SHA_CTXSIZE * WORDSIZE);
+        ValidMemRange(ctx, ctx + SHA_CTXSIZE * WORDSIZE);
+        SeqLength(input) == 16;
+        SeqLength(contents) == (if has_contents then 1024 else 0);
+        IsCompleteSHA256Trace(trace1);
+        SHA256TraceIsCorrect(trace1);
+        SaneShaGlobal(globals);
+        has_contents ==> isUInt32(contents_ptr + PAGESIZE);
+        has_contents ==> ValidMemRange(contents_ptr, contents_ptr + PAGESIZE);
+// REVIEW: >= should be ok for call to sha256_*: ctx + SHA_CTXSIZE * WORDSIZE < contents_ptr || ctx >= contents_ptr + PAGESIZE;
+        has_contents ==> ctx + SHA_CTXSIZE * WORDSIZE < contents_ptr || ctx > contents_ptr + PAGESIZE;
+        has_contents ==> sp <= contents_ptr;
+        forall i :: 0 <= i < SHA_BLOCKSIZE ==> AddrMemContents(mem, input_ptr + i * WORDSIZE) == input[i];
+        forall i :: 0 <= i < SeqLength(contents) ==> AddrMemContents(mem, contents_ptr + i * WORDSIZE) == contents[i];
+        forall i :: 0 <= i < 8 ==> last(trace1.H)[i] == AddrMemContents(mem, ctx + i * WORDSIZE);
     reads
         globals;
     modifies
         mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
     ensures
         SmcProcedureInvariant(old(this), this);
-        pagedb == updateMeasurement(pagedb_in, old(as_page), seq(old(metadata0), old(metadata1)), seq());
+        AddrMemPreservingExcept2(old(mem), mem, sp - STACKSIZE_SHA_UPDATE * WORDSIZE, sp, ctx,
+            ctx + SHA_CTXSIZE * WORDSIZE);
+        IsCompleteSHA256Trace(trace2);
+        IsCompleteSHA256Trace(trace3);
+        SHA256TraceIsCorrect(trace2);
+        SHA256TraceIsCorrect(trace3);
+        SeqLength(trace2.M) == SeqLength(trace1.M) + 1;
+        SeqLength(trace3.M) == SeqLength(trace2.M) + (if has_contents then 64 else 0);
+        trace1.M == SeqSlice(trace2.M, 0, SeqLength(trace1.M));
+        trace2.M == SeqSlice(trace3.M, 0, SeqLength(trace2.M));
+        trace2.M[SeqLength(trace1.M)] == SeqSlice(input, 0, SHA_BLOCKSIZE);
+        forall i :: 0 <= i < SeqLength(trace3.M) - SeqLength(trace2.M) ==>
+            trace3.M[SeqLength(trace2.M) + i] == SeqSlice(contents, i * SHA_BLOCKSIZE, (i + 1) * SHA_BLOCKSIZE);
+        forall i :: 0 <= i < 8 ==> last(trace3.H)[i] == AddrMemContents(mem, ctx + i * WORDSIZE);
+{
+    ghost var num_blocks := 1; // Number of 64-byte blocks to process
+    MOV(r0, r4); // ctx
+    MOV(r1, sp); // input_ptr
+    MOV(r2, 1); // num_blocks
+    LDRglobaladdr(lr, K_SHA256s());
+    sha256_incremental(trace1, input);
+    exists t2 ::
+    (
+        IsCompleteSHA256Trace(t2)
+     && SHA256TraceIsCorrect(t2)
+     && SeqLength(t2.M) == SeqLength(trace1.M) + 1
+     && trace1.M == SeqSlice(t2.M, 0, SeqLength(trace1.M))  // trace1.M is a prefix of t2.M
+     && (forall i {TStep(i)} :: 0 <= i < 1 
+          ==> t2.M[SeqLength(trace1.M) + i] == SeqSlice(input, i*SHA_BLOCKSIZE, (i+1)*SHA_BLOCKSIZE))
+     && last(t2.H)[0] == AddrMemContents(mem, ctx + 0*WORDSIZE)
+     && last(t2.H)[1] == AddrMemContents(mem, ctx + 1*WORDSIZE)
+     && last(t2.H)[2] == AddrMemContents(mem, ctx + 2*WORDSIZE)
+     && last(t2.H)[3] == AddrMemContents(mem, ctx + 3*WORDSIZE)
+     && last(t2.H)[4] == AddrMemContents(mem, ctx + 4*WORDSIZE)
+     && last(t2.H)[5] == AddrMemContents(mem, ctx + 5*WORDSIZE)
+     && last(t2.H)[6] == AddrMemContents(mem, ctx + 6*WORDSIZE)
+     && last(t2.H)[7] == AddrMemContents(mem, ctx + 7*WORDSIZE)
+    );
+    assert t2.M[SeqLength(trace1.M)] == SeqSlice(input, 0, SHA_BLOCKSIZE) by { assert TStep(0); }
+    trace2 := t2;
+
+    inline if (has_contents)
+    {
+        num_blocks := 64;
+        MOV(r0, r4); // ctx
+        MOV(r1, r5); // contents_ptr
+        MOV(r2, 64); // num_blocks
+        sha256_incremental(trace2, contents);
+        exists t3 ::
+        (
+            IsCompleteSHA256Trace(t3)
+         && SHA256TraceIsCorrect(t3)
+         && SeqLength(t3.M) == SeqLength(trace2.M) + num_blocks
+         && trace2.M == SeqSlice(t3.M, 0, SeqLength(trace2.M))  // trace2.M is a prefix of t3.M
+         && (forall i :: 0 <= i < num_blocks
+              ==> t3.M[SeqLength(trace2.M) + i] == SeqSlice(contents, i*SHA_BLOCKSIZE, (i+1)*SHA_BLOCKSIZE))
+         && last(t3.H)[0] == AddrMemContents(mem, ctx + 0*WORDSIZE)
+         && last(t3.H)[1] == AddrMemContents(mem, ctx + 1*WORDSIZE)
+         && last(t3.H)[2] == AddrMemContents(mem, ctx + 2*WORDSIZE)
+         && last(t3.H)[3] == AddrMemContents(mem, ctx + 3*WORDSIZE)
+         && last(t3.H)[4] == AddrMemContents(mem, ctx + 4*WORDSIZE)
+         && last(t3.H)[5] == AddrMemContents(mem, ctx + 5*WORDSIZE)
+         && last(t3.H)[6] == AddrMemContents(mem, ctx + 6*WORDSIZE)
+         && last(t3.H)[7] == AddrMemContents(mem, ctx + 7*WORDSIZE)
+        );
+        trace3 := t3;
+    }
+    else
+    {
+        trace3 := trace2;
+    }
+}
+
+procedure{:timeLimitMultiplier 2} kom_smc_map_measure_hash(
+    inline has_contents:bool,
+    operand as_page:reg,
+    ghost metadata:seq(word),
+    ghost contents:seq(word),
+    ghost contents_page:PageNr,
+    ghost contents_ptr:word,
+    ghost pagedb_in:PageDb,
+    ghost pagedb:PageDb,
+    ghost base:addr,
+    ghost ctx:addr,
+    ghost input:seq(word),
+    ghost trace1:SHA256Trace,
+    ghost e:PageDbEntryTyped
+    )
+    requires/ensures
+        SaneState(this);
+    requires
+        StackBytesRemaining(this, STACKSIZE_SHA_UPDATE * WORDSIZE);
+        sp + SHA_BLOCKSIZE * WORDSIZE <= StackBase();
+        @as_page == OReg(R1);
+        r3 == base;
+        r4 == ctx;
+        has_contents ==> r5 == contents_ptr;
+        SeqLength(contents) == (if has_contents then 1024 else 0);
+        has_contents ==> contents_page != as_page;
+        has_contents ==> contents_ptr == page_monvaddr(contents_page);
+        has_contents ==> wellFormedPageDbEntryTyped(DataPage(contents));
+        wellFormedPageDb(pagedb_in);
         wellFormedPageDb(pagedb);
+        validAddrspacePage(pagedb_in, as_page);
+        validPageDb(pagedb_in);
+        pageDbCorresponds(this.m, pagedb_in);
+        pagedb_in[as_page].entry.state is InitState;
+        SeqLength(metadata) == 2;
+        input == metadata + seq(0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0);
+        pagedb == updateMeasurement(pagedb_in, as_page, metadata, contents);
+        base == page_monvaddr(as_page);
+        ctx == base + ADDRSPACE_HASH;
+        this.m.addresses?[base + ADDRSPACE_HASHED_BLOCK_COUNT];
+        this.m.addresses[base + ADDRSPACE_HASHED_BLOCK_COUNT] + 65 < 0x1_0000_0000;
+        IsCompleteSHA256Trace(trace1);
+        SHA256TraceIsCorrect(trace1);
+        forall i :: 0 <= i < SHA_BLOCKSIZE ==> AddrMemContents(mem, sp + i * WORDSIZE) == input[i];
+        forall i :: 0 <= i < SeqLength(contents) ==> AddrMemContents(mem, contents_ptr + i * WORDSIZE) == contents[i];
+        forall i :: 0 <= i < 8 ==> last(trace1.H)[i] == AddrMemContents(mem, ctx + i * WORDSIZE);
+        pagedb_in?[as_page];
+        pagedb_in[as_page] is PageDbEntryTyped;
+        e == pagedb_in[as_page].entry;
+        trace1 == e.shatrace;
+        SeqLength(e.measurement) % SHA_BLOCKSIZE == 0;
+        ConcatenateSeqs(trace1.M) == e.measurement;
+    reads
+        globals;
+    modifies
+        mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
+    ensures
+        SmcProcedureInvariant(old(this), this);
         pageDbCorresponds(this.m, pagedb);
 {
     lemma_SaneState_implies_SaneShaGlobal(this);
 
-    SUB(sp, sp, const(MEASURE_STACK_BYTES));
+    LDR(r12, r3, const(ADDRSPACE_HASHED_BLOCK_COUNT));
+    ADD(r12, r12, const(if has_contents then 65 else 1));
+    STR(r12, r3, const(ADDRSPACE_HASHED_BLOCK_COUNT));
 
-    ghost var metadata := seq(old(metadata0), old(metadata1));
-    (ghost var base), (ghost var ctx), (ghost var input), (ghost var trace_in), (ghost var e), pagedb :=
-        kom_smc_map_measure_helper1(this, as_page, metadata, pagedb_in);
-
-    page_monvaddr_impl(r0, as_page, r12);
-    assert r0 == base;
-    LDR(r12, r0, const(ADDRSPACE_HASHED_BLOCK_COUNT));
-    ADD(r12, r12, 1);
-    STR(r12, r0, const(ADDRSPACE_HASHED_BLOCK_COUNT));
-
-    ADD(r0, r0, const(ADDRSPACE_HASH));
-    assert r0 == ctx;
-
-    ghost var input_ptr := sp;
-    MOV(r1, sp);
-
-    STR(metadata0, sp, const(0 * WORDSIZE));
-    STR(metadata1, sp, const(1 * WORDSIZE));
-    kom_smc_map_measure_zero(input);
-
-    ghost var num_blocks := 1; // Number of 64-byte blocks to process
-    MOV(r2, 1);
-
-    LDRglobaladdr(lr, K_SHA256s());
-
-    assert (forall j :: 0 <= j < num_blocks*SHA_BLOCKSIZE ==> AddrMemContents(mem, input_ptr + j*WORDSIZE) == input[j]);
-
-    sha256_incremental(trace_in, input);
-    exists trace_out ::
-    (
-        IsCompleteSHA256Trace(trace_out)
-     && SHA256TraceIsCorrect(trace_out)
-     && SeqLength(trace_out.M) == SeqLength(trace_in.M) + 1
-     && trace_in.M == SeqSlice(trace_out.M, 0, SeqLength(trace_in.M))  // trace_in.M is a prefix of trace_out.M
-     && (forall i {TStep(i)} :: 0 <= i < 1 
-          ==> trace_out.M[SeqLength(trace_in.M) + i] == SeqSlice(input, i*SHA_BLOCKSIZE, (i+1)*SHA_BLOCKSIZE))
-     && last(trace_out.H)[0] == AddrMemContents(mem, ctx + 0*WORDSIZE)
-     && last(trace_out.H)[1] == AddrMemContents(mem, ctx + 1*WORDSIZE)
-     && last(trace_out.H)[2] == AddrMemContents(mem, ctx + 2*WORDSIZE)
-     && last(trace_out.H)[3] == AddrMemContents(mem, ctx + 3*WORDSIZE)
-     && last(trace_out.H)[4] == AddrMemContents(mem, ctx + 4*WORDSIZE)
-     && last(trace_out.H)[5] == AddrMemContents(mem, ctx + 5*WORDSIZE)
-     && last(trace_out.H)[6] == AddrMemContents(mem, ctx + 6*WORDSIZE)
-     && last(trace_out.H)[7] == AddrMemContents(mem, ctx + 7*WORDSIZE)
-    );
-    assert trace_out.M[SeqLength(trace_in.M)] == SeqSlice(input, 0, SHA_BLOCKSIZE) by { assert TStep(0); }
+    (ghost var trace2), (ghost var trace3) := kom_smc_map_measure_sha(
+        has_contents, trace1, input, contents, sp, contents_ptr, ctx);
 
     ghost var p := old(as_page);
-    kom_smc_map_measure_helper2(pagedb_in, pagedb, e, e.measurement, p, metadata, input, trace_in, trace_out);
+    kom_smc_map_measure_helper2(pagedb_in, pagedb, e, e.measurement, p, metadata, input, contents,
+        trace1, trace2, trace3);
 
     AllButOnePageOrStackPreserving(p, old(this), this);
-
-    ADD(sp, sp, const(MEASURE_STACK_BYTES));
 
     assert pageDbEntryCorresponds(pagedb[p], extractPageDbEntry(this.m, p)) by
     {
@@ -193,4 +295,70 @@ procedure{:timeLimitMultiplier 2} kom_smc_map_measure(
         reveal pageContentsCorresponds;
         reveal pageDbAddrspaceCorresponds;
     }
+}
+
+procedure{:timeLimitMultiplier 2} kom_smc_map_measure(
+    inline has_contents:bool,
+    operand as_page:reg,
+    inout operand metadata0:reg,
+    inout operand metadata1:reg,
+    ghost contents:seq(word),
+    ghost contents_page:PageNr,
+    ghost contents_ptr:word,
+    ghost pagedb_in:PageDb
+    )
+    returns (ghost pagedb:PageDb)
+    requires/ensures
+        SaneState(this);
+    requires
+        StackBytesRemaining(this, MEASURE_STACK_BYTES + STACKSIZE_SHA_UPDATE * WORDSIZE);
+        @as_page == OReg(R1);
+        @metadata0 == OReg(R2);
+        @metadata1 == OReg(R3);
+        has_contents ==> r5 == contents_ptr;
+        SeqLength(contents) == (if has_contents then 1024 else 0);
+        has_contents ==> contents_page != as_page;
+        has_contents ==> contents_ptr == page_monvaddr(contents_page);
+        has_contents ==> wellFormedPageDbEntryTyped(DataPage(contents));
+        has_contents ==> pageDbDataCorresponds(contents_page, DataPage(contents), extractPage(this.m, contents_page));
+        wellFormedPageDb(pagedb_in);
+        validAddrspacePage(pagedb_in, as_page);
+        validPageDb(pagedb_in);
+        pageDbCorresponds(this.m, pagedb_in);
+        pagedb_in[as_page].entry.state is InitState;
+    reads
+        globals;
+    modifies
+        mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
+    ensures
+        SmcProcedureInvariant(old(this), this);
+        pagedb == updateMeasurement(pagedb_in, old(as_page), seq(old(metadata0), old(metadata1)), contents);
+        wellFormedPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+{
+    SUB(sp, sp, const(MEASURE_STACK_BYTES));
+
+    ghost var metadata := seq(old(metadata0), old(metadata1));
+    (ghost var base), (ghost var ctx), (ghost var input), (ghost var trace1), (ghost var e), pagedb :=
+        kom_smc_map_measure_helper1(this, as_page, metadata, contents, pagedb_in);
+
+    STR(metadata0, sp, const(0 * WORDSIZE));
+    STR(metadata1, sp, const(1 * WORDSIZE));
+    kom_smc_map_measure_zero(input);
+
+    page_monvaddr_impl(r3, as_page, r12);
+    ADD(r4, r3, const(ADDRSPACE_HASH));
+    assert r3 == base;
+    assert r4 == ctx;
+
+    assert forall i :: 0 <= i < SeqLength(contents) ==> AddrMemContents(mem, contents_ptr + i * WORDSIZE) == contents[i] by
+        { reveal pageDbDataCorresponds; }
+
+    lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb_in);
+
+    kom_smc_map_measure_hash(has_contents, as_page, metadata,
+        contents, contents_page, contents_ptr, pagedb_in, pagedb,
+        base, ctx, input, trace1, e);
+
+    ADD(sp, sp, const(MEASURE_STACK_BYTES));
 }

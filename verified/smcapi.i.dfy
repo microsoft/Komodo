@@ -790,7 +790,7 @@ lemma lemma_updateL2PtePreservesPageDb(d:PageDb,a:PageNr,mapping:Mapping,l2e:L2P
   
 }
 
-lemma kom_smc_map_measure_helper1(s:state, as_page:PageNr, metadata:seq<word>, pagedb_in:PageDb)
+lemma kom_smc_map_measure_helper1(s:state, as_page:PageNr, metadata:seq<word>, contents:seq<word>, pagedb_in:PageDb)
     returns (base:addr, ctx:addr, input:seq<word>, trace_in:SHA256Trace, e:PageDbEntryTyped, pagedb:PageDb)
     requires SaneState(s)
     requires wellFormedPageDb(pagedb_in)
@@ -799,12 +799,13 @@ lemma kom_smc_map_measure_helper1(s:state, as_page:PageNr, metadata:seq<word>, p
     requires pageDbCorresponds(s.m, pagedb_in)
     requires !stoppedAddrspace(pagedb_in[as_page])
     requires |metadata| == 2
+    requires |contents| % SHA_BLOCKSIZE == 0
     ensures input == metadata + [0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0]
-    ensures pagedb == updateMeasurement(pagedb_in, as_page, metadata, [])
+    ensures pagedb == updateMeasurement(pagedb_in, as_page, metadata, contents)
     ensures base == page_monvaddr(as_page)
     ensures ctx == base + ADDRSPACE_HASH
     ensures base + ADDRSPACE_HASHED_BLOCK_COUNT in s.m.addresses
-    ensures s.m.addresses[base + ADDRSPACE_HASHED_BLOCK_COUNT] + 1 < 0x1_0000_0000
+    ensures s.m.addresses[base + ADDRSPACE_HASHED_BLOCK_COUNT] + 65 < 0x1_0000_0000
     ensures IsCompleteSHA256Trace(trace_in)
     ensures SHA256TraceIsCorrect(trace_in)
     ensures
@@ -816,7 +817,7 @@ lemma kom_smc_map_measure_helper1(s:state, as_page:PageNr, metadata:seq<word>, p
     ensures e.Addrspace?
     ensures ConcatenateSeqs(trace_in.M) == e.measurement
     ensures trace_in == e.shatrace
-    ensures WordsToBytes(SeqLength(e.measurement) + 16) < MaxBytesForSHA();
+    ensures WordsToBytes(SeqLength(e.measurement) + 16) + PAGESIZE < MaxBytesForSHA();
 {
     input := metadata + [0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0];
     var p := as_page;
@@ -839,54 +840,123 @@ lemma kom_smc_map_measure_helper1(s:state, as_page:PageNr, metadata:seq<word>, p
         by { reveal pageDbAddrspaceCorresponds(); }
 
     assert base + ADDRSPACE_HASHED_BLOCK_COUNT in s.m.addresses
-        && s.m.addresses[base + ADDRSPACE_HASHED_BLOCK_COUNT] + 1 < 0x1_0000_0000
+        && s.m.addresses[base + ADDRSPACE_HASHED_BLOCK_COUNT] + 65 < 0x1_0000_0000
         by { reveal pageDbAddrspaceCorresponds(); }
 
-    pagedb := updateMeasurement(pagedb_in, as_page, metadata, []);
+    pagedb := updateMeasurement(pagedb_in, as_page, metadata, contents);
+}
+
+function{:opaque} ConcatSha(m:seq<seq<word>>):seq<word>
+{
+    if |m| == 0 then [] else m[0] + ConcatSha(m[1..])
+}
+
+lemma lemma_ConcatSha_ConcatenateSeqs(m:seq<seq<word>>)
+    ensures ConcatSha(m) == ConcatenateSeqs(m)
+{
+    reveal ConcatSha();
+    if (|m| > 0)
+    {
+        lemma_ConcatSha_ConcatenateSeqs(m[1..]);
+    }
+}
+
+lemma lemma_ConcatSha_Adds(s:seq<seq<word>>, s':seq<seq<word>>)
+    ensures ConcatSha(s + s') == ConcatSha(s) + ConcatSha(s'); 
+{
+    lemma_ConcatSha_ConcatenateSeqs(s);
+    lemma_ConcatSha_ConcatenateSeqs(s');
+    lemma_ConcatSha_ConcatenateSeqs(s + s');
+    lemma_ConcatenateSeqs_Adds'(s, s');
+}
+
+lemma lemma_sha256_concat(m:seq<seq<word>>, input:seq<word>)
+    requires |input| == |m| * SHA_BLOCKSIZE
+    requires
+        (forall i :: 0 <= i < |m| ==>
+            m[i] == SeqSlice(input, i * SHA_BLOCKSIZE, (i + 1) * SHA_BLOCKSIZE))
+    ensures ConcatSha(m) == input
+{
+    assert ConcatSha([]) == [] by { reveal ConcatSha(); }
+    if (|m| != 0)
+    {
+        var m' := m[1..];
+        var input' := input[SHA_BLOCKSIZE..];
+        lemma_sha256_concat(m', input');
+        assert m == [m[0]] + m';
+        assert ConcatSha([m[0]]) == m[0] by { reveal ConcatSha(); }
+        calc
+        {
+            ConcatSha(m);
+            ConcatSha([m[0]] + m');            { lemma_ConcatSha_Adds([m[0]], m'); }
+            ConcatSha([m[0]]) + ConcatSha(m');
+            m[0] + input';
+            input;
+        }
+    }
+}
+
+lemma lemma_sha256_suffix(m1:seq<seq<word>>, m2:seq<seq<word>>, input:seq<word>)
+    requires |input| == (|m2| - |m1|) * SHA_BLOCKSIZE
+    requires m1 == SeqSlice(m2, 0, |m1|)
+    requires
+        (forall i {:trigger m2[|m1| + i]}{:trigger m2[|m1|..][i]} :: 0 <= i < |m2| - |m1| ==>
+            m2[|m1| + i] == SeqSlice(input, i * SHA_BLOCKSIZE, (i + 1) * SHA_BLOCKSIZE))
+    ensures ConcatenateSeqs(m2) == ConcatenateSeqs(m1) + input
+{
+    var suffix := m2[|m1|..];
+    lemma_sha256_concat(suffix, input);
+    calc
+    {
+        ConcatSha(m2);                     { assert m2 == m1 + suffix; }
+        ConcatSha(m1 + suffix);            { lemma_ConcatSha_Adds(m1, suffix); }
+        ConcatSha(m1) + ConcatSha(suffix);
+        ConcatSha(m1) + input;
+    }
+    lemma_ConcatSha_ConcatenateSeqs(m1);
+    lemma_ConcatSha_ConcatenateSeqs(m2);
 }
 
 lemma kom_smc_map_measure_helper2(pagedb_in:PageDb, pagedb:PageDb, e:PageDbEntryTyped,
-    measurement:seq<word>, as_page:PageNr, metadata:seq<word>, input:seq<word>,
-    trace_in:SHA256Trace, trace_out:SHA256Trace)
+    measurement:seq<word>, as_page:PageNr, metadata:seq<word>, input:seq<word>, contents:seq<word>,
+    trace1:SHA256Trace, trace2:SHA256Trace, trace3:SHA256Trace)
     requires wellFormedPageDb(pagedb_in)
     requires validAddrspacePage(pagedb_in, as_page)
     requires validPageDb(pagedb_in)
     requires pagedb_in[as_page].entry.state.InitState?
     requires |measurement| % SHA_BLOCKSIZE == 0
-    requires ConcatenateSeqs(trace_in.M) == measurement;
-    requires IsCompleteSHA256Trace(trace_out)
-    requires SHA256TraceIsCorrect(trace_out)
-    requires SeqLength(trace_out.M) == SeqLength(trace_in.M) + 1
-    requires trace_in.M == SeqSlice(trace_out.M, 0, SeqLength(trace_in.M))  // trace_in.M is a prefix of trace_out.M
+    requires ConcatenateSeqs(trace1.M) == measurement;
+    requires IsCompleteSHA256Trace(trace2)
+    requires SHA256TraceIsCorrect(trace2)
+    requires IsCompleteSHA256Trace(trace3)
+    requires SHA256TraceIsCorrect(trace3)
+    requires SeqLength(trace2.M) - SeqLength(trace1.M) == 1
+    requires (SeqLength(trace3.M) - SeqLength(trace2.M)) * SHA_BLOCKSIZE == |contents|
+    requires trace1.M == SeqSlice(trace2.M, 0, |trace1.M|)
+    requires trace2.M == SeqSlice(trace3.M, 0, |trace2.M|)
     requires |metadata| == 2
+    requires |contents| % SHA_BLOCKSIZE == 0
     requires input == metadata + [0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0]
-    requires trace_out.M[SeqLength(trace_in.M)] == SeqSlice(input, 0, SHA_BLOCKSIZE)
-    requires pagedb == updateMeasurement(pagedb_in, as_page, metadata, [])
+    requires trace2.M[|trace1.M|] == SeqSlice(input, 0, SHA_BLOCKSIZE)
+    requires forall i :: 0 <= i < |trace3.M| - |trace2.M| ==>
+        trace3.M[|trace2.M| + i] == SeqSlice(contents, i * SHA_BLOCKSIZE, (i + 1) * SHA_BLOCKSIZE)
+    requires pagedb == updateMeasurement(pagedb_in, as_page, metadata, contents)
     requires as_page in pagedb_in
     requires pagedb_in[as_page].PageDbEntryTyped?
     requires e == pagedb_in[as_page].entry
     requires e.Addrspace?
     requires measurement == e.measurement
-    ensures trace_out == newShaTraceForMeasurement(measurement + input)
-    ensures pagedb[as_page].entry.shatrace == trace_out
+    ensures trace3 == newShaTraceForMeasurement(measurement + input + contents)
+    ensures pagedb[as_page].entry.shatrace == trace3
 {
     var padded_metadata := metadata + SeqRepeat(SHA_BLOCKSIZE - SeqLength(metadata), 0);
-    var contents := [];
     var newmeasurement := measurement + padded_metadata + contents;
-    assert newmeasurement == measurement + input;
+    assert newmeasurement == measurement + input + contents;
     var trace_new := newShaTraceForMeasurement(newmeasurement);
 
     assert SeqSlice(input, 0, SHA_BLOCKSIZE) == input;
 
-    assert trace_out.M == trace_in.M + [input];
-    calc
-    {
-        ConcatenateSeqs(trace_out.M);
-        ConcatenateSeqs(trace_in.M + [input]);
-            { lemma_ConcatenateSeqs_Adds'(trace_in.M, [input]); }
-        ConcatenateSeqs(trace_in.M) + ConcatenateSeqs([input]);
-        measurement + ConcatenateSeqs([input]);
-        measurement + input;
-    }
-    lemma_SHATracesAreEqual(trace_out, trace_new);
+    lemma_sha256_suffix(trace1.M, trace2.M, input);
+    lemma_sha256_suffix(trace2.M, trace3.M, contents);
+    lemma_SHATracesAreEqual(trace3, trace_new);
 }

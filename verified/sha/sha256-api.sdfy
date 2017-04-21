@@ -89,7 +89,7 @@ const STACKSIZE_SHA_FINALIZE:int := 16 + STACKSIZE_SHA_UPDATE;    // Need 16 mor
 
 #endverbatim
 
-procedure {:refined} sha256_finalize(
+procedure {:refined}{:bridge} sha256_finalize(
         ghost trace_in:SHA256Trace
     ) 
 requires/ensures

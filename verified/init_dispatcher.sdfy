@@ -131,7 +131,7 @@ procedure {:frame false} kom_smc_init_dispatcher(
                 MOV(r1, as_page);
                 MOV(r2, const(KOM_SMC_INIT_DISPATCHER));
                 assert entrypoint == old(entrypoint);
-                pagedb := kom_smc_map_measure(r1, r2, entrypoint, pagedb);
+                pagedb := kom_smc_map_measure(false, r1, r2, entrypoint, seq(), 0, 0, pagedb);
                 assert pagedb == specPageDb(specResult);
                 err := const(KOM_ERR_SUCCESS);
             } else {
