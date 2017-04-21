@@ -215,6 +215,56 @@ lemma lemma_integrate_reg_equiv(s1: state, s2: state)
 {
 }
 
+lemma lemma_smcinvar1(
+    s1: state, s1': state, s2: state, s2': state,
+    entry: bool)
+    requires ValidState(s1) && ValidState(s1')
+    requires ValidState(s2) && ValidState(s2')
+    requires smchandlerInvariant(s1, s1', entry)
+    requires smchandlerInvariant(s2, s2', entry)
+    requires os_regs_equiv(s1, s2)
+    ensures  non_ret_os_regs_equiv(s1', s2')
+{
+    reveal ValidRegState();
+    assert forall m | m !in {Monitor, IRQ, FIQ} && 
+        m != User :: m in {Supervisor, Abort, Undefined};
+    assert non_ret_os_regs_equiv(s1, s2);
+    assert non_ret_os_regs_equiv(s1, s1');
+    assert non_ret_os_regs_equiv(s2, s2');
+    assert non_ret_os_regs_equiv(s1', s2');
+}
+
+lemma lemma_smcinvar2(
+    s1: state, s1': state, s2: state, s2': state,
+    entry: bool)
+    requires ValidState(s1) && ValidState(s1')
+    requires ValidState(s2) && ValidState(s2')
+    requires smchandlerInvariant(s1, s1', entry)
+    requires smchandlerInvariant(s2, s2', entry)
+    requires os_ctrl_eq(s1, s2)
+    ensures  os_ctrl_eq(s1', s2')
+{
+    reveal ValidSRegState();
+    assert os_ctrl_eq(s1, s1');
+    assert os_ctrl_eq(s2, s2');
+}
+
+lemma lemma_smcinvar3(
+    s1: state, s1': state, s2: state, s2': state,
+    entry: bool)
+    requires ValidState(s1) && ValidState(s1')
+    requires ValidState(s2) && ValidState(s2')
+    requires smchandlerInvariant(s1, s1', entry)
+    requires smchandlerInvariant(s2, s2', entry)
+    requires InsecureMemInvariant(s1, s2)
+    ensures  !entry ==> InsecureMemInvariant(s1', s2')
+{
+    if(!entry) {
+        assert InsecureMemInvariant(s1, s1');
+        assert InsecureMemInvariant(s2, s2');
+    }
+}
+
 lemma lemma_smchandlerInvariant_regs_ni(
     s1: state, s1': state, s2: state, s2': state,
     entry: bool)
@@ -229,9 +279,14 @@ lemma lemma_smchandlerInvariant_regs_ni(
     ensures  non_ret_os_regs_equiv(s1', s2')
     ensures  !entry ==> InsecureMemInvariant(s1', s2')
 {
-
-    assert smcNonvolatileRegInvariant(s1, s1');
-    assert smcNonvolatileRegInvariant(s2, s2');
+    lemma_smcinvar1(s1, s1', s2, s2', entry);
+    lemma_smcinvar2(s1, s1', s2, s2', entry);
+    lemma_smcinvar3(s1, s1', s2, s2', entry);
+    // reveal ValidRegState();
+    // assert smcNonvolatileRegInvariant(s1, s1') by
+    //     { lemma_smchandler_nvregs(s1, s1', entry); }
+    // assert smcNonvolatileRegInvariant(s2, s2') by
+    //     { lemma_smchandler_nvregs(s2, s2', entry); }
     // if(!entry) {
     //     assert forall m | m != User ::
     //         s1.sregs[spsr(m)] == s1'.sregs[spsr(m)];

@@ -106,7 +106,7 @@ predicate os_ctrl_eq(s1: state, s2: state)
     requires ValidState(s1) && ValidState(s2)
 {
     reveal_ValidSRegState();
-    forall m | m in {FIQ, IRQ, Supervisor, Abort, Undefined} ::
+    forall m | m in {Supervisor, Abort, Undefined} ::
         s1.sregs[spsr(m)] == s2.sregs[spsr(m)]
 
 }
