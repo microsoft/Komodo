@@ -36,6 +36,7 @@ procedure {:timeLimitMultiplier 2} svc_returning_verify_inner(
         // Framing
         StackPreserving(old(this), this);
         NonStackMemPreserving(old(this), this);
+        pageDbCorresponds(this.m, pagedb);
         sp == old(sp);
 
         // Results
@@ -249,7 +250,7 @@ procedure {:timeLimitMultiplier 2} compare_memory_to_regs(ghost contents:seq(wor
     //assert {:split_here} true;
 }
 
-procedure {:timeLimitMultiplier 2} svc_returning_verify_inner'(
+procedure {:frame false} {:timeLimitMultiplier 2} svc_returning_verify_inner'(
     ghost exstate: state,
     ghost stack_bytes: int,
     ghost pagedb: PageDb,
