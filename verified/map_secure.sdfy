@@ -144,6 +144,93 @@ procedure update_l2pte(
     lemma_updateL2PtePreservesPageDb(d, a, abs_mapping, l2pte_abs);
 }
 
+procedure{:timeLimitMultiplier 2} is_valid_mapping_target_finish(
+    operand addr:reg,
+    operand mapping:reg,
+    out operand l1pte:reg,
+    out operand err:reg,
+    ghost d:PageDb)
+    requires/ensures
+        SaneState(this);
+    requires
+        (@addr == OReg(R1) || @addr == OReg(R2)) && @mapping == OReg(R3)
+            && @l1pte == OReg(R10) && @err == OReg(R0);
+        validPageDb(d);
+        pageDbCorresponds(this.m, d);
+        isAddrspace(d, addr);
+        d[addr].entry.state is InitState;
+        validPageNr(l1indexFromMapping(mapping));
+        validPageNr(l2indexFromMapping(mapping));
+        permFromMapping(mapping).r;
+        0 <= l1indexFromMapping(mapping) < NR_L1PTES;
+        0 <= l2indexFromMapping(mapping) < NR_L2PTES;
+        let l1p := d[addr].entry.l1ptnr;
+        let abs_mapping:Mapping := wordToMapping(mapping);
+        d[l1p] is PageDbEntryTyped;
+        d[l1p].entry is L1PTable;
+        let l1index:word := l1indexFromMapping(mapping);
+        let l1pt:seq(Maybe(PageNr)) := d[l1p].entry.l1pt;
+        0 <= l1index < SeqLength(l1pt);
+        l1pt[l1index] is Just;
+        let l1pte_abs := fromJust(l1pt[l1index]);
+        l1pte == ARM_L1PTE(page_paddr(l1pte_abs));
+    reads
+        mem; globals;
+    modifies
+        r7; r8; r9;
+    ensures
+        SmcProcedureInvariant(old(this), this);
+        err == old(isValidMappingTarget(d, addr, mapping));
+        err == KOM_ERR_SUCCESS ==>(
+            validAddrspacePage(d, old(addr)) && 
+            l1pte == mkL1Pte(d[d[old(addr)].entry.l1ptnr].entry.l1pt[
+                wordToMapping(old(mapping)).l1index], 0) );
+{
+    ghost var specResult := isValidMappingTarget(d,addr,mapping);
+    ghost var abs_mapping := wordToMapping(mapping);
+    ghost var l1p := d[addr].entry.l1ptnr;
+
+    assert abs_mapping.l1index == l1indexFromMapping(mapping) by { reveal wordToMapping; }
+    ghost var l1pte_abs := fromJust(d[l1p].entry.l1pt[abs_mapping.l1index]);
+    ghost var l2pt := d[l1pte_abs].entry.l2pt;
+    ghost var l2index := l2indexFromMapping(old(mapping));
+    lemma_ARM_L1PTE_Dual(page_paddr(l1pte_abs));
+    SUB(r9, l1pte, 1);
+    assert r9 == page_paddr(l1pte_abs);
+    ADD(r9, r9, const(KOM_DIRECTMAP_VBASE));
+    assert r9 == page_monvaddr(l1pte_abs);
+
+    assert mapping == old(mapping);
+    LSR(r8, mapping, 12);
+    AND(r8, r8, 0xff);
+    assert r8 == abs_mapping.l2index by {
+        reveal wordToMapping;
+        assert r8 == l2indexFromMapping(mapping);
+    }
+    lemma_LeftShift2(r8);
+    LSL(r8, r8, 2);
+    assert r8 == WordsToBytes(abs_mapping.l2index);
+    assert addrInPage(r9 + r8, l1pte_abs);
+    LDR(r7, r9, r8);
+    ghost var l2pte_abs := l2pt[l2index];
+    assert r7 == mkL2Pte(l2pte_abs) by {
+        assert pageDbCorresponds(this.m, d);
+        assert pageContentsCorresponds(l1pte_abs, d[l1pte_abs], extractPage(this.m, l1pte_abs));
+        assert pageDbL2PTableCorresponds(l1pte_abs, d[l1pte_abs].entry, extractPage(this.m, l1pte_abs)) by
+            { reveal pageContentsCorresponds; }
+        assert d[l1pte_abs].entry.l2pt[l2index] == l2pte_abs;
+        assert r7 == mkL2Pte(l2pte_abs) by
+            { reveal pageDbL2PTableCorresponds; }
+    }
+    AND(r7, r7, 3);
+    lemma_read_l2pte_zero(l2pte_abs);
+    if( r7 != 0 ) {
+        err := const(KOM_ERR_INVALID_MAPPING);
+    } else {
+        err := const(KOM_ERR_SUCCESS);
+    }
+}
+
 procedure{:timeLimitMultiplier 2} is_valid_mapping_target(
     operand addr:reg,
     operand mapping:reg,
@@ -170,7 +257,6 @@ procedure{:timeLimitMultiplier 2} is_valid_mapping_target(
             l1pte == mkL1Pte(d[d[old(addr)].entry.l1ptnr].entry.l1pt[
                 wordToMapping(old(mapping)).l1index], 0) );
 {
-assume false; // TODO: break this procedure up because it is timing out
     ghost var specResult := isValidMappingTarget(d,addr,mapping);
 
     page_monvaddr_impl(r7,addr,r8);
@@ -259,47 +345,7 @@ assume false; // TODO: break this procedure up because it is timing out
                     if( l1pte == 0 ) {
                         err := const(KOM_ERR_INVALID_MAPPING);
                     } else {
-                        ghost var l1pte_abs := fromJust(d[l1p].entry.l1pt[abs_mapping.l1index]);
-                        assert l1pte == ARM_L1PTE(page_paddr(l1pte_abs));
-                        ghost var l2pt := d[l1pte_abs].entry.l2pt;
-                        ghost var l2index := l2indexFromMapping(old(mapping));
-                        // ARM_L1PTE(page_paddr(l1pte_abs)) = BitwiseOr(page_paddr(l1pte_abs), 1)
-                        // 
-                        lemma_ARM_L1PTE_Dual(page_paddr(l1pte_abs));
-                        SUB(r9, l1pte, 1);
-                        assert r9 == page_paddr(l1pte_abs);
-                        ADD(r9, r9, const(KOM_DIRECTMAP_VBASE));
-                        assert r9 == page_monvaddr(l1pte_abs);
-
-                        assert mapping == old(mapping);
-                        LSR(r8, mapping, 12);
-                        AND(r8, r8, 0xff);
-                        assert r8 == abs_mapping.l2index by {
-                            reveal wordToMapping;
-                            assert r8 == l2indexFromMapping(mapping);
-                        }
-                        lemma_LeftShift2(r8);
-                        LSL(r8, r8, 2);
-                        assert r8 == WordsToBytes(abs_mapping.l2index);
-                        assert addrInPage(r9 + r8, l1pte_abs);
-                        LDR(r7, r9, r8);
-                        ghost var l2pte_abs := l2pt[l2index];
-                        assert r7 == mkL2Pte(l2pte_abs) by {
-                            assert pageDbCorresponds(this.m, d);
-                            assert pageContentsCorresponds(l1pte_abs, d[l1pte_abs], extractPage(this.m, l1pte_abs));
-                            assert pageDbL2PTableCorresponds(l1pte_abs, d[l1pte_abs].entry, extractPage(this.m, l1pte_abs)) by
-                                { reveal pageContentsCorresponds; }
-                            assert d[l1pte_abs].entry.l2pt[l2index] == l2pte_abs;
-                            assert r7 == mkL2Pte(l2pte_abs) by
-                                { reveal pageDbL2PTableCorresponds; }
-                        }
-                        AND(r7, r7, 3);
-                        lemma_read_l2pte_zero(l2pte_abs);
-                        if( r7 != 0 ) {
-                            err := const(KOM_ERR_INVALID_MAPPING);
-                        } else {
-                            err := const(KOM_ERR_SUCCESS);
-                        }
+                        is_valid_mapping_target_finish(addr, mapping, l1pte, err, d);
                     }
 
                 }
