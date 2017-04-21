@@ -346,7 +346,7 @@ lemma lemma_WsIncrement(old_mem:memmap, mem:memmap, trace1:SHA256Trace, trace2:S
 }
 
 // TODO: Need to import sha256_unique.i.dfy from Vale
-lemma lemma_SHA256IsAFunction(message:seq<byte>, hash:seq<word>)
+lemma {:axiom} lemma_SHA256IsAFunction(message:seq<byte>, hash:seq<word>)
     requires |message| <= MaxBytesForSHA();
     requires IsSHA256(message, hash);
     ensures  SHA256(message) == hash;
