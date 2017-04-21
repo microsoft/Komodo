@@ -41,15 +41,12 @@ lemma{:fuel AddrMemContentsSeq, 0} lemma_grab_user_words(
 {
     assert validPageNr(dispPg);     // OBSERVE: Trigger pageDbCorresponds
     assert pageContentsCorresponds(dispPg, pagedb[dispPg], extractPage(s.m, dispPg));
-//    reveal pageContentsCorresponds();
     assert pageDbDispatcherCorresponds(dispPg, pagedb[dispPg].entry, extractPage(s.m, dispPg)) by
         { reveal pageContentsCorresponds(); }
-//    reveal pageDbDispatcherCorresponds();
 
     var dp := page_monvaddr(dispPg) + DISP_CTXT_USER_WORDS;
     var page := extractPage(s.m, dispPg);
     WordAlignedAdd(page_monvaddr(dispPg), DISP_CTXT_USER_WORDS);
-assume ValidMemRange(dp, dp + SHA_CTXSIZE * WORDSIZE);
     forall i | 0 <= i < SHA_CTXSIZE
         ensures AddrMemContentsSeq(s.m.addresses, base, SHA_CTXSIZE)[i] == pagedb[dispPg].entry.verify_words[i];
     {
@@ -61,26 +58,6 @@ assume ValidMemRange(dp, dp + SHA_CTXSIZE * WORDSIZE);
             AddrMemContents(s.m.addresses, dp + i * WORDSIZE);
             page[dp + i*WORDSIZE]; 
             { reveal pageContentsCorresponds(); reveal pageDbDispatcherCorresponds(); }
-//{ assume false; }           // TODO: Remove me!
-//                { assert if i == 0 then 
-//                           page[dp + 0*WORDSIZE] == pagedb[dispPg].entry.verify_words[0]
-//                         else if i == 1 then 
-//                           page[dp + 1*WORDSIZE] == pagedb[dispPg].entry.verify_words[1]
-//                         else if i == 2 then 
-//                           page[dp + 2*WORDSIZE] == pagedb[dispPg].entry.verify_words[2]
-//                         else if i == 3 then 
-//                           page[dp + 3*WORDSIZE] == pagedb[dispPg].entry.verify_words[3]
-//                         else if i == 4 then 
-//                           page[dp + 4*WORDSIZE] == pagedb[dispPg].entry.verify_words[4]
-//                         else if i == 5 then 
-//                           page[dp + 5*WORDSIZE] == pagedb[dispPg].entry.verify_words[5]
-//                         else if i == 6 then 
-//                           page[dp + 6*WORDSIZE] == pagedb[dispPg].entry.verify_words[6]
-//                         else //if i == 7 then 
-//                           page[dp + 7*WORDSIZE] == pagedb[dispPg].entry.verify_words[7]
-//                         ;
-//                }
-
             pagedb[dispPg].entry.verify_words[i];
         }
     }
