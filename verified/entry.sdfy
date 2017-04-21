@@ -146,6 +146,111 @@ lemma lemma_stackunstack_banked_regs(s1:state, m1:memstate, s2:state, m2:memstat
 }
 #endverbatim
 
+procedure stack_banked_regs1(out operand tmp:reg)
+    requires/ensures
+        SaneState(this);
+    requires
+        @tmp != OSP;
+        sp + BANKED_FRAMESIZE <= StackBase();
+        ValidMem(sp + 12*WORDSIZE);
+        ValidMem(sp + 13*WORDSIZE);
+        ValidMem(sp + 14*WORDSIZE);
+        ValidMem(sp + 15*WORDSIZE);
+        ValidMem(sp + 16*WORDSIZE);
+        ValidMem(sp + 17*WORDSIZE);
+    reads
+        sp;
+        spsr_fiq; spsr_irq; spsr_svc; spsr_abt; spsr_und; spsr_mon;
+    modifies
+        mem;
+    ensures
+        MemPreservingExcept(old(this), this, sp + 12*WORDSIZE, sp + 18*WORDSIZE);
+        sp == old(sp);
+        MemContents(this.m, sp + 12*WORDSIZE) == spsr_fiq;
+        MemContents(this.m, sp + 13*WORDSIZE) == spsr_irq;
+        MemContents(this.m, sp + 14*WORDSIZE) == spsr_svc;
+        MemContents(this.m, sp + 15*WORDSIZE) == spsr_abt;
+        MemContents(this.m, sp + 16*WORDSIZE) == spsr_und;
+        MemContents(this.m, sp + 17*WORDSIZE) == spsr_mon;
+{
+    MRS_STR(spsr_fiq, sp, const(12*WORDSIZE), tmp);
+    MRS_STR(spsr_irq, sp, const(13*WORDSIZE), tmp);
+    MRS_STR(spsr_svc, sp, const(14*WORDSIZE), tmp);
+    MRS_STR(spsr_abt, sp, const(15*WORDSIZE), tmp);
+    MRS_STR(spsr_und, sp, const(16*WORDSIZE), tmp);
+    MRS_STR(spsr_mon, sp, const(17*WORDSIZE), tmp);
+}
+
+procedure stack_banked_regs2(out operand tmp:reg)
+    requires/ensures
+        SaneState(this);
+    requires
+        @tmp != OSP;
+        sp + BANKED_FRAMESIZE <= StackBase();
+        ValidMem(sp + 0*WORDSIZE);
+        ValidMem(sp + 1*WORDSIZE);
+        ValidMem(sp + 2*WORDSIZE);
+        ValidMem(sp + 3*WORDSIZE);
+        ValidMem(sp + 4*WORDSIZE);
+        ValidMem(sp + 5*WORDSIZE);
+    reads
+        sp;
+        sp_usr; sp_fiq; sp_irq; sp_svc; sp_abt; sp_und;
+    modifies
+        mem;
+    ensures
+        MemPreservingExcept(old(this), this, sp + 0*WORDSIZE, sp + 6*WORDSIZE);
+        sp == old(sp);
+        MemContents(this.m, sp + 0*WORDSIZE) == sp_usr;
+        MemContents(this.m, sp + 1*WORDSIZE) == sp_fiq;
+        MemContents(this.m, sp + 2*WORDSIZE) == sp_irq;
+        MemContents(this.m, sp + 3*WORDSIZE) == sp_svc;
+        MemContents(this.m, sp + 4*WORDSIZE) == sp_abt;
+        MemContents(this.m, sp + 5*WORDSIZE) == sp_und;
+{
+    MRS_STR(sp_usr, sp, const(0*WORDSIZE), tmp);
+    MRS_STR(sp_fiq, sp, const(1*WORDSIZE), tmp);
+    MRS_STR(sp_irq, sp, const(2*WORDSIZE), tmp);
+    MRS_STR(sp_svc, sp, const(3*WORDSIZE), tmp);
+    MRS_STR(sp_abt, sp, const(4*WORDSIZE), tmp);
+    MRS_STR(sp_und, sp, const(5*WORDSIZE), tmp);
+}
+
+procedure stack_banked_regs3(out operand tmp:reg)
+    requires/ensures
+        SaneState(this);
+    requires
+        @tmp != OSP;
+        sp + BANKED_FRAMESIZE <= StackBase();
+        ValidMem(sp + 6*WORDSIZE);
+        ValidMem(sp + 7*WORDSIZE);
+        ValidMem(sp + 8*WORDSIZE);
+        ValidMem(sp + 9*WORDSIZE);
+        ValidMem(sp + 10*WORDSIZE);
+        ValidMem(sp + 11*WORDSIZE);
+    reads
+        sp;
+        lr_usr; lr_fiq; lr_irq; lr_svc; lr_abt; lr_und;
+    modifies
+        mem;
+    ensures
+        MemPreservingExcept(old(this), this, sp + 6*WORDSIZE, sp + 12*WORDSIZE);
+        sp == old(sp);
+        MemContents(this.m, sp + 6*WORDSIZE) == lr_usr;
+        MemContents(this.m, sp + 7*WORDSIZE) == lr_fiq;
+        MemContents(this.m, sp + 8*WORDSIZE) == lr_irq;
+        MemContents(this.m, sp + 9*WORDSIZE) == lr_svc;
+        MemContents(this.m, sp + 10*WORDSIZE) == lr_abt;
+        MemContents(this.m, sp + 11*WORDSIZE) == lr_und;
+{
+    MRS_STR(lr_usr, sp, const(6*WORDSIZE), tmp);
+    MRS_STR(lr_fiq, sp, const(7*WORDSIZE), tmp);
+    MRS_STR(lr_irq, sp, const(8*WORDSIZE), tmp);
+    MRS_STR(lr_svc, sp, const(9*WORDSIZE), tmp);
+    MRS_STR(lr_abt, sp, const(10*WORDSIZE), tmp);
+    MRS_STR(lr_und, sp, const(11*WORDSIZE), tmp);
+}
+
 procedure stack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
           returns (ghost stack_bytes:int)
     requires/ensures
@@ -171,41 +276,10 @@ procedure stack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
     SUB(sp, sp, const(BANKED_FRAMESIZE));
     stack_bytes := stack_bytes_in - BANKED_FRAMESIZE;
 
-    ghost var start := this;
+    stack_banked_regs1(tmp);
+    stack_banked_regs2(tmp);
+    stack_banked_regs3(tmp);
 
-    MRS_STR(spsr_fiq, sp, const(12*WORDSIZE), tmp);
-    MRS_STR(spsr_irq, sp, const(13*WORDSIZE), tmp);
-    MRS_STR(spsr_svc, sp, const(14*WORDSIZE), tmp);
-    MRS_STR(spsr_abt, sp, const(15*WORDSIZE), tmp);
-    MRS_STR(spsr_und, sp, const(16*WORDSIZE), tmp);
-    MRS_STR(spsr_mon, sp, const(17*WORDSIZE), tmp);
-
-    ghost var midway := this;
-
-    assert wellformed_banked_regs_stackframe(this.m, sp) by {
-        reveal_wellformed_banked_regs_stackframe();
-        forall i:int :| 12 <= i <= 17 :: ValidPsrWord(MemContents(this.m, sp + i * WORDSIZE))
-            { reveal_ValidSRegState(); }
-    }
-    //assert RegPreservingExcept(start,this,set(@tmp));
-    assert MemPreservingExcept(old(this), this, sp + 12*WORDSIZE, sp + 18*WORDSIZE);
-
-    MRS_STR(sp_usr, sp, const(0*WORDSIZE), tmp);
-    MRS_STR(sp_fiq, sp, const(1*WORDSIZE), tmp);
-    MRS_STR(sp_irq, sp, const(2*WORDSIZE), tmp);
-    MRS_STR(sp_svc, sp, const(3*WORDSIZE), tmp);
-    MRS_STR(sp_abt, sp, const(4*WORDSIZE), tmp);
-    MRS_STR(sp_und, sp, const(5*WORDSIZE), tmp);
-
-    MRS_STR(lr_usr, sp, const(6*WORDSIZE), tmp);
-    MRS_STR(lr_fiq, sp, const(7*WORDSIZE), tmp);
-    MRS_STR(lr_irq, sp, const(8*WORDSIZE), tmp);
-    MRS_STR(lr_svc, sp, const(9*WORDSIZE), tmp);
-    MRS_STR(lr_abt, sp, const(10*WORDSIZE), tmp);
-    MRS_STR(lr_und, sp, const(11*WORDSIZE), tmp);
-
-    //assert RegPreservingExcept(midway, this, set(@tmp));
-    assert MemPreservingExcept(midway, this, sp, sp + 12*WORDSIZE);
     assert wellformed_banked_regs_stackframe(this.m, sp)
         by { reveal_wellformed_banked_regs_stackframe(); }
     assert banked_regs_stackframe(old(this), this.m, sp)
@@ -268,6 +342,110 @@ procedure LDR_MSR_spsr(
     MSR(reg, tmp);
 }
 
+procedure unstack_banked_regs1(out operand tmp:reg)
+    requires/ensures
+        SaneState(this);
+    requires
+        @tmp != OSP;
+        sp + BANKED_FRAMESIZE <= StackBase();
+        wellformed_banked_regs_stackframe(this.m, sp);
+        ValidMem(sp + 0*WORDSIZE);
+        ValidMem(sp + 1*WORDSIZE);
+        ValidMem(sp + 2*WORDSIZE);
+        ValidMem(sp + 3*WORDSIZE);
+        ValidMem(sp + 4*WORDSIZE);
+        ValidMem(sp + 5*WORDSIZE);
+    reads
+        sp;
+        mem;
+    modifies
+        sp_usr; sp_fiq; sp_irq; sp_svc; sp_abt; sp_und;
+    ensures
+        sp == old(sp);
+        MemContents(this.m, sp + 0*WORDSIZE) == sp_usr;
+        MemContents(this.m, sp + 1*WORDSIZE) == sp_fiq;
+        MemContents(this.m, sp + 2*WORDSIZE) == sp_irq;
+        MemContents(this.m, sp + 3*WORDSIZE) == sp_svc;
+        MemContents(this.m, sp + 4*WORDSIZE) == sp_abt;
+        MemContents(this.m, sp + 5*WORDSIZE) == sp_und;
+{
+    LDR_MSR_banked(sp_usr, sp, const(0*WORDSIZE), tmp);
+    LDR_MSR_banked(sp_fiq, sp, const(1*WORDSIZE), tmp);
+    LDR_MSR_banked(sp_irq, sp, const(2*WORDSIZE), tmp);
+    LDR_MSR_banked(sp_svc, sp, const(3*WORDSIZE), tmp);
+    LDR_MSR_banked(sp_abt, sp, const(4*WORDSIZE), tmp);
+    LDR_MSR_banked(sp_und, sp, const(5*WORDSIZE), tmp);
+}
+
+procedure unstack_banked_regs2(out operand tmp:reg)
+    requires/ensures
+        SaneState(this);
+    requires
+        @tmp != OSP;
+        sp + BANKED_FRAMESIZE <= StackBase();
+        wellformed_banked_regs_stackframe(this.m, sp);
+        ValidMem(sp + 6*WORDSIZE);
+        ValidMem(sp + 7*WORDSIZE);
+        ValidMem(sp + 8*WORDSIZE);
+        ValidMem(sp + 9*WORDSIZE);
+        ValidMem(sp + 10*WORDSIZE);
+        ValidMem(sp + 11*WORDSIZE);
+    reads
+        sp;
+        mem;
+    modifies
+        lr_usr; lr_fiq; lr_irq; lr_svc; lr_abt; lr_und;
+    ensures
+        sp == old(sp);
+        MemContents(this.m, sp + 6*WORDSIZE) == lr_usr;
+        MemContents(this.m, sp + 7*WORDSIZE) == lr_fiq;
+        MemContents(this.m, sp + 8*WORDSIZE) == lr_irq;
+        MemContents(this.m, sp + 9*WORDSIZE) == lr_svc;
+        MemContents(this.m, sp + 10*WORDSIZE) == lr_abt;
+        MemContents(this.m, sp + 11*WORDSIZE) == lr_und;
+{
+    LDR_MSR_banked(lr_usr, sp, const(6*WORDSIZE), tmp);
+    LDR_MSR_banked(lr_fiq, sp, const(7*WORDSIZE), tmp);
+    LDR_MSR_banked(lr_irq, sp, const(8*WORDSIZE), tmp);
+    LDR_MSR_banked(lr_svc, sp, const(9*WORDSIZE), tmp);
+    LDR_MSR_banked(lr_abt, sp, const(10*WORDSIZE), tmp);
+    LDR_MSR_banked(lr_und, sp, const(11*WORDSIZE), tmp);
+}
+
+procedure unstack_banked_regs3(out operand tmp:reg)
+    requires/ensures
+        SaneState(this);
+    requires
+        @tmp != OSP;
+        sp + BANKED_FRAMESIZE <= StackBase();
+        wellformed_banked_regs_stackframe(this.m, sp);
+        ValidMem(sp + 12*WORDSIZE);
+        ValidMem(sp + 13*WORDSIZE);
+        ValidMem(sp + 14*WORDSIZE);
+        ValidMem(sp + 15*WORDSIZE);
+        ValidMem(sp + 16*WORDSIZE);
+        ValidMem(sp + 17*WORDSIZE);
+    reads
+        sp;
+        mem;
+    modifies
+        spsr_fiq; spsr_irq; spsr_svc; spsr_abt; spsr_und; spsr_mon;
+    ensures
+        sp == old(sp);
+        MemContents(this.m, sp + 12*WORDSIZE) == spsr_fiq;
+        MemContents(this.m, sp + 13*WORDSIZE) == spsr_irq;
+        MemContents(this.m, sp + 14*WORDSIZE) == spsr_svc;
+        MemContents(this.m, sp + 15*WORDSIZE) == spsr_abt;
+        MemContents(this.m, sp + 16*WORDSIZE) == spsr_und;
+        MemContents(this.m, sp + 17*WORDSIZE) == spsr_mon;
+{
+    LDR_MSR_spsr(spsr_fiq, sp, const(12*WORDSIZE), tmp);
+    LDR_MSR_spsr(spsr_irq, sp, const(13*WORDSIZE), tmp);
+    LDR_MSR_spsr(spsr_svc, sp, const(14*WORDSIZE), tmp);
+    LDR_MSR_spsr(spsr_abt, sp, const(15*WORDSIZE), tmp);
+    LDR_MSR_spsr(spsr_und, sp, const(16*WORDSIZE), tmp);
+    LDR_MSR_spsr(spsr_mon, sp, const(17*WORDSIZE), tmp);
+}
 procedure unstack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
           returns (ghost stack_bytes:int)
     requires/ensures
@@ -293,28 +471,10 @@ procedure unstack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
         banked_regs_stackframe(this, old(this.m), old(sp));
         //CoreRegPreservingExcept(old(this), this, set(@tmp,@sp));
 {
-    LDR_MSR_banked(sp_usr, sp, const(0*WORDSIZE), tmp);
-    LDR_MSR_banked(sp_fiq, sp, const(1*WORDSIZE), tmp);
-    LDR_MSR_banked(sp_irq, sp, const(2*WORDSIZE), tmp);
-    LDR_MSR_banked(sp_svc, sp, const(3*WORDSIZE), tmp);
-    LDR_MSR_banked(sp_abt, sp, const(4*WORDSIZE), tmp);
-    LDR_MSR_banked(sp_und, sp, const(5*WORDSIZE), tmp);
-
-    LDR_MSR_banked(lr_usr, sp, const(6*WORDSIZE), tmp);
-    LDR_MSR_banked(lr_fiq, sp, const(7*WORDSIZE), tmp);
-    LDR_MSR_banked(lr_irq, sp, const(8*WORDSIZE), tmp);
-    LDR_MSR_banked(lr_svc, sp, const(9*WORDSIZE), tmp);
-    LDR_MSR_banked(lr_abt, sp, const(10*WORDSIZE), tmp);
-    LDR_MSR_banked(lr_und, sp, const(11*WORDSIZE), tmp);
-
+    unstack_banked_regs1(tmp);
+    unstack_banked_regs2(tmp);
     assert this.m == old(this.m);
-
-    LDR_MSR_spsr(spsr_fiq, sp, const(12*WORDSIZE), tmp);
-    LDR_MSR_spsr(spsr_irq, sp, const(13*WORDSIZE), tmp);
-    LDR_MSR_spsr(spsr_svc, sp, const(14*WORDSIZE), tmp);
-    LDR_MSR_spsr(spsr_abt, sp, const(15*WORDSIZE), tmp);
-    LDR_MSR_spsr(spsr_und, sp, const(16*WORDSIZE), tmp);
-    LDR_MSR_spsr(spsr_mon, sp, const(17*WORDSIZE), tmp);
+    unstack_banked_regs3(tmp);
 
     reveal_banked_regs_stackframe();
     assert sp == old(sp)
@@ -872,6 +1032,7 @@ procedure {:frame false} enclaveexecution_loop(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
+//assume false;
     ghost var loop0 := this;
     ghost var loop1 := this;
     ghost var retToEnclave := true;
@@ -1021,6 +1182,7 @@ procedure {:frame false} {:timeLimitMultiplier 2} smc_enterresume_success(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
+//assume false;
     pagedb := pagedb_in;
     ghost var dispPg := old(pagenr);
     assert finalDispatcher(pagedb, dispPg);
@@ -1113,6 +1275,7 @@ procedure {:frame false} kom_smc_enterresume(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
+//assume false; // succeeded with /proc
     r5 := callno;
     smc_enter_err(callno, disppg, pagedb_base, err, pagedb_in);
     if (err != const(KOM_ERR_SUCCESS) ) {
