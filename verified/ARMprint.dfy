@@ -254,7 +254,14 @@ method printIns(ins:ins)
         case MRS(dst, src) => printIns2Op("MRS", dst, src);
         case MSR(dst, src) => printIns2Op("MSR", dst, src);
         case MRC(dst, src) => printMcr("MRC", src, dst);
-        case MCR(dst,src) => printMcr("MCR", dst, src); printInsFixed("ISB", "");
+        case MCR(dst,src) => {
+            printMcr("MCR", dst, src);
+            if dst == OSReg(ttbr0) {
+                // if we just wrote to the page-table base, flush the TLB
+                printInsFixed("MCR", "p15, 0, r0, c8, c7, 0"); // TLBIALL
+            }
+            printInsFixed("ISB", "");
+        }
         case CPSID_IAF(mod) => printIns1Op("CPSID iaf,", mod);
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE =>
             printInsFixed("MOVS", "pc, lr");

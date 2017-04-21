@@ -486,7 +486,7 @@ procedure switch_addrspace(
     reads
         globals; mem;
     modifies
-        scr; ttbr0; tlbiasid; r10; r11;
+        scr; ttbr0; /* tlbiasid; */ r10; r11;
     ensures
         BankedRegsInvariant(old(this),this);
         this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, old(pagenr)));
@@ -554,8 +554,9 @@ procedure switch_addrspace(
     }
 
     // flush non-global TLB entries with ASID 0 (the only one we use)
-    MOV(r10, 0);
-    MCR(tlbiasid, r10);
+    // (this code is now in the printer, in lieu of a trusted spec)
+    //MOV(r10, 0);
+    //MCR(tlbiasid, r10);
 }
 
 procedure leave_secure_world(out operand tmp:reg)
@@ -603,7 +604,7 @@ procedure pre_entry_enter(
     reads
         mem;
     modifies
-        globals; scr; ttbr0; tlbiasid; spsr_mon;
+        globals; scr; ttbr0; /* tlbiasid; */ spsr_mon;
         r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr; lr_usr; sp_usr;
     ensures
         GlobalsPreservingExcept(old(this), this, set(CurDispatcherOp()));
@@ -771,7 +772,7 @@ procedure pre_entry_resume(
     reads
         mem;
     modifies
-        globals; scr; ttbr0; tlbiasid; spsr_mon;
+        globals; scr; ttbr0; /* tlbiasid; */ spsr_mon;
         r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr_usr; sp_usr; lr;
     ensures
         GlobalsPreservingExcept(old(this),this, set(CurDispatcherOp()));
@@ -1007,7 +1008,7 @@ procedure {:frame false} {:timeLimitMultiplier 2} smc_enterresume_success(
         sp_usr; sp_fiq; sp_irq; sp_svc; sp_abt; sp_und;
         lr_usr; lr_fiq; lr_irq; lr_svc; lr_abt; lr_und; sp;
     modifies
-        mem; globals; scr; ttbr0; tlbiasid; spsr_mon;
+        mem; globals; scr; ttbr0; /* tlbiasid; */ spsr_mon;
         r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr_usr; sp_usr; lr;
     ensures
         EnterResumeSmcProcedureInvariant(old(this), this);
@@ -1100,7 +1101,7 @@ procedure {:frame false} kom_smc_enterresume(
         sp_usr; sp_fiq; sp_irq; sp_svc; sp_abt; sp_und;
         lr_usr; lr_fiq; lr_irq; lr_svc; lr_abt; lr_und; sp;
     modifies
-        mem; globals; scr; ttbr0; tlbiasid; spsr_mon;
+        mem; globals; scr; ttbr0; /* tlbiasid; */ spsr_mon;
         r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr_usr; sp_usr; lr;
     ensures
         EnterResumeSmcProcedureInvariant(old(this), this);
