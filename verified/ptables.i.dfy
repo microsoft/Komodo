@@ -5,6 +5,16 @@ include "ptebits.i.dfy"
 
 // XXX: this is placed at the top of the file to work around timeout
 // instability when verifying it later in the file
+lemma lemma_PageAlignedAdd(x:int, y:int)
+    requires PageAligned(x) && PageAligned(y)
+    ensures PageAligned(x + y)
+{
+    // sigh. why do I need a lemma to prove this??
+    reveal_PageAligned();
+}
+
+// XXX: this is placed at the top of the file to work around timeout
+// instability when verifying it later in the file
 lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
     requires SaneMem(s)
     requires PhysBase() == KOM_DIRECTMAP_VBASE
@@ -187,14 +197,6 @@ lemma lemma_l2tablesmatch(s:memstate, p:PageNr, e:PageDbEntryTyped)
         assert ValidAbsL2PTable(s, subbase);
         assert |mkAbsL2PTable(e, i)| == |ExtractAbsL2PTable(s, subbase)| == ARM_L2PTES;
     }
-}
-
-lemma lemma_PageAlignedAdd(x:int, y:int)
-    requires PageAligned(x) && PageAligned(y)
-    ensures PageAligned(x + y)
-{
-    // sigh. why do I need a lemma to prove this??
-    reveal_PageAligned();
 }
 
 lemma lemma_WritablePages(d:PageDb, l1p:PageNr, pagebase:addr)
