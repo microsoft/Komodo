@@ -272,16 +272,17 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest_inner(
     spec_hmac := HMAC_SHA256(AttestKey(), WordSeqToBytes(spec_message));
 
 
+    ghost var STACKSIZE_LOCAL := STACKSIZE_ATTEST - STACKSIZE_HMAC;
+    ghost var size := STACKSIZE_ATTEST - STACKSIZE_HMAC - SHA_CTXSIZE;
     calc {
         old(sp) - (sp + SHA_CTXSIZE * WORDSIZE);
         old(sp) - (old(sp) - (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE  + SHA_CTXSIZE * WORDSIZE);
         (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE - SHA_CTXSIZE * WORDSIZE;
         (STACKSIZE_ATTEST - STACKSIZE_HMAC - SHA_CTXSIZE) * WORDSIZE;
+        size * WORDSIZE;
     }
 
     // Prove stack memory is valid
-    ghost var STACKSIZE_LOCAL := STACKSIZE_ATTEST - STACKSIZE_HMAC;
-    ghost var size := STACKSIZE_ATTEST - STACKSIZE_HMAC - SHA_CTXSIZE;
     calc {
         true;
         ValidMemRange(old(sp) - STACKSIZE_ATTEST * WORDSIZE, old(sp));
