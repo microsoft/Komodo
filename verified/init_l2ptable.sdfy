@@ -11,6 +11,16 @@ include "memset.sdfy"
 include "map_utils.sdfy"
 
 #verbatim
+lemma pa_implies_modl2p(p:int)
+    requires PageAligned(p)
+    ensures  p % ARM_L2PTABLE_BYTES == 0
+{
+    assert p % PAGESIZE == 0 by { reveal_PageAligned(); }
+    assert PAGESIZE == 0x1000;
+    assert ARM_L2PTABLE_BYTES == 0x400;
+    assert PAGESIZE % ARM_L2PTABLE_BYTES == 0;
+}
+
 lemma SameEntriesImpliesPageDbCorresponds(s:memstate, p: PageNr,
                                           db1: PageDb, db2: PageDb)
     requires SaneMem(s)
@@ -34,16 +44,6 @@ lemma lemma_SecurePage(pagebase:word)
     assert PageAligned(upper);
     assert lower <= pagebase < upper;
     assert pagebase + PAGESIZE <= upper;
-}
-
-lemma pa_implies_modl2p(p:int)
-    requires PageAligned(p)
-    ensures  p % ARM_L2PTABLE_BYTES == 0
-{
-    assert p % PAGESIZE == 0 by { reveal_PageAligned(); }
-    assert PAGESIZE == 0x1000;
-    assert ARM_L2PTABLE_BYTES == 0x400;
-    assert PAGESIZE % ARM_L2PTABLE_BYTES == 0;
 }
 #endverbatim
 
