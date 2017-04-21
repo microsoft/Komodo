@@ -42,7 +42,6 @@ procedure {:timeLimitMultiplier 2} compute_hmac(
         validDispatcherPage(pagedb, dispPg);
         finalDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
-        r0 == KOM_SVC_ATTEST;
 //        r10 == page_monvaddr(dispPg);
 //        r11 == page_monvaddr(pagedb[dispPg].addrspace);
 

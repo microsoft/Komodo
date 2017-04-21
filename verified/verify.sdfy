@@ -113,7 +113,7 @@ procedure {:timeLimitMultiplier 2} svc_returning_verify_inner(
 #verbatim
 
 predicate {:opaque} comparison_invariant(r1:word, index:nat, regs:seq<word>, contents:seq<word>)
-    requires 0 <= index < |regs|;
+    requires 0 <= index <= |regs|;
     requires |regs| == |contents|;
 {
     r1 == index <==> regs[..index] == contents[..index]
