@@ -63,7 +63,7 @@ lemma{:fuel AddrMemContentsSeq, 0} lemma_grab_user_words(
     }
 }
 
-lemma lemma_grab_measurement(
+lemma{:fuel AddrMemContentsSeq, 0} lemma_grab_measurement(
     pagedb: PageDb,
     dispPg: PageNr,
     base:word,
@@ -82,7 +82,30 @@ lemma lemma_grab_measurement(
           == AddrMemContentsSeq(s.m.addresses, page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT, SHA_CTXSIZE);
 
     ensures AddrMemContentsSeq(s.m.addresses, base, SHA_CTXSIZE) == pagedb[dispPg].entry.verify_measurement;
+{
+    assert validPageNr(dispPg);     // OBSERVE: Trigger pageDbCorresponds
+    assert pageContentsCorresponds(dispPg, pagedb[dispPg], extractPage(s.m, dispPg));
+    assert pageDbDispatcherCorresponds(dispPg, pagedb[dispPg].entry, extractPage(s.m, dispPg)) by
+        { reveal pageContentsCorresponds(); }
 
+    var dp := page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT;
+    var page := extractPage(s.m, dispPg);
+    WordAlignedAdd(page_monvaddr(dispPg), DISP_CTXT_VERIFY_MEASUREMENT);
+    forall i | 0 <= i < SHA_CTXSIZE
+        ensures AddrMemContentsSeq(s.m.addresses, base, SHA_CTXSIZE)[i] == pagedb[dispPg].entry.verify_measurement[i];
+    {
+        lemma_MulModZero(i, WORDSIZE); // Prove: assert WordAligned(i * WORDSIZE);
+        WordAlignedAdd(dp, i * WORDSIZE);
+        calc {
+            AddrMemContentsSeq(s.m.addresses, base, SHA_CTXSIZE)[i];
+            AddrMemContentsSeq(s.m.addresses, dp, SHA_CTXSIZE)[i];
+            AddrMemContents(s.m.addresses, dp + i * WORDSIZE);
+            page[dp + i*WORDSIZE]; 
+            { reveal pageContentsCorresponds(); reveal pageDbDispatcherCorresponds(); }
+            pagedb[dispPg].entry.verify_measurement[i];
+        }
+    }
+}
 #endverbatim
 
 procedure arrange_user_words_in_memory(
