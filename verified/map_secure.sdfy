@@ -17,6 +17,57 @@ lemma lemma_read_l2pte_zero(pte:L2PTE)
     assert WordAsBits(3) == 3 by { reveal WordAsBits(); }
     lemma_l2ptesmatch(pte);
 }
+
+lemma lemma_update_l2pte_helper1(s:state, s':state, as_page:word, mapping:word, ptr:word,
+    l2pte:word, l1pte:word, d:PageDb, d':PageDb, abs_mapping:Mapping,
+    l1pte_abs:PageNr, l2pte_abs:L2PTE)
+    requires SaneState(s)
+    requires SaneState(s')
+    requires validPageDb(d) && wellFormedPageDb(d)
+    requires abs_mapping.l1index == wordToMapping(mapping).l1index
+    requires abs_mapping.l2index == wordToMapping(mapping).l2index
+    requires pageDbCorresponds(s.m, d)
+    requires isAddrspace(d, as_page)
+    requires validMapping(abs_mapping,d,as_page)
+    requires d[as_page].entry.state.InitState?
+    requires validL2PTE(d, as_page, l2pte_abs)
+    requires l1pte_abs == fromJust(d[d[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index])
+    requires l2pte == mkL2Pte(l2pte_abs)
+    requires l1pte == mkL1Pte(d[d[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0)
+    requires d' == updateL2Pte(d, as_page, abs_mapping, l2pte_abs)
+    requires ptr == page_monvaddr(l1pte_abs) + WordsToBytes(abs_mapping.l2index)
+    requires va_get_mem(s') == AddrMemUpdate(va_get_mem(s), ptr, mkL2Pte(l2pte_abs))
+    requires s.m.globals == s'.m.globals
+    ensures pageDbL2PTableCorresponds(l1pte_abs, d'[l1pte_abs].entry, extractPage(s'.m, l1pte_abs))
+{
+    var p := l1pte_abs;
+
+    assert pageDbL2PTableCorresponds(p, d'[p].entry, extractPage(s'.m, p))
+    by {
+        var base := page_monvaddr(p);
+        var old_page := extractPage(s.m, p);
+        var mem_page := extractPage(s'.m, p);
+        assert pageDbL2PTableCorresponds(p, d[p].entry, old_page)
+        by {
+            reveal pageContentsCorresponds();
+            assert pageDbCorrespondsOnly(s.m, d, p);
+        }
+        forall i | 0 <= i < NR_L2PTES && i != abs_mapping.l2index
+            ensures mem_page[base+WordsToBytes(i)] == mkL2Pte(d'[p].entry.l2pt[i])
+        {
+            assert base + WordsToBytes(i) !=
+                page_monvaddr(l1pte_abs) + 
+                WordsToBytes(abs_mapping.l2index);
+            assert mem_page[base+WordsToBytes(i)] == old_page[base+WordsToBytes(i)];
+            assert mem_page[base+WordsToBytes(i)] == mkL2Pte(d'[p].entry.l2pt[i])
+                by { reveal pageDbL2PTableCorresponds(); }
+        }
+        var j := abs_mapping.l2index;
+        assert mem_page[base+WordsToBytes(j)] == mkL2Pte(d'[p].entry.l2pt[j]);
+        assert pageDbL2PTableCorresponds(p, d'[p].entry, extractPage(s'.m, p)) by
+            { reveal pageDbL2PTableCorresponds(); }
+    }
+}
 #endverbatim
 
 procedure update_l2pte(
@@ -94,31 +145,11 @@ procedure update_l2pte(
 
     assert pageDbCorrespondsOnly(this.m, d', l1pte_abs)
     by {
+        lemma_update_l2pte_helper1(old(this), this, as_page, mapping, tmp1 + tmp2,
+            l2pte, l1pte, d, d', abs_mapping, l1pte_abs, l2pte_abs);
         ghost var p := l1pte_abs;
         assert pageDbEntryCorresponds(d'[p], extractPageDbEntry(this.m, p))
             by { reveal pageDbEntryCorresponds; }
-        assert pageDbL2PTableCorresponds(p, d'[p].entry, extractPage(this.m, p))
-        by {
-            ghost var base := page_monvaddr(p);
-            ghost var old_page := extractPage(old(this.m), p);
-            ghost var mem_page := extractPage(this.m, p);
-            assert pageDbL2PTableCorresponds(p, d[p].entry, old_page)
-            by {
-                reveal pageContentsCorresponds;
-                assert pageDbCorrespondsOnly(old(this.m), d, p);
-            }
-            reveal pageDbL2PTableCorresponds;
-            forall i :| 0 <= i < NR_L2PTES && i != abs_mapping.l2index
-                :: mem_page[base+WordsToBytes(i)] == mkL2Pte(d'[p].entry.l2pt[i])
-            {
-                assert base + WordsToBytes(i) !=
-                    page_monvaddr(l1pte_abs) + 
-                    WordsToBytes(abs_mapping.l2index);
-                assert mem_page[base+WordsToBytes(i)] == old_page[base+WordsToBytes(i)];
-            }
-            ghost var j := abs_mapping.l2index;
-            assert mem_page[base+WordsToBytes(j)] == mkL2Pte(d'[p].entry.l2pt[j]);
-        }
         reveal pageContentsCorresponds;
         assert pageContentsCorresponds(p, d'[p], extractPage(this.m, p));
     }
