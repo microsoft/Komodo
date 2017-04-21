@@ -66,3 +66,4 @@ DAFNYFLAGS_ptebits.i = /proverOpt:OPTIMIZE_FOR_BV=true
 DAFNYFLAGS_psrbits.i = /proverOpt:OPTIMIZE_FOR_BV=true
 DAFNYFLAGS_entrybits.i = /proverOpt:OPTIMIZE_FOR_BV=true
 DAFNYFLAGS_ptables.i = /restartProver
+DAFNYFLAGS_attest_helpers = /restartProver
