@@ -226,8 +226,27 @@ procedure {:frame false} maybe_inject_interrupt(out operand tmp1:reg,
     }
 }
 
+#verbatim
+lemma revealWordAligned()
+    ensures forall i :: WordAligned(i) <==> i % 4 == 0
+{
+}
+lemma smc_handler_WordAligned(sp:word)
+    requires WordAligned(sp)
+    ensures WordAligned(sp+4);
+    ensures WordAligned(sp+8);
+    ensures WordAligned(sp+12);
+    ensures WordAligned(sp+16);
+    ensures WordAligned(sp+20);
+    ensures WordAligned(sp+24);
+    ensures WordAligned(sp+28);
+    ensures WordAligned(sp+32);
+    ensures WordAligned(sp+36);
+{
+}
+#endverbatim
 
-procedure {:frame false} smc_handler(
+procedure {:frame false}{:fuel WordAligned, 0}{:timeLimitMultiplier 2} smc_handler(
     ghost stack_bytes: int,
     ghost pagedb_in: PageDb) returns (ghost pagedb: PageDb)
     requires/ensures
@@ -245,6 +264,8 @@ procedure {:frame false} smc_handler(
         smchandler(old(this), pagedb_in, this, pagedb);
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
+// HACK: the :fuel option isn't checked into Vale yet, so just drop the body in as a verbatim block (Vale is outside the trusted computing base anyway)
+/*
 {
     ghost var stack_bytes_local;
     stack_bytes_local := stack_nonvolatiles(stack_bytes);
@@ -261,6 +282,7 @@ procedure {:frame false} smc_handler(
     ghost var s0 := this;
     pagedb := smc_handler_inner(r0, r1, r2, r3, r4, r12, r0, r1,
                                 stack_bytes_local, pagedb_in);
+    ghost var s1 := this;
 
     ghost if (old(r0 == KOM_SMC_ENTER || r0 == KOM_SMC_RESUME)) {
             lemma_ValidEntryPre(old(this), s0, pagedb_in, this, pagedb,
@@ -274,6 +296,16 @@ procedure {:frame false} smc_handler(
     unstack_lr();
     maybe_inject_interrupt(r2, r3, r4);
 
+//assume WordAligned(sp+4);
+//assume WordAligned(sp+8);
+//assume WordAligned(sp+12);
+//assume WordAligned(sp+16);
+//assume WordAligned(sp+20);
+//assume WordAligned(sp+24);
+//assume WordAligned(sp+28);
+//assume WordAligned(sp+32);
+//assume WordAligned(sp+36);
+    smc_handler_WordAligned(sp);
     stack_bytes_local := unstack_nonvolatiles_except_lr(stack_bytes_local);
     assert stack_bytes_local == stack_bytes;
     lemma_SameMemAndGlobalsPreservesPageDb(prePopThis, this, pagedb);
@@ -282,10 +314,11 @@ procedure {:frame false} smc_handler(
     MOV(r2, 0);
     MOV(r3, 0);
 
-    assert prePopErr == r0;
-    assert prePopRet == r1;
+//    assert prePopErr == r0;
+//    assert prePopRet == r1;
 
-    assert smchandlerInvariant(old(this), this);
+//assert smcNonvolatileRegInvariant(old(this), this);
+//    assert smchandlerInvariant(old(this), this);
 
     ghost if (old(r0 == KOM_SMC_ENTER || r0 == KOM_SMC_RESUME)) {
         assert validExceptionTransition(prePopThis, pagedb,
@@ -295,3 +328,103 @@ procedure {:frame false} smc_handler(
                              old(r1), old(r2), old(r3), old(r4));
     }
 }
+*/
+extern;
+#verbatim
+function method{:opaque} va_code_smc_handler():va_code
+{
+  va_Block(va_CCons(va_code_stack_nonvolatiles(),
+    va_CCons(va_code_LDRglobaladdr(va_op_operand_reg(R12), PageDb()),
+    va_CCons(va_code_smc_handler_inner(va_op_operand_reg(R0), va_op_operand_reg(R1),
+    va_op_operand_reg(R2), va_op_operand_reg(R3), va_op_operand_reg(R4), va_op_operand_reg(R12),
+    va_op_operand_reg(R0), va_op_operand_reg(R1)), va_CCons(va_code_unstack_lr(),
+    va_CCons(va_code_maybe_inject_interrupt(va_op_operand_reg(R2), va_op_operand_reg(R3),
+    va_op_operand_reg(R4)), va_CCons(va_code_unstack_nonvolatiles_except_lr(),
+    va_CCons(va_code_MOV(va_op_operand_reg(R2), va_const_operand(0)),
+    va_CCons(va_code_MOV(va_op_operand_reg(R3), va_const_operand(0)), va_CNil())))))))))
+}
+
+lemma{:fuel WordAligned, 0}{:timeLimitMultiplier 2} va_lemma_smc_handler(va_b0:va_codes,
+  va_s0:va_state, va_sN:va_state, stack_bytes:int, pagedb_in:PageDb)
+  returns (va_bM:va_codes, va_sM:va_state, pagedb:PageDb)
+  requires va_require(va_b0, va_code_smc_handler(), va_s0, va_sN)
+  ensures  va_ensure(va_b0, va_bM, va_s0, va_sM, va_sN)
+  requires SaneState(va_s0)
+  requires StackBytesRemaining(va_s0, stack_bytes)
+  ensures  SaneState(va_sM)
+  ensures  StackBytesRemaining(va_sM, stack_bytes)
+  requires stack_bytes >= BANKED_FRAMESIZE + EXCEPTION_STACK_BYTES + 40
+  requires validPageDb(pagedb_in)
+  requires pageDbCorresponds(va_s0.m, pagedb_in)
+  requires UsermodeContinuationInvariantDef()
+  requires UsermodeContinuationPreconditionDef()
+  requires va_s0.conf.scr.ns == NotSecure
+  requires ValidPsrWord(va_get_sreg(spsr(Monitor), va_s0)) && decode_psr(va_get_sreg(spsr(Monitor),
+    va_s0)).m != Monitor
+  ensures  smchandler(va_s0, pagedb_in, va_sM, pagedb)
+  ensures  validPageDb(pagedb)
+  ensures  pageDbCorresponds(va_sM.m, pagedb)
+{
+  reveal_va_code_smc_handler();
+  var va_old_s:va_state := va_s0;
+  ghost var va_ltmp1, va_cM:va_code, va_ltmp2 := va_lemma_block(va_b0, va_s0, va_sN);
+  va_sM := va_ltmp1;
+  va_bM := va_ltmp2;
+  var va_b1:va_codes := va_get_block(va_cM);
+  ghost var stack_bytes_local;
+  ghost var va_b3, va_s3, va_ltmp3 := va_lemma_stack_nonvolatiles(va_b1, va_s0, va_sM, stack_bytes);
+  stack_bytes_local := va_ltmp3;
+  lemma_SameMemAndGlobalsPreservesPageDb(va_old_s, va_s3, pagedb_in);
+  ghost var va_b6, va_s6 := va_lemma_LDRglobaladdr(va_b3, va_s3, va_sM, va_op_operand_reg(R12),
+    PageDb());
+  if (va_get_reg(R0, va_old_s) == KOM_SMC_MAP_SECURE && !(va_get_reg(R4, va_old_s) == 0 ||
+    !(physPageIsInsecureRam(va_get_reg(R4, va_old_s)))))
+  {
+    forall
+      ensures contentsOfPhysPage(va_old_s, va_get_reg(R4, va_old_s)) == contentsOfPhysPage(va_s6,
+        va_get_reg(R4, va_old_s))
+    {
+      assert InsecureMemInvariant(va_old_s, va_s6);  // line 277 column 18 of file .\.\verified\smc_handler.sdfy
+    }
+  }
+  ghost var s0 := va_s6;
+  ghost var va_b9, va_s9, va_ltmp4 := va_lemma_smc_handler_inner(va_b6, va_s6, va_sM,
+    va_op_operand_reg(R0), va_op_operand_reg(R1), va_op_operand_reg(R2), va_op_operand_reg(R3),
+    va_op_operand_reg(R4), va_op_operand_reg(R12), va_op_operand_reg(R0), va_op_operand_reg(R1),
+    stack_bytes_local, pagedb_in);
+  pagedb := va_ltmp4;
+  ghost var s1 := va_s9;
+  if (va_get_reg(R0, va_old_s) == KOM_SMC_ENTER || va_get_reg(R0, va_old_s) == KOM_SMC_RESUME)
+  {
+    lemma_ValidEntryPre(va_old_s, s0, pagedb_in, va_s9, pagedb, va_get_reg(R1, va_old_s),
+      va_get_reg(R2, va_old_s), va_get_reg(R3, va_old_s), va_get_reg(R4, va_old_s));
+  }
+  ghost var prePopErr := va_get_reg(R0, va_s9);
+  ghost var prePopRet := va_get_reg(R1, va_s9);
+  ghost var prePopThis := va_s9;
+  ghost var va_b16, va_s16 := va_lemma_unstack_lr(va_b9, va_s9, va_sM);
+  ghost var va_b17, va_s17 := va_lemma_maybe_inject_interrupt(va_b16, va_s16, va_sM,
+    va_op_operand_reg(R2), va_op_operand_reg(R3), va_op_operand_reg(R4));
+  smc_handler_WordAligned(va_get_osp(va_s17));
+  ghost var va_b19, va_s19, va_ltmp5 := va_lemma_unstack_nonvolatiles_except_lr(va_b17, va_s17,
+    va_sM, stack_bytes_local);
+  stack_bytes_local := va_ltmp5;
+  assert stack_bytes_local == stack_bytes;  // line 308 column 5 of file .\.\verified\smc_handler.sdfy
+  lemma_SameMemAndGlobalsPreservesPageDb(prePopThis, va_s19, pagedb);
+  ghost var va_b23, va_s23 := va_lemma_MOV(va_b19, va_s19, va_sM, va_op_operand_reg(R2),
+    va_const_operand(0));
+  ghost var va_b24, va_s24 := va_lemma_MOV(va_b23, va_s23, va_sM, va_op_operand_reg(R3),
+    va_const_operand(0));
+  if (va_get_reg(R0, va_old_s) == KOM_SMC_ENTER || va_get_reg(R0, va_old_s) == KOM_SMC_RESUME)
+  {
+    forall
+      ensures validExceptionTransition(prePopThis, pagedb, va_s24, pagedb, va_get_reg(R1, va_old_s))
+    {
+      reveal_validExceptionTransition();
+    }
+    lemma_ValidEntryPost(va_old_s, pagedb_in, prePopThis, pagedb, va_s24, va_get_reg(R1, va_old_s),
+      va_get_reg(R2, va_old_s), va_get_reg(R3, va_old_s), va_get_reg(R4, va_old_s));
+  }
+  va_sM := va_lemma_empty(va_s24, va_sM);
+}
+#endverbatim
