@@ -111,7 +111,34 @@ procedure {:timeLimitMultiplier 2} svc_returning_verify_inner(
     assert sp == old(sp);
 }
 
-procedure compare_mem_to_reg(operand reg:word, inline offset:byte, inline index:byte)
+#verbatim
+
+predicate {:opaque} comparison_invariant(r1:word, index:nat, regs:seq<word>, contents:seq<word>)
+    requires 0 <= index < |regs|;
+    requires |regs| == |contents|;
+{
+    r1 == index <==> regs[..index] == contents[..index]
+}
+
+lemma lemma_comparison_invariant_implies(r1:word, regs:seq<word>, contents:seq<word>)
+    requires |regs| == |contents|;
+    requires comparison_invariant(r1, |regs|, regs, contents);
+    ensures  r1 == |regs| <==> regs == contents;
+{
+    reveal_comparison_invariant();
+    assert SeqDrop(regs, |regs|) == regs;
+    assert SeqDrop(contents, |regs|) == contents;
+}
+
+
+#endverbatim
+
+procedure compare_mem_to_reg(
+        operand reg:word, 
+        inline offset:byte, 
+        inline index:byte,
+        ghost regs:seq(word),
+        ghost contents:seq(word))
     reads
         mem; sp;
     modifies 
@@ -124,24 +151,36 @@ procedure compare_mem_to_reg(operand reg:word, inline offset:byte, inline index:
         ValidMemRange(sp + offset, sp + offset + SHA_CTXSIZE * WORDSIZE);
         0 <= index < 8;
         0 <= r1 < 8;
+        SeqLength(regs) == 8;
+        SeqLength(contents) == 8;
+        regs[index] == reg;
+        contents[index] == AddrMemContents(mem, sp + offset + index * WORDSIZE);
+        comparison_invariant(r1, index, regs, contents);
+        //r1 == index <==> SeqDrop(regs, index) == SeqDrop(contents, index);
     ensures
-        ValidMem(sp + offset + index * WORDSIZE);
-        r1 == (if (AddrMemContents(mem, sp + offset + index * WORDSIZE) == reg) then old(r1) + 1 else old(r1));
+        comparison_invariant(r1, index + 1, regs, contents);
+        //r1 == index + 1 <==> SeqDrop(regs, index + 1) == SeqDrop(contents, index + 1);
+        r1 == old(r1) || r1 == old(r1) + 1;
+//        ValidMem(sp + offset + index * WORDSIZE);
+//        r1 == (if (AddrMemContents(mem, sp + offset + index * WORDSIZE) == reg) then old(r1) + 1 else old(r1));
+//        r1 == old(r1) <==> contents[index] != regs[index];
 {
     assert WordAligned(sp);
     WordAlignedAdd(sp, offset);
     WordAlignedAdd(sp + offset, index*WORDSIZE);
 
     LDR(r0, sp, const(offset + index * WORDSIZE));
+    assert r0 == contents[index];
     if (r0 == reg) {
         ADD(r1, r1, 1);
     }
+    reveal comparison_invariant;
 }
 
 procedure {:timeLimitMultiplier 2} compare_memory_to_regs(
         ghost contents:seq(word),
         inline offset:byte
-        )
+        ) returns (ghost regs:seq(word))
     reads
         mem; r1; r2; r3; r4; r5; r6; r7; r8; sp;
     modifies 
@@ -154,55 +193,37 @@ procedure {:timeLimitMultiplier 2} compare_memory_to_regs(
         SeqLength(contents) == 8;
         AddrMemContentsSeq(mem, sp + offset, SHA_CTXSIZE) == contents;
     ensures
-        r1 == (if (old(seq(r1, r2, r3, r4, r5, r6, r7, r8)) == contents) then 1 else 0);
+        r1 == (if (regs == contents) then 1 else 0);
+        regs == old(seq(r1, r2, r3, r4, r5, r6, r7, r8));
 {
+    regs := seq(r1, r2, r3, r4, r5, r6, r7, r8);
+
     assert WordAligned(sp);
     WordAlignedAdd(sp, offset);
 
     LDR(r0, sp, const(offset + 0 * WORDSIZE));
+    assert r0 == contents[0];
     if (r0 == r1) {
         MOV(r1, 1); 
     } else {
         MOV(r1, 0);
     }
+    assert comparison_invariant(r1, 1, regs, contents) by { reveal comparison_invariant; }
 
-    compare_mem_to_reg(r2, offset, 1);
-    compare_mem_to_reg(r3, offset, 2);
-    compare_mem_to_reg(r4, offset, 3);
-    compare_mem_to_reg(r5, offset, 4);
-    compare_mem_to_reg(r6, offset, 5);
-    compare_mem_to_reg(r7, offset, 6);
-    compare_mem_to_reg(r8, offset, 7);
+    compare_mem_to_reg(r2, offset, 1, regs, contents);
+    compare_mem_to_reg(r3, offset, 2, regs, contents);
+    compare_mem_to_reg(r4, offset, 3, regs, contents);
+    compare_mem_to_reg(r5, offset, 4, regs, contents);
+    compare_mem_to_reg(r6, offset, 5, regs, contents);
+    compare_mem_to_reg(r7, offset, 6, regs, contents);
+    compare_mem_to_reg(r8, offset, 7, regs, contents);
 
+    lemma_comparison_invariant_implies(r1, regs, contents);
     if (r1 == 8) {
-        assert old(r1) == AddrMemContents(mem, sp + offset + 0 * WORDSIZE) == contents[0];
-        assert old(r2) == AddrMemContents(mem, sp + offset + 1 * WORDSIZE) == contents[1];
-        assert old(r3) == AddrMemContents(mem, sp + offset + 2 * WORDSIZE) == contents[2];
-        assert old(r4) == AddrMemContents(mem, sp + offset + 3 * WORDSIZE) == contents[3];
-        assert old(r5) == AddrMemContents(mem, sp + offset + 4 * WORDSIZE) == contents[4];
-        assert old(r6) == AddrMemContents(mem, sp + offset + 5 * WORDSIZE) == contents[5];
-        assert old(r7) == AddrMemContents(mem, sp + offset + 6 * WORDSIZE) == contents[6];
-        assert old(r8) == AddrMemContents(mem, sp + offset + 7 * WORDSIZE) == contents[7];
+        assert regs == contents;
         MOV(r1, 1);
     } else {
-        assert old(r1) != AddrMemContents(mem, sp + offset + 0 * WORDSIZE) 
-            || old(r2) != AddrMemContents(mem, sp + offset + 1 * WORDSIZE) 
-            || old(r3) != AddrMemContents(mem, sp + offset + 2 * WORDSIZE) 
-            || old(r4) != AddrMemContents(mem, sp + offset + 3 * WORDSIZE) 
-            || old(r5) != AddrMemContents(mem, sp + offset + 4 * WORDSIZE) 
-            || old(r6) != AddrMemContents(mem, sp + offset + 5 * WORDSIZE) 
-            || old(r7) != AddrMemContents(mem, sp + offset + 6 * WORDSIZE) 
-            || old(r8) != AddrMemContents(mem, sp + offset + 7 * WORDSIZE) ;
-
-        assert AddrMemContents(mem, sp + offset + 0 * WORDSIZE) == contents[0];
-        assert AddrMemContents(mem, sp + offset + 1 * WORDSIZE) == contents[1];
-        assert AddrMemContents(mem, sp + offset + 2 * WORDSIZE) == contents[2];
-        assert AddrMemContents(mem, sp + offset + 3 * WORDSIZE) == contents[3];
-        assert AddrMemContents(mem, sp + offset + 4 * WORDSIZE) == contents[4];
-        assert AddrMemContents(mem, sp + offset + 5 * WORDSIZE) == contents[5];
-        assert AddrMemContents(mem, sp + offset + 6 * WORDSIZE) == contents[6];
-        assert AddrMemContents(mem, sp + offset + 7 * WORDSIZE) == contents[7];
-
+        assert regs != contents;
         MOV(r1, 0);
     }
 }
@@ -284,7 +305,8 @@ procedure svc_returning_verify(
     SUB(r0, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC + 10) * WORDSIZE));
     load_memory_into_regs(mac);
 
-    compare_memory_to_regs(mac, (0 - 1) * (STACKSIZE_ATTEST - STACKSIZE_HMAC + 10) * WORDSIZE);
+    ghost var dummy;
+    dummy := compare_memory_to_regs(mac, (0 - 1) * (STACKSIZE_ATTEST - STACKSIZE_HMAC + 10) * WORDSIZE);
     
     MOV(r0, const(encode_mode(User)));
     MSR(spsr_mon, r0);
