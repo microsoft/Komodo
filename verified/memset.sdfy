@@ -1,6 +1,13 @@
 include {:verbatim} "kom_common.i.dfy"
 include "ARMdecls.sdfy"
 
+#verbatim
+lemma WordAlignedSub(x1:int, x2:int, y:int)
+    requires WordAligned(x1) && WordAligned(x2) && x1 >= x2 && y == x1-x2
+    ensures WordAligned(y)
+    {}
+#endverbatim
+
 procedure {:timeLimitMultiplier 2} memcpy_bare(operand dst:addr, operand src:addr,
                                           inout operand size:reg, out operand tmp:reg)
     modifies
@@ -13,8 +20,6 @@ procedure {:timeLimitMultiplier 2} memcpy_bare(operand dst:addr, operand src:add
         ValidMemRange(dst, dst + size);
         ValidMemRange(src, src + size);
         dst + size <= src || src + size <= dst;
-        // no writing to insecure mem
-        dst >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || dst + size <= KOM_DIRECTMAP_VBASE;
     ensures
         MemPreservingExcept(old(this), this, old(dst), old(dst + size));
         forall a:addr :: old(dst) <= a < old(dst + size)
@@ -26,7 +31,7 @@ procedure {:timeLimitMultiplier 2} memcpy_bare(operand dst:addr, operand src:add
     while (size > 0)
         invariant
             SaneState(this);
-            GlobalsInvariant(old(this),this);
+            //GlobalsInvariant(old(this),this);
             WordAligned(size) && 0 <= size <= old(size);
             dst == old(dst) && src == old(src);
             MemPreservingExcept(old(this), this, dst + size, dst + old(size));
@@ -36,8 +41,9 @@ procedure {:timeLimitMultiplier 2} memcpy_bare(operand dst:addr, operand src:add
             size;
     {
         ghost var prevThis := this;
-        SUB(size, size, 4);
-        assert WordAligned(size);
+        ghost var prevSize := size;
+        SUB(size, size, const(WORDSIZE));
+        WordAlignedSub(prevSize, WORDSIZE, size);
         LDR(tmp, src, size);
         assert tmp == MemContents(old(this.m), src + size);
         STR(tmp, dst, size);
@@ -45,8 +51,8 @@ procedure {:timeLimitMultiplier 2} memcpy_bare(operand dst:addr, operand src:add
     }
 }
 
-procedure {:timeLimitMultiplier 2} memcpy(operand dst:addr, operand src:addr,
-                                          inout operand size:reg, out operand tmp:reg)
+procedure memcpy(operand dst:addr, operand src:addr,
+                 inout operand size:reg, out operand tmp:reg)
     modifies
         mem;
     requires/ensures
@@ -66,32 +72,7 @@ procedure {:timeLimitMultiplier 2} memcpy(operand dst:addr, operand src:addr,
         forall a:addr :: old(dst) <= a < old(dst + size)
             ==> MemContents(this.m, a) == old(MemContents(this.m, a - dst + src));
 {
-    assert @dst != @src && @dst != @size && @dst != @tmp && @src != @size
-        && @src != @tmp && @size != @tmp && @size != OSP && @tmp != OSP;
-
-    while (size > 0)
-        invariant
-            SaneState(this);
-            GlobalsInvariant(old(this),this);
-            SmcProcedureInvariant(old(this),this);
-            //RegPreservingExcept(old(this), this, set(@size, @tmp));
-            WordAligned(size) && 0 <= size <= old(size);
-            dst == old(dst) && src == old(src);
-            MemPreservingExcept(old(this), this, dst + size, dst + old(size));
-            forall a:addr :: dst + size <= a < dst + old(size)
-                ==> MemContents(this.m, a) == old(MemContents(this.m, a - dst + src));
-        decreases
-            size;
-    {
-        ghost var prevThis := this;
-        SUB(size, size, 4);
-        assert WordAligned(size);
-        WordAlignedAdd(dst, size);
-        LDR(tmp, src, size);
-        assert tmp == MemContents(old(this.m), src + size);
-        STR(tmp, dst, size);
-        assert MemContents(this.m, dst + size) == MemContents(old(this.m), src + size);
-    }
+    memcpy_bare(dst, src, size, tmp);
 }
 
 procedure memset(operand base:addr, operand val:word, inout operand size:reg)
