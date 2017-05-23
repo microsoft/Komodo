@@ -311,7 +311,7 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest_inner(
 }
 
 
-procedure svc_returning_attest(
+procedure {:timeLimitMultiplier 2} svc_returning_attest(
     ghost exstate: state,
     ghost stack_bytes: int,
     ghost pagedb: PageDb,

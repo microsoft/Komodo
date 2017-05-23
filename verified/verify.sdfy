@@ -1,7 +1,7 @@
 include "attest.sdfy"
 include "verify_input.sdfy"
 
-procedure {:timeLimitMultiplier 2} svc_returning_verify_inner(
+procedure {:timeLimitMultiplier 3} svc_returning_verify_inner(
     ghost exstate: state,
     ghost stack_bytes: int,
     ghost pagedb: PageDb,
@@ -109,6 +109,10 @@ procedure {:timeLimitMultiplier 2} svc_returning_verify_inner(
     assert isUInt32(old(sp));
     ADD(sp, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE));
     assert sp == old(sp);
+
+    assert pageDbCorresponds(this.m, pagedb) by {
+        lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
+    }
 }
 
 #verbatim
@@ -283,6 +287,9 @@ procedure {:frame false} {:timeLimitMultiplier 2} svc_returning_verify_inner'(
         pageDbCorresponds(this.m, pagedb);
         StackPreserving(old(this), this);
         NonStackMemPreserving(old(this), this);
+        BankedRegsInvariant(old(this), this);
+        SRegsInvariant(old(this), this);
+        GlobalsInvariant(old(this), this);
         r2 == old(r2);
         r3 == old(r3);
         r4 == old(r4);
@@ -411,6 +418,11 @@ procedure {:frame false} svc_returning_verify(
     ghost var mac;
     regs', mac := svc_returning_verify_inner'(exstate, stack_bytes, pagedb, dispPg);
 
+    assert old(lr) == lr;
+    assert OperandContents(this, OLR) == OperandContents(old(this), OLR);
+    assert old(lr_usr) == lr_usr;
+    assert old(sp_usr) == sp_usr;
+
     MOV(r0, const(encode_mode(User)));
     MSR(spsr_mon, r0);
 
@@ -422,10 +434,9 @@ procedure {:frame false} svc_returning_verify(
     MOV(r6, 0);
     MOV(r7, 0);
     MOV(r8, 0);
-    //assert old(lr) == lr;
-    //assert OperandContents(this, OLR) == OperandContents(old(this), OLR);
 
     assert pageDbCorresponds(this.m, pagedb) by {
+        assert globals == old(globals);
         lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
     }
 
