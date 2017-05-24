@@ -101,7 +101,7 @@ procedure {:frame false} switch_to_monitor(inline oldmode:mode)
     }
 }
 
-procedure fault_exit(
+procedure {:timeLimitMultiplier 2} fault_exit(
     inline ex: exception,
     ghost exstate: state,
     ghost pagedb_in: PageDb,
@@ -115,7 +115,8 @@ procedure fault_exit(
     requires
         ValidState(exstate);
         mode_of_state(exstate) != User && spsr_of_state(exstate).m == User;
-        exstate.conf.ex == ex && set(ExSVC, ExAbt, ExUnd) ?[ex];
+        exstate.conf.ex == ex;
+        ex == ExSVC || ex == ExAbt || ex == ExUnd;
         r1 == OperandContents(exstate, OReg(R1));
         //this.conf.scr.ns == Secure;
         validPageDb(pagedb_in);
@@ -149,9 +150,9 @@ procedure fault_exit(
     ghost var pg := extractPage(this.m, dispPg);
     ghost var oldpg := extractPage(old(this).m, dispPg);
     assert pageDbDispatcherCorresponds(dispPg, dispEntry, pg) by {
-        reveal pageDbDispatcherCorresponds;
         assert pageDbDispatcherCorresponds(dispPg, pagedb_in[dispPg].entry, oldpg)
             by { reveal pageContentsCorresponds; }
+        reveal pageDbDispatcherCorresponds; reveal pageDbDispatcherVerifyStateCorresponds;
         assert pg[page_monvaddr(dispPg) + DISPATCHER_ENTERED] == 0;
         assert forall a:addr :: addrInPage(a, dispPg)
             && a != page_monvaddr(dispPg) + DISPATCHER_ENTERED
@@ -163,12 +164,12 @@ procedure fault_exit(
     lemma_exceptionHandled_validPageDb(exstate, pagedb_in, dispPg);
 
     assert GlobalsInvariant(old(this), this);
+    assert validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg)
+        by { reveal validExceptionTransition; }
     assert pageDbCorrespondsOnly(this.m, pagedb, dispPg)
         by { reveal pageContentsCorresponds; reveal pageDbEntryCorresponds; }
     AllButOnePagePreserving(dispPg, old(this), this);
     assert pageDbCorresponds(this.m, pagedb);
-
-    reveal validExceptionTransition;
 }
 
 procedure svc_returning_default(
@@ -411,6 +412,10 @@ procedure {:frame false} svc_returning(
     ensures
         lr == old(lr);
         StackPreserving(old(this), this);
+        GlobalsInvariant(old(this), this);
+        BankedRegsInvariant(old(this), this);
+        //SRegsInvariant(old(this), this);
+        ttbr0 == old(ttbr0) && scr == old(scr);
         wellFormedPageDb(pagedb');
         pageDbCorresponds(this.m, pagedb');
         if old(r0) == KOM_SVC_ATTEST || old(r0) > KOM_SVC_VERIFY_STEP2 then
@@ -589,6 +594,57 @@ procedure save_disp_context_helper(operand base:reg, ghost dispPg:PageNr)
     MRS_STR(spsr_mon, base, const(DISP_CTXT_PSR), r1);
 }
 
+#verbatim
+lemma lemma_pageDbDispatcherVerifyStateCorresponds(p: PageNr,
+                                               e1:PageDbEntryTyped, pg1:memmap,
+                                               e2:PageDbEntryTyped, pg2:memmap)
+    requires memContainsPage(pg1, p) && memContainsPage(pg2, p)
+    requires wellFormedPageDbEntryTyped(e1) && e1.Dispatcher?
+    requires wellFormedPageDbEntryTyped(e2) && e2.Dispatcher?
+    requires e1.verify_words == e2.verify_words
+    requires e1.verify_measurement == e2.verify_measurement
+    requires pageDbDispatcherVerifyStateCorresponds(p, e1, pg1)
+    requires forall a | a in pg1 && a > page_monvaddr(p) + DISP_CTXT_PSR :: a in pg2 && pg1[a] == pg2[a]
+    ensures pageDbDispatcherVerifyStateCorresponds(p, e2, pg2)
+{
+    reveal pageDbDispatcherVerifyStateCorresponds();
+
+    var base := page_monvaddr(p);
+    forall i | 0 <= i <= 7
+        ensures pg2[base + DISP_CTXT_USER_WORDS + i*WORDSIZE] == e2.verify_words[i]
+    {
+        calc {
+            e2.verify_words[i];
+            e1.verify_words[i];
+            pg1[base + DISP_CTXT_USER_WORDS + i*WORDSIZE];
+            pg2[base + DISP_CTXT_USER_WORDS + i*WORDSIZE];
+        }
+    }
+    forall i | 0 <= i <= 7
+        ensures pg2[base + DISP_CTXT_VERIFY_MEASUREMENT + i*WORDSIZE] == e2.verify_measurement[i]
+    {
+        calc {
+            e2.verify_measurement[i];
+            e1.verify_measurement[i];
+            pg1[base + DISP_CTXT_VERIFY_MEASUREMENT + i*WORDSIZE];
+            pg2[base + DISP_CTXT_VERIFY_MEASUREMENT + i*WORDSIZE];
+        }
+    }
+}
+
+lemma lemma_pageDbEntryCorresponds_helper(e1:PageDbEntry, e2:PageDbEntry, ms1:memstate, ms2:memstate, p:PageNr)
+    requires wellFormedPageDbEntry(e1) && wellFormedPageDbEntry(e2)
+    requires SaneMem(ms1) && SaneMem(ms2)
+    requires pageDbEntryCorresponds(e1, extractPageDbEntry(ms1, p))
+    requires ms1.globals == ms2.globals
+    requires pageDbEntryTypeVal(e1) == pageDbEntryTypeVal(e2)
+    requires e1.PageDbEntryTyped? ==> e1.addrspace == e2.addrspace
+    ensures pageDbEntryCorresponds(e2, extractPageDbEntry(ms2, p))
+{
+    reveal pageDbEntryCorresponds();
+}
+#endverbatim
+
 procedure save_disp_context(inout operand base: reg,
                             ghost ex:exception, ghost exstate:state,
                             ghost dispPg:PageNr, ghost pagedb_in:PageDb)
@@ -626,6 +682,7 @@ procedure save_disp_context(inout operand base: reg,
     ghost var orig_disp := pagedb_in[dispPg].entry;
     ghost var orig_pg := extractPage(old(this.m), dispPg);
     assert orig_disp.entrypoint == orig_pg[base + DISPATCHER_ENTRYPOINT]
+        && pageDbDispatcherVerifyStateCorresponds(dispPg, orig_disp, orig_pg)
     by {
         assert pageDbDispatcherCorresponds(dispPg, orig_disp, orig_pg)
             by { reveal pageContentsCorresponds; }
@@ -639,7 +696,8 @@ procedure save_disp_context(inout operand base: reg,
     MOV(r1, 1);
     STR(r1, base, const(DISPATCHER_ENTERED));
 
-    assert MemPreservingExcept(old(this), this, old(base), old(base) + DISP_SIZE);
+    assert MemPreservingExcept(old(this), this, old(base),
+                               old(base) + DISP_CTXT_PSR + WORDSIZE);
 
     pagedb := exPageDb(exceptionHandled(exstate, pagedb_in, dispPg));
     lemma_exceptionHandled_validPageDb(exstate, pagedb_in, dispPg);
@@ -649,31 +707,65 @@ procedure save_disp_context(inout operand base: reg,
     assert pageDbDispatcherCorresponds(dispPg, disp, pg) by {
         ghost var ctxt := disp.ctxt;
         ghost var pgbase := page_monvaddr(dispPg);
-        assert ctxt == DispatcherContext(user_regs(exstate.regs), old(lr),
-                                         old(spsr_mon));
-        /*assert orig_disp.entrypoint == disp.entrypoint
-            == pg[pgbase + DISPATCHER_ENTRYPOINT];
-        assert pg[pgbase + DISP_CTXT_PC] == old(lr)
-            == TruncateWord(OperandContents(exstate, OLR) - 4);
-        // oh for a calc statement...
-        assert pg[pgbase + DISP_CTXT_PSR] == old(spsr_mon)
-            == exstate.sregs[spsr(mode_of_state(exstate))];
-        assert pg[pgbase + DISP_CTXT_R0] == gr0 == ctxt.regs[R0];
-        assert pg[pgbase + DISP_CTXT_LR] == old(lr_usr) == ctxt.regs[LR(User)];
-        assert pg[pgbase + DISP_CTXT_SP] == old(sp_usr) == ctxt.regs[SP(User)];
-        assert forall r :: USER_REGS() ?[r] && r != R0
-            ==> va_get_reg(r, exstate) == va_get_reg(r, old(this)) == ctxt.regs[r];*/
+        assert pageDbDispatcherContextCorresponds(dispPg, ctxt, pg)
+        by {
+            assert ctxt == DispatcherContext(user_regs(exstate.regs), old(lr),
+                                             old(spsr_mon));
+            reveal pageDbDispatcherContextCorresponds;
+            calc {
+                pg[pgbase + DISP_CTXT_PC];
+                old(lr);
+                TruncateWord(OperandContents(exstate, OLR) - 4);
+            }
+            calc {
+                pg[pgbase + DISP_CTXT_PSR];
+                old(spsr_mon);
+                exstate.sregs[spsr(mode_of_state(exstate))];
+            }
+            calc {
+                pg[pgbase + DISP_CTXT_R0];
+                gr0;
+                ctxt.regs[R0];
+            }
+            calc {
+                pg[pgbase + DISP_CTXT_LR];
+                old(lr_usr);
+                ctxt.regs[LR(User)];
+            }
+            calc {
+                pg[pgbase + DISP_CTXT_SP];
+                old(sp_usr);
+                ctxt.regs[SP(User)];
+            }
+            forall r :| USER_REGS() ?[r] && r != R0
+                :: va_get_reg(r, exstate) == ctxt.regs[r]
+            {
+                calc {
+                     va_get_reg(r, exstate);
+                     va_get_reg(r, old(this));
+                     ctxt.regs[r];
+                }
+            }
+        }
+
+        lemma_pageDbDispatcherVerifyStateCorresponds(dispPg, orig_disp, orig_pg, disp, pg);
         reveal pageDbDispatcherCorresponds;
+
+        calc {
+            disp.entrypoint;
+            orig_disp.entrypoint;
+            orig_pg[base + DISPATCHER_ENTRYPOINT];
+            pg[pgbase + DISPATCHER_ENTRYPOINT];
+        }
     }
+
+    assert {:split_here} true;
 
     assert pageDbCorresponds(this.m, pagedb) by {
         assert pageDbCorrespondsOnly(this.m, pagedb, dispPg) by {
-            assert pageDbEntryCorresponds(pagedb[dispPg],
-                                          extractPageDbEntry(this.m, dispPg))
-                by { assert GlobalsInvariant(old(this), this);
-                     reveal pageDbEntryCorresponds; }
+            lemma_pageDbEntryCorresponds_helper(pagedb_in[dispPg], pagedb[dispPg], old(this).m, this.m, dispPg);
             assert pageContentsCorresponds(dispPg, pagedb[dispPg], pg)
-                by { reveal pageContentsCorresponds; }
+                by { reveal pageContentsCorresponds; assert pageDbDispatcherCorresponds(dispPg, disp, pg); }
         }
         AllButOnePagePreserving(dispPg, old(this), this);
     }

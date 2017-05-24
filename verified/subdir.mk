@@ -1,4 +1,4 @@
-DAFNYTIMELIMIT ?= 60
+DAFNYTIMELIMIT ?= 90
 VALEDIRECT ?= 1
 DAFNYFLAGS = /trace /errorTrace:0 /timeLimit:$(DAFNYTIMELIMIT) \
     /ironDafny /allocated:1 /induction:1 \

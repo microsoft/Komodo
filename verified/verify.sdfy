@@ -387,6 +387,9 @@ procedure {:frame false} svc_returning_verify(
         pageDbCorresponds(this.m, pagedb);
         StackPreserving(old(this), this);
         NonStackMemPreserving(old(this), this);
+        BankedRegsInvariant(old(this), this);
+        ttbr0 == old(ttbr0) && scr == old(scr);
+        GlobalsInvariant(old(this), this);
         let tuple := svcHandled(exstate, pagedb, dispPg) in
         let retRegs := firstOf2(tuple) in
         let handled_pagedb := secondOf2(tuple) in

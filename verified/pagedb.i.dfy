@@ -182,33 +182,40 @@ predicate {:opaque} pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, pag
 
 function  to_i(b:bool):int { if(b) then 1 else 0 }
 
-predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
+predicate {:opaque} pageDbDispatcherContextCorresponds(p:PageNr,
+                                          ctxt:DispatcherContext, page:memmap)
+    requires memContainsPage(page, p)
+    requires wellformedDispatcherContext(ctxt)
+{
+    var base := page_monvaddr(p);
+    assert base in page;
+      page[base + DISP_CTXT_PC] == ctxt.pc
+    && page[base + DISP_CTXT_PSR] == ctxt.cpsr
+    && page[base + DISP_CTXT_LR]  == ctxt.regs[LR(User)]
+    && page[base + DISP_CTXT_SP]  == ctxt.regs[SP(User)]
+    && page[base + DISP_CTXT_R0]  == ctxt.regs[R0]
+    && page[base + DISP_CTXT_R1]  == ctxt.regs[R1]
+    && page[base + DISP_CTXT_R2]  == ctxt.regs[R2]
+    && page[base + DISP_CTXT_R3]  == ctxt.regs[R3]
+    && page[base + DISP_CTXT_R4]  == ctxt.regs[R4]
+    && page[base + DISP_CTXT_R5]  == ctxt.regs[R5]
+    && page[base + DISP_CTXT_R6]  == ctxt.regs[R6]
+    && page[base + DISP_CTXT_R7]  == ctxt.regs[R7]
+    && page[base + DISP_CTXT_R8]  == ctxt.regs[R8]
+    && page[base + DISP_CTXT_R9]  == ctxt.regs[R9]
+    && page[base + DISP_CTXT_R10] == ctxt.regs[R10]
+    && page[base + DISP_CTXT_R11] == ctxt.regs[R11]
+    && page[base + DISP_CTXT_R12] == ctxt.regs[R12]
+}
+
+predicate {:opaque} pageDbDispatcherVerifyStateCorresponds(p:PageNr,
+                                        e:PageDbEntryTyped, page:memmap)
     requires memContainsPage(page, p)
     requires wellFormedPageDbEntryTyped(e) && e.Dispatcher?
 {
     var base := page_monvaddr(p);
     assert base in page;
-    assert wellformedDispatcherContext(e.ctxt);
-    page[base + DISPATCHER_ENTERED] == to_i(e.entered)
-    && page[base + DISPATCHER_ENTRYPOINT] == e.entrypoint
-    && (e.entered ==> page[base + DISP_CTXT_PC] == e.ctxt.pc
-    &&  page[base + DISP_CTXT_PSR] == e.ctxt.cpsr
-    &&  page[base + DISP_CTXT_LR]  == e.ctxt.regs[LR(User)]
-    &&  page[base + DISP_CTXT_SP]  == e.ctxt.regs[SP(User)]
-    &&  page[base + DISP_CTXT_R0]  == e.ctxt.regs[R0]
-    &&  page[base + DISP_CTXT_R1]  == e.ctxt.regs[R1]
-    &&  page[base + DISP_CTXT_R2]  == e.ctxt.regs[R2]
-    &&  page[base + DISP_CTXT_R3]  == e.ctxt.regs[R3]
-    &&  page[base + DISP_CTXT_R4]  == e.ctxt.regs[R4]
-    &&  page[base + DISP_CTXT_R5]  == e.ctxt.regs[R5]
-    &&  page[base + DISP_CTXT_R6]  == e.ctxt.regs[R6]
-    &&  page[base + DISP_CTXT_R7]  == e.ctxt.regs[R7]
-    &&  page[base + DISP_CTXT_R8]  == e.ctxt.regs[R8]
-    &&  page[base + DISP_CTXT_R9]  == e.ctxt.regs[R9]
-    &&  page[base + DISP_CTXT_R10] == e.ctxt.regs[R10]
-    &&  page[base + DISP_CTXT_R11] == e.ctxt.regs[R11]
-    &&  page[base + DISP_CTXT_R12] == e.ctxt.regs[R12])
-    && page[base + DISP_CTXT_USER_WORDS + 0*WORDSIZE] == e.verify_words[0]
+      page[base + DISP_CTXT_USER_WORDS + 0*WORDSIZE] == e.verify_words[0]
     && page[base + DISP_CTXT_USER_WORDS + 1*WORDSIZE] == e.verify_words[1]
     && page[base + DISP_CTXT_USER_WORDS + 2*WORDSIZE] == e.verify_words[2]
     && page[base + DISP_CTXT_USER_WORDS + 3*WORDSIZE] == e.verify_words[3]
@@ -224,6 +231,18 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
     && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 5*WORDSIZE] == e.verify_measurement[5]
     && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 6*WORDSIZE] == e.verify_measurement[6]
     && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 7*WORDSIZE] == e.verify_measurement[7]
+}
+
+predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
+    requires memContainsPage(page, p)
+    requires wellFormedPageDbEntryTyped(e) && e.Dispatcher?
+{
+    var base := page_monvaddr(p);
+    assert base in page;
+    page[base + DISPATCHER_ENTERED] == to_i(e.entered)
+    && page[base + DISPATCHER_ENTRYPOINT] == e.entrypoint
+    && (e.entered ==> pageDbDispatcherContextCorresponds(p, e.ctxt, page))
+    && pageDbDispatcherVerifyStateCorresponds(p, e, page)
 }
 
 function ARM_L1PTE(paddr: word): word

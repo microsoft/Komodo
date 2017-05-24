@@ -179,17 +179,14 @@ lemma lemma_svc_returning_verify_step0_helper(s:state, pagedb:PageDb, dispPg:Pag
     requires |user_words| == 8
     requires pagedb' == pagedb[dispPg := pagedb[dispPg].(entry := pagedb[dispPg].entry.(verify_words := user_words))]
     requires disp == pagedb'[dispPg].entry
-    requires ValidMemState(m2)
+    requires ValidMemState(m1) && ValidMemState(m2)
     requires pg == extractPage(m2, dispPg)
     requires
-        forall i :: i in m1.addresses <==> i in m2.addresses
-    requires
-        forall i :: !(0 <= i - (page_monvaddr(dispPg) + DISP_CTXT_USER_WORDS ) <= 7 * WORDSIZE) ==>
-            i in m1.addresses ==> m1.addresses[i] == m2.addresses[i]
+        forall i :: ValidMem(i) && !(0 <= i - (page_monvaddr(dispPg) + DISP_CTXT_USER_WORDS) <= 7 * WORDSIZE) ==> MemContents(m1, i) == MemContents(m2, i)
     requires
         forall i :: 0 <= i < 8 ==>
             var a := page_monvaddr(dispPg) + DISP_CTXT_USER_WORDS + i * WORDSIZE;
-            a in m2.addresses && m2.addresses[a] == user_words[i]
+            MemContents(m2, a) == user_words[i]
     ensures pageDbDispatcherCorresponds(dispPg, disp, pg)
     ensures validDispatcherPage(pagedb', dispPg)
 {
@@ -197,6 +194,9 @@ lemma lemma_svc_returning_verify_step0_helper(s:state, pagedb:PageDb, dispPg:Pag
     {
         reveal pageContentsCorresponds();
         reveal pageDbDispatcherCorresponds();
+        reveal pageDbDispatcherContextCorresponds();
+        reveal pageDbDispatcherVerifyStateCorresponds();
+
     }
 
     assert validDispatcherPage(pagedb', dispPg) by
@@ -238,6 +238,8 @@ lemma lemma_svc_returning_verify_step1_helper(s:state, pagedb:PageDb, dispPg:Pag
     {
         reveal pageContentsCorresponds();
         reveal pageDbDispatcherCorresponds();
+        reveal pageDbDispatcherContextCorresponds();
+        reveal pageDbDispatcherVerifyStateCorresponds();
     }
 
     assert validDispatcherPage(pagedb', dispPg) by

@@ -121,6 +121,8 @@ procedure{:timeLimitMultiplier 3} init_dispatcher_page(
     assert pageDbDispatcherCorresponds(old(disp_page), e, pg)
     by {
         reveal pageDbDispatcherCorresponds;
+        reveal pageDbDispatcherContextCorresponds;
+        reveal pageDbDispatcherVerifyStateCorresponds;
         assert pg[dispva + DISPATCHER_ENTRYPOINT] == old(entrypoint);
         assert pg[dispva + DISPATCHER_ENTERED] == to_i(false);
     }

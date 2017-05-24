@@ -57,7 +57,7 @@ lemma{:fuel AddrMemContentsSeq, 0} lemma_grab_user_words(
             AddrMemContentsSeq(s.m.addresses, dp, SHA_CTXSIZE)[i];
             AddrMemContents(s.m.addresses, dp + i * WORDSIZE);
             page[dp + i*WORDSIZE]; 
-            { reveal pageContentsCorresponds(); reveal pageDbDispatcherCorresponds(); }
+            { reveal pageContentsCorresponds(); reveal pageDbDispatcherCorresponds(); reveal pageDbDispatcherVerifyStateCorresponds(); }
             pagedb[dispPg].entry.verify_words[i];
         }
     }
@@ -101,7 +101,7 @@ lemma{:fuel AddrMemContentsSeq, 0} lemma_grab_measurement(
             AddrMemContentsSeq(s.m.addresses, dp, SHA_CTXSIZE)[i];
             AddrMemContents(s.m.addresses, dp + i * WORDSIZE);
             page[dp + i*WORDSIZE]; 
-            { reveal pageContentsCorresponds(); reveal pageDbDispatcherCorresponds(); }
+            { reveal pageContentsCorresponds(); reveal pageDbDispatcherCorresponds(); reveal pageDbDispatcherVerifyStateCorresponds(); }
             pagedb[dispPg].entry.verify_measurement[i];
         }
     }

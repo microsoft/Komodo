@@ -908,10 +908,11 @@ procedure pre_entry_resume_context(ghost dispPg:PageNr, ghost pagedb:PageDb)
     by {
         assert validDispatcherPage(pagedb,dispPg);
         ghost var pg := extractPage(this.m,dispPg);
-        reveal_pageDbDispatcherCorresponds();
+        reveal pageDbDispatcherCorresponds;
+        reveal pageDbDispatcherContextCorresponds;
         assert pageDbDispatcherCorresponds(dispPg, pagedb[dispPg].entry, pg) by {
             assert pageDbCorrespondsOnly(this.m,pagedb,dispPg);
-            reveal_pageContentsCorresponds();
+            reveal pageContentsCorresponds;
             assert pageContentsCorresponds(dispPg,pagedb[dispPg], pg);
         }
     }
@@ -973,10 +974,11 @@ procedure pre_entry_resume(
     assert r0 == pagedb[dispPg].entry.ctxt.cpsr by
     {
         assert pageDbCorrespondsOnly(this.m,pagedb,dispPg);
-        reveal_pageContentsCorresponds();
+        reveal pageContentsCorresponds;
         assert pageContentsCorresponds(dispPg,pagedb[dispPg],
             extractPage(this.m,dispPg));
-        reveal_pageDbDispatcherCorresponds();
+        reveal pageDbDispatcherCorresponds;
+        reveal pageDbDispatcherContextCorresponds;
     }
 
     assert decode_mode'(psr_mask_mode(pagedb[dispPg].entry.ctxt.cpsr)) == Just(User);
@@ -1032,7 +1034,6 @@ procedure {:frame false} enclaveexecution_loop(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
-//assume false;
     ghost var loop0 := this;
     ghost var loop1 := this;
     ghost var retToEnclave := true;
