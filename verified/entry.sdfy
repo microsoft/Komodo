@@ -1024,15 +1024,19 @@ lemma lemma_sp_bit_helper(x:word, y:word)
     assert y != x by { reveal_BitAnd(); reveal_BitMod(); }
     lemma_BitOrOneIsLikePlus(x);
 }
+
+lemma lemma_obvious_sp(s:state)
+    requires ValidState(s)
+    ensures va_get_osp(s) == OperandContents(s, OSP)
+{}
+
+lemma lemma_aligned_sp(s:state)
+    requires SaneState(s)
+    ensures OpaqueEven(va_get_osp(s))
+{ reveal OpaqueEven(); }
 #endverbatim
 
-procedure establish_OpaqueEven_sp()
-    requires SaneState(this);
-    reads sp;
-    ensures this == old(this) && OpaqueEven(sp);
-{ reveal OpaqueEven; }
-
-procedure {:frame false} {:timeLimitMultiplier 2} enclaveexecution_loop(
+procedure {:frame false}{:fuel WordAligned, 0}{:timeLimitMultiplier 2} enclaveexecution_loop(
         ghost pagedb_in: PageDb,
         ghost dispPg: PageNr)
     returns (ghost pagedb:PageDb, ghost steps:nat)
@@ -1064,8 +1068,10 @@ procedure {:frame false} {:timeLimitMultiplier 2} enclaveexecution_loop(
     pagedb := pagedb_in;
     ghost var states := seq(tuple(this, pagedb));
 
-    establish_OpaqueEven_sp();
+    lemma_obvious_sp(this);
+    lemma_aligned_sp(this);
     lemma_sp_alignment(old(sp));
+    ghost var loop1_sp := sp;
 
     while (tst_eq(sp, 1)) // test bottom bit of SP for this kludge
         invariant
@@ -1084,22 +1090,31 @@ procedure {:frame false} {:timeLimitMultiplier 2} enclaveexecution_loop(
             if retToEnclave then states[steps] == tuple(loop1, pagedb)
                 else validEnclaveExecution(old(this), pagedb_in, loop1, pagedb, dispPg, steps);
             equivStates(loop1, this);
+            sp == loop1_sp == OperandContents(loop1, OSP);
         decreases *;
     {
         ghost var loop_pagedb := pagedb;
         loop0 := this;
 
         // SP & 1 == 0 => go to usermode
-        assume BitwiseAnd(sp, 1) == 0; // from tst_eq
+        assume evalOBool(loop1, OCmp(OTstEq, OSP, OConst(1))); // from tst_eq
+        assert BitwiseAnd(loop1_sp, 1) == 0;
         assert sp == old(sp) && retToEnclave by { lemma_sp_bit_helper1(old(sp), sp); }
+
+        calc {
+            OperandContents(loop0, OSP);
+            { lemma_obvious_sp(this); }
+            sp;
+            loop1_sp;
+            old(sp);
+        }
 
         assert KomUserEntryPrecondition(takestep(this), pagedb, dispPg);
         lemma_Establish_UsermodeContinuationPrecondition(takestep(this), pagedb, dispPg);
         MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
 
         pagedb, retToEnclave := lemma_evalMOVSPCLRUC(loop0, loop_pagedb, this, dispPg);
-        assume OperandContents(loop0, OSP) == old(sp);
-        assume OperandContents(this, OSP) == sp;
+        lemma_obvious_sp(this);
         lemma_validEnclaveExecutionStep_PageDb(loop0, loop_pagedb, this, pagedb,
                                                dispPg, retToEnclave);
 
@@ -1119,6 +1134,7 @@ procedure {:frame false} {:timeLimitMultiplier 2} enclaveexecution_loop(
             assert validEnclaveExecution(old(this), pagedb_in, this, pagedb, dispPg, steps);
         }
         loop1 := this;
+        loop1_sp := sp;
     }
 
     // clear lower bit of SP, which was set to exit the loop
