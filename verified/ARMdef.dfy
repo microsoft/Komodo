@@ -181,6 +181,16 @@ function psr_mask_mode(v:word): word
     BitwiseAnd(v, ARM_PSR_MODE_MASK)
 }
 
+function psr_mask_fiq(v:word): word
+{
+    BitwiseAnd(v, ARM_PSR_FIQ)
+}
+
+function psr_mask_irq(v:word): word
+{
+    BitwiseAnd(v, ARM_PSR_IRQ)
+}
+
 predicate ValidPsrWord(v:word)
 {
     ValidModeEncoding(psr_mask_mode(v))

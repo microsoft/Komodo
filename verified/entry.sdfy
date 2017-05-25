@@ -779,6 +779,7 @@ procedure pre_entry_enter(
         preEntryEnter(old(this), this, pagedb, old(pagenr), old(arg1), old(arg2), old(arg3));
         spsr_of_state(this).m == User;
         this.conf.scr == SCRT(Secure, true, true);
+        !spsr_of_state(this).i && !spsr_of_state(this).f;
         //sp == old(sp);
 {
     assert validPageNr(pagenr);
@@ -802,11 +803,24 @@ procedure pre_entry_enter(
         assert BitAnd(0x10, 0x1f) == 0x10 by { reveal BitAnd; }
         lemma_WordBitEquiv(0x10, 0x10);
     }
+    assert BitwiseAnd(0x10, ARM_PSR_FIQ) == 0x00 by {
+        assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
+            by { reveal WordAsBits; }
+        assert BitAnd(0x10, 0x40) == 0x00 by { reveal BitAnd; }
+        lemma_WordBitEquiv(0x00, 0x00);
+    }
+    assert BitwiseAnd(0x10, ARM_PSR_IRQ) == 0x00 by {
+        assert WordAsBits(0x10) == 0x10 && WordAsBits(0x80) == 0x80
+            by { reveal WordAsBits; }
+        assert BitAnd(0x10, 0x80) == 0x00 by { reveal BitAnd; }
+        lemma_WordBitEquiv(0x00, 0x00);
+    }
     assert decode_mode(psr_mask_mode(r10)) == User;
     assert ValidModeChange'(this, User);
     assert ValidModeChange(this, r10);
     MSR(spsr_mon, r10);
     assert spsr_of_state(this).m == User;
+    assert !spsr_of_state(this).i && !spsr_of_state(this).f;
     //-------------------------------------------------------------------------
 
     //-------------------------------------------------------------------------
@@ -947,6 +961,7 @@ procedure pre_entry_resume(
         preEntryResume(old(this), this, pagedb, old(pagenr));
         spsr_of_state(this).m == User;
         this.conf.scr == SCRT(Secure, true, true);
+        !spsr_of_state(this).i && !spsr_of_state(this).f;
         //sp == old(sp);
 {
     ghost var dispPg := pagenr;
@@ -986,6 +1001,9 @@ procedure pre_entry_resume(
     }
 
     assert decode_mode'(psr_mask_mode(pagedb[dispPg].entry.ctxt.cpsr)) == Just(User);
+    ghost var dc := pagedb[dispPg].entry.ctxt;
+    assert psr_mask_fiq(dc.cpsr) == 0;
+    assert psr_mask_irq(dc.cpsr) == 0;
     MSR(spsr_mon, r0);
     assert this.sregs[spsr(Monitor)] == pagedb[dispPg].entry.ctxt.cpsr;
     assert spsr_of_state(this).m == User;
@@ -1087,6 +1105,7 @@ procedure {:frame false}{:fuel WordAligned, 0}{:timeLimitMultiplier 2} enclaveex
             if retToEnclave then sp == old(sp) else sp == BitwiseOr(old(sp), 1);
             partialEnclaveExecution(states, dispPg, steps);
             states[0] == tuple(old(this), pagedb_in);
+            retToEnclave ==> !spsr_of_state(this).f && !spsr_of_state(this).i;
             if retToEnclave then states[steps] == tuple(loop1, pagedb)
                 else validEnclaveExecution(old(this), pagedb_in, loop1, pagedb, dispPg, steps);
             equivStates(loop1, this);
@@ -1158,6 +1177,7 @@ lemma lemma_ValidEntryPost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp
     requires validExceptionTransition(r1, rd, r2, rd, dp)
     requires OperandContents(r1, OReg(R0)) == OperandContents(r2, OReg(R0))
     requires OperandContents(r1, OReg(R1)) == OperandContents(r2, OReg(R1))
+    requires InsecureMemInvariant(r1, r2)
     ensures smc_enter(s, sd, r1, rd, dp, a1, a2, a3)
         ==> smc_enter(s, sd, r2, rd, dp, a1, a2, a3)
     ensures smc_resume(s, sd, r1, rd, dp) ==> smc_resume(s, sd, r2, rd, dp)

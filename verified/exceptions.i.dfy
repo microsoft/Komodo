@@ -63,6 +63,7 @@ predicate KomInterruptHandlerInvariant(s:state, sd:PageDb, r:state, dispPg:PageN
         && BankedRegsInvariant(s, r)
         && NonStackMemPreserving(s, r)
         && SaneStack(r)
+        && s.conf.nondet == r.conf.nondet
     ) else (
         mode_of_state(s) != User
         && KomExceptionHandlerInvariant(s, sd, r, dispPg)
@@ -77,7 +78,8 @@ lemma lemma_KomInterruptHandlerInvariant_soundness(s:state, r:state)
     requires priv_of_mode(spsr_of_state(s).m) == PL1
     requires KomInterruptHandlerInvariant(s, dummyPageDb(), r, dummyPageNr())
     ensures EssentialContinuationInvariantProperties(s, r)
-{}
+{
+}
 
 predicate {:opaque} InterruptContinuationInvariantDef()
 {
@@ -97,8 +99,12 @@ lemma lemma_InterruptContinuationInvariantDef(s:state, r:state)
     requires priv_of_mode(spsr_of_state(s).m) == PL1
     requires InterruptContinuationInvariant(s, r)
     ensures KomInterruptHandlerInvariant(s, dummyPageDb(), r, dummyPageNr())
+    ensures s.conf.nondet == r.conf.nondet
 {
     reveal_InterruptContinuationInvariantDef();
+    if priv_of_mode(spsr_of_state(s).m) == PL1 {
+        assert s.conf.nondet == r.conf.nondet;
+    }
 }
 
 lemma lemma_PrivInterruptInvariants(s:state, r:state)
@@ -118,6 +124,8 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
             && m != mode_of_exception(s.conf, ExFIQ)
             ==> s.regs[LR(m)] == r.regs[LR(m)]
                 && s.regs[SP(m)] == r.regs[SP(m)]
+    ensures interrupts_enabled(s) ==>
+        r.conf.nondet == nondet_int(s.conf.nondet, NONDET_GENERATOR())
 {
     var nondet := nondet_word(s.conf.nondet, NONDET_EX());
     if !interrupts_enabled(s) {
@@ -164,8 +172,11 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
             s2.regs[SP(Monitor)];
             r.regs[SP(Monitor)];
         }
+        assert r.conf.nondet == s'.conf.nondet;
+        assert r.conf.nondet == nondet_int(s.conf.nondet, NONDET_GENERATOR());
     } else {
         assert r == takestep(reseed_nondet_state(s));
+        assert r.conf.nondet == nondet_int(s.conf.nondet, NONDET_GENERATOR());
     }
 }
 

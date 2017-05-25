@@ -30,6 +30,40 @@ function userExecutionModelSteps(s:state): (state, state, word, exception, state
     (s2, s3, expc, ex, s4)
 }
 
+lemma lemma_executionPreservesMasks(s:state, r:state)
+    requires userExecutionPreconditions(s)
+    requires ValidState(r)
+    requires !spsr_of_state(s).f && !spsr_of_state(s).i
+    requires r == userExecutionModel(s)
+    requires mode_of_state(r) !=User && spsr_of_state(r).m == User
+    ensures  !spsr_of_state(r).f && !spsr_of_state(r).i
+{
+    var (s2, s3, expc, ex, s4) := userExecutionModelSteps(s);
+    assert s4 == r by { reveal_userExecutionModel(); }
+    assert !s2.conf.cpsr.f && !s2.conf.cpsr.i by
+    {
+        reveal userExecutionModel();
+    }
+    assert (s3, expc, ex) == userspaceExecutionFn(s2,
+        OperandContents(s, OLR)) by
+            { reveal userExecutionModel(); }
+    assert decode_psr(s3.sregs[cpsr]) == s2.conf.cpsr by
+        { reveal userspaceExecutionFn(); }
+    assert !decode_psr(s3.sregs[cpsr]).f && !decode_psr(s3.sregs[cpsr]).i;
+    var newmode := mode_of_exception(s3.conf, ex);
+    assert s4 == exceptionTakenFn(s3, ex, expc) by
+        { reveal userExecutionModel(); }
+    assert s4.sregs[spsr(newmode)] == s3.sregs[cpsr];
+    var maskfiq := ex == ExFIQ || newmode == Monitor;
+    lemma_update_psr(s3.sregs[cpsr], encode_mode(newmode), maskfiq, true);
+    assert mode_of_state(s4) == newmode;
+    calc {
+        spsr_of_state(r);
+        spsr_of_state(s4);
+        decode_psr(s3.sregs[cpsr]);
+    }
+}
+
 function {:opaque} userExecutionModel(s:state): state
     requires userExecutionPreconditions(s)
     ensures ValidState(userExecutionModel(s))
@@ -93,6 +127,25 @@ predicate KomUserEntryPrecondition(s:state, pagedb:PageDb, dispPg:PageNr)
     && finalDispatcher(pagedb, dispPg)
     && GlobalWord(s.m, CurDispatcherOp(), 0) == page_monvaddr(dispPg)
     && s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, dispPg))    
+    && mode_of_state(s) != User
+    && !spsr_of_state(s).f && !spsr_of_state(s).i
+    // && (!(s.conf.ex == ExFIQ || s.conf.ex == ExIRQ) ==>
+    //     !spsr_of_state(s).f && !spsr_of_state(s).i)
+}
+
+predicate PrivKomUserEntryPrecondition(s:state, pagedb:PageDb, dispPg:PageNr)
+{
+    SaneConstants() && ValidState(s) && s.ok && SaneStack(s) && SaneMem(s.m)
+    && s.conf.scr == SCRT(Secure, true, true)
+    && StackBytesRemaining(s, EXCEPTION_STACK_BYTES)
+    && validPageDb(pagedb) && pageDbCorresponds(s.m, pagedb)
+    && nonStoppedDispatcher(pagedb, dispPg)
+    && GlobalWord(s.m, CurDispatcherOp(), 0) == page_monvaddr(dispPg)
+    && s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, dispPg))    
+    && mode_of_state(s) != User
+    // && !spsr_of_state(s).f && !spsr_of_state(s).i
+    // && (!(s.conf.ex == ExFIQ || s.conf.ex == ExIRQ) ==>
+    //     !spsr_of_state(s).f && !spsr_of_state(s).i)
 }
 
 predicate UsermodeContinuationPreconditionDefInner()
@@ -138,6 +191,7 @@ predicate SaneStateAfterException(s:state)
     && SaneMem(s.m)
     && mode_of_state(s) == Monitor
     && !interrupts_enabled(s)
+    //&& !spsr_of_state(s).f && !spsr_of_state(s).i
 }
 
 // what do we know between the start and end of the exception handler
@@ -164,7 +218,7 @@ predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr)
     && pageDbCorresponds(r.m, rd)
     && (if retToEnclave
        then rsp == ssp
-        && var (regs, rd) := svcHandled(s, sd, dp); preEntryReturn(s, r, regs)
+        && var (regs, rd) := svcHandled(s, sd, dp); preEntryReturn(s, r, regs, rd, dp)
        else rsp == BitwiseOr(ssp, 1)
         && (r.regs[R0], r.regs[R1], rd) == exceptionHandled(s, sd, dp))
 }
@@ -209,6 +263,7 @@ lemma lemma_UsermodeContinuationInvariantDef(s:state, r:state, d:PageDb, dp:Page
 
 lemma lemma_exceptionHandled_validPageDb(s:state, d:PageDb, dispPg:PageNr)
     requires ValidState(s) && mode_of_state(s) != User && spsr_of_state(s).m == User
+    requires !spsr_of_state(s).f && !spsr_of_state(s).i
     requires validPageDb(d) && validDispatcherPage(d, dispPg)
     ensures validPageDb(exceptionHandled(s, d, dispPg).2)
 {
@@ -223,6 +278,8 @@ lemma lemma_exceptionHandled_validPageDb(s:state, d:PageDb, dispPg:PageNr)
         assert dc.cpsr == s.sregs[spsr(mode_of_state(s))];
         assert spsr_of_state(s).m == decode_psr(s.sregs[spsr(mode_of_state(s))]).m;
         assert decode_mode'(psr_mask_mode(dc.cpsr)) == Just(User);
+        assert psr_mask_fiq(dc.cpsr) == 0;
+        assert psr_mask_irq(dc.cpsr) == 0;
         assert validDispatcherContext(dc);
     }
     assert validPageDbEntry(d', dispPg);
@@ -480,6 +537,7 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
     requires mode_of_state(s) == Monitor && spsr_of_state(s).m == User
     requires evalMOVSPCLRUC(s, r)
     requires UsermodeContinuationInvariantDef()
+    requires !spsr_of_state(s).f && !spsr_of_state(s).i
     ensures SaneStateAfterException(r)
     ensures OperandContents(r, OSP) == OperandContents(s, OSP)
         || OperandContents(r, OSP) == BitwiseOr(OperandContents(s, OSP), 1)
@@ -494,6 +552,7 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
     ensures KomExceptionHandlerInvariant(s4, d4, r, dp)
     ensures s.conf.ttbr0 == r.conf.ttbr0
     ensures s.conf.scr == r.conf.scr
+    ensures !spsr_of_state(s4).f && !spsr_of_state(s4).i
 {
     // XXX: prove some obvious things about OSP early, to stop Z3 getting lost
     assert ValidOperand(OSP);
@@ -517,6 +576,7 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
     lemma_UsermodeContinuationInvariantDef(s4, r, d4, dp);
     assert GlobalsInvariant(s, s4) && GlobalsPreservingExcept(s4, r, {PendingInterruptOp()});
 
+    lemma_executionPreservesMasks(s, s4);
     assert s4.regs[SP(Monitor)] == OperandContents(r, OSP)
         || BitwiseOr(s4.regs[SP(Monitor)], 1) == OperandContents(r, OSP);
 
@@ -631,6 +691,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     requires s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(sd, dispPg))
     requires evalMOVSPCLRUC(takestep(s), r)
     requires UsermodeContinuationInvariantDef()
+    requires !spsr_of_state(s).f && !spsr_of_state(s).i
     ensures SaneStateAfterException(r)
     ensures ParentStackPreserving(s, r)
     ensures GlobalsPreservingExcept(s, r, {PendingInterruptOp()})
@@ -643,11 +704,14 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     ensures validPageDb(rd) && SaneMem(r.m) && pageDbCorresponds(r.m, rd)
     ensures validEnclaveExecutionStep(s, sd, r, rd, dispPg, retToEnclave)
     ensures retToEnclave ==> spsr_of_state(r).m == User
+    ensures retToEnclave ==> !spsr_of_state(r).f && !spsr_of_state(r).i
 {
     var s4, d4 := lemma_evalMOVSPCLRUC_inner(takestep(s), r, sd, dispPg);
 
     var ssp, rsp := OperandContents(s, OSP), OperandContents(r, OSP);
     assert rsp == r.regs[SP(Monitor)];
+
+    assert !spsr_of_state(s4).f && !spsr_of_state(s4).i;
 
     retToEnclave := isReturningSvc(s4);
     if retToEnclave {
@@ -658,7 +722,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
         rd := d4';
 
         assert spsr_of_state(r).m == User by {
-            assert preEntryReturn(s4, r, regs);
+            assert preEntryReturn(s4, r, regs, rd, dispPg);
             assert (reveal_ValidSRegState();
                         r.sregs[spsr(mode_of_state(r))] == encode_mode(User));
             assert decode_mode(psr_mask_mode(encode_mode(User))) == User by {
@@ -675,6 +739,23 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
         lemma_exceptionHandled_validPageDb(s4, d4, dispPg);
     }
 
+    if(retToEnclave) {
+       assert !spsr_of_state(r).f && !spsr_of_state(r).i by {
+           assert psr_mask_fiq(encode_mode(User)) == 0 by {
+               assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
+                   by { reveal_WordAsBits(); }
+               lemma_BitsAndWordConversions();
+               reveal_BitAnd();
+           }
+           assert psr_mask_irq(encode_mode(User)) == 0 by {
+               assert WordAsBits(0x10) == 0x10 && WordAsBits(0x80) == 0x80
+                   by { reveal_WordAsBits(); }
+               lemma_BitsAndWordConversions();
+               reveal_BitAnd();
+           }
+       }
+    }
+
     assert validEnclaveExecutionStep(s, sd, r, rd, dispPg, retToEnclave) by {
         reveal_validEnclaveExecutionStep();
         lemma_userspaceExecutionAndException_pre(s, takestep(s), s4);
@@ -682,6 +763,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
         assert validExceptionTransition(s4, d4, r, rd, dispPg) by { reveal validExceptionTransition(); }
         assert validEnclaveExecutionStep'(s, sd, s4, d4, r, rd, dispPg, retToEnclave); // trigger exists
     }
+    assert retToEnclave ==> !spsr_of_state(r).f && !spsr_of_state(r).i;
 }
 
 lemma lemma_ValidEntryPre(s0:state, s1:state, sd:PageDb, r:state, rd:PageDb, dp:word,
@@ -689,6 +771,7 @@ lemma lemma_ValidEntryPre(s0:state, s1:state, sd:PageDb, r:state, rd:PageDb, dp:
     requires ValidState(s0) && ValidState(s1) && ValidState(r) && validPageDb(sd)
     requires SaneConstants()
     requires s0.conf.nondet == s1.conf.nondet
+    requires InsecureMemInvariant(s0, s1)
     ensures smc_enter(s1, sd, r, rd, dp, a1, a2, a3)
         ==> smc_enter(s0, sd, r, rd, dp, a1, a2, a3)
     ensures smc_resume(s1, sd, r, rd, dp) ==> smc_resume(s0, sd, r, rd, dp)

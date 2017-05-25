@@ -97,7 +97,7 @@ predicate validEnclaveExecutionStep'(s1:state, d1:PageDb,
         && isReturningSvc(s4) == retToEnclave
         && (if retToEnclave then
             var (retRegs, rd') := svcHandled(s4, d4, dispPg);
-            rd == rd' && preEntryReturn(s4, rs, retRegs)
+            rd == rd' && preEntryReturn(s4, rs, retRegs, rd, dispPg)
           else reveal_ValidRegState();
             (rs.regs[R0], rs.regs[R1], rd) == exceptionHandled(s4, d4, dispPg))
 }
@@ -137,7 +137,8 @@ predicate smc_enter(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb,
     reveal_ValidRegState();
     var err := smc_enter_err(pageDbIn, dispPg, false);
     if err != KOM_ERR_SUCCESS then
-        pageDbOut == pageDbIn && s'.regs[R0] == err && s'.regs[R1] == 0
+        pageDbOut == pageDbIn && s'.regs[R0] == err && s'.regs[R1] == 0 &&
+        InsecureMemInvariant(s, s')
     else
         exists s1, steps:nat :: preEntryEnter(s, s1, pageDbIn, dispPg, arg1, arg2, arg3)
             && validEnclaveExecution(s1, pageDbIn, s', pageDbOut, dispPg, steps)
@@ -151,7 +152,8 @@ predicate smc_resume(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb,
     reveal_ValidRegState();
     var err := smc_enter_err(pageDbIn, dispPg, true);
     if err != KOM_ERR_SUCCESS then
-        pageDbOut == pageDbIn && s'.regs[R0] == err && s'.regs[R1] == 0
+        pageDbOut == pageDbIn && s'.regs[R0] == err && s'.regs[R1] == 0 &&
+            InsecureMemInvariant(s, s')
     else
         exists s1, steps:nat :: preEntryResume(s, s1, pageDbIn, dispPg)
             && validEnclaveExecution(s1, pageDbIn, s', pageDbOut, dispPg, steps)
@@ -162,7 +164,10 @@ predicate preEntryCommon(s:state, d:PageDb, dispPage:PageNr)
 {
     ValidState(s) && validPageDb(d) && finalDispatcher(d, dispPage)
         && priv_of_state(s) == PL1
-        && s.conf.scr.ns == Secure
+        // XXX: we don't really need the impl to set SCR.FIQ and
+        // SCR.IRQ, but for the NI proof we need them to be constant,
+        // and this is just the simplest way of specifying that
+        && s.conf.scr == SCRT(Secure, true, true)
         && s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(d, dispPage))
 }
 
@@ -186,6 +191,7 @@ predicate preEntryEnter(s:state,s':state,d:PageDb,
     && OperandContents(s', OLR) == d[dispPage].entry.entrypoint
     && (reveal_ValidSRegState();
         s'.sregs[spsr(mode_of_state(s'))] == encode_mode(User))
+    && InsecureMemInvariant(s, s')
 }
 
 predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
@@ -207,14 +213,16 @@ predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
         forall r | r in USER_REGS() :: s'.regs[r] == disp.ctxt.regs[r])
     && OperandContents(s', OLR) == disp.ctxt.pc
     && (reveal_ValidSRegState();
-        s'.sregs[spsr(Monitor)] == disp.ctxt.cpsr)
+        s'.sregs[spsr(mode_of_state(s'))] == disp.ctxt.cpsr)
+    && InsecureMemInvariant(s, s')
 }
 
-predicate preEntryReturn(exs:state, s:state, retregs:SvcReturnRegs)
+predicate preEntryReturn(exs:state, s:state, retregs:SvcReturnRegs, d:PageDb, dispPg:PageNr)
     requires ValidState(exs) && ValidState(s)
 {
     reveal_ValidRegState();
-    mode_of_state(s) == Monitor
+    preEntryCommon(s, d, dispPg)
+    && s.conf.nondet == nondet_int(exs.conf.nondet, NONDET_GENERATOR())
     // returning to same PC
     && OperandContents(s, OLR) == OperandContents(exs, OLR)
     && (reveal_ValidSRegState();
@@ -254,12 +262,14 @@ predicate userspaceExecutionAndException'(s:state, s1:state, s2:state, r:state)
     && (var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
     evalExceptionTaken(s3, ex, expc, r))
     && mode_of_state(r) != User // known, but we need a lemma to prove it
+    //&& !spsr_of_state(r).f && !spsr_of_state(r).i
 }
 
 predicate {:opaque} userspaceExecutionAndException(s:state, r:state)
     requires ValidState(s)
     ensures userspaceExecutionAndException(s, r)
         ==> ValidState(r) && mode_of_state(r) != User
+
 {
     exists s1, s2 :: userspaceExecutionAndException'(s, s1, s2, r)
 }
@@ -386,6 +396,7 @@ predicate {:opaque} validExceptionTransition(s:state, d:PageDb, s':state,
         ValidState(s) && ValidState(s') && validPageDb(d) && validPageDb(d')
 {
     ValidState(s) && ValidState(s') && validPageDb(d) && validPageDb(d')
+    && InsecureMemInvariant(s, s')
     && mode_of_state(s') == Monitor
     && (d == d' || (
         validPageNr(dispPg) && validDispatcherPage(d, dispPg)

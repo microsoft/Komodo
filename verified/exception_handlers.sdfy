@@ -29,6 +29,7 @@ CPSID_IAF(operand mod:word)
         ValidModeEncoding(mod);
         priv_of_state(this) == PL1;
         ValidModeChange'(this, decode_mode(mod));
+        interrupts_enabled(this);
     modifies
         cpsr;
     ensures
@@ -44,6 +45,7 @@ CPSID_IAF(operand mod:word)
             && m != mode_of_exception(old(this).conf, ExFIQ)
             ==> old(this).regs[LR(m)] == this.regs[LR(m)]
               && old(this).regs[SP(m)] == this.regs[SP(m)];
+        this.conf.nondet == nondet_int(old(this).conf.nondet, NONDET_GENERATOR());
 {
     reveal va_eval;
     exists s' :: maybeHandleInterrupt(old(this), s') && evalIns'(CPSID_IAF(@mod), s', this);
@@ -68,6 +70,7 @@ procedure {:frame false} switch_to_monitor(inline oldmode:mode)
         mode_of_state(this) == oldmode;
         oldmode == Supervisor || oldmode == Abort || oldmode == Undefined;
         this.ok;
+        interrupts_enabled(this);
     ensures
         SaneState(this);
         SaneStack(this);
@@ -80,6 +83,7 @@ procedure {:frame false} switch_to_monitor(inline oldmode:mode)
         lr == OperandContents(old(this), OLR);
         this.conf.ttbr0 == old(this).conf.ttbr0;
         this.conf.scr == old(this).conf.scr;
+        this.conf.nondet == nondet_int(old(this).conf.nondet, NONDET_GENERATOR());
 {
     CPSID_IAF(const(encode_mode(Monitor)));
 
@@ -115,6 +119,7 @@ procedure {:timeLimitMultiplier 2} fault_exit(
     requires
         ValidState(exstate);
         mode_of_state(exstate) != User && spsr_of_state(exstate).m == User;
+        !spsr_of_state(exstate).f && !spsr_of_state(exstate).i;
         exstate.conf.ex == ex;
         ex == ExSVC || ex == ExAbt || ex == ExUnd;
         r1 == OperandContents(exstate, OReg(R1));
@@ -212,6 +217,20 @@ procedure svc_returning_default(
     MOV(r7, 0);
     MOV(r8, 0);
 }
+
+#verbatim
+predicate exregs_preserved(s1:state, s2:state)
+    requires ValidState(s1) && ValidState(s2)
+{
+    reveal ValidRegState();
+    s1.regs[R9] == s2.regs[R9] &&
+    s1.regs[R10] == s2.regs[R10] &&
+    s1.regs[R11] == s2.regs[R11] &&
+    s1.regs[R12] == s2.regs[R12] &&
+    s1.regs[LR(User)] == s2.regs[LR(User)] &&
+    s1.regs[SP(User)] == s2.regs[SP(User)]
+}
+#endverbatim
 
 procedure svc_returning_verify_step0(
     ghost exstate: state,
@@ -350,7 +369,8 @@ procedure svc_returning_verify_step1(
     STR(r7, r0, const(DISP_CTXT_VERIFY_MEASUREMENT + 6 * WORDSIZE));
     STR(r8, r0, const(DISP_CTXT_VERIFY_MEASUREMENT + 7 * WORDSIZE));
 
-    MOV(r0, const(encode_mode(User)));
+    MOV(r0, const(encode_mode(User)));        preEntryCommon(this, pagedb, dispPg);
+        this.conf.nondet == nondet_int(exstate.conf.nondet, NONDET_GENERATOR());
     MSR(spsr_mon, r0);
 
     assert firstOf2(svcHandled(exstate, pagedb, dispPg)) == tuple(KOM_ERR_SUCCESS,0,0,0,0,0,0,0,0);
@@ -404,10 +424,11 @@ procedure {:frame false} svc_returning(
         ValidState(exstate) && mode_of_state(exstate) != User;
         isReturningSvc(exstate);
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
-        validPageDb(pagedb);
+        preEntryCommon(this, pagedb, dispPg);
+        this.conf.nondet == nondet_int(exstate.conf.nondet, NONDET_GENERATOR());
         pageDbCorresponds(this.m, pagedb);
-        validDispatcherPage(pagedb, dispPg);
-        finalDispatcher(pagedb, dispPg);
+        exregs_preserved(exstate, this);
+        OperandContents(this, OLR) == OperandContents(exstate, OLR);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
         lr == old(lr);
@@ -435,7 +456,7 @@ procedure {:frame false} svc_returning(
         let handled_pagedb := secondOf2(tuple);
         pagedb' == handled_pagedb;
         validPageDb(pagedb');
-        preEntryReturn(old(this), this, retRegs);
+        preEntryReturn(exstate, this, retRegs, pagedb, dispPg);
 {
     if (r0 == const(KOM_SVC_ATTEST)) {
         // Create an attestation
@@ -528,6 +549,7 @@ procedure {:frame false} abort_handler(
         this.conf.ex == ex && (ex == ExAbt || ex == ExUnd);
         mode_of_state(this) == (if ex == ExAbt then Abort else Undefined);
         spsr_of_state(this).m == User;
+        interrupts_enabled(this);
     ensures
         KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
         validPageDb(pagedb);
@@ -660,6 +682,7 @@ procedure save_disp_context(inout operand base: reg,
         ex == exstate.conf.ex && (ex == ExFIQ || ex == ExIRQ);
         ValidState(exstate) && mode_of_state(exstate) == Monitor
             && spsr_of_state(exstate).m == User;
+        !spsr_of_state(exstate).f && !spsr_of_state(exstate).i;
         va_get_sreg(spsr(Monitor), exstate) == spsr_mon;
         forall r :: USER_REGS() ?[r] && r != R0
             ==> va_get_reg(r, exstate) == va_get_reg(r, this);
@@ -780,11 +803,13 @@ procedure {:frame false} interrupt_handler(
     modifies
         mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; cpsr; lr; spsr_mon;
     requires
-        KomUserEntryPrecondition(this, pagedb_in, dispPg);
+        PrivKomUserEntryPrecondition(this, pagedb_in, dispPg);
         InterruptContinuationInvariantDef();
         this.conf.ex == ex && (ex == ExFIQ || ex == ExIRQ);
         mode_of_state(this) == Monitor;
         !interrupts_enabled(this);
+        spsr_of_state(this).m  == User ==>
+            !spsr_of_state(this).f && !spsr_of_state(this).i;
     ensures
         KomInterruptHandlerInvariant(old(this), pagedb_in, this, dispPg);
         validPageDb(pagedb);
@@ -821,6 +846,22 @@ procedure {:frame false} interrupt_handler(
 
     if (r0 == const(encode_mode(User))) { // we came from user-mode
         assert spsr_of_state(old(this)).m == User;
+        // assert psr_mask_fiq(r0) == 0 && psr_mask_irq(r0) == 0 by {
+        //     assert r0 == 0x10;
+        //     assert BitwiseAnd(0x10, ARM_PSR_FIQ) == 0x00 by {
+        //         assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
+        //             by { reveal WordAsBits; }
+        //         assert BitAnd(0x10, 0x40) == 0x00 by { reveal BitAnd; }
+        //         lemma_WordBitEquiv(0x00, 0x00);
+        //     }
+        //     assert BitwiseAnd(0x10, ARM_PSR_IRQ) == 0x00 by {
+        //         assert WordAsBits(0x10) == 0x10 && WordAsBits(0x80) == 0x80
+        //             by { reveal WordAsBits; }
+        //         assert BitAnd(0x10, 0x80) == 0x00 by { reveal BitAnd; }
+        //         lemma_WordBitEquiv(0x00, 0x00);
+        //     }
+        // }
+        assert !spsr_of_state(old(this)).f && !spsr_of_state(old(this)).i;
 
         // save dispatcher context
         LDRglobaladdr(r0, CurDispatcherOp());

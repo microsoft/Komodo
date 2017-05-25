@@ -111,7 +111,13 @@ function initDispCtxt() : DispatcherContext
     assert psr == 0x10;
     assert BitwiseAnd(0x10, 0x1f) == 0x10
         by { reveal_BitAnd(); reveal_WordAsBits(); reveal_BitsAsWord(); }
+    assert BitwiseAnd(0x10, 0x40) == 0x00
+        by { reveal_BitAnd(); reveal_WordAsBits(); reveal_BitsAsWord(); }
+    assert BitwiseAnd(0x10, 0x80) == 0x00
+        by { reveal_BitAnd(); reveal_WordAsBits(); reveal_BitsAsWord(); }
     assert psr_mask_mode(psr) == 0x10;
+    assert psr_mask_fiq(psr) == 0;
+    assert psr_mask_irq(psr) == 0;
     assert decode_mode'(psr_mask_mode(psr)) == Just(User);
     DispatcherContext(
         map[R0 := 0, R1 := 0, R2 := 0, R3 := 0, R4 := 0, R5 := 0, R6 := 0, R7 := 0,
@@ -462,7 +468,7 @@ predicate smcNonvolatileRegInvariant(s:state, s':state)
 }
 
 /* Overall invariant across SMC handler state */
-predicate smchandlerInvariant(s:state, s':state)
+predicate smchandlerInvariant(s:state, s':state, entry:bool)
     requires ValidState(s) && ValidState(s')
 {
     reveal_ValidRegState();
@@ -474,16 +480,20 @@ predicate smchandlerInvariant(s:state, s':state)
         // return to a non-monitor mode (so we leave secure world)
         && decode_mode(psr_mask_mode(s.sregs[spsr(Monitor)])) != Monitor
         // most banked regs are preserved -- carve-outs for IRQ/FIQ injection 
+        && (forall m :: s.regs[SP(m)] == s'.regs[SP(m)])
         && (forall m | m !in {Monitor, IRQ, FIQ} ::
             (m != User ==> s.sregs[spsr(m)] == s'.sregs[spsr(m)])
             && s.regs[LR(m)] == s'.regs[LR(m)])
-        && (forall m :: s.regs[SP(m)] == s'.regs[SP(m)])
+        && (!entry ==> InsecureMemInvariant(s, s'))
 }
 
 predicate smchandler(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb)
     requires ValidState(s) && validPageDb(pageDbIn) && SaneConstants()
 {
-    smchandlerRelation(s, pageDbIn, s', pageDbOut) && smchandlerInvariant(s, s')
+    reveal ValidRegState();
+    var entry := s.regs[R0] == KOM_SMC_ENTER || s.regs[R0] == KOM_SMC_RESUME;
+    smchandlerRelation(s, pageDbIn, s', pageDbOut) &&
+        smchandlerInvariant(s, s', entry)
 }
 
 // lemma for allocatePage; FIXME: not trusted, should not be in a .s.dfy file

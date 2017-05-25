@@ -212,6 +212,7 @@ predicate SaneConstants()
                     KOM_DIRECTMAP_VBASE + SecurePhysBase() + KOM_SECURE_RESERVE)
     // globals are as we expect
     && KomGlobalDecls() == TheGlobalDecls()
+    && (forall a:addr :: address_is_secure(a) <==> addrIsSecure(a))
 }
 
 predicate SaneState(s:state)
@@ -222,5 +223,17 @@ predicate SaneState(s:state)
     && SaneMem(s.m)
     && mode_of_state(s) == Monitor
     && !interrupts_enabled(s)
+}
+
+
+//-----------------------------------------------------------------------------
+// Stack/procedure invariants
+//-----------------------------------------------------------------------------
+predicate InsecureMemInvariant(s:state, r:state)
+    requires ValidState(s) && ValidState(r);
+{
+    forall m:addr :: ValidMem(m)
+        && KOM_DIRECTMAP_VBASE <= m < KOM_DIRECTMAP_VBASE + MonitorPhysBase()
+        ==> MemContents(s.m, m) == MemContents(r.m, m)
 }
 
