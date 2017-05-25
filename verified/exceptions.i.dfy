@@ -46,7 +46,7 @@ predicate KomInterruptHandlerInvariant(s:state, sd:PageDb, r:state, dispPg:PageN
     requires s.conf.ex == ExFIQ || s.conf.ex == ExIRQ
     requires priv_of_mode(spsr_of_state(s).m) == PL0 ==> (
         validPageDb(sd) && pageDbCorresponds(s.m, sd)
-        && nonStoppedDispatcher(sd, dispPg))
+        && finalDispatcher(sd, dispPg))
 {
     ValidState(r) && (s.ok ==> r.ok)
     && SaneStateAfterException(r)

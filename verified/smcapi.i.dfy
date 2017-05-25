@@ -556,10 +556,10 @@ lemma lemma_userspaceExecutionAndException_spsr(s:state, r:state)
 lemma lemma_validEnclaveExecutionStep_validPageDb(s1:state, d1:PageDb,
     rs:state, rd:PageDb, dispPg:PageNr, retToEnclave:bool)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
-    requires nonStoppedDispatcher(d1, dispPg)
+    requires finalDispatcher(d1, dispPg)
     requires validEnclaveExecutionStep(s1, d1, rs, rd, dispPg, retToEnclave)
     ensures validPageDb(rd)
-    ensures nonStoppedDispatcher(rd, dispPg)
+    ensures finalDispatcher(rd, dispPg)
 {
     reveal_validEnclaveExecutionStep();
     reveal_updateUserPagesFromState();
@@ -570,14 +570,14 @@ lemma lemma_validEnclaveExecutionStep_validPageDb(s1:state, d1:PageDb,
             && rd == exceptionHandled(s4, d4, dispPg).2;
         lemma_userspaceExecutionAndException_spsr(s1, s4);
         lemma_exceptionHandled_validPageDb(s4, d4, dispPg);
-        assert nonStoppedDispatcher(rd, dispPg);
+        assert finalDispatcher(rd, dispPg);
     }
 }
 
 lemma lemma_validEnclaveExecution(s1:state, d1:PageDb,
     rs:state, rd:PageDb, dispPg:PageNr, steps:nat)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
-    requires nonStoppedDispatcher(d1, dispPg)
+    requires finalDispatcher(d1, dispPg)
     requires validEnclaveExecution(s1, d1, rs, rd, dispPg, steps)
     ensures validPageDb(rd)
     decreases steps

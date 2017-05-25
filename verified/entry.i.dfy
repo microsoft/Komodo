@@ -145,7 +145,7 @@ predicate SaneStateAfterException(s:state)
 predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr)
     requires ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
     requires validPageDb(sd) && pageDbCorresponds(s.m, sd)
-    requires nonStoppedDispatcher(sd, dp)
+    requires finalDispatcher(sd, dp)
 {
     reveal_ValidRegState();
     var retToEnclave := isReturningSvc(s);
@@ -175,7 +175,7 @@ lemma lemma_KomExceptionHandlerInvariant_soundness(s:state, sd:PageDb, r:state,
                                                    dp:PageNr)
     requires ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
     requires validPageDb(sd) && pageDbCorresponds(s.m, sd)
-    requires nonStoppedDispatcher(sd, dp)
+    requires finalDispatcher(sd, dp)
     requires KomExceptionHandlerInvariant(s, sd, r, dp)
     ensures EssentialContinuationInvariantProperties(s, r)
 {}
@@ -187,7 +187,7 @@ predicate {:opaque} UsermodeContinuationInvariantDef()
     forall s:state, r:state, sd: PageDb, dp:PageNr
         | ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
             && validPageDb(sd) && pageDbCorresponds(s.m, sd)
-            && nonStoppedDispatcher(sd, dp)
+            && finalDispatcher(sd, dp)
         :: UsermodeContinuationInvariant(s, r)
         ==> KomExceptionHandlerInvariant(s, sd, r, dp)
 }
@@ -196,7 +196,7 @@ lemma lemma_UsermodeContinuationInvariantDef(s:state, r:state, d:PageDb, dp:Page
     requires SaneConstants() && UsermodeContinuationInvariantDef()
     requires ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
         && validPageDb(d) && pageDbCorresponds(s.m, d)
-        && nonStoppedDispatcher(d, dp)
+        && finalDispatcher(d, dp)
     requires UsermodeContinuationInvariant(s, r)
     ensures KomExceptionHandlerInvariant(s, d, r, dp)
 {
@@ -330,7 +330,7 @@ lemma lemma_ExtractSamePages(m1:memstate, m2:memstate, p:PageNr)
 lemma lemma_updateUserPagesFromState(s:state, d:PageDb, d':PageDb,
                                      dispPg:PageNr, p:PageNr)
     requires ValidState(s) && validPageDb(d) && SaneConstants()
-    requires nonStoppedDispatcher(d, dispPg)
+    requires finalDispatcher(d, dispPg)
     requires d' == updateUserPagesFromState(s, d, dispPg)
     ensures d'[p] == d[p] || (d[p].PageDbEntryTyped? && d[p].entry.DataPage? && d'[p] == updateUserPageFromState(s, d, p))
 { reveal_updateUserPagesFromState(); }
@@ -361,7 +361,7 @@ lemma lemma_monvaddr_ValidMem(p:PageNr, a:addr)
 {}
 
 lemma lemma_userExecutionUpdatesPageDb(d:PageDb, s:state, s':state, dispPg:PageNr)
-    requires validPageDb(d) && nonStoppedDispatcher(d, dispPg)
+    requires validPageDb(d) && finalDispatcher(d, dispPg)
     requires userExecutionPreconditions(s) && userExecutionModel(s) == s'
     requires SaneMem(s.m) && pageDbCorresponds(s.m, d) && SaneMem(s'.m)
     requires s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(d, dispPg))
@@ -458,10 +458,13 @@ lemma lemma_userExecutionPreservesPrivState(s:state, r:state)
     reveal_userspaceExecutionFn();
 }
 
+predicate {:opaque} OpaqueEven(x:word) { x % 2 == 0 }
+
 lemma lemma_sp_alignment(x:word)
-    requires x % 2 == 0
+    requires OpaqueEven(x)
     ensures x != BitwiseOr(x, 1)
 {
+    reveal OpaqueEven();
     assert BitsAsWord(1) == 1 && BitsAsWord(2) == 2 by { reveal_BitsAsWord(); }
     lemma_BitsAndWordConversions();
 
@@ -472,7 +475,7 @@ lemma lemma_sp_alignment(x:word)
 lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
         returns (s4:state, d4:PageDb)
     requires SaneState(s)
-    requires validPageDb(d) && pageDbCorresponds(s.m, d) && nonStoppedDispatcher(d, dp)
+    requires validPageDb(d) && pageDbCorresponds(s.m, d) && finalDispatcher(d, dp)
     requires s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(d, dp))
     requires mode_of_state(s) == Monitor && spsr_of_state(s).m == User
     requires evalMOVSPCLRUC(s, r)
@@ -495,6 +498,7 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
     // XXX: prove some obvious things about OSP early, to stop Z3 getting lost
     assert ValidOperand(OSP);
     assert OperandContents(s, OSP) == s.regs[SP(Monitor)];
+    assert OpaqueEven(OperandContents(s, OSP)) by { reveal OpaqueEven(); }
     lemma_sp_alignment(OperandContents(s, OSP));
     assert ValidMemRange(StackLimit(), StackBase());
 
@@ -571,7 +575,7 @@ lemma lemma_userspaceExecutionAndException_pre(s0:state, s1:state, r:state)
 lemma lemma_svcHandled_pageDbCorresponds(s4:state, d4:PageDb, r:state, dispPg:PageNr, regs:SvcReturnRegs, rd:PageDb)
     requires ValidState(s4) && mode_of_state(s4) != User && SaneMem(s4.m)
     requires validPageDb(d4) && pageDbCorresponds(s4.m, d4)
-    requires nonStoppedDispatcher(d4, dispPg)
+    requires finalDispatcher(d4, dispPg)
     requires KomExceptionHandlerInvariant(s4, d4, r, dispPg)
     requires validPageDb(d4) && validDispatcherPage(d4, dispPg)
     requires isReturningSvc(s4)
@@ -598,7 +602,7 @@ lemma lemma_svcHandled_validPageDb(s4:state, d4:PageDb, r:state, dispPg:PageNr, 
     requires ValidState(s4) && mode_of_state(s4) != User && SaneMem(s4.m)
     requires validPageDb(d4) && validDispatcherPage(d4, dispPg)
     requires isReturningSvc(s4)
-    requires nonStoppedDispatcher(d4, dispPg)
+    requires finalDispatcher(d4, dispPg)
     requires validPageNr(l1pOfDispatcher(d4, dispPg))
     requires (regs, rd) == svcHandled(s4, d4, dispPg)
     ensures validPageDb(rd)
@@ -623,7 +627,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     requires SaneState(s)
     requires spsr_of_state(s).m == User
     requires validPageDb(sd) && pageDbCorresponds(s.m, sd)
-    requires nonStoppedDispatcher(sd, dispPg)
+    requires finalDispatcher(sd, dispPg)
     requires s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(sd, dispPg))
     requires evalMOVSPCLRUC(takestep(s), r)
     requires UsermodeContinuationInvariantDef()
@@ -729,9 +733,9 @@ lemma lemma_evalExceptionTaken_Mode(s:state, e:exception, expc:word, r:state)
 lemma lemma_validEnclaveExecutionStep_PageDb(s1:state, d1:PageDb, r1:state,
     rd:PageDb, dispPg:PageNr, retToEnclave:bool)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
-    requires nonStoppedDispatcher(d1, dispPg)
+    requires finalDispatcher(d1, dispPg)
     requires validEnclaveExecutionStep(s1, d1, r1, rd, dispPg, retToEnclave)
-    ensures validPageDb(rd) && nonStoppedDispatcher(rd, dispPg)
+    ensures validPageDb(rd) && finalDispatcher(rd, dispPg)
     ensures l1pOfDispatcher(d1, dispPg) == l1pOfDispatcher(rd, dispPg)
 {
     reveal_validEnclaveExecutionStep();
@@ -742,7 +746,7 @@ lemma lemma_validEnclaveExecutionStep_PageDb(s1:state, d1:PageDb, r1:state,
 lemma lemma_validEnclaveExecutionStepPost(s1:state, d1:PageDb, r1:state,
                             rd:PageDb, r2:state, dispPg:PageNr)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
-    requires nonStoppedDispatcher(d1, dispPg)
+    requires finalDispatcher(d1, dispPg)
     requires validEnclaveExecutionStep(s1, d1, r1, rd, dispPg, false)
     requires validExceptionTransition(r1, rd, r2, rd, dispPg)
     requires OperandContents(r1, OReg(R0)) == OperandContents(r2, OReg(R0))
@@ -765,7 +769,7 @@ lemma lemma_validEnclaveExecutionStepPost(s1:state, d1:PageDb, r1:state,
 lemma lemma_validEnclaveExecutionStepPre(s0:state, s1:state, sd:PageDb, r:state,
                                     rd:PageDb, dispPg:PageNr, retToEnclave:bool)
     requires ValidState(s1) && validPageDb(sd) && SaneConstants()
-    requires nonStoppedDispatcher(sd, dispPg)
+    requires finalDispatcher(sd, dispPg)
     requires validEnclaveExecutionStep(s1, sd, r, rd, dispPg, retToEnclave)
     requires equivStates(s0, s1)
     ensures validEnclaveExecutionStep(s0, sd, r, rd, dispPg, retToEnclave)
@@ -783,7 +787,7 @@ lemma lemma_validEnclaveExecutionStepPre(s0:state, s1:state, sd:PageDb, r:state,
 lemma lemma_validEnclaveExecutionPost(s1:state, d1:PageDb, r1:state, rd:PageDb,
                                       r2:state, dispPg:PageNr, steps:nat)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
-    requires nonStoppedDispatcher(d1, dispPg)
+    requires finalDispatcher(d1, dispPg)
     requires validEnclaveExecution(s1, d1, r1, rd, dispPg, steps)
     requires validExceptionTransition(r1, rd, r2, rd, dispPg)
     requires OperandContents(r1, OReg(R0)) == OperandContents(r2, OReg(R0))
@@ -853,7 +857,7 @@ function exPageDb(t: (int, int, PageDb)): PageDb { t.2 }
 lemma lemma_singlestep_execution(s1:state, d1:PageDb,
     rs:state, rd:PageDb, dispPg:PageNr)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
-    requires nonStoppedDispatcher(d1, dispPg)
+    requires finalDispatcher(d1, dispPg)
     requires validEnclaveExecutionStep(s1, d1, rs, rd, dispPg, false)
     ensures validEnclaveExecution(s1, d1, rs, rd, dispPg, 0)
 {
@@ -876,14 +880,14 @@ predicate partialEnclaveExecution(l:seq<(state, PageDb)>, dispPg:PageNr, steps:n
 {
     |l| == steps + 1
     && (forall i | 0 <= i <= steps :: ValidState(l[i].0) && validPageDb(l[i].1)
-                && nonStoppedDispatcher(l[i].1, dispPg))
+                && finalDispatcher(l[i].1, dispPg))
     && (forall i {:trigger l[i]} | 0 < i <= steps ::
             validEnclaveExecutionStep(l[i-1].0, l[i-1].1, l[i].0, l[i].1, dispPg, true))
 }
 
 lemma lemma_partialEnclaveExecution_append(l:seq<(state, PageDb)>, s:state, d:PageDb, dispPg:PageNr, steps:nat)
     requires SaneConstants()
-    requires ValidState(s) && validPageDb(d) && nonStoppedDispatcher(d, dispPg)
+    requires ValidState(s) && validPageDb(d) && finalDispatcher(d, dispPg)
     requires partialEnclaveExecution(l, dispPg, steps)
     requires validEnclaveExecutionStep(l[steps].0, l[steps].1, s, d, dispPg, true)
     ensures partialEnclaveExecution(l + [(s, d)], dispPg, steps + 1)
@@ -898,8 +902,8 @@ lemma lemma_partialEnclaveExecution_append(l:seq<(state, PageDb)>, s:state, d:Pa
 lemma lemma_validEnclaveExecution_ExtraStep(s0:state, d0:PageDb, s1:state, d1:PageDb,
     rs:state, rd:PageDb, dispPg:PageNr, steps:nat)
     requires SaneConstants() && steps > 0
-    requires ValidState(s0) && validPageDb(d0) && nonStoppedDispatcher(d0, dispPg)
-    requires ValidState(s1) && validPageDb(d1) && nonStoppedDispatcher(d1, dispPg)
+    requires ValidState(s0) && validPageDb(d0) && finalDispatcher(d0, dispPg)
+    requires ValidState(s1) && validPageDb(d1) && finalDispatcher(d1, dispPg)
     requires validEnclaveExecutionStep(s0, d0, s1, d1, dispPg, true)
     requires validEnclaveExecution(s1, d1, rs, rd, dispPg, steps - 1)
     ensures  validEnclaveExecution(s0, d0, rs, rd, dispPg, steps)

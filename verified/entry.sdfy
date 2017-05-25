@@ -277,13 +277,17 @@ procedure stack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
     stack_bytes := stack_bytes_in - BANKED_FRAMESIZE;
 
     stack_banked_regs1(tmp);
+
+    assert wellformed_banked_regs_stackframe(this.m, sp)
+        by { reveal ValidSRegState; reveal wellformed_banked_regs_stackframe; }
+
     stack_banked_regs2(tmp);
     stack_banked_regs3(tmp);
 
     assert wellformed_banked_regs_stackframe(this.m, sp)
-        by { reveal_wellformed_banked_regs_stackframe(); }
+        by { reveal wellformed_banked_regs_stackframe; }
     assert banked_regs_stackframe(old(this), this.m, sp)
-        by { reveal_banked_regs_stackframe(); }
+        by { reveal banked_regs_stackframe; }
 }
 
 procedure LDR_MSR_banked(
@@ -993,12 +997,25 @@ procedure pre_entry_resume(
 }
 
 #verbatim
+lemma lemma_sp_bit_helper1(x:word, y:word)
+    requires OpaqueEven(x)
+    requires y == x || y == BitwiseOr(x, 1)
+    requires BitwiseAnd(y, 1) == 0
+    ensures x == y
+{
+    assert BitsAsWord(1) == 1 by { reveal BitsAsWord(); }
+    lemma_BitsAndWordConversions();
+    reveal BitAnd();
+    reveal BitOr();
+}
+
 lemma lemma_sp_bit_helper(x:word, y:word)
-    requires x % 2 == 0
+    requires OpaqueEven(x)
     requires y == x || y == BitwiseOr(x, 1)
     requires BitwiseAnd(y, 1) != 0
     ensures y - 1 == x
 {
+    reveal OpaqueEven();
     assert BitsAsWord(1) == 1 && BitsAsWord(2) == 2 by { reveal_BitsAsWord(); }
     lemma_BitsAndWordConversions();
 
@@ -1009,7 +1026,13 @@ lemma lemma_sp_bit_helper(x:word, y:word)
 }
 #endverbatim
 
-procedure {:frame false} enclaveexecution_loop(
+procedure establish_OpaqueEven_sp()
+    requires SaneState(this);
+    reads sp;
+    ensures this == old(this) && OpaqueEven(sp);
+{ reveal OpaqueEven; }
+
+procedure {:frame false} {:timeLimitMultiplier 2} enclaveexecution_loop(
         ghost pagedb_in: PageDb,
         ghost dispPg: PageNr)
     returns (ghost pagedb:PageDb, ghost steps:nat)
@@ -1041,6 +1064,7 @@ procedure {:frame false} enclaveexecution_loop(
     pagedb := pagedb_in;
     ghost var states := seq(tuple(this, pagedb));
 
+    establish_OpaqueEven_sp();
     lemma_sp_alignment(old(sp));
 
     while (tst_eq(sp, 1)) // test bottom bit of SP for this kludge
@@ -1066,26 +1090,23 @@ procedure {:frame false} enclaveexecution_loop(
         loop0 := this;
 
         // SP & 1 == 0 => go to usermode
-        assert sp == old(sp) by {
-            assert BitwiseAnd(sp, 1) == 0;
-            assert BitsAsWord(1) == 1 by { reveal BitsAsWord; }
-            lemma_BitsAndWordConversions();
-            reveal BitAnd;
-            reveal BitOr;
-        }
-        assert retToEnclave;
+        assume BitwiseAnd(sp, 1) == 0; // from tst_eq
+        assert sp == old(sp) && retToEnclave by { lemma_sp_bit_helper1(old(sp), sp); }
 
         assert KomUserEntryPrecondition(takestep(this), pagedb, dispPg);
         lemma_Establish_UsermodeContinuationPrecondition(takestep(this), pagedb, dispPg);
         MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
 
         pagedb, retToEnclave := lemma_evalMOVSPCLRUC(loop0, loop_pagedb, this, dispPg);
+        assume OperandContents(loop0, OSP) == old(sp);
+        assume OperandContents(this, OSP) == sp;
         lemma_validEnclaveExecutionStep_PageDb(loop0, loop_pagedb, this, pagedb,
                                                dispPg, retToEnclave);
 
         lemma_validEnclaveExecutionStepPre(loop1, loop0, loop_pagedb, this, pagedb, dispPg, retToEnclave);
 
         ghost if (retToEnclave) {
+            assert sp == old(sp);
             ghost var states' := states;
             lemma_partialEnclaveExecution_append(states, this, pagedb, dispPg, steps);
             states := states + seq(tuple(this, pagedb));
@@ -1093,6 +1114,7 @@ procedure {:frame false} enclaveexecution_loop(
             //assert states[0] == states'[0] == tuple(old(this), pagedb_in);
             //assert states[steps] == tuple(this, pagedb);
         } else {
+            assert sp == BitwiseOr(old(sp), 1);
             lemma_partialEnclaveExecution_done(states, this, pagedb, dispPg, steps);
             assert validEnclaveExecution(old(this), pagedb_in, this, pagedb, dispPg, steps);
         }
@@ -1100,6 +1122,7 @@ procedure {:frame false} enclaveexecution_loop(
     }
 
     // clear lower bit of SP, which was set to exit the loop
+    assume BitwiseAnd(sp, 1) != 0; // from tst_eq
     lemma_sp_bit_helper(old(sp), sp);
     assert !retToEnclave;
     SUB(sp, sp, 1);
@@ -1183,7 +1206,6 @@ procedure {:frame false} {:timeLimitMultiplier 2} smc_enterresume_success(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
-//assume false;
     pagedb := pagedb_in;
     ghost var dispPg := old(pagenr);
     assert finalDispatcher(pagedb, dispPg);
@@ -1276,7 +1298,6 @@ procedure {:frame false} kom_smc_enterresume(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
-//assume false; // succeeded with /proc
     r5 := callno;
     smc_enter_err(callno, disppg, pagedb_base, err, pagedb_in);
     if (err != const(KOM_ERR_SUCCESS) ) {

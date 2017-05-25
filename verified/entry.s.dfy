@@ -47,7 +47,7 @@ function updateUserPageFromState(s:state, d:PageDb, p:PageNr): PageDbEntry
 
 function updateUserPagesFromState'(s:state, d:PageDb, dispPg:PageNr): PageDb
     requires ValidState(s) && validPageDb(d) && SaneConstants()
-    requires nonStoppedDispatcher(d, dispPg)
+    requires finalDispatcher(d, dispPg)
 {
     var l1p := l1pOfDispatcher(d, dispPg);
     imap p:PageNr :: if pageSWrInAddrspace(d, l1p, p)
@@ -56,7 +56,7 @@ function updateUserPagesFromState'(s:state, d:PageDb, dispPg:PageNr): PageDb
 
 lemma lemma_updateUserPagesFromState_validPageDb(s:state, d:PageDb, dispPg:PageNr)
     requires ValidState(s) && validPageDb(d) && SaneConstants()
-    requires nonStoppedDispatcher(d, dispPg)
+    requires finalDispatcher(d, dispPg)
     ensures validPageDb(updateUserPagesFromState'(s, d, dispPg))
 {
     var d' := updateUserPagesFromState'(s, d, dispPg);
@@ -72,9 +72,9 @@ lemma lemma_updateUserPagesFromState_validPageDb(s:state, d:PageDb, dispPg:PageN
 
 function {:opaque} updateUserPagesFromState(s:state, d:PageDb, dispPg:PageNr): PageDb
     requires ValidState(s) && validPageDb(d) && SaneConstants()
-    requires nonStoppedDispatcher(d, dispPg)
+    requires finalDispatcher(d, dispPg)
     ensures var d' := updateUserPagesFromState(s, d, dispPg);
-        validPageDb(d') && nonStoppedDispatcher(d', dispPg)
+        validPageDb(d') && finalDispatcher(d', dispPg)
 {
     lemma_updateUserPagesFromState_validPageDb(s, d, dispPg);
     updateUserPagesFromState'(s, d, dispPg)
@@ -83,7 +83,7 @@ function {:opaque} updateUserPagesFromState(s:state, d:PageDb, dispPg:PageNr): P
 predicate validEnclaveExecutionStep'(s1:state, d1:PageDb,
     s4:state, d4:PageDb, rs:state, rd:PageDb, dispPg:PageNr, retToEnclave:bool)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
-    requires nonStoppedDispatcher(d1, dispPg)
+    requires finalDispatcher(d1, dispPg)
 {
     assert ValidOperand(OLR); // XXX: dafny gets lost on this below; NFI why
     var l1p := l1pOfDispatcher(d1, dispPg);
@@ -105,7 +105,7 @@ predicate validEnclaveExecutionStep'(s1:state, d1:PageDb,
 predicate {:opaque} validEnclaveExecutionStep(s1:state, d1:PageDb,
     rs:state, rd:PageDb, dispPg:PageNr, retToEnclave:bool)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
-    requires nonStoppedDispatcher(d1, dispPg)
+    requires finalDispatcher(d1, dispPg)
 {
     exists s4, d4
         :: validEnclaveExecutionStep'(s1, d1, s4, d4, rs, rd, dispPg,
@@ -115,7 +115,7 @@ predicate {:opaque} validEnclaveExecutionStep(s1:state, d1:PageDb,
 predicate {:opaque} validEnclaveExecution(s1:state, d1:PageDb,
     rs:state, rd:PageDb, dispPg:PageNr, steps:nat)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
-    requires nonStoppedDispatcher(d1, dispPg)
+    requires finalDispatcher(d1, dispPg)
     decreases steps
 {
     reveal_validEnclaveExecutionStep();
