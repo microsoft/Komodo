@@ -329,10 +329,11 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest(
         stack_bytes >= (STACKSIZE_ATTEST + 10) * WORDSIZE;  // +10 to store volatile reigsters
         isReturningSvc(exstate);
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
+        //OperandContents(this, OLR) == OperandContents(exstate, OLR);
+        //this.conf.nondet == nondet_int(exstate.conf.nondet, NONDET_GENERATOR());
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
-        validDispatcherPage(pagedb, dispPg);
-        finalDispatcher(pagedb, dispPg);
+        preEntryCommon(this, pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
         r0 == KOM_SVC_ATTEST;
 //        r10 == page_monvaddr(dispPg);
@@ -346,7 +347,10 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest(
         let tuple := svcHandled(exstate, pagedb, dispPg) in
         let retRegs := firstOf2(tuple) in
         let handled_pagedb := secondOf2(tuple) in
-        pagedb == handled_pagedb && preEntryReturn(old(this), this, retRegs);
+        pagedb == handled_pagedb && preEntryReturnRegsMatch(this, retRegs);
+        preEntryReturnPreserved(old(this), this);
+        spsr_mon == encode_mode(User);
+        lr == old(lr);
 {
     ghost var addrspace := pagedb[dispPg].addrspace;
     assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
@@ -354,7 +358,7 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest(
     ghost var remaining_stack_bytes;
     remaining_stack_bytes := stack_nonvolatiles(stack_bytes);
     lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
-    
+
     // Prove we still have a valid stack region after pushing registers onto the stack
     assert sp == old(sp) - 40;
     calc {
@@ -387,17 +391,13 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest(
     // Load the mac into registers
     SUB(r0, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC + 10) * WORDSIZE));
     load_memory_into_regs(mac);
-    
+
     MOV(r0, const(encode_mode(User)));
     MSR(spsr_mon, r0);
 
     MOV(r0, const(KOM_ERR_SUCCESS));
-    assert old(lr) == lr;
-    assert OperandContents(this, OLR) == OperandContents(old(this), OLR);
 
     assert pageDbCorresponds(this.m, pagedb) by {
         lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
     }
-
-    assert {:split_here} true;
 }

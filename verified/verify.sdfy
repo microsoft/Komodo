@@ -267,7 +267,7 @@ procedure {:frame false} {:timeLimitMultiplier 2} svc_returning_verify_inner'(
         globals;
     modifies
          r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
-         spsr_mon; mem;
+         mem;
     requires/ensures
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
@@ -355,7 +355,20 @@ procedure {:frame false} {:timeLimitMultiplier 2} svc_returning_verify_inner'(
     ADD(sp, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC + 14) * WORDSIZE));
 }
 
-procedure {:frame false} svc_returning_verify(
+#verbatim
+lemma lemma_BankedRegsInvariant_framing(s:state, s':state)
+    requires ValidState(s) && ValidState(s')
+    requires BankedRegsInvariant(s, s')
+    requires mode_of_state(s) == mode_of_state(s')
+    ensures s'.regs == va_update_olr(s', va_update_osp(s', va_update_reg(R12, s', va_update_reg(R11, s', va_update_reg(R10, s', va_update_reg(R9, s', va_update_reg(R8, s', va_update_reg(R7, s', va_update_reg(R6, s', va_update_reg(R5, s', va_update_reg(R4, s', va_update_reg(R3, s', va_update_reg(R2, s', va_update_reg(R1, s', va_update_reg(R0, s', s))))))))))))))).regs
+{
+    reveal_ValidRegState();
+    // sigh. help Dafny see that we're enumerating all constructors of a datatype
+    assert forall r | r in s'.regs :: r.R0? || r.R1? || r.R2? || r.R3? || r.R4? || r.R5? || r.R6? || r.R7? || r.R8? || r.R9? || r.R10? || r.R11? || r.R12? || r.SP? || r.LR?;
+}
+#endverbatim
+
+procedure svc_returning_verify(
     ghost exstate: state,
     ghost stack_bytes: int,
     ghost pagedb: PageDb,
@@ -375,7 +388,6 @@ procedure {:frame false} svc_returning_verify(
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
-        validDispatcherPage(pagedb, dispPg);
         finalDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
         r0 == KOM_SVC_VERIFY_STEP2;
@@ -387,13 +399,17 @@ procedure {:frame false} svc_returning_verify(
         pageDbCorresponds(this.m, pagedb);
         StackPreserving(old(this), this);
         NonStackMemPreserving(old(this), this);
-        BankedRegsInvariant(old(this), this);
+        lr == old(lr) && sp == old(sp);
+        /*BankedRegsInvariant(old(this), this);
         ttbr0 == old(ttbr0) && scr == old(scr);
-        GlobalsInvariant(old(this), this);
+        this.conf.nondet == old(this.conf.nondet);
+        GlobalsInvariant(old(this), this);*/
+        spsr_mon == encode_mode(User);
         let tuple := svcHandled(exstate, pagedb, dispPg) in
         let retRegs := firstOf2(tuple) in
         let handled_pagedb := secondOf2(tuple) in
-        pagedb == handled_pagedb && preEntryReturn(old(this), this, retRegs);
+        pagedb == handled_pagedb && preEntryReturnRegsMatch(this, retRegs);
+        preEntryReturnPreserved(old(this), this);
 {
     ghost var regs := seq(r1, r2, r3, r4, r5, r6, r7, r8);
 
@@ -421,10 +437,10 @@ procedure {:frame false} svc_returning_verify(
     ghost var mac;
     regs', mac := svc_returning_verify_inner'(exstate, stack_bytes, pagedb, dispPg);
 
-    assert old(lr) == lr;
-    assert OperandContents(this, OLR) == OperandContents(old(this), OLR);
-    assert old(lr_usr) == lr_usr;
-    assert old(sp_usr) == sp_usr;
+    //assert old(lr) == lr;
+    //assert OperandContents(this, OLR) == OperandContents(old(this), OLR);
+    //assert old(lr_usr) == lr_usr;
+    //assert old(sp_usr) == sp_usr;
 
     MOV(r0, const(encode_mode(User)));
     MSR(spsr_mon, r0);
@@ -437,6 +453,9 @@ procedure {:frame false} svc_returning_verify(
     MOV(r6, 0);
     MOV(r7, 0);
     MOV(r8, 0);
+
+    // help with framing
+    lemma_BankedRegsInvariant_framing(old(this), this);
 
     assert pageDbCorresponds(this.m, pagedb) by {
         assert globals == old(globals);

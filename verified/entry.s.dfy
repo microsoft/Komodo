@@ -217,6 +217,33 @@ predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
     && InsecureMemInvariant(s, s')
 }
 
+predicate preEntryReturnRegsMatch(s:state, retregs:SvcReturnRegs)
+    requires ValidState(s)
+{
+    reveal_ValidRegState();
+    s.regs[R0] == retregs.0
+    && s.regs[R1] == retregs.1
+    && s.regs[R2] == retregs.2
+    && s.regs[R3] == retregs.3
+    && s.regs[R4] == retregs.4
+    && s.regs[R5] == retregs.5
+    && s.regs[R6] == retregs.6
+    && s.regs[R7] == retregs.7
+    && s.regs[R8] == retregs.8
+}
+
+predicate preEntryReturnPreserved(s1:state, s2:state)
+    requires ValidState(s1) && ValidState(s2)
+{
+    reveal ValidRegState();
+    s1.regs[R9] == s2.regs[R9] &&
+    s1.regs[R10] == s2.regs[R10] &&
+    s1.regs[R11] == s2.regs[R11] &&
+    s1.regs[R12] == s2.regs[R12] &&
+    s1.regs[LR(User)] == s2.regs[LR(User)] &&
+    s1.regs[SP(User)] == s2.regs[SP(User)]
+}
+
 predicate preEntryReturn(exs:state, s:state, retregs:SvcReturnRegs, d:PageDb, dispPg:PageNr)
     requires ValidState(exs) && ValidState(s)
 {
@@ -228,22 +255,9 @@ predicate preEntryReturn(exs:state, s:state, retregs:SvcReturnRegs, d:PageDb, di
     && (reveal_ValidSRegState();
         s.sregs[spsr(mode_of_state(s))] == encode_mode(User))
     // R0-R8 return values
-    && s.regs[R0] == retregs.0
-    && s.regs[R1] == retregs.1
-    && s.regs[R2] == retregs.2
-    && s.regs[R3] == retregs.3
-    && s.regs[R4] == retregs.4
-    && s.regs[R5] == retregs.5
-    && s.regs[R6] == retregs.6
-    && s.regs[R7] == retregs.7
-    && s.regs[R8] == retregs.8
+    && preEntryReturnRegsMatch(s, retregs)
     // other user regs preserved
-    && s.regs[R9] == exs.regs[R9]
-    && s.regs[R10] == exs.regs[R10]
-    && s.regs[R11] == exs.regs[R11]
-    && s.regs[R12] == exs.regs[R12]
-    && s.regs[LR(User)] == exs.regs[LR(User)]
-    && s.regs[SP(User)] == exs.regs[SP(User)]
+    && preEntryReturnPreserved(s, exs)
 }
 
 predicate equivStates(s1:state, s2:state)

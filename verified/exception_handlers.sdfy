@@ -198,11 +198,12 @@ procedure svc_returning_default(
     ensures
         let tuple := svcHandled(exstate, pagedb, dispPg) in
         let retRegs := firstOf2(tuple) in
-        let pagedb' := secondOf2(tuple) in
-        preEntryReturn(old(this), this, retRegs);
+        preEntryReturnRegsMatch(this, retRegs);
+        spsr_mon == encode_mode(User);
 {
     // Fall back position
-    assert firstOf2(svcHandled(exstate, pagedb, dispPg)) == tuple(KOM_ERR_INVALID,0,0,0,0,0,0,0,0);
+    assert firstOf2(svcHandled(exstate, pagedb, dispPg))
+            == tuple(KOM_ERR_INVALID,0,0,0,0,0,0,0,0);
 
     MOV(r0, const(encode_mode(User)));
     MSR(spsr_mon, r0);
@@ -217,20 +218,6 @@ procedure svc_returning_default(
     MOV(r7, 0);
     MOV(r8, 0);
 }
-
-#verbatim
-predicate exregs_preserved(s1:state, s2:state)
-    requires ValidState(s1) && ValidState(s2)
-{
-    reveal ValidRegState();
-    s1.regs[R9] == s2.regs[R9] &&
-    s1.regs[R10] == s2.regs[R10] &&
-    s1.regs[R11] == s2.regs[R11] &&
-    s1.regs[R12] == s2.regs[R12] &&
-    s1.regs[LR(User)] == s2.regs[LR(User)] &&
-    s1.regs[SP(User)] == s2.regs[SP(User)]
-}
-#endverbatim
 
 procedure svc_returning_verify_step0(
     ghost exstate: state,
@@ -263,7 +250,8 @@ procedure svc_returning_verify_step0(
         let tuple := svcHandled(exstate, pagedb, dispPg) in
         let retRegs := firstOf2(tuple) in
         let handled_pagedb := secondOf2(tuple) in
-        pagedb' == handled_pagedb && preEntryReturn(old(this), this, retRegs);
+        pagedb' == handled_pagedb && preEntryReturnRegsMatch(this, retRegs);
+        spsr_mon == encode_mode(User);
         pageDbCorresponds(this.m, pagedb');
         validDispatcherPage(pagedb', dispPg);
 {
@@ -328,8 +316,7 @@ procedure svc_returning_verify_step1(
     reads
         globals; lr; 
     modifies
-         r0; r1; r2; r3; r4; r5; r6; r7; r8; 
-         spsr_mon; mem;
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; spsr_mon;
     requires/ensures
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
@@ -348,9 +335,10 @@ procedure svc_returning_verify_step1(
         let tuple := svcHandled(exstate, pagedb, dispPg) in
         let retRegs := firstOf2(tuple) in
         let handled_pagedb := secondOf2(tuple) in
-        pagedb' == handled_pagedb && preEntryReturn(old(this), this, retRegs);
+        pagedb' == handled_pagedb && preEntryReturnRegsMatch(this, retRegs);
         pageDbCorresponds(this.m, pagedb');
         validDispatcherPage(pagedb', dispPg);
+        spsr_mon == encode_mode(User);
 {
     ghost var user_words := seq(r1, r2, r3, r4, r5, r6, r7, r8);
     pagedb' := pagedb[dispPg := pagedb[dispPg].(entry := pagedb[dispPg].entry.(verify_measurement := user_words))];
@@ -369,11 +357,11 @@ procedure svc_returning_verify_step1(
     STR(r7, r0, const(DISP_CTXT_VERIFY_MEASUREMENT + 6 * WORDSIZE));
     STR(r8, r0, const(DISP_CTXT_VERIFY_MEASUREMENT + 7 * WORDSIZE));
 
-    MOV(r0, const(encode_mode(User)));        preEntryCommon(this, pagedb, dispPg);
-        this.conf.nondet == nondet_int(exstate.conf.nondet, NONDET_GENERATOR());
+    MOV(r0, const(encode_mode(User)));
     MSR(spsr_mon, r0);
 
-    assert firstOf2(svcHandled(exstate, pagedb, dispPg)) == tuple(KOM_ERR_SUCCESS,0,0,0,0,0,0,0,0);
+    assert firstOf2(svcHandled(exstate, pagedb, dispPg))
+            == tuple(KOM_ERR_SUCCESS,0,0,0,0,0,0,0,0);
     MOV(r0, const(KOM_ERR_SUCCESS));
     MOV(r1, 0);
     MOV(r2, 0);
@@ -402,8 +390,18 @@ procedure svc_returning_verify_step1(
     }
 }
 
+#verbatim
+lemma lemma_svc_returning_WordAlignedStack(s:state, stack_bytes:int)
+    requires SaneState(s)
+    requires StackBytesRemaining(s, stack_bytes)
+    requires stack_bytes >= (STACKSIZE_ATTEST + 14) * WORDSIZE
+    ensures ValidMemRange(va_get_osp(s) - (STACKSIZE_ATTEST + 14) * WORDSIZE, va_get_osp(s))
+    ensures ValidMemRange(va_get_osp(s) - (STACKSIZE_ATTEST + 10) * WORDSIZE, va_get_osp(s))
+{
+}
+#endverbatim
 
-procedure {:frame false} svc_returning(
+procedure {:frame false} {:fuel WordAligned, 0} svc_returning(
     ghost exstate: state,
     ghost stack_bytes: int,
     ghost pagedb: PageDb,
@@ -420,14 +418,16 @@ procedure {:frame false} svc_returning(
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
     requires
-        stack_bytes >= (STACKSIZE_ATTEST + 14) * WORDSIZE;  
+        stack_bytes >= (STACKSIZE_ATTEST + 14) * WORDSIZE;
         ValidState(exstate) && mode_of_state(exstate) != User;
         isReturningSvc(exstate);
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
+        OperandContents(this, OLR) == OperandContents(exstate, OLR);
         preEntryCommon(this, pagedb, dispPg);
         this.conf.nondet == nondet_int(exstate.conf.nondet, NONDET_GENERATOR());
+        this.conf.scr == exstate.conf.scr && this.conf.ttbr0 == exstate.conf.ttbr0;
         pageDbCorresponds(this.m, pagedb);
-        exregs_preserved(exstate, this);
+        preEntryReturnPreserved(exstate, this);
         OperandContents(this, OLR) == OperandContents(exstate, OLR);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
@@ -458,32 +458,44 @@ procedure {:frame false} svc_returning(
         validPageDb(pagedb');
         preEntryReturn(exstate, this, retRegs, pagedb, dispPg);
 {
+    ghost var retRegs := firstOf2(svcHandled(exstate, pagedb, dispPg));
+
+    lemma_svc_returning_WordAlignedStack(this, stack_bytes);
+
     if (r0 == const(KOM_SVC_ATTEST)) {
         // Create an attestation
         svc_returning_attest(exstate, stack_bytes, pagedb, dispPg);
         pagedb' := pagedb;
-        assert wellFormedPageDb(pagedb');
         assert pageDbCorresponds(this.m, pagedb');
+        assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
     } else if (r0 == const(KOM_SVC_VERIFY_STEP0)) {
         // Store the user provided words to verify
         pagedb' := svc_returning_verify_step0(exstate, stack_bytes, pagedb, dispPg);
-        assert wellFormedPageDb(pagedb');
         assert pageDbCorresponds(this.m, pagedb');
+        assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
     } else if (r0 == const(KOM_SVC_VERIFY_STEP1)) {
         // Store the user provided measurement to verify
         pagedb' := svc_returning_verify_step1(exstate, stack_bytes, pagedb, dispPg);
-        assert wellFormedPageDb(pagedb');
         assert pageDbCorresponds(this.m, pagedb');
+        assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
     } else if (r0 == const(KOM_SVC_VERIFY_STEP2)) {
         // Do some verification
         svc_returning_verify(exstate, stack_bytes, pagedb, dispPg);
         pagedb' := pagedb;
+        assert pageDbCorresponds(this.m, pagedb');
+        calc {
+            OperandContents(this, OLR);
+            lr;
+            old(lr);
+            OperandContents(old(this), OLR);
+            OperandContents(exstate, OLR);
+        }
+        assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
     } else {
         // Fall back position
         svc_returning_default(exstate, stack_bytes, pagedb, dispPg);
         pagedb' := pagedb;
-        assert wellFormedPageDb(pagedb');
-        assert pageDbCorresponds(this.m, pagedb');
+        assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
     }
 }
 
@@ -499,6 +511,7 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
         InterruptContinuationInvariantDef();
         mode_of_state(this) == Supervisor && spsr_of_state(this).m == User;
         this.conf.ex == ExSVC;
+        interrupts_enabled(this);
         exists stack_bytes :: StackBytesRemaining(this, stack_bytes) && stack_bytes >= (STACKSIZE_ATTEST + 14) * WORDSIZE;
     ensures
         KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
@@ -527,7 +540,7 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
         ghost var tuple;
         tuple := svcHandled(old(this), pagedb, dispPg);
         assert pagedb == secondOf2(tuple);
-        assert preEntryReturn(old(this), this, firstOf2(tuple));
+        assert preEntryReturn(old(this), this, firstOf2(tuple), pagedb, dispPg);
     }
 
     assert validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg)
@@ -794,7 +807,7 @@ procedure save_disp_context(inout operand base: reg,
     }
 }
 
-procedure {:frame false} interrupt_handler(
+procedure {:frame false} {:timeLimitMultiplier 2} interrupt_handler(
     inline ex: exception,
     ghost pagedb_in: PageDb,
     ghost dispPg: PageNr) returns (ghost pagedb: PageDb)
@@ -895,6 +908,35 @@ procedure {:frame false} interrupt_handler(
 
         pagedb := pagedb_in;
         lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
+
+        // sigh. trigger OReg(x) to see CoreRegPreservingExcept
+        assert CoreRegPreservingExcept(old(this), this, set(OLR)) by {
+            // double sigh. help Dafny see that we're enumerating all
+            // constructors of a datatype
+            assert forall r :: ValidRegOperand(OReg(r)) ==> r is R0 || r is R1 || r is R2
+                || r is R3 || r is R4 || r is R5 || r is R6 || r is R7 || r is R8 || r is R9
+                || r is R10 || r is R11 || r is R12;
+            assert r0 == OperandContents(this, OReg(R0)) == old(r0);
+            assert r1 == OperandContents(this, OReg(R1)) == old(r1);
+            assert r2 == OperandContents(this, OReg(R2)) == old(r2);
+            assert r3 == OperandContents(this, OReg(R3)) == old(r3);
+            assert r4 == OperandContents(this, OReg(R4)) == old(r4);
+            assert r5 == OperandContents(this, OReg(R5)) == old(r5);
+            assert r6 == OperandContents(this, OReg(R6)) == old(r6);
+            assert r7 == OperandContents(this, OReg(R7)) == old(r7);
+            assert r8 == OperandContents(this, OReg(R8)) == old(r8);
+            assert r9 == OperandContents(this, OReg(R9)) == old(r9);
+            assert r10 == OperandContents(this, OReg(R10)) == old(r10);
+            assert r11 == OperandContents(this, OReg(R11)) == old(r11);
+            assert r12 == OperandContents(this, OReg(R12)) == old(r12);
+            assert sp == OperandContents(this, OSP) == old(sp);
+        }
+        calc {
+            OperandContents(this, OLR);
+            lr;
+            TruncateWord(old(lr) - 4);
+            TruncateWord(OperandContents(old(this), OLR) - 4);
+        }
         assert KomInterruptHandlerInvariant(old(this), pagedb_in, this, dispPg);
     }
 }

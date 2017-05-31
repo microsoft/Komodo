@@ -263,4 +263,3 @@ lemma lemma_svc_returning_verify_step1_helper(s:state, pagedb:PageDb, dispPg:Pag
         }
     }
 }
-
