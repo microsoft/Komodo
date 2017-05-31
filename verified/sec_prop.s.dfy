@@ -73,10 +73,11 @@ predicate {:opaque} enc_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
 predicate os_eqentry(e1:PageDbEntryTyped, e2:PageDbEntryTyped)
 {
     match e1
-        case Addrspace(_,_,_) => e1 == e2
+        case Addrspace(_,_,_,_,_)
+            => e2.Addrspace? && e1.(shatrace := e2.shatrace) == e2 // shatrace is irrelevant
         case L1PTable(_) => e1 == e2
         case L2PTable(_) => e1 == e2
-        case Dispatcher(_,_,_) => e2.Dispatcher? &&
+        case Dispatcher(_,_,_,_,_) => e2.Dispatcher? &&
             e2.entered == e1.entered && e2.entrypoint == e1.entrypoint
         case DataPage(_) => e2.DataPage?
 }

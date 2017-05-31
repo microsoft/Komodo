@@ -1,7 +1,6 @@
 include "sec_prop.s.dfy"
 include "pagedb.s.dfy"
 include "entry.s.dfy"
-include "sec_prop_util.i.dfy"
 include "os_declass.s.dfy"
 
 predicate contentsOk(physPage: word, contents: Maybe<seq<word>>)
@@ -42,12 +41,12 @@ lemma lemma_unpack_validEnclaveExecution(s1:state, d1:PageDb,
     rs:state, rd:PageDb, dispPg:PageNr, steps:nat)
     returns (retToEnclave:bool, s5:state, d5:PageDb)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
-    requires nonStoppedDispatcher(d1, dispPg)
+    requires finalDispatcher(d1, dispPg)
     requires validEnclaveExecution(s1, d1, rs, rd, dispPg, steps)
     ensures retToEnclave == (steps > 0)
     ensures validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
     ensures retToEnclave ==> ValidState(s5) && validPageDb(d5)
-    ensures retToEnclave ==> nonStoppedDispatcher(d5, dispPg)
+    ensures retToEnclave ==> finalDispatcher(d5, dispPg)
     ensures retToEnclave ==> validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1)
     ensures !retToEnclave ==> rs == s5 && rd == d5
 {
@@ -125,7 +124,7 @@ predicate entering_atkr(d1: PageDb, d2: PageDb, disp: word, atkr: PageNr, is_res
     d1[disp].PageDbEntryTyped? && d1[disp].entry.Dispatcher? &&
     d2[disp].PageDbEntryTyped? && d2[disp].entry.Dispatcher? &&
     d1[disp].addrspace == atkr && d2[disp].addrspace == atkr &&
-    nonStoppedDispatcher(d1, disp) && nonStoppedDispatcher(d2, disp) &&
+    finalDispatcher(d1, disp) && finalDispatcher(d2, disp) &&
     smc_enter_err(d1, disp, is_resume) == KOM_ERR_SUCCESS &&
     smc_enter_err(d2, disp, is_resume) == KOM_ERR_SUCCESS
 }

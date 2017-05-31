@@ -405,7 +405,7 @@ predicate outside_world_same(d:PageDb, d':PageDb, p:PageNr, asp: PageNr)
     requires validPageNr(asp) && valAddrPage(d, asp)
     requires d[p].addrspace == asp
 {
-    nonStoppedDispatcher(d', p) && nonStoppedDispatcher(d, p) &&
+    finalDispatcher(d', p) && finalDispatcher(d, p) &&
     valDispPage(d', p) && valAddrPage(d', asp) && d'[p].addrspace == asp &&
     (forall n : PageNr :: d'[n].PageDbEntryTyped? <==>
         d[n].PageDbEntryTyped?) &&
@@ -473,7 +473,7 @@ lemma lemma_validEnclaveEx_oae(
     requires validPageNr(disp) && valDispPage(d, disp)
     requires validPageNr(asp) && valAddrPage(d, asp)
     requires d[disp].addrspace == asp
-    requires nonStoppedDispatcher(d, disp)
+    requires finalDispatcher(d, disp)
     requires mode_of_state(s) != User
     requires !spsr_of_state(s).f && !spsr_of_state(s).i
     requires validEnclaveExecution(s, d, s', d', disp, steps);
@@ -506,7 +506,7 @@ lemma lemma_validEnclaveStep_oae(
     requires validPageNr(disp) && valDispPage(d, disp)
     requires validPageNr(asp) && valAddrPage(d, asp)
     requires d[disp].addrspace == asp
-    requires nonStoppedDispatcher(d, disp)
+    requires finalDispatcher(d, disp)
     requires validEnclaveExecutionStep(s, d, s', d', disp, ret);
     ensures outside_world_same(d, d', disp, asp)
 {
@@ -525,7 +525,7 @@ lemma lemma_validEnclaveStepPrime_oae(
     requires validPageNr(disp) && valDispPage(d1, disp)
     requires validPageNr(asp) && valAddrPage(d1, asp)
     requires d1[disp].addrspace == asp
-    requires nonStoppedDispatcher(d1, disp)
+    requires finalDispatcher(d1, disp)
     requires validEnclaveExecutionStep'(s1,d1,s4,d4,r,rd,disp,ret)
     ensures outside_world_same(d1, rd, disp, asp)
 {
@@ -554,7 +554,7 @@ predicate atkr_entry(d1: PageDb, d2: PageDb, disp: word, atkr: PageNr)
     valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
     d1[disp].PageDbEntryTyped? && d1[disp].entry.Dispatcher? &&
     d2[disp].PageDbEntryTyped? && d2[disp].entry.Dispatcher? &&
-    nonStoppedDispatcher(d1, disp) && nonStoppedDispatcher(d2, disp) &&
+    finalDispatcher(d1, disp) && finalDispatcher(d2, disp) &&
     d1[disp].addrspace == d2[disp].addrspace == atkr
 }
 
@@ -1062,8 +1062,8 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
         assert user_regs(r1.regs) == user_regs(r2.regs) by
         { 
             lemma_preEntryUserRegs(
-                s14, r1, ret1, rd1,
-                s24, r2, ret2, rd2, dispPg
+                s14, r1, ret1.0, rd1,
+                s24, r2, ret2.0, rd2, dispPg
             );
         }
         assert OperandContents(r1, OLR) == OperandContents(r2, OLR);

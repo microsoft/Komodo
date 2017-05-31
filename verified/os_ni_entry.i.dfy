@@ -113,8 +113,8 @@ lemma lemma_validEnclaveEx_os(
         ValidState(s1') && ValidState(s2')
     requires validPageDb(d1) && validPageDb(d2) &&
         validPageDb(d1') && validPageDb(d2')
-    requires nonStoppedDispatcher(d1, dispPg)
-    requires nonStoppedDispatcher(d2, dispPg)
+    requires finalDispatcher(d1, dispPg)
+    requires finalDispatcher(d2, dispPg)
     requires validEnclaveExecution(s1, d1, s1', d1', dispPg, steps1);
     requires validEnclaveExecution(s2, d2, s2', d2', dispPg, steps2);
     requires os_eqpdb(d1, d2)
@@ -166,8 +166,8 @@ lemma lemma_validEnclaveStep_os(s1: state, d1: PageDb, s1':state, d1': PageDb,
              validPageDb(d1') && validPageDb(d2') 
     requires SaneConstants() && do_declassify()
     requires s1.conf.nondet == s2.conf.nondet
-    requires nonStoppedDispatcher(d1, dispPage)
-    requires nonStoppedDispatcher(d2, dispPage)
+    requires finalDispatcher(d1, dispPage)
+    requires finalDispatcher(d2, dispPage)
     requires validEnclaveExecutionStep(s1, d1, s1', d1', dispPage, ret1);
     requires validEnclaveExecutionStep(s2, d2, s2', d2', dispPage, ret2);
     requires os_eqpdb(d1, d2)
@@ -206,8 +206,8 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
              validPageDb(rd1) && validPageDb(rd2) && SaneConstants()
     requires do_declassify()
     requires s11.conf.nondet == s21.conf.nondet
-    requires nonStoppedDispatcher(d11, dispPg)
-    requires nonStoppedDispatcher(d21, dispPg)
+    requires finalDispatcher(d11, dispPg)
+    requires finalDispatcher(d21, dispPg)
     requires validEnclaveExecutionStep'(s11,d11,s14,d14,r1,rd1,dispPg,retToEnclave1)
     requires validEnclaveExecutionStep'(s21,d21,s24,d24,r2,rd2,dispPg,retToEnclave2)
     requires InsecureMemInvariant(s11, s21)
@@ -362,8 +362,8 @@ lemma lemma_updateUserPages_os(
     dispPg: PageNr)
 requires validStates({s14, s24}) && SaneConstants()
 requires validPageDbs({d11,d21,d14,d24})
-requires nonStoppedDispatcher(d11, dispPg)
-requires nonStoppedDispatcher(d21, dispPg)
+requires finalDispatcher(d11, dispPg)
+requires finalDispatcher(d21, dispPg)
 requires d14 == updateUserPagesFromState(s14, d11, dispPg)
 requires d24 == updateUserPagesFromState(s24, d21, dispPg)
 requires os_eqpdb(d11, d21)
