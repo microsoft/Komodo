@@ -533,7 +533,7 @@ lemma lemma_validEnclaveStepPrime_oae(
     assert outside_world_same(d1, d4, disp, asp) by 
         { reveal_updateUserPagesFromState(); }
     if (ret) {
-        assert rd == d4;
+        assert rd == svcHandled(s4, d4, disp).1;
         assert outside_world_same(d1, rd, disp, asp);
     } else {
         // This is the slow case if that matters.

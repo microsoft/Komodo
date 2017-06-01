@@ -21,10 +21,10 @@ lemma lemma_enc_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     requires enc_eqpdb(d1, d2, atkr)
     requires (var callno := s1.regs[R0]; var dispPage := s1.regs[R1];
         (callno == KOM_SMC_ENTER  && entering_atkr(d1, d2, dispPage, atkr, false))
-                ==> s1.conf.nondet == s2.conf.nondet
+                ==> s1.conf.nondet == s2.conf.nondet)
     requires (var callno := s1.regs[R0]; var dispPage := s1.regs[R1];
         (callno == KOM_SMC_RESUME  && entering_atkr(d1, d2, dispPage, atkr, true))
-                ==> s1.conf.nondet == s2.conf.nondet
+                ==> s1.conf.nondet == s2.conf.nondet)
     // then (s1', d1') =_{atkr} (s2', d2')
     ensures !(var callno := s1.regs[R0]; var asp := s1.regs[R1];
         callno == KOM_SMC_STOP && asp == atkr) ==>
@@ -244,7 +244,9 @@ lemma lemma_initDispatcher_enc_ni(d1: PageDb, d1': PageDb, e1':word,
 {
     reveal_enc_eqpdb();
     if(isAddrspace(d1, addrspacePage) && isAddrspace(d2, addrspacePage)) {
-        var disp := Dispatcher(entrypoint, false, initDispCtxt());
+        var disp := Dispatcher(entrypoint, false, initDispCtxt(),
+                               [0, 0, 0, 0, 0, 0, 0, 0],
+                               [0, 0, 0, 0, 0, 0, 0, 0]);
         assert allocatePage(d1, page, addrspacePage, disp) == (d1', e1');
         assert allocatePage(d2, page, addrspacePage, disp) == (d2', e2');
         lemma_allocatePage_enc_ni(d1, d1', e1', d2, d2', e2',
