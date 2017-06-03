@@ -174,10 +174,10 @@ lemma lemma_validEnclaveStep_os(s1: state, d1: PageDb, s1':state, d1': PageDb,
     requires InsecureMemInvariant(s1, s2)
     ensures  os_eqpdb(d1', d2')
     ensures  InsecureMemInvariant(s1', s2')
-    ensures  same_ret(s1', s2')
     ensures  ret1 == ret2
     ensures  ret1 ==> s1'.conf.nondet == s2'.conf.nondet;
     ensures  ret1 ==> do_declassify()
+    ensures  !ret1 ==> same_ret(s1', s2')
 {
     reveal validEnclaveExecutionStep();
     var s14, d14 :|
@@ -194,7 +194,87 @@ lemma lemma_validEnclaveStep_os(s1: state, d1: PageDb, s1':state, d1': PageDb,
         dispPage, ret1, ret2);
 }
 
-lemma {:timeLimitMultiplier 2}
+lemma lemma_svcHandled_os_eqpdb(s: state, d: PageDb, dispPg: PageNr, d': PageDb)
+    requires validPageDbs({d, d'}) && validDispatcherPage(d, dispPg)
+    requires ValidState(s) && mode_of_state(s) != User
+    requires isReturningSvc(s)
+    requires d' == svcHandled(s, d, dispPg).1
+    ensures os_eqpdb(d, d')
+{
+
+    reveal os_eqpdb();
+    if( OperandContents(s, OReg(R0)) == KOM_SVC_ATTEST ) {
+        assert d' == d;
+    } else if( OperandContents(s, OReg(R0)) == KOM_SVC_VERIFY_STEP0) {
+        assert os_eqentry(d[dispPg].entry, d'[dispPg].entry);
+    } else if( OperandContents(s, OReg(R0)) == KOM_SVC_VERIFY_STEP1) {
+        assert os_eqentry(d[dispPg].entry, d'[dispPg].entry);
+    } else if( OperandContents(s, OReg(R0)) == KOM_SVC_VERIFY_STEP2) {
+        assert d' == d;
+    } else {
+        assert d' == d;
+    }
+}
+
+lemma //{:timeLimitMultiplier 2}
+lemma_validEnclaveStepPrime_os_retnondet(
+s11: state, d11: PageDb, s14:state, d14:PageDb, r1:state, rd1:PageDb,
+s21: state, d21: PageDb, s24:state, d24:PageDb, r2:state, rd2:PageDb,
+dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
+)
+    requires ValidState(s11) && ValidState(s21) &&
+             ValidState(r1)  && ValidState(r2)  &&
+             validPageDb(d11) && validPageDb(d21) &&
+             validPageDb(rd1) && validPageDb(rd2) && SaneConstants()
+    requires do_declassify()
+    // requires s11.conf.nondet == s21.conf.nondet
+    requires finalDispatcher(d11, dispPg)
+    requires finalDispatcher(d21, dispPg)
+    requires validEnclaveExecutionStep'(s11,d11,s14,d14,r1,rd1,dispPg,retToEnclave1)
+    requires validEnclaveExecutionStep'(s21,d21,s24,d24,r2,rd2,dispPg,retToEnclave2)
+    /// requires InsecureMemInvariant(s11, s21)
+    // requires os_eqpdb(d11, d21)
+    //requires userspaceExecutionAndException'(s11, s1', s12, s14);
+    //requires userspaceExecutionAndException'(s21, s2', s22, s24);
+    requires s14.conf.nondet == s24.conf.nondet 
+    requires os_eqpdb(d14, d24)
+    requires retToEnclave1 == retToEnclave2
+    requires s14.conf.ex == s24.conf.ex == declassified_ex();
+    requires (!retToEnclave1 && declassified_ex() == ExSVC ==>
+            s14.regs[R0] == s24.regs[R0] == declassified_reg(R0));
+    requires (!retToEnclave1 && declassified_ex() == ExSVC &&
+        declassified_reg(R0) == KOM_SVC_EXIT) ==> 
+        s14.regs[R1] == s24.regs[R1]
+    ensures  os_eqpdb(rd1, rd2)
+    ensures  !retToEnclave1 ==> same_ret(r1, r2)
+    ensures  retToEnclave1 ==> r1.conf.nondet == r2.conf.nondet
+{
+    if(retToEnclave1) {
+        
+        var (retRegs1, rd1') := svcHandled(s14, d14, dispPg);
+        var (retRegs2, rd2') := svcHandled(s24, d24, dispPg);
+
+        lemma_svcHandled_os_eqpdb(s14, d14, dispPg, rd1');
+        lemma_svcHandled_os_eqpdb(s24, d24, dispPg, rd2');
+
+        reveal os_eqpdb();
+        
+        assert os_eqpdb(rd1', rd2');
+        assert os_eqpdb(rd1, rd2);
+
+        assert r1.conf.nondet == r2.conf.nondet by {
+            assert s14.conf.nondet == s24.conf.nondet; 
+        }
+    } else {
+        reveal ValidRegState();
+        lemma_exceptionHandled_os(
+            s14, d14, rd1, r1.regs[R0], r1.regs[R1],
+            s24, d24, rd2, r2.regs[R0], r2.regs[R1],
+            dispPg);
+    }
+}
+
+lemma {:timeLimitMultiplier 3}
 lemma_validEnclaveStepPrime_os(
 s11: state, d11: PageDb, s14:state, d14:PageDb, r1:state, rd1:PageDb,
 s21: state, d21: PageDb, s24:state, d24:PageDb, r2:state, rd2:PageDb,
@@ -214,8 +294,8 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
     requires os_eqpdb(d11, d21)
     ensures  InsecureMemInvariant(r1, r2)
     ensures  os_eqpdb(rd1, rd2)
-    ensures  same_ret(r1, r2)
     ensures  retToEnclave1 == retToEnclave2
+    ensures  !retToEnclave1 ==> same_ret(r1, r2)
     ensures  retToEnclave1 ==> r1.conf.nondet == r2.conf.nondet
 {
     assert l1pOfDispatcher(d11, dispPg) == l1pOfDispatcher(d21, dispPg) by
@@ -236,6 +316,11 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
     var pc1 := OperandContents(s11, OLR);
     var pc2 := OperandContents(s21, OLR);
     
+    assert ExtractAbsPageTable(s12).Just? by {
+        assert ExtractAbsPageTable(s11).Just?;
+        assert ExtractAbsPageTable(s11) == ExtractAbsPageTable(s1');
+        assert ExtractAbsPageTable(s12) == ExtractAbsPageTable(s1');
+    }
     var (s13, expc1, ex1) := userspaceExecutionFn(s12, pc1);
     var (s23, expc2, ex2) := userspaceExecutionFn(s22, pc2);
    
@@ -293,9 +378,18 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
 
     assert s14.conf.ex == s24.conf.ex == declassified_ex();
 
+    assert os_eqpdb(d14, d24) by
+    {
+        assert validPageDbs({d11,d21,d14,d24});
+        lemma_updateUserPages_os(s14, d11, d14,
+            s24, d21, d24, dispPg);
+    }
+
     assert retToEnclave1 == retToEnclave2 &&
         (!retToEnclave1 && declassified_ex() == ExSVC ==>
-            s14.regs[R1] == s24.regs[R1]) by
+            s14.regs[R0] == s24.regs[R0] == declassified_reg(R0) && 
+            (declassified_reg(R0) == KOM_SVC_EXIT ==>
+            s14.regs[R1] == s24.regs[R1])) by
     {
         assert s14.regs[R0] == s13.regs[R0];
         assert s24.regs[R0] == s23.regs[R0];
@@ -309,13 +403,13 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
             }
         }
     }
+    
+    lemma_validEnclaveStepPrime_os_retnondet(
+        s11, d11, s14, d14, r1, rd1,
+        s21, d21, s24, d24, r2, rd2,
+        dispPg, retToEnclave1, retToEnclave2);
 
-    assert os_eqpdb(d14, d24) by
-    {
-        lemma_updateUserPages_os(s14, d11, d14,
-            s24, d21, d24, dispPg);
-    }
-
+    /*
     if(retToEnclave1) {
         assert os_eqpdb(rd1, rd2);
         assert same_ret(r1, r2);
@@ -329,6 +423,7 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
             s24, d24, rd2, r2.regs[R0], r2.regs[R1],
             dispPg);
     }
+    */
 
 }
 
