@@ -658,7 +658,7 @@ lemma lemma_svcHandled_pageDbCorresponds(s4:state, d4:PageDb, r:state, dispPg:Pa
     }
 }
 
-lemma lemma_svcHandled_validPageDb(s4:state, d4:PageDb, r:state, dispPg:PageNr, regs:SvcReturnRegs, rd:PageDb)
+lemma lemma_svcHandled_validPageDb(s4:state, d4:PageDb, dispPg:PageNr, regs:SvcReturnRegs, rd:PageDb)
     requires ValidState(s4) && mode_of_state(s4) != User && SaneMem(s4.m)
     requires validPageDb(d4) && validDispatcherPage(d4, dispPg)
     requires isReturningSvc(s4)
@@ -718,7 +718,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
         assert ssp == rsp;
         var (regs, d4') := svcHandled(s4, d4, dispPg);
         lemma_svcHandled_pageDbCorresponds(s4, d4, r, dispPg, regs, d4');
-        lemma_svcHandled_validPageDb(s4, d4, r, dispPg, regs, d4');
+        lemma_svcHandled_validPageDb(s4, d4, dispPg, regs, d4');
         rd := d4';
 
         assert spsr_of_state(r).m == User by {

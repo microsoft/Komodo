@@ -881,6 +881,122 @@ s21: state, s2':state, s22: state)
     assert evalUpdate(takestep(s2'), OSReg(cpsr), spsr2v, s22);
 }
 
+lemma lemma_svcHandled_enc_eqpdb(
+    s1: state, d1: PageDb, d1': PageDb,
+    s2: state, d2: PageDb, d2': PageDb, dispPg: PageNr, atkr: PageNr)
+    requires validPageDbs({d1, d2}) &&
+        validDispatcherPage(d1, dispPg) &&
+        validDispatcherPage(d2, dispPg)
+    requires ValidState(s1) && mode_of_state(s1) != User
+    requires ValidState(s2) && mode_of_state(s2) != User
+    requires isReturningSvc(s1) && isReturningSvc(s2)
+    requires d1' == svcHandled(s1, d1, dispPg).1
+    requires d2' == svcHandled(s2, d2, dispPg).1
+    requires user_regs(s1.regs) == user_regs(s2.regs)
+    requires atkr_entry(d1, d2, dispPg, atkr)
+    requires enc_eqpdb(d1, d2, atkr)
+    requires ValidState(s1) && mode_of_state(s1) != User && SaneMem(s1.m)
+    requires ValidState(s2) && mode_of_state(s2) != User && SaneMem(s2.m)
+    ensures  atkr_entry(d1', d2', dispPg, atkr)
+    ensures  enc_eqpdb(d1', d2', atkr)
+    ensures  svcHandled(s1, d1, dispPg).0 == svcHandled(s2, d2, dispPg).0
+{
+
+    var call := OperandContents(s1, OReg(R0));
+    var user_words1 := [s1.regs[R1], s1.regs[R2], s1.regs[R3], s1.regs[R4],
+        s1.regs[R5], s1.regs[R6], s1.regs[R7], s1.regs[R8]];
+    var user_words2 := [s2.regs[R1], s2.regs[R2], s2.regs[R3], s2.regs[R4],
+        s2.regs[R5], s2.regs[R6], s2.regs[R7], s2.regs[R8]];
+
+    assert user_words1 == user_words2 by {
+        assert R1 in USER_REGS();
+        assert R2 in USER_REGS();
+        assert R3 in USER_REGS();
+        assert R4 in USER_REGS();
+        assert R5 in USER_REGS();
+        assert R6 in USER_REGS();
+        assert R7 in USER_REGS();
+        assert R8 in USER_REGS();
+        assert R1 in user_regs(s1.regs);
+        assert R1 in user_regs(s2.regs);
+        assert R2 in user_regs(s1.regs);
+        assert R2 in user_regs(s2.regs);
+        assert R3 in user_regs(s1.regs);
+        assert R3 in user_regs(s2.regs);
+        assert R4 in user_regs(s1.regs);
+        assert R4 in user_regs(s2.regs);
+        assert R5 in user_regs(s1.regs);
+        assert R5 in user_regs(s2.regs);
+        assert R6 in user_regs(s1.regs);
+        assert R6 in user_regs(s2.regs);
+        assert R7 in user_regs(s1.regs);
+        assert R7 in user_regs(s2.regs);
+        assert R8 in user_regs(s1.regs);
+        assert R8 in user_regs(s2.regs);
+        // There's no good ascii version of upside-down face emoji,
+        // but if there was, it would go here.
+    }
+    var retRegs1 := svcHandled(s1, d1, dispPg).0;
+    var retRegs2 := svcHandled(s2, d2, dispPg).0;
+    lemma_svcHandled_validPageDb(s1, d1, dispPg, retRegs1, d1');
+    lemma_svcHandled_validPageDb(s2, d2, dispPg, retRegs2, d2');
+
+    assert OperandContents(s1, OReg(R0)) ==
+        OperandContents(s2, OReg(R0)) by {
+           assert R0 in USER_REGS(); 
+           assert R0 in user_regs(s1.regs);
+           assert R0 in user_regs(s2.regs);
+        }
+    if( call  == KOM_SVC_ATTEST ) {
+        assert d1' == d1;
+        assert d2' == d2;
+        reveal enc_eqpdb();
+    } else if( call == KOM_SVC_VERIFY_STEP0 || call  == KOM_SVC_VERIFY_STEP1 ) {
+        assert d1[dispPg].entry == d2[dispPg].entry &&
+            d1'[dispPg].entry == d2'[dispPg].entry &&
+            d1'[dispPg].addrspace == d2'[dispPg].addrspace by {
+            reveal enc_eqpdb();
+        }
+        forall (n: PageNr | n != dispPg )
+            ensures d1'[n] == d1[n]
+            ensures d2'[n] == d2[n] 
+            ensures pgInAddrSpc(d1, n, atkr) ==> 
+                pgInAddrSpc(d1', n, atkr)
+            ensures pgInAddrSpc(d2, n, atkr) ==> 
+                pgInAddrSpc(d2', n, atkr)
+            {
+                assert enc_eqpdb(d1, d2, atkr);
+                if(d1[n].PageDbEntryTyped? && d1[n].addrspace == atkr){
+                    assert d1'[n].PageDbEntryTyped? &&
+                        d1'[n].addrspace == atkr;
+                }
+                reveal enc_eqpdb();
+            }
+
+        reveal enc_eqpdb();
+        assert enc_eqpdb(d1', d2', atkr);
+        assert user_words1 == user_words2;
+    } else if( call == KOM_SVC_VERIFY_STEP2) {
+        var dummy:word := 0;
+        var hmac1 := svcHmacVerify(s1, d1, dispPg);
+        var hmac2 := svcHmacVerify(s2, d2, dispPg);
+        assert hmac1 == hmac2 by { reveal enc_eqpdb(); }
+        var ok := if user_words1 == hmac1 then 1 else 0;
+        assert retRegs1 == (KOM_ERR_SUCCESS, ok, dummy, dummy, dummy, dummy, 
+            dummy, dummy, dummy);
+        assert retRegs2 == (KOM_ERR_SUCCESS, ok, dummy, dummy, dummy, dummy, 
+            dummy, dummy, dummy);
+        assert retRegs1 == retRegs2;
+        assert d1' == d1;
+        assert d2' == d2;
+        reveal enc_eqpdb();
+    } else {
+        assert d1' == d1;
+        assert d2' == d2;
+        reveal enc_eqpdb();
+    }
+}
+
 lemma lemma_validEnclaveStepPrime_enc(
 s11: state, d11: PageDb, s14:state, d14:PageDb, r1:state, rd1:PageDb,
 s21: state, d21: PageDb, s24:state, d24:PageDb, r2:state, rd2:PageDb,
@@ -1050,8 +1166,9 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
     var retToEnclave := retToEnclave1;
 
     if(retToEnclave) {
-        assert rd1 == d14;
-        assert rd2 == d24;
+        lemma_svcHandled_enc_eqpdb(s14, d14, rd1,
+            s24, d24, rd2, dispPg, atkr);
+
         assert r1.conf.nondet == r2.conf.nondet by {
             assert s14.conf.nondet == s24.conf.nondet; 
         }
@@ -1059,6 +1176,7 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
         assert r1.conf.nondet == r2.conf.nondet;
         var ret1 := svcHandled(s14, d14, dispPg);
         var ret2 := svcHandled(s24, d24, dispPg);
+        assert ret1.0 == ret2.0;
         assert user_regs(r1.regs) == user_regs(r2.regs) by
         { 
             lemma_preEntryUserRegs(
