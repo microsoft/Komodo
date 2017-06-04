@@ -60,6 +60,23 @@ lemma lemma_unpack_validEnclaveExecution(s1:state, d1:PageDb,
             rs == s5 && rd == d5);
 }
 
+lemma lemma_enc_eqpdb_transitive(d1: PageDb, d2: PageDb, d3: PageDb, atkr: PageNr)
+    requires validPageDb(d1) && validPageDb(d2) && validPageDb(d3)
+    requires enc_eqpdb(d1, d2, atkr)
+    requires enc_eqpdb(d2, d3, atkr)
+    ensures  enc_eqpdb(d1, d3, atkr)
+{
+    reveal enc_eqpdb();
+}
+
+lemma lemma_enc_eqpdb_assoc(d1: PageDb, d2: PageDb, atkr: PageNr)
+    requires validPageDb(d1) && validPageDb(d2)
+    requires enc_eqpdb(d1, d2, atkr)
+    ensures enc_eqpdb(d2, d1, atkr)
+{
+    reveal enc_eqpdb();
+}
+
 
 //-----------------------------------------------------------------------------
 // Enclave NI
