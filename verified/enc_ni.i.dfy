@@ -5,7 +5,7 @@ include "sec_prop_util.i.dfy"
 include "enc_ni_entry.i.dfy"
 
 //-----------------------------------------------------------------------------
-// Confidentiality, Enclaves are NI with other Enclaves 
+// Enclaves are NI with other Enclaves 
 //-----------------------------------------------------------------------------
 lemma lemma_enc_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
                         s2: state, d2: PageDb, s2': state, d2': PageDb,
@@ -445,18 +445,19 @@ lemma lemma_initL2PTable_enc_ni_one_go(d1: PageDb, d1': PageDb, e1':word,
     ensures enc_eqpdb(d1', d2', atkr) 
 {
     reveal_enc_eqpdb();
-    assert d1'[atkr].PageDbEntryTyped? <==> d1[atkr].PageDbEntryTyped?;
-    assert d2'[atkr].PageDbEntryTyped? <==> d2[atkr].PageDbEntryTyped?;
-    assert d2'[atkr].PageDbEntryTyped? <==> d1'[atkr].PageDbEntryTyped?;
-    assert d2' == d2;
-    if( d1'[atkr].PageDbEntryTyped? ){
-        assert enc_eqpdb(d1', d2', atkr);
-    } else {
-        assert enc_eqpdb(d1', d2', atkr);
-    }
+    assert atkr != addrspacePage by
+        { reveal validPageDb(); }
+    var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
+    var (pagedb, err) := allocatePage(d1, page, addrspacePage, l2pt);
+    lemma_allocatePage_not_atkr(d1, page, addrspacePage, l2pt, pagedb, e1', atkr);
+    assert enc_eqpdb(d1, pagedb, atkr);
+    assert enc_eqpdb(pagedb, d1', atkr);
+    assert d2 == d2';
 }
 
-lemma lemma_initL2PTable_enc_ni(d1: PageDb, d1': PageDb, e1':word,
+// On faster machines this seems to not be a problem at all
+lemma {:timeLimitMultiplier 2}
+lemma_initL2PTable_enc_ni(d1: PageDb, d1': PageDb, e1':word,
                                      d2: PageDb, d2': PageDb, e2':word,
                                      page:word, addrspacePage:word, l1index:word,
                                      atkr: PageNr)
