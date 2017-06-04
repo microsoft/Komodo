@@ -768,7 +768,16 @@ lemma lemma_validEnclaveStep_enc(s1: state, d1: PageDb, s1':state, d1': PageDb,
     var s24, d24 :|
         validEnclaveExecutionStep'(s2, d2, s24, d24, s2', d2',
             dispPage, ret2);
+    
+    lemma_updateUserPagesFromState_validPageDb(s14, d1, dispPage);
+    lemma_updateUserPagesFromState_validPageDb(s24, d2, dispPage);
 
+    assert validPageDb(d1);
+    assert validPageDb(d2);
+    assert validPageDb(d14);
+    assert validPageDb(d24);
+    assert validPageDb(d1');
+    assert validPageDb(d2');
     lemma_validEnclaveStepPrime_enc(
         s1, d1, s14, d14, s1', d1',
         s2, d2, s24, d24, s2', d2',
@@ -884,7 +893,11 @@ s21: state, s2':state, s22: state)
 lemma lemma_svcHandled_enc_eqpdb(
     s1: state, d1: PageDb, d1': PageDb,
     s2: state, d2: PageDb, d2': PageDb, dispPg: PageNr, atkr: PageNr)
-    requires validPageDbs({d1, d2}) &&
+    requires 
+        validPageDb(d1) &&
+        validPageDb(d2) &&
+        validPageDb(d1') &&
+        validPageDb(d2') &&
         validDispatcherPage(d1, dispPg) &&
         validDispatcherPage(d2, dispPg)
     requires ValidState(s1) && mode_of_state(s1) != User
@@ -895,8 +908,6 @@ lemma lemma_svcHandled_enc_eqpdb(
     requires user_regs(s1.regs) == user_regs(s2.regs)
     requires atkr_entry(d1, d2, dispPg, atkr)
     requires enc_eqpdb(d1, d2, atkr)
-    requires ValidState(s1) && mode_of_state(s1) != User && SaneMem(s1.m)
-    requires ValidState(s2) && mode_of_state(s2) != User && SaneMem(s2.m)
     ensures  atkr_entry(d1', d2', dispPg, atkr)
     ensures  enc_eqpdb(d1', d2', atkr)
     ensures  svcHandled(s1, d1, dispPg).0 == svcHandled(s2, d2, dispPg).0
@@ -997,15 +1008,21 @@ lemma lemma_svcHandled_enc_eqpdb(
     }
 }
 
-lemma lemma_validEnclaveStepPrime_enc(
+lemma
+lemma_validEnclaveStepPrime_enc(
 s11: state, d11: PageDb, s14:state, d14:PageDb, r1:state, rd1:PageDb,
 s21: state, d21: PageDb, s24:state, d24:PageDb, r2:state, rd2:PageDb,
 dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
 )
     requires ValidState(s11) && ValidState(s21) &&
              ValidState(r1)  && ValidState(r2)  &&
-             validPageDb(d11) && validPageDb(d21) &&
-             validPageDb(rd1) && validPageDb(rd2) && SaneConstants()
+             validPageDb(d11) &&
+             validPageDb(d21) && 
+             validPageDb(d14) && 
+             validPageDb(d24) && 
+             validPageDb(rd1) && 
+             validPageDb(rd2) && 
+             SaneConstants()
     requires atkr_entry(d11, d21, dispPg, atkr)
     requires validEnclaveExecutionStep'(s11,d11,s14,d14,r1,rd1,dispPg,retToEnclave1)
     requires validEnclaveExecutionStep'(s21,d21,s24,d24,r2,rd2,dispPg,retToEnclave2)
@@ -1059,14 +1076,10 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
         lemma_eval_cpsrs(s11, s1', s12, s21, s2', s22);
     }
 
-    assert pageTableCorresponds(s12, d11, l1p) by
+    assert pageTableCorresponds(s12, d11, l1p) &&
+        pageTableCorresponds(s22, d21, l1p) by
     { 
         assert pageTableCorresponds(s11, d11, l1p);
-        reveal pageTableCorresponds();
-    }
-
-    assert pageTableCorresponds(s22, d21, l1p) by
-    { 
         assert pageTableCorresponds(s21, d21, l1p);
         reveal pageTableCorresponds();
     }
@@ -1166,6 +1179,12 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
     var retToEnclave := retToEnclave1;
 
     if(retToEnclave) {
+        var retRegs1 := svcHandled(s14, d14, dispPg).0;
+        var retRegs2 := svcHandled(s24, d24, dispPg).0;
+
+        lemma_svcHandled_validPageDb(s14, d14, dispPg, retRegs1, rd1);
+        lemma_svcHandled_validPageDb(s24, d24, dispPg, retRegs2, rd2);
+
         lemma_svcHandled_enc_eqpdb(s14, d14, rd1,
             s24, d24, rd2, dispPg, atkr);
 
@@ -1174,14 +1193,12 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
         }
         assert enc_eqpdb(rd1, rd2, atkr);
         assert r1.conf.nondet == r2.conf.nondet;
-        var ret1 := svcHandled(s14, d14, dispPg);
-        var ret2 := svcHandled(s24, d24, dispPg);
-        assert ret1.0 == ret2.0;
+        assert retRegs1 == retRegs2;
         assert user_regs(r1.regs) == user_regs(r2.regs) by
         { 
             lemma_preEntryUserRegs(
-                s14, r1, ret1.0, rd1,
-                s24, r2, ret2.0, rd2, dispPg
+                s14, r1, retRegs1, rd1,
+                s24, r2, retRegs2, rd2, dispPg
             );
         }
         assert OperandContents(r1, OLR) == OperandContents(r2, OLR);

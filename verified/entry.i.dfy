@@ -659,7 +659,7 @@ lemma lemma_svcHandled_pageDbCorresponds(s4:state, d4:PageDb, r:state, dispPg:Pa
 }
 
 lemma lemma_svcHandled_validPageDb(s4:state, d4:PageDb, dispPg:PageNr, regs:SvcReturnRegs, rd:PageDb)
-    requires ValidState(s4) && mode_of_state(s4) != User && SaneMem(s4.m)
+    requires ValidState(s4) && mode_of_state(s4) != User
     requires validPageDb(d4) && validDispatcherPage(d4, dispPg)
     requires isReturningSvc(s4)
     requires finalDispatcher(d4, dispPg)
