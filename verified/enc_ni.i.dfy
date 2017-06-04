@@ -524,24 +524,32 @@ lemma lemma_mapInsecure_enc_ni(d1: PageDb, d1': PageDb, e1':word,
     requires enc_eqpdb(d1, d2, atkr)
     ensures enc_eqpdb(d1', d2', atkr) 
 {
-    reveal_enc_eqpdb();
-    var go1, go2 := e1' == KOM_ERR_SUCCESS, e2' == KOM_ERR_SUCCESS; 
-    if( go1 && go2 ) {
-        assert enc_eqpdb(d1', d2', atkr) by {
+
+    if(atkr == addrspacePage) {
+        assert e1' == KOM_ERR_SUCCESS <==> e2' == KOM_ERR_SUCCESS by 
+            { reveal enc_eqpdb(); reveal validPageDb(); }
+        if(e1' == KOM_ERR_SUCCESS) {
             var abs_mapping := wordToMapping(mapping);
             var l2pte := InsecureMapping(physPage, abs_mapping.perm.w);
             assert d1' == updateL2Pte(d1, addrspacePage, abs_mapping, l2pte); 
             assert d2' == updateL2Pte(d2, addrspacePage, abs_mapping, l2pte); 
             lemma_updateL2Pte_enc_ni(d1, d1', d2, d2', 
                 addrspacePage, abs_mapping, l2pte, atkr);
+        } 
+    } else {
+        if(e1' == KOM_ERR_SUCCESS) { 
+            var abs_mapping := wordToMapping(mapping);
+            var l2pte := InsecureMapping(physPage, abs_mapping.perm.w);
+            lemma_updateL2Pte_not_atkr(d1, addrspacePage, abs_mapping, l2pte, 
+                d1', atkr);
         }
-    }
-    if( go1 && !go2 ) { assert enc_eqpdb(d1', d2', atkr); }
-    if( !go1 && go2 ) { assert enc_eqpdb(d1', d2', atkr); }
-    if( !go1 && !go2 ) {
-        assert d1' == d1;
-        assert d2' == d2;
-        assert enc_eqpdb(d1', d2', atkr);
+        if(e2' == KOM_ERR_SUCCESS) { 
+            var abs_mapping := wordToMapping(mapping);
+            var l2pte := InsecureMapping(physPage, abs_mapping.perm.w);
+            lemma_updateL2Pte_not_atkr(d2, addrspacePage, abs_mapping, l2pte, 
+                d2', atkr);
+        }
+        reveal enc_eqpdb();
     }
 }
 
