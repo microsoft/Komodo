@@ -330,10 +330,72 @@ lemma lemma_initAddrspace_enc_ni(d1: PageDb, d1': PageDb, e1':word,
     }
 }
 
+lemma lemma_initDispMeasure_enc_ni(d1: PageDb, d2: PageDb, addrspacePage: PageNr,
+    entrypoint: word, d1': PageDb, d2': PageDb, atkr: PageNr)
+    requires validPageDb(d1) && validPageDb(d2) &&
+        validPageDb(d1') && validPageDb(d2')
+    requires validAddrspacePage(d1, addrspacePage) &&
+        validAddrspacePage(d2, addrspacePage) &&
+        validAddrspacePage(d1', addrspacePage) &&
+        validAddrspacePage(d2', addrspacePage)
+    requires valAddrPage(d1, atkr) && valAddrPage(d1', atkr)
+    requires valAddrPage(d2, atkr) && valAddrPage(d2', atkr)
+    requires d1' == updateMeasurement(d1, addrspacePage,
+        [KOM_SMC_INIT_DISPATCHER, entrypoint], [])
+    requires d2' == updateMeasurement(d2, addrspacePage,
+        [KOM_SMC_INIT_DISPATCHER, entrypoint], [])
+    requires enc_eqpdb(d1, d2, atkr)
+    ensures  enc_eqpdb(d1', d2', atkr)
+{
+    reveal enc_eqpdb();
+    if(addrspacePage == atkr) {
+        assert d1[addrspacePage] == d2[addrspacePage] by
+            { reveal validPageDb(); }
+        assert d1[addrspacePage].entry.measurement == 
+            d2[addrspacePage].entry.measurement;
+        assert d1'[addrspacePage] == d2'[addrspacePage];
+        assert valAddrPage(d1', atkr) && valAddrPage(d2', atkr);
+        assert forall n : PageNr :: pgInAddrSpc(d1, n, atkr) ==>
+             pgInAddrSpc(d1', n, atkr);
+        assert forall n : PageNr :: pgInAddrSpc(d2, n, atkr) ==>
+             pgInAddrSpc(d2', n, atkr);
+    } else {
+        lemma_updateMeasurement_not_atkr(d1, addrspacePage,
+            [KOM_SMC_INIT_DISPATCHER, entrypoint], [], d1', atkr);
+        lemma_updateMeasurement_not_atkr(d2, addrspacePage,
+            [KOM_SMC_INIT_DISPATCHER, entrypoint], [], d2', atkr);
+    }
+}
+
+lemma lemma_initDispatcher_enc_ni_one_go(
+    d1: PageDb, d1': PageDb, e1': word,
+    d2: PageDb, d2': PageDb, e2': word,
+    page:word, addrspacePage:word, entrypoint:word, atkr: PageNr)
+    requires ni_reqs_(d1, d1', d2, d2', atkr)
+    requires smc_initDispatcher(d1, page, addrspacePage, entrypoint) == (d1', e1')
+    requires smc_initDispatcher(d2, page, addrspacePage, entrypoint) == (d2', e2')
+    requires enc_eqpdb(d1, d2, atkr)
+    requires  isAddrspace(d1, addrspacePage) && !isAddrspace(d2, addrspacePage)
+    ensures  enc_eqpdb(d1', d2', atkr)
+{
+    reveal enc_eqpdb();
+    reveal validPageDb();
+    assert atkr != addrspacePage;
+    var disp := Dispatcher(entrypoint, false, initDispCtxt(),
+                           [0, 0, 0, 0, 0, 0, 0, 0],
+                           [0, 0, 0, 0, 0, 0, 0, 0]);
+    var ad1 := allocatePage(d1, page, addrspacePage, disp).0;
+    lemma_allocatePage_not_atkr(d1, page, addrspacePage, disp, ad1, e1', atkr);
+    if(e1' == KOM_ERR_SUCCESS){
+        lemma_updateMeasurement_not_atkr(ad1, addrspacePage, 
+            [KOM_SMC_INIT_DISPATCHER, entrypoint], [], d1', atkr);
+    }
+}
+
 lemma lemma_initDispatcher_enc_ni(d1: PageDb, d1': PageDb, e1':word,
-                                       d2: PageDb, d2': PageDb, e2':word,
-                                       page:word, addrspacePage:word, entrypoint:word,
-                                       atkr: PageNr)
+                                  d2: PageDb, d2': PageDb, e2':word,
+                                  page:word, addrspacePage:word, entrypoint:word,
+                                  atkr: PageNr)
     requires ni_reqs_(d1, d1', d2, d2', atkr)
     requires smc_initDispatcher(d1, page, addrspacePage, entrypoint) == (d1', e1')
     requires smc_initDispatcher(d2, page, addrspacePage, entrypoint) == (d2', e2')
@@ -345,15 +407,23 @@ lemma lemma_initDispatcher_enc_ni(d1: PageDb, d1': PageDb, e1':word,
         var disp := Dispatcher(entrypoint, false, initDispCtxt(),
                                [0, 0, 0, 0, 0, 0, 0, 0],
                                [0, 0, 0, 0, 0, 0, 0, 0]);
-        assert allocatePage(d1, page, addrspacePage, disp) == (d1', e1');
-        assert allocatePage(d2, page, addrspacePage, disp) == (d2', e2');
-        lemma_allocatePage_enc_ni(d1, d1', e1', d2, d2', e2',
+        var ad1 := allocatePage(d1, page, addrspacePage, disp).0;
+        var ad2 := allocatePage(d2, page, addrspacePage, disp).0;
+        lemma_allocatePage_enc_ni(d1, ad1, e1', d2, ad2, e2',
             page, addrspacePage, disp, atkr);
+        if(e1' == KOM_ERR_SUCCESS && e2' == KOM_ERR_SUCCESS) {
+            lemma_initDispMeasure_enc_ni(ad1, ad2, addrspacePage,
+                entrypoint, d1', d2', atkr);
+        } else {
+        }
     }
-    // Get dafny to think about these cases:
     if(isAddrspace(d1, addrspacePage) && !isAddrspace(d2, addrspacePage)) {
+        lemma_initDispatcher_enc_ni_one_go(d1, d1', e1', d2, d2', e2',
+            page, addrspacePage, entrypoint, atkr);
     }
     if(!isAddrspace(d1, addrspacePage) && isAddrspace(d2, addrspacePage)) {
+        lemma_initDispatcher_enc_ni_one_go(d2, d2', e2', d1, d1', e1',
+            page, addrspacePage, entrypoint, atkr);
     }
 }
 
@@ -607,6 +677,7 @@ lemma lemma_allocatePage_enc_ni(d1: PageDb, d1': PageDb, e1':word,
     requires allocatePage(d2, page, addrspacePage, entry) == (d2', e2')
     requires enc_eqpdb(d1, d2, atkr)
     ensures  enc_eqpdb(d1', d2', atkr) 
+    ensures  addrspacePage == atkr ==> e1' == e2'
 {
     reveal_enc_eqpdb();
     assert allocatePage_inner(d1, page, addrspacePage, entry) == (d1', e1');
