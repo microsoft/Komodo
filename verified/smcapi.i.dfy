@@ -539,7 +539,9 @@ lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word)
 
 lemma lemma_userspaceExecutionAndException_spsr(s:state, r:state)
     requires ValidState(s) && userspaceExecutionAndException(s, r)
+    requires mode_of_state(s) != User && !spsr_of_state(s).f && !spsr_of_state(s).i
     ensures mode_of_state(r) != User && spsr_of_state(r).m == User
+    ensures !spsr_of_state(r).f && !spsr_of_state(r).i
 {
     assert ValidOperand(OLR);
     reveal_userspaceExecutionAndException();
@@ -552,6 +554,14 @@ lemma lemma_userspaceExecutionAndException_spsr(s:state, r:state)
     var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
     assert mode_of_state(s3) == User by { reveal_userspaceExecutionFn(); }
     lemma_evalExceptionTaken_Mode(s3, ex, expc, r);
+    calc {
+        !spsr_of_state(s).f && !spsr_of_state(s).i;
+        !spsr_of_state(s').f && !spsr_of_state(s').i;
+        !s2.conf.cpsr.f && !s2.conf.cpsr.i;
+        { reveal userspaceExecutionFn(); }
+        !s3.conf.cpsr.f && !s3.conf.cpsr.i;
+        !spsr_of_state(r).f && !spsr_of_state(r).i;
+    }
 }
 
 lemma lemma_validEnclaveExecutionStep_validPageDb(s1:state, d1:PageDb,
@@ -571,7 +581,6 @@ lemma lemma_validEnclaveExecutionStep_validPageDb(s1:state, d1:PageDb,
         var s4, d4 :| userspaceExecutionAndException(s1, s4)
             && d4 == updateUserPagesFromState(s4, d1, dispPg)
             && rd == exceptionHandled(s4, d4, dispPg).2;
-        assume !spsr_of_state(s4).f && !spsr_of_state(s4).i;
         lemma_userspaceExecutionAndException_spsr(s1, s4);
         lemma_exceptionHandled_validPageDb(s4, d4, dispPg);
         assert finalDispatcher(rd, dispPg);
