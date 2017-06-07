@@ -2,7 +2,8 @@ DAFNYTIMELIMIT ?= 90
 VALEDIRECT ?= 1
 DAFNYFLAGS = /trace /errorTrace:0 /timeLimit:$(DAFNYTIMELIMIT) \
     /ironDafny /allocated:1 /induction:1 \
-    $(call mkdafnyflags,$(notdir $(*))) $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
+    $(call mkdafnyflags,$(notdir $(*))) \
+    $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)",/restartProver)
 VALEFLAGS = -includeSuffix .sdfy .gen.dfy
 
 # dafny flags: file-specific flags plus /noNLarith unless the file is named nlarith.x
@@ -65,6 +66,3 @@ DAFNYFLAGS_bitvectors.i = /proverOpt:OPTIMIZE_FOR_BV=true
 DAFNYFLAGS_ptebits.i = /proverOpt:OPTIMIZE_FOR_BV=true
 DAFNYFLAGS_psrbits.i = /proverOpt:OPTIMIZE_FOR_BV=true
 DAFNYFLAGS_entrybits.i = /proverOpt:OPTIMIZE_FOR_BV=true
-DAFNYFLAGS_ptables.i = /restartProver
-DAFNYFLAGS_attest_helpers = /restartProver
-DAFNYFLAGS_enter_enc_ni.i = /restartProver
