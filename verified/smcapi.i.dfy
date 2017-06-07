@@ -154,8 +154,9 @@ lemma GrowShaLength(d:PageDb, n:PageNr, metadata:seq<word>, contents:seq<word>)
     }
     lemma_sha256_length(u[n].entry.shatrace);
 
-    assert (d[n].entry.refcount + 1) * (1 + PAGESIZE / (WORDSIZE * SHA_BLOCKSIZE))
-        == d[n].entry.refcount * (1 + PAGESIZE / (WORDSIZE * SHA_BLOCKSIZE)) + 65;
+    var k := 1 + PAGESIZE / (WORDSIZE * SHA_BLOCKSIZE);
+    assert k == 65;
+    lemma_MulDistrib(d[n].entry.refcount, 1, k);
 }
 
 // TODO: consolidate with lemma_ConcatenateSeqs_Adds

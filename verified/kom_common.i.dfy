@@ -163,7 +163,7 @@ function monvaddr_page(mva:addr): PageNr
     requires PageAligned(mva)
     requires address_is_secure(mva)
     ensures validPageNr(monvaddr_page(mva))
-    ensures page_monvaddr(monvaddr_page(mva)) == mva
+    //ensures page_monvaddr(monvaddr_page(mva)) == mva
 {
     (mva - KOM_DIRECTMAP_VBASE - SecurePhysBase()) / PAGESIZE
 }

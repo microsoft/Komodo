@@ -39,3 +39,7 @@ lemma lemma_MulSign(a:int, b:int)
     requires a >= 0 && b >= 0
     ensures a * b >= 0
 {}
+
+lemma lemma_MulDistrib(a:int, b:int, c:int)
+    ensures (a + b) * c == a * c + b * c
+{}
