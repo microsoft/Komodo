@@ -86,16 +86,9 @@ lemma lemma_os_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
             s2, d2, s2', d2',
             arg1, arg2, arg3, arg4);
         assert os_regs_equiv(s1', s2') by {
-            // assume forall m | m != User && m in {FIQ, IRQ} ::
-            //     s1'.regs[LR(m)] == s2'.regs[LR(m)];
-            // assert most_modes_regs_equiv(s1', s2');
-            // This should be provable from entry.s
-            // assume e1' == e2' && val1 == val2;
             lemma_integrate_reg_equiv(s1', s2');
         }
         assert os_ctrl_eq(s1', s2') by {
-            // assume forall m | m in {FIQ, IRQ} ::
-            //     s1'.sregs[spsr(m)] == s2'.sregs[spsr(m)];
             assert most_modes_ctrl_eq(s1', s2');
         }
     }
@@ -105,16 +98,9 @@ lemma lemma_os_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
             s2, d2, s2', d2',
             arg1);
         assert os_regs_equiv(s1', s2') by {
-            // assume forall m | m != User && m in {FIQ, IRQ} ::
-            //     s1'.regs[LR(m)] == s2'.regs[LR(m)];
-            // assert most_modes_regs_equiv(s1', s2');
-            // This should be provable from entry.s
-            assume e1' == e2' && val1 == val2;
             lemma_integrate_reg_equiv(s1', s2');
         }
         assert os_ctrl_eq(s1', s2') by {
-            // assume forall m | m in {FIQ, IRQ} ::
-            //     s1'.sregs[spsr(m)] == s2'.sregs[spsr(m)];
             assert most_modes_ctrl_eq(s1', s2');
         }
     }
