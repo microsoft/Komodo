@@ -94,10 +94,11 @@ lemma contentsDivBlock(physPage: word, contents: Maybe<seq<word>>)
 {
 }
 
-lemma lemma_mapSecure_enc_ni_both_go(d1: PageDb, c1: Maybe<seq<word>>, d1': PageDb, e1':word,
-                                  d2: PageDb, c2: Maybe<seq<word>>, d2': PageDb, e2':word,
-                                  page:word, addrspacePage:word, mapping:word, 
-                                  physPage: word, atkr: PageNr)
+lemma lemma_mapSecure_enc_ni_both_go(
+        d1: PageDb, c1: Maybe<seq<word>>, d1': PageDb, e1':word,
+        d2: PageDb, c2: Maybe<seq<word>>, d2': PageDb, e2':word,
+        page:word, addrspacePage:word, mapping:word, 
+        physPage: word, atkr: PageNr)
     requires ni_reqs_(d1, d1', d2, d2', atkr)
     requires contentsOk(physPage, c1) && contentsOk(physPage, c2)
     requires c1 == c2;
@@ -138,11 +139,47 @@ lemma lemma_mapSecure_enc_ni_both_go(d1: PageDb, c1: Maybe<seq<word>>, d1': Page
             [KOM_SMC_MAP_SECURE, mapping], fromJust(c1));
         assert d2' == updateMeasurement(db2, addrspacePage, 
             [KOM_SMC_MAP_SECURE, mapping], fromJust(c2));
-        assume false;
+        lemma_updateMeasurement_ni(db1, db2, d1', d2', addrspacePage,
+            [KOM_SMC_MAP_SECURE, mapping], fromJust(c1), atkr);
         reveal enc_eqpdb();
         assert enc_eqpdb(d1', d2', atkr);
     } else {
         reveal enc_eqpdb();
+        assert enc_eqpdb(d1', d2', atkr);
+    }
+}
+
+lemma lemma_updateMeasurement_ni(d1: PageDb, d2: PageDb, d1': PageDb, d2': PageDb,
+    addrsp: PageNr, metadata:seq<word>, contents:seq<word>, atkr: PageNr)
+    requires validPageDb(d1)  && validPageDb(d2)
+    requires validPageDb(d1') && validPageDb(d2')
+    requires valAddrPage(d1, addrsp) && valAddrPage(d2, addrsp)
+    requires |metadata| <= SHA_BLOCKSIZE
+    requires |contents| % SHA_BLOCKSIZE == 0
+    requires d1' == updateMeasurement(d1, addrsp, metadata, contents)
+    requires d2' == updateMeasurement(d2, addrsp, metadata, contents)
+    requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+    requires enc_eqpdb(d1, d2, atkr)
+    ensures enc_eqpdb(d1', d2', atkr)
+{
+    reveal enc_eqpdb();
+    if(atkr == addrsp) {
+        reveal validPageDb();
+        assert d1'[addrsp] == d2'[addrsp];
+        forall(n: PageNr | n != addrsp)
+            ensures d1[n] == d1'[n]
+            ensures d2[n] == d2'[n] 
+            ensures pgInAddrSpc(d1, n, atkr) ==>
+                pgInAddrSpc(d1', n, atkr)
+            ensures pgInAddrSpc(d2, n, atkr) ==>
+                pgInAddrSpc(d2', n, atkr)
+            {}
+        assert enc_eqpdb(d1', d2', atkr);
+    } else {
+        lemma_updateMeasurement_not_atkr(d1, addrsp, metadata,
+            contents, d1', atkr);
+        lemma_updateMeasurement_not_atkr(d2, addrsp, metadata,
+            contents, d2', atkr);
         assert enc_eqpdb(d1', d2', atkr);
     }
 }
