@@ -858,7 +858,7 @@ procedure {:frame false} {:timeLimitMultiplier 2} interrupt_handler(
         ==> va_get_reg(r, old(this)) == va_get_reg(r, this);
 
     if (r0 == const(encode_mode(User))) { // we came from user-mode
-        assert spsr_of_state(old(this)).m == User;
+        assert spsr_of_state(old(this)).m == User by { reveal ValidSRegState; }
         // assert psr_mask_fiq(r0) == 0 && psr_mask_irq(r0) == 0 by {
         //     assert r0 == 0x10;
         //     assert BitwiseAnd(0x10, ARM_PSR_FIQ) == 0x00 by {
@@ -897,7 +897,7 @@ procedure {:frame false} {:timeLimitMultiplier 2} interrupt_handler(
             by { reveal_validExceptionTransition(); }
         assert KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
     } else { // we came from another exception handler
-        assert spsr_of_state(old(this)).m != User;
+        assert spsr_of_state(old(this)).m != User by { reveal ValidSRegState; }
         assert priv_of_mode(spsr_of_state(old(this)).m) == PL1;
 
         // restore r0, r1, sp

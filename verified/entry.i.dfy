@@ -561,7 +561,8 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
     lemma_sp_alignment(OperandContents(s, OSP));
     assert ValidMemRange(StackLimit(), StackBase());
 
-    assert ValidPsrWord(OperandContents(s, OSReg(spsr(Monitor))))
+    var spsr := OperandContents(s, OSReg(spsr(Monitor)));
+    assert ValidPsrWord(spsr) && decode_mode(psr_mask_mode(spsr)) == User
         by { reveal_ValidSRegState(); }
     lemma_ptablesmatch(s.m, d, l1pOfDispatcher(d, dp));
     assert userExecutionPreconditions(s);

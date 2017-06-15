@@ -38,8 +38,8 @@ datatype SReg = cpsr | spsr(m:mode) | SCR | SCTLR | VBAR | ttbr0 | TLBIASID
 // The abstract representation should be used for reasoning about the status of
 // the processor and the concrete representation should be used only for
 // ensuring that the correct values are stored/returned by instructions
-datatype config = Config(cpsr:PSR, spsr:map<mode,PSR>, scr:SCR, ttbr0:TTBR, 
-    ex:exception, exstep:nat, nondet:int)
+datatype config = Config(cpsr:PSR, scr:SCR, ttbr0:TTBR,
+                         ex:exception, exstep:nat, nondet:int)
 datatype PSR  = PSR(m:mode, f:bool, i:bool) // See B1.3.3
 datatype SCR  = SCRT(ns:world, irq:bool, fiq:bool) // See B4.1.129
 datatype TTBR = TTBR(ptbase:addr)      // See B4.1.154
@@ -102,7 +102,7 @@ function spsr_of_state(s:state): PSR
     requires mode_of_state(s) != User
 {
     reveal_ValidSRegState();
-    s.conf.spsr[mode_of_state(s)]
+    decode_psr(s.sregs[spsr(mode_of_state(s))])
 }
 
 predicate interrupts_enabled(s:state)
@@ -228,30 +228,21 @@ predicate ValidSReg(sr:SReg)
     sr.spsr? ==> sr.m != User
 }
 
-function update_config_from_sreg(s:state, sr:SReg, v:word): config
+function update_config_from_sreg(s:state, sr:SReg, v:word): (c:config)
     requires ValidSRegState(s.sregs, s.conf) && ValidSReg(sr)
     requires (sr.cpsr? || sr.spsr?) ==> ValidPsrWord(v)
+    ensures ValidSRegState(s.sregs[sr := v], c)
 {
     reveal_ValidSRegState();
-    match sr
-        case ttbr0 => s.conf.(ttbr0 := decode_ttbr(v))
-        case cpsr  => s.conf.(cpsr := decode_psr(v))
-        case spsr(m)  => 
-            assert m != User;
-            var spsr' := s.conf.spsr[ m := decode_psr(v) ];
-            s.conf.(spsr := spsr') 
-        case SCR => s.conf.(scr := decode_scr(v))
-        case SCTLR => s.conf
-        case VBAR => s.conf
-        case TLBIASID => s.conf
+    if sr == cpsr then s.conf.(cpsr := decode_psr(v))
+    else if sr == SCR then s.conf.(scr := decode_scr(v))
+    else if sr == ttbr0 then s.conf.(ttbr0 := decode_ttbr(v))
+    else s.conf
 }
 
 //-----------------------------------------------------------------------------
 // Mode / Security State Decoding / Encoding
 //-----------------------------------------------------------------------------
-function method encode_ns(ns:world): word
-    { if ns == NotSecure then 1 else 0 }
-
 function method encode_mode(m:mode): word
 {
     match m
@@ -359,11 +350,9 @@ predicate {:opaque} ValidRegState(regs:map<ARMReg, word>)
 predicate {:opaque} ValidSRegState(sregs:map<SReg, word>, c:config)
 {
     assert ValidSReg(cpsr);
-    (forall sr | ValidSReg(sr) :: sr in sregs)
+    (forall sr :: ValidSReg(sr) <==> sr in sregs)
     && ValidPsrWord(sregs[cpsr]) && c.cpsr == decode_psr(sregs[cpsr])
-    && (forall m:mode :: (m != User) == (spsr(m) in sregs) == (m in c.spsr))
-    && (forall m:mode :: m != User ==>
-        ValidPsrWord(sregs[spsr(m)]) && c.spsr[m] == decode_psr(sregs[spsr(m)]))
+    && (forall m:mode | ValidSReg(spsr(m)) :: ValidPsrWord(sregs[spsr(m)]))
     && c.ttbr0 == decode_ttbr(sregs[ttbr0])
     && c.scr == decode_scr(sregs[SCR])
 }
@@ -538,18 +527,19 @@ function exceptionTakenFn(s:state, e:exception, pc:word): state
     requires ValidState(s) && ValidPsrWord(psr_of_exception(s, e))
     ensures ValidState(exceptionTakenFn(s, e, pc))
 {
-    reveal_ValidRegState();
-    reveal_ValidSRegState();
     var oldmode := mode_of_state(s);
     var newmode := mode_of_exception(s.conf, e);
+    assert newmode != User;
     // this does not model all of the CPSR update, since we don't model all the bits
     var newpsr := psr_of_exception(s, e);
     // update mode, copy CPSR of oldmode to SPSR of newmode, havoc LR
-    takestep(s).(conf := s.conf.(cpsr := decode_psr(newpsr),
-        spsr := s.conf.spsr[newmode := s.conf.cpsr],
-        ex := e, exstep := s.steps),
-        sregs := s.sregs[cpsr := newpsr][spsr(newmode) := s.sregs[cpsr]],
-        regs := s.regs[LR(newmode) := pc])
+    var newregs := s.regs[LR(newmode) := pc];
+    assert ValidRegState(newregs) by { reveal_ValidRegState(); }
+    var newsregs := s.sregs[cpsr := newpsr][spsr(newmode) := s.sregs[cpsr]];
+    var newcpsr := decode_psr(newpsr);
+    var newconf := s.conf.(cpsr := newcpsr, ex := e, exstep := s.steps);
+    assert ValidSRegState(newsregs, newconf) by { reveal_ValidSRegState(); }
+    takestep(s).(conf := newconf, sregs := newsregs, regs := newregs)
 }
 
 predicate evalExceptionTaken(s:state, e:exception, pc:word, r:state)
@@ -951,7 +941,6 @@ predicate evalUpdate(s:state, o:operand, v:word, r:state)
     ensures evalUpdate(s, o, v, r) ==> ValidState(r)
 {
     reveal_ValidRegState();
-    reveal_ValidSRegState();
     match o
         case OReg(reg) => r == s.(regs := s.regs[o.r := v])
         case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := v])
