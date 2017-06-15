@@ -1,9 +1,9 @@
 DAFNYTIMELIMIT ?= 90
 VALEDIRECT ?= 1
 DAFNYFLAGS = /trace /errorTrace:0 /timeLimit:$(DAFNYTIMELIMIT) \
-    /ironDafny /allocated:1 /induction:1 \
+    /ironDafny /allocated:1 /induction:1 $(EXTRADAFNYFLAGS) \
     $(call mkdafnyflags,$(notdir $(*))) \
-    $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)",/restartProver)
+    $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
 VALEFLAGS = -includeSuffix .sdfy .gen.dfy
 
 # dafny flags: file-specific flags plus /noNLarith unless the file is named nlarith.x
