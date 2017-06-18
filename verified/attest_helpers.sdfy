@@ -177,23 +177,15 @@ procedure load_attestion_key() returns (ghost key:seq(word))
 //    lemma_memset_result(old(this.m), this.m, r4, r2, SHA_CTXSIZE);
 
     assert WordAligned(r4);
-    WordAlignedAdd(r4, 1*WORDSIZE);
-    WordAlignedAdd(r4, 2*WORDSIZE);
-    WordAlignedAdd(r4, 3*WORDSIZE);
-    WordAlignedAdd(r4, 4*WORDSIZE);
-    WordAlignedAdd(r4, 5*WORDSIZE);
-    WordAlignedAdd(r4, 6*WORDSIZE);
-    WordAlignedAdd(r4, 7*WORDSIZE);
-
     key := 
-        seq(AddrMemContents(mem, r4 + 0*WORDSIZE),
-            AddrMemContents(mem, r4 + 1*WORDSIZE),
-            AddrMemContents(mem, r4 + 2*WORDSIZE),
-            AddrMemContents(mem, r4 + 3*WORDSIZE),
-            AddrMemContents(mem, r4 + 4*WORDSIZE),
-            AddrMemContents(mem, r4 + 5*WORDSIZE),
-            AddrMemContents(mem, r4 + 6*WORDSIZE),
-            AddrMemContents(mem, r4 + 7*WORDSIZE));
+        seq(AddrMemContents(mem, WordOffset(r4, 0)),
+            AddrMemContents(mem, WordOffset(r4, 1)),
+            AddrMemContents(mem, WordOffset(r4, 2)),
+            AddrMemContents(mem, WordOffset(r4, 3)),
+            AddrMemContents(mem, WordOffset(r4, 4)),
+            AddrMemContents(mem, WordOffset(r4, 5)),
+            AddrMemContents(mem, WordOffset(r4, 6)),
+            AddrMemContents(mem, WordOffset(r4, 7)));
     lemma_package_hash_result(mem, r4, AttestKey());    // Ensures AddMemContentsSeq(mem, r4, SHA_CTXSIZE) == key
     //assert key == GlobalFullContents(this.m, AttestKeyOp());
     assert GlobalFullContents(this.m, AttestKeyOp()) == AttestKey();
@@ -222,22 +214,22 @@ procedure load_memory_into_regs(ghost contents:seq(word))
         r8 == contents[7];
 {
     assert WordAligned(r0);
-    WordAlignedAdd(r0, 1*WORDSIZE);
-    WordAlignedAdd(r0, 2*WORDSIZE);
-    WordAlignedAdd(r0, 3*WORDSIZE);
-    WordAlignedAdd(r0, 4*WORDSIZE);
-    WordAlignedAdd(r0, 5*WORDSIZE);
-    WordAlignedAdd(r0, 6*WORDSIZE);
-    WordAlignedAdd(r0, 7*WORDSIZE);
+    lemma_WordAlignedAdd(r0, WordsToBytes(1));
+    lemma_WordAlignedAdd(r0, WordsToBytes(2));
+    lemma_WordAlignedAdd(r0, WordsToBytes(3));
+    lemma_WordAlignedAdd(r0, WordsToBytes(4));
+    lemma_WordAlignedAdd(r0, WordsToBytes(5));
+    lemma_WordAlignedAdd(r0, WordsToBytes(6));
+    lemma_WordAlignedAdd(r0, WordsToBytes(7));
 
-    LDR(r1, r0, const(0 * WORDSIZE));
-    LDR(r2, r0, const(1 * WORDSIZE));
-    LDR(r3, r0, const(2 * WORDSIZE));
-    LDR(r4, r0, const(3 * WORDSIZE));
-    LDR(r5, r0, const(4 * WORDSIZE));
-    LDR(r6, r0, const(5 * WORDSIZE));
-    LDR(r7, r0, const(6 * WORDSIZE));
-    LDR(r8, r0, const(7 * WORDSIZE));
+    LDR(r1, r0, const(WordsToBytes(0)));
+    LDR(r2, r0, const(WordsToBytes(1)));
+    LDR(r3, r0, const(WordsToBytes(2)));
+    LDR(r4, r0, const(WordsToBytes(3)));
+    LDR(r5, r0, const(WordsToBytes(4)));
+    LDR(r6, r0, const(WordsToBytes(5)));
+    LDR(r7, r0, const(WordsToBytes(6)));
+    LDR(r8, r0, const(WordsToBytes(7)));
 }
 
 #verbatim
@@ -385,50 +377,50 @@ procedure stack_all_regs(ghost stack_bytes:int)
     requires/ensures
         SaneState(this);
     requires
-        stack_bytes >= 56;
+        stack_bytes >= WordsToBytes(14);
         StackBytesRemaining(this,stack_bytes);
     ensures
-        sp == old(sp-56);
+        sp == old(sp-WordsToBytes(14));
  
         MemContents(this.m, sp)    == old(r12);
-        MemContents(this.m, sp+4)  == old(r11);
-        MemContents(this.m, sp+8)  == old(r10);
-        MemContents(this.m, sp+12) == old(r9);
-        MemContents(this.m, sp+16) == old(r8);
-        MemContents(this.m, sp+20) == old(r7);
-        MemContents(this.m, sp+24) == old(r6);
-        MemContents(this.m, sp+28) == old(r5);
-        MemContents(this.m, sp+32) == old(r4);
-        MemContents(this.m, sp+36) == old(r3);
-        MemContents(this.m, sp+40) == old(r2);
-        MemContents(this.m, sp+44) == old(r1);
-        MemContents(this.m, sp+48) == old(r0);
-        MemContents(this.m, sp+52) == old(lr);
+        MemContents(this.m, WordOffset(sp, 1))  == old(r11);
+        MemContents(this.m, WordOffset(sp, 2))  == old(r10);
+        MemContents(this.m, WordOffset(sp, 3)) == old(r9);
+        MemContents(this.m, WordOffset(sp, 4)) == old(r8);
+        MemContents(this.m, WordOffset(sp, 5)) == old(r7);
+        MemContents(this.m, WordOffset(sp, 6)) == old(r6);
+        MemContents(this.m, WordOffset(sp, 7)) == old(r5);
+        MemContents(this.m, WordOffset(sp, 8)) == old(r4);
+        MemContents(this.m, WordOffset(sp, 9)) == old(r3);
+        MemContents(this.m, WordOffset(sp, 10)) == old(r2);
+        MemContents(this.m, WordOffset(sp, 11)) == old(r1);
+        MemContents(this.m, WordOffset(sp, 12)) == old(r0);
+        MemContents(this.m, WordOffset(sp, 13)) == old(lr);
 
         NonStackMemPreserving(old(this),this);
         ParentStackPreserving(old(this),this);
 
-        stack_bytes_ret == stack_bytes-56;
+        stack_bytes_ret == stack_bytes-WordsToBytes(14);
         StackBytesRemaining(this,stack_bytes_ret);
 {
-    SUB(sp, sp, 56);
+    SUB(sp, sp, const(WordsToBytes(14)));
 
-    STR(lr,  sp, 52);
-    STR(r0,  sp, 48);
-    STR(r1,  sp, 44);
-    STR(r2,  sp, 40);
-    STR(r3,  sp, 36);
-    STR(r4,  sp, 32);
-    STR(r5,  sp, 28);
-    STR(r6,  sp, 24);
-    STR(r7,  sp, 20);
-    STR(r8,  sp, 16);
-    STR(r9,  sp, 12);
-    STR(r10, sp, 8);
-    STR(r11, sp, 4);
+    STR(lr,  sp, const(WordsToBytes(13)));
+    STR(r0,  sp, const(WordsToBytes(12)));
+    STR(r1,  sp, const(WordsToBytes(11)));
+    STR(r2,  sp, const(WordsToBytes(10)));
+    STR(r3,  sp, const(WordsToBytes(9)));
+    STR(r4,  sp, const(WordsToBytes(8)));
+    STR(r5,  sp, const(WordsToBytes(7)));
+    STR(r6,  sp, const(WordsToBytes(6)));
+    STR(r7,  sp, const(WordsToBytes(5)));
+    STR(r8,  sp, const(WordsToBytes(4)));
+    STR(r9,  sp, const(WordsToBytes(3)));
+    STR(r10, sp, const(WordsToBytes(2)));
+    STR(r11, sp, const(WordsToBytes(1)));
     STR(r12, sp, 0);
 
-    stack_bytes_ret := stack_bytes - 56;
+    stack_bytes_ret := stack_bytes - WordsToBytes(14);
 }
 
 procedure unstack_all_regs(ghost stack_bytes:int)
@@ -440,45 +432,45 @@ procedure unstack_all_regs(ghost stack_bytes:int)
     requires/ensures
         SaneState(this);
     requires
-        isUInt32(sp + 56);
-        sp + 56 <= StackBase();
+        isUInt32(sp + WordsToBytes(14));
+        sp + WordsToBytes(14) <= StackBase();
         StackBytesRemaining(this, stack_bytes);
     ensures
-        sp == old(sp+56);
+        sp == old(sp+WordsToBytes(14));
         
         old(MemContents(this.m, sp))    == r12;
-        old(MemContents(this.m, sp+4))  == r11;
-        old(MemContents(this.m, sp+8))  == r10;
-        old(MemContents(this.m, sp+12)) == r9;
-        old(MemContents(this.m, sp+16)) == r8;
-        old(MemContents(this.m, sp+20)) == r7;
-        old(MemContents(this.m, sp+24)) == r6;
-        old(MemContents(this.m, sp+28)) == r5;
-        old(MemContents(this.m, sp+32)) == r4;
-        old(MemContents(this.m, sp+36)) == r3;
-        old(MemContents(this.m, sp+40)) == r2;
-        old(MemContents(this.m, sp+44)) == r1;
-        old(MemContents(this.m, sp+48)) == r0;
-        old(MemContents(this.m, sp+52)) == lr;
+        old(MemContents(this.m, WordOffset(sp, 1)))  == r11;
+        old(MemContents(this.m, WordOffset(sp, 2)))  == r10;
+        old(MemContents(this.m, WordOffset(sp, 3))) == r9;
+        old(MemContents(this.m, WordOffset(sp, 4))) == r8;
+        old(MemContents(this.m, WordOffset(sp, 5))) == r7;
+        old(MemContents(this.m, WordOffset(sp, 6))) == r6;
+        old(MemContents(this.m, WordOffset(sp, 7))) == r5;
+        old(MemContents(this.m, WordOffset(sp, 8))) == r4;
+        old(MemContents(this.m, WordOffset(sp, 9))) == r3;
+        old(MemContents(this.m, WordOffset(sp, 10))) == r2;
+        old(MemContents(this.m, WordOffset(sp, 11))) == r1;
+        old(MemContents(this.m, WordOffset(sp, 12))) == r0;
+        old(MemContents(this.m, WordOffset(sp, 13))) == lr;
 
-        stack_bytes_ret == stack_bytes + 56;
+        stack_bytes_ret == stack_bytes + WordsToBytes(14);
         StackBytesRemaining(this, stack_bytes_ret);
 {
     LDR(r12, sp, 0);
-    LDR(r11, sp, 4);
-    LDR(r10, sp, 8);
-    LDR(r9,  sp, 12);
-    LDR(r8,  sp, 16);
-    LDR(r7,  sp, 20);
-    LDR(r6,  sp, 24);
-    LDR(r5,  sp, 28);
-    LDR(r4,  sp, 32);
-    LDR(r3,  sp, 36);
-    LDR(r2,  sp, 40);
-    LDR(r1,  sp, 44);
-    LDR(r0,  sp, 48);
-    LDR(lr,  sp, 52);
+    LDR(r11, sp, const(WordsToBytes(1)));
+    LDR(r10, sp, const(WordsToBytes(2)));
+    LDR(r9,  sp, const(WordsToBytes(3)));
+    LDR(r8,  sp, const(WordsToBytes(4)));
+    LDR(r7,  sp, const(WordsToBytes(5)));
+    LDR(r6,  sp, const(WordsToBytes(6)));
+    LDR(r5,  sp, const(WordsToBytes(7)));
+    LDR(r4,  sp, const(WordsToBytes(8)));
+    LDR(r3,  sp, const(WordsToBytes(9)));
+    LDR(r2,  sp, const(WordsToBytes(10)));
+    LDR(r1,  sp, const(WordsToBytes(11)));
+    LDR(r0,  sp, const(WordsToBytes(12)));
+    LDR(lr,  sp, const(WordsToBytes(13)));
 
-    ADD(sp, sp, 56);
-    stack_bytes_ret := stack_bytes + 56;
+    ADD(sp, sp, const(WordsToBytes(14)));
+    stack_bytes_ret := stack_bytes + WordsToBytes(14);
 }

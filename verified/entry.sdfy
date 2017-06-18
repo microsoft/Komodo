@@ -67,7 +67,7 @@ predicate {:opaque} wellformed_banked_regs_stackframe(m:memstate, a:addr)
 {
     ValidMemRange(a, a + BANKED_FRAMESIZE)
     && forall i:int | 12 <= i <= 17 ::
-        ValidPsrWord(MemContents(m, a + i * WORDSIZE))
+        ValidPsrWord(MemContents(m, WordOffset(a, i)))
 }
 
 lemma lemma_wellformed_banked_regs_stackframe_preserved(m1:memstate, m2:memstate, a:addr)
@@ -79,9 +79,9 @@ lemma lemma_wellformed_banked_regs_stackframe_preserved(m1:memstate, m2:memstate
 {
     reveal_wellformed_banked_regs_stackframe();
     forall i:int | 12 <= i <= 17
-        ensures ValidPsrWord(MemContents(m2, a + i * WORDSIZE));
+        ensures ValidPsrWord(MemContents(m2, WordOffset(a, i)));
     {
-        assert MemContents(m1, a + i * WORDSIZE) == MemContents(m2, a + i * WORDSIZE);
+        assert MemContents(m1, WordOffset(a, i)) == MemContents(m2, WordOffset(a, i));
     }
 }
 
@@ -94,26 +94,26 @@ predicate {:opaque} banked_regs_stackframe(s:state, m:memstate, a:addr)
     reveal_wellformed_banked_regs_stackframe();
 
     wellformed_banked_regs_stackframe(m, a)
-    && MemContents(m, a+(0*WORDSIZE))  == s.regs[SP(User)]
-    && MemContents(m, a+(1*WORDSIZE))  == s.regs[SP(FIQ)]
-    && MemContents(m, a+(2*WORDSIZE))  == s.regs[SP(IRQ)]
-    && MemContents(m, a+(3*WORDSIZE))  == s.regs[SP(Supervisor)]
-    && MemContents(m, a+(4*WORDSIZE))  == s.regs[SP(Abort)]
-    && MemContents(m, a+(5*WORDSIZE))  == s.regs[SP(Undefined)]
+    && MemContents(m, WordOffset(a, 0))  == s.regs[SP(User)]
+    && MemContents(m, WordOffset(a, 1))  == s.regs[SP(FIQ)]
+    && MemContents(m, WordOffset(a, 2))  == s.regs[SP(IRQ)]
+    && MemContents(m, WordOffset(a, 3))  == s.regs[SP(Supervisor)]
+    && MemContents(m, WordOffset(a, 4))  == s.regs[SP(Abort)]
+    && MemContents(m, WordOffset(a, 5))  == s.regs[SP(Undefined)]
 
-    && MemContents(m, a+(6*WORDSIZE))  == s.regs[LR(User)]
-    && MemContents(m, a+(7*WORDSIZE))  == s.regs[LR(FIQ)]
-    && MemContents(m, a+(8*WORDSIZE))  == s.regs[LR(IRQ)]
-    && MemContents(m, a+(9*WORDSIZE))  == s.regs[LR(Supervisor)]
-    && MemContents(m, a+(10*WORDSIZE)) == s.regs[LR(Abort)]
-    && MemContents(m, a+(11*WORDSIZE)) == s.regs[LR(Undefined)]
+    && MemContents(m, WordOffset(a, 6))  == s.regs[LR(User)]
+    && MemContents(m, WordOffset(a, 7))  == s.regs[LR(FIQ)]
+    && MemContents(m, WordOffset(a, 8))  == s.regs[LR(IRQ)]
+    && MemContents(m, WordOffset(a, 9))  == s.regs[LR(Supervisor)]
+    && MemContents(m, WordOffset(a, 10)) == s.regs[LR(Abort)]
+    && MemContents(m, WordOffset(a, 11)) == s.regs[LR(Undefined)]
 
-    && MemContents(m, a+(12*WORDSIZE)) == s.sregs[spsr(FIQ)]
-    && MemContents(m, a+(13*WORDSIZE)) == s.sregs[spsr(IRQ)]
-    && MemContents(m, a+(14*WORDSIZE)) == s.sregs[spsr(Supervisor)]
-    && MemContents(m, a+(15*WORDSIZE)) == s.sregs[spsr(Abort)]
-    && MemContents(m, a+(16*WORDSIZE)) == s.sregs[spsr(Undefined)]
-    && MemContents(m, a+(17*WORDSIZE)) == s.sregs[spsr(Monitor)]
+    && MemContents(m, WordOffset(a, 12)) == s.sregs[spsr(FIQ)]
+    && MemContents(m, WordOffset(a, 13)) == s.sregs[spsr(IRQ)]
+    && MemContents(m, WordOffset(a, 14)) == s.sregs[spsr(Supervisor)]
+    && MemContents(m, WordOffset(a, 15)) == s.sregs[spsr(Abort)]
+    && MemContents(m, WordOffset(a, 16)) == s.sregs[spsr(Undefined)]
+    && MemContents(m, WordOffset(a, 17)) == s.sregs[spsr(Monitor)]
 }
 
 lemma lemma_stackunstack_banked_regs(s1:state, m1:memstate, s2:state, m2:memstate, a:addr)
@@ -152,33 +152,33 @@ procedure stack_banked_regs1(out operand tmp:reg)
     requires
         @tmp != OSP;
         sp + BANKED_FRAMESIZE <= StackBase();
-        ValidMem(sp + 12*WORDSIZE);
-        ValidMem(sp + 13*WORDSIZE);
-        ValidMem(sp + 14*WORDSIZE);
-        ValidMem(sp + 15*WORDSIZE);
-        ValidMem(sp + 16*WORDSIZE);
-        ValidMem(sp + 17*WORDSIZE);
+        ValidMem(WordOffset(sp, 12));
+        ValidMem(WordOffset(sp, 13));
+        ValidMem(WordOffset(sp, 14));
+        ValidMem(WordOffset(sp, 15));
+        ValidMem(WordOffset(sp, 16));
+        ValidMem(WordOffset(sp, 17));
     reads
         sp;
         spsr_fiq; spsr_irq; spsr_svc; spsr_abt; spsr_und; spsr_mon;
     modifies
         mem;
     ensures
-        MemPreservingExcept(old(this), this, sp + 12*WORDSIZE, sp + 18*WORDSIZE);
+        MemPreservingExcept(old(this), this, WordOffset(sp, 12), WordOffset(sp, 18));
         sp == old(sp);
-        MemContents(this.m, sp + 12*WORDSIZE) == spsr_fiq;
-        MemContents(this.m, sp + 13*WORDSIZE) == spsr_irq;
-        MemContents(this.m, sp + 14*WORDSIZE) == spsr_svc;
-        MemContents(this.m, sp + 15*WORDSIZE) == spsr_abt;
-        MemContents(this.m, sp + 16*WORDSIZE) == spsr_und;
-        MemContents(this.m, sp + 17*WORDSIZE) == spsr_mon;
+        MemContents(this.m, WordOffset(sp, 12)) == spsr_fiq;
+        MemContents(this.m, WordOffset(sp, 13)) == spsr_irq;
+        MemContents(this.m, WordOffset(sp, 14)) == spsr_svc;
+        MemContents(this.m, WordOffset(sp, 15)) == spsr_abt;
+        MemContents(this.m, WordOffset(sp, 16)) == spsr_und;
+        MemContents(this.m, WordOffset(sp, 17)) == spsr_mon;
 {
-    MRS_STR(spsr_fiq, sp, const(12*WORDSIZE), tmp);
-    MRS_STR(spsr_irq, sp, const(13*WORDSIZE), tmp);
-    MRS_STR(spsr_svc, sp, const(14*WORDSIZE), tmp);
-    MRS_STR(spsr_abt, sp, const(15*WORDSIZE), tmp);
-    MRS_STR(spsr_und, sp, const(16*WORDSIZE), tmp);
-    MRS_STR(spsr_mon, sp, const(17*WORDSIZE), tmp);
+    MRS_STR(spsr_fiq, sp, const(WordsToBytes(12)), tmp);
+    MRS_STR(spsr_irq, sp, const(WordsToBytes(13)), tmp);
+    MRS_STR(spsr_svc, sp, const(WordsToBytes(14)), tmp);
+    MRS_STR(spsr_abt, sp, const(WordsToBytes(15)), tmp);
+    MRS_STR(spsr_und, sp, const(WordsToBytes(16)), tmp);
+    MRS_STR(spsr_mon, sp, const(WordsToBytes(17)), tmp);
 }
 
 procedure stack_banked_regs2(out operand tmp:reg)
@@ -187,33 +187,33 @@ procedure stack_banked_regs2(out operand tmp:reg)
     requires
         @tmp != OSP;
         sp + BANKED_FRAMESIZE <= StackBase();
-        ValidMem(sp + 0*WORDSIZE);
-        ValidMem(sp + 1*WORDSIZE);
-        ValidMem(sp + 2*WORDSIZE);
-        ValidMem(sp + 3*WORDSIZE);
-        ValidMem(sp + 4*WORDSIZE);
-        ValidMem(sp + 5*WORDSIZE);
+        ValidMem(WordOffset(sp, 0));
+        ValidMem(WordOffset(sp, 1));
+        ValidMem(WordOffset(sp, 2));
+        ValidMem(WordOffset(sp, 3));
+        ValidMem(WordOffset(sp, 4));
+        ValidMem(WordOffset(sp, 5));
     reads
         sp;
         sp_usr; sp_fiq; sp_irq; sp_svc; sp_abt; sp_und;
     modifies
         mem;
     ensures
-        MemPreservingExcept(old(this), this, sp + 0*WORDSIZE, sp + 6*WORDSIZE);
+        MemPreservingExcept(old(this), this, WordOffset(sp, 0), WordOffset(sp, 6));
         sp == old(sp);
-        MemContents(this.m, sp + 0*WORDSIZE) == sp_usr;
-        MemContents(this.m, sp + 1*WORDSIZE) == sp_fiq;
-        MemContents(this.m, sp + 2*WORDSIZE) == sp_irq;
-        MemContents(this.m, sp + 3*WORDSIZE) == sp_svc;
-        MemContents(this.m, sp + 4*WORDSIZE) == sp_abt;
-        MemContents(this.m, sp + 5*WORDSIZE) == sp_und;
+        MemContents(this.m, WordOffset(sp, 0)) == sp_usr;
+        MemContents(this.m, WordOffset(sp, 1)) == sp_fiq;
+        MemContents(this.m, WordOffset(sp, 2)) == sp_irq;
+        MemContents(this.m, WordOffset(sp, 3)) == sp_svc;
+        MemContents(this.m, WordOffset(sp, 4)) == sp_abt;
+        MemContents(this.m, WordOffset(sp, 5)) == sp_und;
 {
-    MRS_STR(sp_usr, sp, const(0*WORDSIZE), tmp);
-    MRS_STR(sp_fiq, sp, const(1*WORDSIZE), tmp);
-    MRS_STR(sp_irq, sp, const(2*WORDSIZE), tmp);
-    MRS_STR(sp_svc, sp, const(3*WORDSIZE), tmp);
-    MRS_STR(sp_abt, sp, const(4*WORDSIZE), tmp);
-    MRS_STR(sp_und, sp, const(5*WORDSIZE), tmp);
+    MRS_STR(sp_usr, sp, const(WordsToBytes(0)), tmp);
+    MRS_STR(sp_fiq, sp, const(WordsToBytes(1)), tmp);
+    MRS_STR(sp_irq, sp, const(WordsToBytes(2)), tmp);
+    MRS_STR(sp_svc, sp, const(WordsToBytes(3)), tmp);
+    MRS_STR(sp_abt, sp, const(WordsToBytes(4)), tmp);
+    MRS_STR(sp_und, sp, const(WordsToBytes(5)), tmp);
 }
 
 procedure stack_banked_regs3(out operand tmp:reg)
@@ -222,33 +222,33 @@ procedure stack_banked_regs3(out operand tmp:reg)
     requires
         @tmp != OSP;
         sp + BANKED_FRAMESIZE <= StackBase();
-        ValidMem(sp + 6*WORDSIZE);
-        ValidMem(sp + 7*WORDSIZE);
-        ValidMem(sp + 8*WORDSIZE);
-        ValidMem(sp + 9*WORDSIZE);
-        ValidMem(sp + 10*WORDSIZE);
-        ValidMem(sp + 11*WORDSIZE);
+        ValidMem(WordOffset(sp, 6));
+        ValidMem(WordOffset(sp, 7));
+        ValidMem(WordOffset(sp, 8));
+        ValidMem(WordOffset(sp, 9));
+        ValidMem(WordOffset(sp, 10));
+        ValidMem(WordOffset(sp, 11));
     reads
         sp;
         lr_usr; lr_fiq; lr_irq; lr_svc; lr_abt; lr_und;
     modifies
         mem;
     ensures
-        MemPreservingExcept(old(this), this, sp + 6*WORDSIZE, sp + 12*WORDSIZE);
+        MemPreservingExcept(old(this), this, WordOffset(sp, 6), WordOffset(sp, 12));
         sp == old(sp);
-        MemContents(this.m, sp + 6*WORDSIZE) == lr_usr;
-        MemContents(this.m, sp + 7*WORDSIZE) == lr_fiq;
-        MemContents(this.m, sp + 8*WORDSIZE) == lr_irq;
-        MemContents(this.m, sp + 9*WORDSIZE) == lr_svc;
-        MemContents(this.m, sp + 10*WORDSIZE) == lr_abt;
-        MemContents(this.m, sp + 11*WORDSIZE) == lr_und;
+        MemContents(this.m, WordOffset(sp, 6)) == lr_usr;
+        MemContents(this.m, WordOffset(sp, 7)) == lr_fiq;
+        MemContents(this.m, WordOffset(sp, 8)) == lr_irq;
+        MemContents(this.m, WordOffset(sp, 9)) == lr_svc;
+        MemContents(this.m, WordOffset(sp, 10)) == lr_abt;
+        MemContents(this.m, WordOffset(sp, 11)) == lr_und;
 {
-    MRS_STR(lr_usr, sp, const(6*WORDSIZE), tmp);
-    MRS_STR(lr_fiq, sp, const(7*WORDSIZE), tmp);
-    MRS_STR(lr_irq, sp, const(8*WORDSIZE), tmp);
-    MRS_STR(lr_svc, sp, const(9*WORDSIZE), tmp);
-    MRS_STR(lr_abt, sp, const(10*WORDSIZE), tmp);
-    MRS_STR(lr_und, sp, const(11*WORDSIZE), tmp);
+    MRS_STR(lr_usr, sp, const(WordsToBytes(6)), tmp);
+    MRS_STR(lr_fiq, sp, const(WordsToBytes(7)), tmp);
+    MRS_STR(lr_irq, sp, const(WordsToBytes(8)), tmp);
+    MRS_STR(lr_svc, sp, const(WordsToBytes(9)), tmp);
+    MRS_STR(lr_abt, sp, const(WordsToBytes(10)), tmp);
+    MRS_STR(lr_und, sp, const(WordsToBytes(11)), tmp);
 }
 
 procedure stack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
@@ -317,17 +317,18 @@ procedure LDR_MSR_banked(
 procedure LDR_MSR_spsr(
     out operand reg:sreg,
     operand base:word,
+    ghost wofs:word,
     operand ofs:word,
     out operand tmp:reg)
     requires/ensures
         SaneState(this);
     requires
-        //ValidMem(base + ofs);
-        //ValidMrsMsrOperand(this, @reg);
-        @reg is OSReg && @reg.sr is spsr;// && ValidPsrWord(MemContents(this.m, base + ofs));
-        @tmp != OSP && @tmp != @base && @tmp != @ofs;
+        @reg is OSReg && @reg.sr is spsr;
+        @tmp != OSP && @tmp != @base;
         ValidMem(base) && wellformed_banked_regs_stackframe(this.m, base);
-        WordAligned(ofs) && 12 <= BytesToWords(ofs) <= 17;
+        12 <= wofs <= 17;
+        @ofs is OConst;
+        ofs == WordsToBytes(wofs);
     reads
         mem;
     ensures
@@ -336,11 +337,12 @@ procedure LDR_MSR_spsr(
         BankedRegsInvariant(old(this),this);
         forall sr :: this.sregs?[sr] && old(this).sregs?[sr] && sr != @reg.sr
             ==> this.sregs[sr] == old(this).sregs[sr];
-        ValidMem(old(base + ofs));
-        reg == MemContents(old(this.m), old(base+ofs));
+        old(isUInt32(base + WordsToBytes(wofs)) && ValidMem(WordOffset(base, wofs)));
+        reg == MemContents(old(this.m), old(WordOffset(base, wofs)));
 {
-    assert exists i :: ofs == i * WORDSIZE && 12 <= i <= 17; // trigger
-    assert ValidMem(base + ofs) && ValidPsrWord(MemContents(this.m, base + ofs))
+    ghost var a := base + WordsToBytes(wofs);
+    assert isUInt32(a) && a == WordOffset(base, wofs) && ValidMem(a)
+        && ValidPsrWord(MemContents(this.m, a))
         by { reveal_wellformed_banked_regs_stackframe(); }
     LDR(tmp, base, ofs);
     MSR(reg, tmp);
@@ -353,12 +355,12 @@ procedure unstack_banked_regs1(out operand tmp:reg)
         @tmp != OSP;
         sp + BANKED_FRAMESIZE <= StackBase();
         wellformed_banked_regs_stackframe(this.m, sp);
-        ValidMem(sp + 0*WORDSIZE);
-        ValidMem(sp + 1*WORDSIZE);
-        ValidMem(sp + 2*WORDSIZE);
-        ValidMem(sp + 3*WORDSIZE);
-        ValidMem(sp + 4*WORDSIZE);
-        ValidMem(sp + 5*WORDSIZE);
+        ValidMem(WordOffset(sp, 0));
+        ValidMem(WordOffset(sp, 1));
+        ValidMem(WordOffset(sp, 2));
+        ValidMem(WordOffset(sp, 3));
+        ValidMem(WordOffset(sp, 4));
+        ValidMem(WordOffset(sp, 5));
     reads
         sp;
         mem;
@@ -366,19 +368,19 @@ procedure unstack_banked_regs1(out operand tmp:reg)
         sp_usr; sp_fiq; sp_irq; sp_svc; sp_abt; sp_und;
     ensures
         sp == old(sp);
-        MemContents(this.m, sp + 0*WORDSIZE) == sp_usr;
-        MemContents(this.m, sp + 1*WORDSIZE) == sp_fiq;
-        MemContents(this.m, sp + 2*WORDSIZE) == sp_irq;
-        MemContents(this.m, sp + 3*WORDSIZE) == sp_svc;
-        MemContents(this.m, sp + 4*WORDSIZE) == sp_abt;
-        MemContents(this.m, sp + 5*WORDSIZE) == sp_und;
+        MemContents(this.m, WordOffset(sp, 0)) == sp_usr;
+        MemContents(this.m, WordOffset(sp, 1)) == sp_fiq;
+        MemContents(this.m, WordOffset(sp, 2)) == sp_irq;
+        MemContents(this.m, WordOffset(sp, 3)) == sp_svc;
+        MemContents(this.m, WordOffset(sp, 4)) == sp_abt;
+        MemContents(this.m, WordOffset(sp, 5)) == sp_und;
 {
-    LDR_MSR_banked(sp_usr, sp, const(0*WORDSIZE), tmp);
-    LDR_MSR_banked(sp_fiq, sp, const(1*WORDSIZE), tmp);
-    LDR_MSR_banked(sp_irq, sp, const(2*WORDSIZE), tmp);
-    LDR_MSR_banked(sp_svc, sp, const(3*WORDSIZE), tmp);
-    LDR_MSR_banked(sp_abt, sp, const(4*WORDSIZE), tmp);
-    LDR_MSR_banked(sp_und, sp, const(5*WORDSIZE), tmp);
+    LDR_MSR_banked(sp_usr, sp, const(WordsToBytes(0)), tmp);
+    LDR_MSR_banked(sp_fiq, sp, const(WordsToBytes(1)), tmp);
+    LDR_MSR_banked(sp_irq, sp, const(WordsToBytes(2)), tmp);
+    LDR_MSR_banked(sp_svc, sp, const(WordsToBytes(3)), tmp);
+    LDR_MSR_banked(sp_abt, sp, const(WordsToBytes(4)), tmp);
+    LDR_MSR_banked(sp_und, sp, const(WordsToBytes(5)), tmp);
 }
 
 procedure unstack_banked_regs2(out operand tmp:reg)
@@ -388,12 +390,12 @@ procedure unstack_banked_regs2(out operand tmp:reg)
         @tmp != OSP;
         sp + BANKED_FRAMESIZE <= StackBase();
         wellformed_banked_regs_stackframe(this.m, sp);
-        ValidMem(sp + 6*WORDSIZE);
-        ValidMem(sp + 7*WORDSIZE);
-        ValidMem(sp + 8*WORDSIZE);
-        ValidMem(sp + 9*WORDSIZE);
-        ValidMem(sp + 10*WORDSIZE);
-        ValidMem(sp + 11*WORDSIZE);
+        ValidMem(WordOffset(sp, 6));
+        ValidMem(WordOffset(sp, 7));
+        ValidMem(WordOffset(sp, 8));
+        ValidMem(WordOffset(sp, 9));
+        ValidMem(WordOffset(sp, 10));
+        ValidMem(WordOffset(sp, 11));
     reads
         sp;
         mem;
@@ -401,19 +403,19 @@ procedure unstack_banked_regs2(out operand tmp:reg)
         lr_usr; lr_fiq; lr_irq; lr_svc; lr_abt; lr_und;
     ensures
         sp == old(sp);
-        MemContents(this.m, sp + 6*WORDSIZE) == lr_usr;
-        MemContents(this.m, sp + 7*WORDSIZE) == lr_fiq;
-        MemContents(this.m, sp + 8*WORDSIZE) == lr_irq;
-        MemContents(this.m, sp + 9*WORDSIZE) == lr_svc;
-        MemContents(this.m, sp + 10*WORDSIZE) == lr_abt;
-        MemContents(this.m, sp + 11*WORDSIZE) == lr_und;
+        MemContents(this.m, WordOffset(sp, 6)) == lr_usr;
+        MemContents(this.m, WordOffset(sp, 7)) == lr_fiq;
+        MemContents(this.m, WordOffset(sp, 8)) == lr_irq;
+        MemContents(this.m, WordOffset(sp, 9)) == lr_svc;
+        MemContents(this.m, WordOffset(sp, 10)) == lr_abt;
+        MemContents(this.m, WordOffset(sp, 11)) == lr_und;
 {
-    LDR_MSR_banked(lr_usr, sp, const(6*WORDSIZE), tmp);
-    LDR_MSR_banked(lr_fiq, sp, const(7*WORDSIZE), tmp);
-    LDR_MSR_banked(lr_irq, sp, const(8*WORDSIZE), tmp);
-    LDR_MSR_banked(lr_svc, sp, const(9*WORDSIZE), tmp);
-    LDR_MSR_banked(lr_abt, sp, const(10*WORDSIZE), tmp);
-    LDR_MSR_banked(lr_und, sp, const(11*WORDSIZE), tmp);
+    LDR_MSR_banked(lr_usr, sp, const(WordsToBytes(6)), tmp);
+    LDR_MSR_banked(lr_fiq, sp, const(WordsToBytes(7)), tmp);
+    LDR_MSR_banked(lr_irq, sp, const(WordsToBytes(8)), tmp);
+    LDR_MSR_banked(lr_svc, sp, const(WordsToBytes(9)), tmp);
+    LDR_MSR_banked(lr_abt, sp, const(WordsToBytes(10)), tmp);
+    LDR_MSR_banked(lr_und, sp, const(WordsToBytes(11)), tmp);
 }
 
 procedure unstack_banked_regs3(out operand tmp:reg)
@@ -423,12 +425,12 @@ procedure unstack_banked_regs3(out operand tmp:reg)
         @tmp != OSP;
         sp + BANKED_FRAMESIZE <= StackBase();
         wellformed_banked_regs_stackframe(this.m, sp);
-        ValidMem(sp + 12*WORDSIZE);
-        ValidMem(sp + 13*WORDSIZE);
-        ValidMem(sp + 14*WORDSIZE);
-        ValidMem(sp + 15*WORDSIZE);
-        ValidMem(sp + 16*WORDSIZE);
-        ValidMem(sp + 17*WORDSIZE);
+        ValidMem(WordOffset(sp, 12));
+        ValidMem(WordOffset(sp, 13));
+        ValidMem(WordOffset(sp, 14));
+        ValidMem(WordOffset(sp, 15));
+        ValidMem(WordOffset(sp, 16));
+        ValidMem(WordOffset(sp, 17));
     reads
         sp;
         mem;
@@ -436,19 +438,19 @@ procedure unstack_banked_regs3(out operand tmp:reg)
         spsr_fiq; spsr_irq; spsr_svc; spsr_abt; spsr_und; spsr_mon;
     ensures
         sp == old(sp);
-        MemContents(this.m, sp + 12*WORDSIZE) == spsr_fiq;
-        MemContents(this.m, sp + 13*WORDSIZE) == spsr_irq;
-        MemContents(this.m, sp + 14*WORDSIZE) == spsr_svc;
-        MemContents(this.m, sp + 15*WORDSIZE) == spsr_abt;
-        MemContents(this.m, sp + 16*WORDSIZE) == spsr_und;
-        MemContents(this.m, sp + 17*WORDSIZE) == spsr_mon;
+        MemContents(this.m, WordOffset(sp, 12)) == spsr_fiq;
+        MemContents(this.m, WordOffset(sp, 13)) == spsr_irq;
+        MemContents(this.m, WordOffset(sp, 14)) == spsr_svc;
+        MemContents(this.m, WordOffset(sp, 15)) == spsr_abt;
+        MemContents(this.m, WordOffset(sp, 16)) == spsr_und;
+        MemContents(this.m, WordOffset(sp, 17)) == spsr_mon;
 {
-    LDR_MSR_spsr(spsr_fiq, sp, const(12*WORDSIZE), tmp);
-    LDR_MSR_spsr(spsr_irq, sp, const(13*WORDSIZE), tmp);
-    LDR_MSR_spsr(spsr_svc, sp, const(14*WORDSIZE), tmp);
-    LDR_MSR_spsr(spsr_abt, sp, const(15*WORDSIZE), tmp);
-    LDR_MSR_spsr(spsr_und, sp, const(16*WORDSIZE), tmp);
-    LDR_MSR_spsr(spsr_mon, sp, const(17*WORDSIZE), tmp);
+    LDR_MSR_spsr(spsr_fiq, sp, 12, const(WordsToBytes(12)), tmp);
+    LDR_MSR_spsr(spsr_irq, sp, 13, const(WordsToBytes(13)), tmp);
+    LDR_MSR_spsr(spsr_svc, sp, 14, const(WordsToBytes(14)), tmp);
+    LDR_MSR_spsr(spsr_abt, sp, 15, const(WordsToBytes(15)), tmp);
+    LDR_MSR_spsr(spsr_und, sp, 16, const(WordsToBytes(16)), tmp);
+    LDR_MSR_spsr(spsr_mon, sp, 17, const(WordsToBytes(17)), tmp);
 }
 procedure unstack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
           returns (ghost stack_bytes:int)
@@ -524,9 +526,8 @@ procedure smc_enter_err(
             assert pagedb[pagenr] is PageDbEntryTyped && pagedb[pagenr].entry is Dispatcher;
 
             ADD(r10, r10, const(PAGEDB_ENTRY_ADDRSPACE));
-            assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE;
-            WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE, r10);
-           
+            assert r10 == WordAlignedAdd(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE);
+
             LDRglobal(r8, PageDb(), pagedb_base, r10);
             ghost var addrspace := pagedb[pagenr].addrspace;
             assert validPageNr(addrspace) by { reveal_validPageDb(); }
@@ -546,8 +547,8 @@ procedure smc_enter_err(
                 assert GlobalWord(this.m, PageDb(), r10) == 
                     page_monvaddr(pagedb[pagenr].addrspace);
             }
-            WordAlignedAdd_(r8,ADDRSPACE_STATE,r8+ADDRSPACE_STATE);
-           
+            lemma_WordAlignedAdd(r8,ADDRSPACE_STATE);
+
             assert ValidMem(r8 + ADDRSPACE_STATE) by { reveal_validPageDb(); }
             LDR(r8, r8, const(ADDRSPACE_STATE));
             assert r8 == KOM_ADDRSPACE_FINAL
@@ -686,8 +687,7 @@ procedure switch_addrspace(
     LSL(r10, pagenr, const(PAGEDB_ENTRY_SHIFT));
     assert r10 == G_PAGEDB_ENTRY(pagenr);
     ADD(r10, r10, const(PAGEDB_ENTRY_ADDRSPACE)); 
-    assert r10 == G_PAGEDB_ENTRY(pagenr) + PAGEDB_ENTRY_ADDRSPACE;
-    WordAlignedAdd_(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE, r10);
+    assert r10 == WordAlignedAdd(G_PAGEDB_ENTRY(pagenr), PAGEDB_ENTRY_ADDRSPACE);
 
     LDRglobal(r11, PageDb(), pagedb_base, r10);
     assert r11 == page_monvaddr(addrspace) by {
@@ -1051,10 +1051,10 @@ lemma lemma_obvious_sp(s:state)
 lemma lemma_aligned_sp(s:state)
     requires SaneState(s)
     ensures OpaqueEven(va_get_osp(s))
-{ reveal OpaqueEven(); }
+{ reveal OpaqueEven(); reveal WordAligned(); }
 #endverbatim
 
-procedure {:frame false}{:fuel WordAligned, 0}{:timeLimitMultiplier 2} enclaveexecution_loop(
+procedure {:frame false}{:timeLimitMultiplier 2} enclaveexecution_loop(
         ghost pagedb_in: PageDb,
         ghost dispPg: PageNr)
     returns (ghost pagedb:PageDb, ghost steps:nat)

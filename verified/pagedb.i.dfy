@@ -14,7 +14,7 @@ function method G_PAGEDB_ENTRY(pageno:PageNr): addr
 
 // entry = start offset of pagedb entry
 const PAGEDB_ENTRY_TYPE:int     := 0;
-const PAGEDB_ENTRY_ADDRSPACE:int := 4;
+const PAGEDB_ENTRY_ADDRSPACE:int := WORDSIZE;
 
 //-----------------------------------------------------------------------------
 // Addrspace Fields

@@ -1,13 +1,6 @@
 include {:verbatim} "kom_common.i.dfy"
 include "ARMdecls.sdfy"
 
-#verbatim
-lemma WordAlignedSub(x1:int, x2:int, y:int)
-    requires WordAligned(x1) && WordAligned(x2) && x1 >= x2 && y == x1-x2
-    ensures WordAligned(y)
-    {}
-#endverbatim
-
 procedure {:timeLimitMultiplier 2} memcpy_bare(operand dst:addr, operand src:addr,
                                           inout operand size:reg, out operand tmp:reg)
     modifies
@@ -41,9 +34,8 @@ procedure {:timeLimitMultiplier 2} memcpy_bare(operand dst:addr, operand src:add
             size;
     {
         ghost var prevThis := this;
-        ghost var prevSize := size;
+        lemma_WordAlignedSub(size, WORDSIZE);
         SUB(size, size, const(WORDSIZE));
-        WordAlignedSub(prevSize, WORDSIZE, size);
         LDR(tmp, src, size);
         assert tmp == MemContents(old(this.m), src + size);
         STR(tmp, dst, size);

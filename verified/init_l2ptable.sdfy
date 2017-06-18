@@ -11,21 +11,12 @@ include "memset.sdfy"
 include "map_utils.sdfy"
 
 #verbatim
-lemma lemma_mod0_really_obvious(x:int)
-    requires x % 0x1000 == 0
-    ensures x % 0x400 == 0
-{
-    assert 0x1000 % 0x400 == 0;
-}
-
-lemma pa_implies_modl2p(p:int)
+lemma pa_implies_modl2p(p:word)
     requires PageAligned(p)
     ensures  p % ARM_L2PTABLE_BYTES == 0
 {
     assert p % PAGESIZE == 0 by { reveal_PageAligned(); }
-    assert PAGESIZE == 0x1000;
-    assert ARM_L2PTABLE_BYTES == 0x400;
-    lemma_mod0_really_obvious(p);
+    lemma_PageAlignedImplies1KAligned(p);
 }
 
 lemma SameEntriesImpliesPageDbCorresponds(s:memstate, p: PageNr,
@@ -88,7 +79,7 @@ procedure install_l1ptes'(
     lemma_ARM_L1PTE_Dual(old(l2base));
     ORR(l2base, l2base, 1);
     assert l2base == mkL1Pte(Just(l2pg), 0);
-    WordAlignedAdd(l1base, l1index);
+    lemma_WordAlignedAdd(l1base, l1index);
     STR(l2base, l1base, l1index);
 
     assert RegPreservingExcept(old(this),this,set(@l1index, @l2base));

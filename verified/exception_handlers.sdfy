@@ -401,7 +401,7 @@ lemma lemma_svc_returning_WordAlignedStack(s:state, stack_bytes:int)
 }
 #endverbatim
 
-procedure {:frame false} {:fuel WordAligned, 0} svc_returning(
+procedure {:frame false} svc_returning(
     ghost exstate: state,
     ghost stack_bytes: int,
     ghost pagedb: PageDb,
@@ -418,7 +418,7 @@ procedure {:frame false} {:fuel WordAligned, 0} svc_returning(
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
     requires
-        stack_bytes >= (STACKSIZE_ATTEST + 14) * WORDSIZE;
+        stack_bytes >= WordsToBytes(STACKSIZE_ATTEST + 14);
         ValidState(exstate) && mode_of_state(exstate) != User;
         isReturningSvc(exstate);
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
@@ -444,11 +444,11 @@ procedure {:frame false} {:fuel WordAligned, 0} svc_returning(
         else if old(r0) == KOM_SVC_VERIFY_STEP0 then 
             MemPreservingExcept(old(this), this, 
                                 page_monvaddr(dispPg), 
-                                page_monvaddr(dispPg) + DISP_CTXT_USER_WORDS + 8 * WORDSIZE)
+                                page_monvaddr(dispPg) + DISP_CTXT_USER_WORDS + WordsToBytes(8))
         else if old(r0) == KOM_SVC_VERIFY_STEP1 then
             MemPreservingExcept(old(this), this, 
                                 page_monvaddr(dispPg), 
-                                page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT + 8 * WORDSIZE)
+                                page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT + WordsToBytes(8))
         else
             NonStackMemPreserving(old(this), this);
         let tuple := svcHandled(exstate, pagedb, dispPg);
@@ -512,7 +512,7 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
         mode_of_state(this) == Supervisor && spsr_of_state(this).m == User;
         this.conf.ex == ExSVC;
         interrupts_enabled(this);
-        exists stack_bytes :: StackBytesRemaining(this, stack_bytes) && stack_bytes >= (STACKSIZE_ATTEST + 14) * WORDSIZE;
+        exists stack_bytes :: StackBytesRemaining(this, stack_bytes) && stack_bytes >= WordsToBytes(STACKSIZE_ATTEST + 14);
     ensures
         KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
         validPageDb(pagedb);
@@ -626,6 +626,7 @@ procedure save_disp_context_helper(operand base:reg, ghost dispPg:PageNr)
     MRS_STR(lr_usr, base, const(DISP_CTXT_LR), r1);
     MRS_STR(sp_usr, base, const(DISP_CTXT_SP), r1);
     STR(lr, base, const(DISP_CTXT_PC));
+    lemma_WordAlignedAdd(base, DISP_CTXT_PSR);
     MRS_STR(spsr_mon, base, const(DISP_CTXT_PSR), r1);
 }
 

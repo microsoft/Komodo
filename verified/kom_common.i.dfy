@@ -188,13 +188,12 @@ function secondOf2<T,U>(t:(T, U)) : U { t.1 }
 // Common lemmas
 //-----------------------------------------------------------------------------
 
-// FIXME: delete
-lemma WordAlignedAdd(x1:int,x2:int)
-    requires WordAligned(x1) && WordAligned(x2)
-    ensures  WordAligned(x1+x2)
-    {}
+lemma lemma_WordAlignedAdd(x1:int, x2:int)
+    requires WordAligned(x1) && WordAligned(x2) 
+    ensures WordAligned(x1+x2)
+{ reveal WordAligned(); }
 
-lemma WordAlignedAdd_(x1:int,x2:int,y:int)
-    requires WordAligned(x1) && WordAligned(x2) && y == x1+x2
-    ensures WordAligned(y)
-    {}
+lemma lemma_WordAlignedSub(x1:int, x2:int)
+    requires WordAligned(x1) && WordAligned(x2) && x1 >= x2
+    ensures WordAligned(x1 - x2)
+{ reveal WordAligned(); }

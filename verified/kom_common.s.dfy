@@ -64,7 +64,7 @@ function {:axiom} StackLimit():addr
 
 function StackBase():addr
 {
-    StackLimit() + KOM_STACK_SIZE
+    reveal WordAligned(); StackLimit() + KOM_STACK_SIZE
 }
 
 predicate address_is_secure(m:addr)

@@ -46,12 +46,12 @@ lemma{:fuel AddrMemContentsSeq, 0} lemma_grab_user_words(
 
     var dp := page_monvaddr(dispPg) + DISP_CTXT_USER_WORDS;
     var page := extractPage(s.m, dispPg);
-    WordAlignedAdd(page_monvaddr(dispPg), DISP_CTXT_USER_WORDS);
+    lemma_WordAlignedAdd(page_monvaddr(dispPg), DISP_CTXT_USER_WORDS);
     forall i | 0 <= i < SHA_CTXSIZE
         ensures AddrMemContentsSeq(s.m.addresses, base, SHA_CTXSIZE)[i] == pagedb[dispPg].entry.verify_words[i];
     {
         lemma_MulModZero(i, WORDSIZE); // Prove: assert WordAligned(i * WORDSIZE);
-        WordAlignedAdd(dp, i * WORDSIZE);
+        lemma_WordAlignedAdd(dp, WordsToBytes(i));
         calc {
             AddrMemContentsSeq(s.m.addresses, base, SHA_CTXSIZE)[i];
             AddrMemContentsSeq(s.m.addresses, dp, SHA_CTXSIZE)[i];
@@ -90,17 +90,17 @@ lemma{:fuel AddrMemContentsSeq, 0} lemma_grab_measurement(
 
     var dp := page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT;
     var page := extractPage(s.m, dispPg);
-    WordAlignedAdd(page_monvaddr(dispPg), DISP_CTXT_VERIFY_MEASUREMENT);
+    lemma_WordAlignedAdd(page_monvaddr(dispPg), DISP_CTXT_VERIFY_MEASUREMENT);
     forall i | 0 <= i < SHA_CTXSIZE
         ensures AddrMemContentsSeq(s.m.addresses, base, SHA_CTXSIZE)[i] == pagedb[dispPg].entry.verify_measurement[i];
     {
         lemma_MulModZero(i, WORDSIZE); // Prove: assert WordAligned(i * WORDSIZE);
-        WordAlignedAdd(dp, i * WORDSIZE);
+        lemma_WordAlignedAdd(dp, WordsToBytes(i));
         calc {
             AddrMemContentsSeq(s.m.addresses, base, SHA_CTXSIZE)[i];
             AddrMemContentsSeq(s.m.addresses, dp, SHA_CTXSIZE)[i];
-            AddrMemContents(s.m.addresses, dp + i * WORDSIZE);
-            page[dp + i*WORDSIZE]; 
+            AddrMemContents(s.m.addresses, WordOffset(dp, i));
+            page[WordOffset(dp, i)]; 
             { reveal pageContentsCorresponds(); reveal pageDbDispatcherCorresponds(); reveal pageDbDispatcherVerifyStateCorresponds(); }
             pagedb[dispPg].entry.verify_measurement[i];
         }
@@ -142,10 +142,10 @@ procedure arrange_user_words_in_memory(
     ghost var offset := r10 + DISP_CTXT_USER_WORDS;
 
     // Arrange the user_words on the stack
-    WordAlignedAdd(sp, SHA_CTXSIZE * WORDSIZE);
-    ADD(r1, sp, const(SHA_CTXSIZE * WORDSIZE));
+    lemma_WordAlignedAdd(sp, WordsToBytes(SHA_CTXSIZE));
+    ADD(r1, sp, const(WordsToBytes(SHA_CTXSIZE)));
     ADD(r2, r10, const(DISP_CTXT_USER_WORDS));  // Construct a pointer to user_words
-    MOV(r3, const(SHA_CTXSIZE * WORDSIZE));         // Size arg to memcpy
+    MOV(r3, const(WordsToBytes(SHA_CTXSIZE)));         // Size arg to memcpy
     ghost var pre_memcpy_state := this;
     memcpy_bare(r1, r2, r3, r4);
     lemma_memset_result(old(this.m), this.m, offset, r1, SHA_CTXSIZE);
@@ -203,10 +203,10 @@ procedure arrange_verify_measurement_in_memory(
     ghost var offset := r10 + DISP_CTXT_VERIFY_MEASUREMENT;
 
     // Arrange the measurement on the stack
-    WordAlignedAdd(sp, 2 * SHA_CTXSIZE * WORDSIZE);
-    ADD(r1, sp, const(2 * SHA_CTXSIZE * WORDSIZE));
+    lemma_WordAlignedAdd(sp, WordsToBytes(2 * SHA_CTXSIZE));
+    ADD(r1, sp, const(WordsToBytes(2 * SHA_CTXSIZE)));
     ADD(r2, r10, const(DISP_CTXT_VERIFY_MEASUREMENT));  // Construct a pointer to measurement 
-    MOV(r3, const(SHA_CTXSIZE * WORDSIZE));         // Size arg to memcpy
+    MOV(r3, const(WordsToBytes(SHA_CTXSIZE)));         // Size arg to memcpy
     ghost var pre_memcpy_state := this;
     memcpy_bare(r1, r2, r3, r4);
     lemma_memset_result(old(this.m), this.m, offset, r1, SHA_CTXSIZE);

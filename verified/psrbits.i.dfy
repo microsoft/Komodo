@@ -112,6 +112,7 @@ lemma lemma_update_psr(oldpsr:word, newmode:word, f:bool, i:bool)
             assert (BitAnd(maskbits, 0x40) != 0) == f by { reveal_BitAnd(); }
 
             reveal_BitAnd(); reveal_BitOr();
+            reveal WordAligned(); // why?
         }
         f || decode_psr(oldpsr).f;
     }
@@ -140,6 +141,7 @@ lemma lemma_update_psr(oldpsr:word, newmode:word, f:bool, i:bool)
             assert (BitAnd(maskbits, 0x80) != 0) == i by { reveal_BitAnd(); }
 
             reveal_BitAnd(); reveal_BitOr();
+            reveal WordAligned(); // why?
         }
         i || decode_psr(oldpsr).i;
     }

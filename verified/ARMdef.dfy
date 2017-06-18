@@ -1,26 +1,8 @@
 include "Maybe.dfy"
 include "Seq.dfy"
+include "types.s.dfy"
 include "bitvectors.s.dfy"
-include "alignment.s.dfy"
 include "words_and_bytes.s.dfy"
-
-//-----------------------------------------------------------------------------
-// Core types (for a 32-bit word-aligned machine)
-//-----------------------------------------------------------------------------
-const WORDSIZE:int := 4;
-predicate WordAligned(i:int) { i % WORDSIZE == 0 }
-function  WordsToBytes(w:int): int
-    ensures WordAligned(WordsToBytes(w))
-{ WORDSIZE * w }
-function  BytesToWords(b:int): int
-    requires WordAligned(b)
-{ b / WORDSIZE }
-
-function {:opaque} TruncateWord(x:int): word
-{ x % UINT32_LIM }
-
-type addr = x | isUInt32(x) && WordAligned(x)
-type shift_amount = s | 0 <= s < 32 // Some shifts allow s=32, but we'll be conservative for simplicity
 
 //-----------------------------------------------------------------------------
 // Microarchitectural State
@@ -43,6 +25,8 @@ datatype config = Config(cpsr:PSR, scr:SCR, ttbr0:TTBR,
 datatype PSR  = PSR(m:mode, f:bool, i:bool) // See B1.3.3
 datatype SCR  = SCRT(ns:world, irq:bool, fiq:bool) // See B4.1.129
 datatype TTBR = TTBR(ptbase:addr)      // See B4.1.154
+
+type shift_amount = s | 0 <= s < 32 // Some shifts allow s=32, but we'll be conservative for simplicity
 
 datatype Shift = LSLShift(amount_lsl:shift_amount)
                | LSRShift(amount_lsr:shift_amount)
@@ -653,16 +637,6 @@ predicate {:axiom} InterruptContinuationInvariant(s:state, r:state)
 // Model of page tables for userspace execution
 //-----------------------------------------------------------------------------
 
-const PAGESIZE:int := 0x1000;
-const PAGEBITS:int := 12;
-
-predicate {:opaque} PageAligned(addr:int)
-    ensures PageAligned(addr) ==> WordAligned(addr)
-{
-    lemma_PageAlignedImpliesWordAligned(addr);
-    addr % PAGESIZE == 0
-}
-
 function {:opaque} PageBase(addr:word): word
     ensures PageAligned(PageBase(addr))
 {
@@ -722,7 +696,7 @@ function AllPagesInTable(pt:AbsPTable): set<addr>
     requires WellformedAbsPTable(pt)
 {
     (set i, j | 0 <= i < |pt| && pt[i].Just? && 0 <= j < |pt[i].v|
-        && pt[i].v[j].Just? :: pt[i].v[j].v.phys + PhysBase())
+        && pt[i].v[j].Just? :: WordAlignedAdd(pt[i].v[j].v.phys, PhysBase()))
 }
 
 function WritablePagesInTable(pt:AbsPTable): set<addr>
@@ -731,13 +705,8 @@ function WritablePagesInTable(pt:AbsPTable): set<addr>
 {
     (set i, j | 0 <= i < |pt| && pt[i].Just? && 0 <= j < |pt[i].v|
         && pt[i].v[j].Just? && pt[i].v[j].v.write
-        :: pt[i].v[j].v.phys + PhysBase())
+        :: WordAlignedAdd(pt[i].v[j].v.phys, PhysBase()))
 }
-
-function WordOffset(a:addr, i:int): addr
-    requires isUInt32(a + WordsToBytes(i))
-    ensures WordAligned(WordOffset(a, i))
-{ a + WordsToBytes(i) }
 
 predicate ValidAbsL1PTable(m:memstate, vbase:int)
     requires ValidMemState(m)
@@ -1134,17 +1103,18 @@ predicate evalIns'(ins:ins, s:state, r:state)
             evalUpdate(s, rd, MemContents(s.m, OperandContents(s, base) +
                 OperandContents(s, ofs)), r)
         case LDR_global(rd, global, base, ofs) => 
-            evalUpdate(s, rd, GlobalWord(s.m, global, OperandContents(s, base)
-                + OperandContents(s, ofs) - AddressOfGlobal(global)), r)
+            evalUpdate(s, rd, GlobalWord(s.m, global,
+                WordAlignedSub(OperandContents(s, base) + OperandContents(s, ofs),
+                               AddressOfGlobal(global))), r)
         case LDR_reloc(rd, name) =>
             evalUpdate(s, rd, AddressOfGlobal(name), r)
         case STR(rd, base, ofs) => 
             evalMemUpdate(s, OperandContents(s, base) +
                 OperandContents(s, ofs), OperandContents(s, rd), r)
         case STR_global(rd, global, base, ofs) => 
-            evalGlobalUpdate(s, global, OperandContents(s, base)
-                + OperandContents(s, ofs) - AddressOfGlobal(global),
-                OperandContents(s, rd), r)
+            evalGlobalUpdate(s, global,
+                WordAlignedSub(OperandContents(s, base) + OperandContents(s, ofs),
+                               AddressOfGlobal(global)), OperandContents(s, rd), r)
         case MOV(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
         case MOVW(dst, src) => evalUpdate(s, dst, OperandContents(s, src), r)
         case MOVT(dst, src) => evalUpdate(s, dst,

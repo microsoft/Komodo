@@ -5,7 +5,7 @@ include "ptebits.i.dfy"
 
 // XXX: this is placed at the top of the file to work around timeout
 // instability when verifying it later in the file
-lemma lemma_PageAlignedAdd(x:int, y:int)
+lemma lemma_PageAlignedAdd(x:nat, y:nat)
     requires PageAligned(x) && PageAligned(y)
     ensures PageAligned(x + y)
 {

@@ -20,7 +20,7 @@ function smc_enter_err(d: PageDb, p: word, isresume: bool): word
     else KOM_ERR_SUCCESS
 }
 
-function securePageFromPhysAddr(phys:int): PageNr
+function securePageFromPhysAddr(phys:word): PageNr
     requires PageAligned(phys)
     requires SecurePhysBase() <= phys < SecurePhysBase() +
         KOM_SECURE_NPAGES * PAGESIZE // physPageIsSecure(phys/PAGESIZE)

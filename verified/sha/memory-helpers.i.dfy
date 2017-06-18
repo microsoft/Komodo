@@ -32,9 +32,9 @@ lemma lemma_ValidMemRange_offset_word(base:int, count:nat)
 }
 
 lemma lemma_ValidMemRange_reduced(base:int, count:nat, count':nat)
-    requires ValidMemRange(base, base + count * WORDSIZE);
+    requires ValidMemRange(base, base + WordsToBytes(count));
     requires count' < count;
-    ensures  ValidMemRange(base, base + (count - count') * WORDSIZE);
+    ensures  ValidMemRange(base, base + WordsToBytes(count - count'));
 {
     var offset := base + count'*WORDSIZE;
     var limit := base + WORDSIZE + (count - count') * WORDSIZE;

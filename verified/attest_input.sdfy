@@ -26,15 +26,6 @@ procedure arrange_user_regs_in_memory() returns (ghost user_words:seq(word))
     STR(r8, sp, const((SHA_CTXSIZE + 7) * WORDSIZE));
 
     assert WordAligned(sp);
-    WordAlignedAdd(sp, (SHA_CTXSIZE + 0) * WORDSIZE);
-    WordAlignedAdd(sp, (SHA_CTXSIZE + 1) * WORDSIZE);
-    WordAlignedAdd(sp, (SHA_CTXSIZE + 2) * WORDSIZE);
-    WordAlignedAdd(sp, (SHA_CTXSIZE + 3) * WORDSIZE);
-    WordAlignedAdd(sp, (SHA_CTXSIZE + 4) * WORDSIZE);
-    WordAlignedAdd(sp, (SHA_CTXSIZE + 5) * WORDSIZE);
-    WordAlignedAdd(sp, (SHA_CTXSIZE + 6) * WORDSIZE);
-    WordAlignedAdd(sp, (SHA_CTXSIZE + 7) * WORDSIZE);
-
     lemma_package_hash_result(mem, sp + SHA_CTXSIZE * WORDSIZE, user_words);    
 }
 
@@ -81,26 +72,17 @@ procedure arrange_real_measurement_in_memory(
     // Use r11 to grab ADDRSPACE_HASH 
  
     assert WordAligned(r11);
-    ghost var offset := r11 + ADDRSPACE_HASH;
-    WordAlignedAdd(r11, ADDRSPACE_HASH);
-    assert WordAligned(offset);
-    WordAlignedAdd(offset, 1*WORDSIZE);
-    WordAlignedAdd(offset, 2*WORDSIZE);
-    WordAlignedAdd(offset, 3*WORDSIZE);
-    WordAlignedAdd(offset, 4*WORDSIZE);
-    WordAlignedAdd(offset, 5*WORDSIZE);
-    WordAlignedAdd(offset, 6*WORDSIZE);
-    WordAlignedAdd(offset, 7*WORDSIZE);
+    ghost var offset := WordAlignedAdd(r11, ADDRSPACE_HASH);
 
     measurement := 
-        seq(AddrMemContents(mem, offset + 0*WORDSIZE),
-            AddrMemContents(mem, offset + 1*WORDSIZE),
-            AddrMemContents(mem, offset + 2*WORDSIZE),
-            AddrMemContents(mem, offset + 3*WORDSIZE),
-            AddrMemContents(mem, offset + 4*WORDSIZE),
-            AddrMemContents(mem, offset + 5*WORDSIZE),
-            AddrMemContents(mem, offset + 6*WORDSIZE),
-            AddrMemContents(mem, offset + 7*WORDSIZE));
+        seq(AddrMemContents(mem, WordOffset(offset, 0)),
+            AddrMemContents(mem, WordOffset(offset, 1)),
+            AddrMemContents(mem, WordOffset(offset, 2)),
+            AddrMemContents(mem, WordOffset(offset, 3)),
+            AddrMemContents(mem, WordOffset(offset, 4)),
+            AddrMemContents(mem, WordOffset(offset, 5)),
+            AddrMemContents(mem, WordOffset(offset, 6)),
+            AddrMemContents(mem, WordOffset(offset, 7)));
     lemma_package_hash_result(mem, offset, measurement);    
     assert AddrMemContentsSeq(mem, offset, SHA_CTXSIZE) == measurement;
 

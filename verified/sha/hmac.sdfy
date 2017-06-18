@@ -440,23 +440,16 @@ ensures
 //    assert r2 == num_blocks + 1;
     sha256_one_shot();
     assert WordAligned(r0);
-    WordAlignedAdd(r0, 1*WORDSIZE);
-    WordAlignedAdd(r0, 2*WORDSIZE);
-    WordAlignedAdd(r0, 3*WORDSIZE);
-    WordAlignedAdd(r0, 4*WORDSIZE);
-    WordAlignedAdd(r0, 5*WORDSIZE);
-    WordAlignedAdd(r0, 6*WORDSIZE);
-    WordAlignedAdd(r0, 7*WORDSIZE);
 
     inner_hash := 
-        seq(AddrMemContents(mem, r0 + 0*WORDSIZE),
-            AddrMemContents(mem, r0 + 1*WORDSIZE),
-            AddrMemContents(mem, r0 + 2*WORDSIZE),
-            AddrMemContents(mem, r0 + 3*WORDSIZE),
-            AddrMemContents(mem, r0 + 4*WORDSIZE),
-            AddrMemContents(mem, r0 + 5*WORDSIZE),
-            AddrMemContents(mem, r0 + 6*WORDSIZE),
-            AddrMemContents(mem, r0 + 7*WORDSIZE));
+        seq(AddrMemContents(mem, WordOffset(r0, 0)),
+            AddrMemContents(mem, WordOffset(r0, 1)),
+            AddrMemContents(mem, WordOffset(r0, 2)),
+            AddrMemContents(mem, WordOffset(r0, 3)),
+            AddrMemContents(mem, WordOffset(r0, 4)),
+            AddrMemContents(mem, WordOffset(r0, 5)),
+            AddrMemContents(mem, WordOffset(r0, 6)),
+            AddrMemContents(mem, WordOffset(r0, 7)));
 
     calc {
         true;
@@ -780,23 +773,16 @@ ensures
 //    assert r2 == 1;
     sha256_one_shot();
     assert WordAligned(r0);
-    WordAlignedAdd(r0, 1*WORDSIZE);
-    WordAlignedAdd(r0, 2*WORDSIZE);
-    WordAlignedAdd(r0, 3*WORDSIZE);
-    WordAlignedAdd(r0, 4*WORDSIZE);
-    WordAlignedAdd(r0, 5*WORDSIZE);
-    WordAlignedAdd(r0, 6*WORDSIZE);
-    WordAlignedAdd(r0, 7*WORDSIZE);
 
     outer_hash := 
-        seq(AddrMemContents(mem, r0 + 0*WORDSIZE),
-            AddrMemContents(mem, r0 + 1*WORDSIZE),
-            AddrMemContents(mem, r0 + 2*WORDSIZE),
-            AddrMemContents(mem, r0 + 3*WORDSIZE),
-            AddrMemContents(mem, r0 + 4*WORDSIZE),
-            AddrMemContents(mem, r0 + 5*WORDSIZE),
-            AddrMemContents(mem, r0 + 6*WORDSIZE),
-            AddrMemContents(mem, r0 + 7*WORDSIZE));
+        seq(AddrMemContents(mem, WordOffset(r0, 0)),
+            AddrMemContents(mem, WordOffset(r0, 1)),
+            AddrMemContents(mem, WordOffset(r0, 2)),
+            AddrMemContents(mem, WordOffset(r0, 3)),
+            AddrMemContents(mem, WordOffset(r0, 4)),
+            AddrMemContents(mem, WordOffset(r0, 5)),
+            AddrMemContents(mem, WordOffset(r0, 6)),
+            AddrMemContents(mem, WordOffset(r0, 7)));
 
     calc {
         true;
@@ -945,14 +931,14 @@ ensures
                              old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE,
                              old(r1), old(r1) + (old(r2) + 1) * SHA_BLOCKSIZE * WORDSIZE);
     assert WordAligned(sp);
-    WordAlignedAdd(sp, 32);
-    WordAlignedAdd(sp, 28);
-    WordAlignedAdd(sp, 24);
-    WordAlignedAdd(sp, 20);
-    WordAlignedAdd(sp, 16);
-    WordAlignedAdd(sp, 12);
-    WordAlignedAdd(sp,  8);
-    WordAlignedAdd(sp,  4);
+    lemma_WordAlignedAdd(sp, 32);
+    lemma_WordAlignedAdd(sp, 28);
+    lemma_WordAlignedAdd(sp, 24);
+    lemma_WordAlignedAdd(sp, 20);
+    lemma_WordAlignedAdd(sp, 16);
+    lemma_WordAlignedAdd(sp, 12);
+    lemma_WordAlignedAdd(sp,  8);
+    lemma_WordAlignedAdd(sp,  4);
 
     // Prove that the key is still intact
     lemma_AddrMemContentsSeq_framing3(pre_inner_mem, mem, 
@@ -969,23 +955,15 @@ ensures
     outer_hash := hmac_outer(key, inner_hash);
 
     assert WordAligned(r0);
-    WordAlignedAdd(r0, 1*WORDSIZE);
-    WordAlignedAdd(r0, 2*WORDSIZE);
-    WordAlignedAdd(r0, 3*WORDSIZE);
-    WordAlignedAdd(r0, 4*WORDSIZE);
-    WordAlignedAdd(r0, 5*WORDSIZE);
-    WordAlignedAdd(r0, 6*WORDSIZE);
-    WordAlignedAdd(r0, 7*WORDSIZE);
-
     mac := 
-        seq(AddrMemContents(mem, r0 + 0*WORDSIZE),
-            AddrMemContents(mem, r0 + 1*WORDSIZE),
-            AddrMemContents(mem, r0 + 2*WORDSIZE),
-            AddrMemContents(mem, r0 + 3*WORDSIZE),
-            AddrMemContents(mem, r0 + 4*WORDSIZE),
-            AddrMemContents(mem, r0 + 5*WORDSIZE),
-            AddrMemContents(mem, r0 + 6*WORDSIZE),
-            AddrMemContents(mem, r0 + 7*WORDSIZE));
+        seq(AddrMemContents(mem, WordOffset(r0, 0)),
+            AddrMemContents(mem, WordOffset(r0, 1)),
+            AddrMemContents(mem, WordOffset(r0, 2)),
+            AddrMemContents(mem, WordOffset(r0, 3)),
+            AddrMemContents(mem, WordOffset(r0, 4)),
+            AddrMemContents(mem, WordOffset(r0, 5)),
+            AddrMemContents(mem, WordOffset(r0, 6)),
+            AddrMemContents(mem, WordOffset(r0, 7)));
 
     lemma_package_hash_result(mem, r0, mac);
     calc {
