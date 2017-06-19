@@ -1,4 +1,4 @@
-include "ARMdef.dfy"
+include "ARMdef.s.dfy"
 include "bitvectors.i.dfy"
 
 lemma lemma_scr_entry(pre: word, post: word)

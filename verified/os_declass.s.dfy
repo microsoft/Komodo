@@ -1,4 +1,4 @@
-include "ARMdef.dfy"
+include "ARMdef.s.dfy"
 include "kom_common.s.dfy"
 
 predicate {:axiom} do_declassify()

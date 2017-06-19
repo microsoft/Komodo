@@ -2,7 +2,7 @@ include {:verbatim} "sha256.i.dfy"
 include {:verbatim} "sha256-helpers.i.dfy"
 include {:verbatim} "sha256-invariants.i.dfy"
 
-include "../ARMdecls.sdfy"
+include "../valedecls.sdfy"
 
 procedure {:refined} LDRPostInc(
     out operand dst:reg,

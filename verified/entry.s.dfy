@@ -1,4 +1,4 @@
-include "ARMdef.dfy"
+include "ARMdef.s.dfy"
 include "pagedb.s.dfy"
 include "ptables.s.dfy"
 include "addrseq.dfy"

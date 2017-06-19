@@ -4,7 +4,7 @@ include {:verbatim} "smcapi.i.dfy"
 include {:verbatim} "entry.i.dfy"
 include {:verbatim} "exceptions.i.dfy"
 
-include "ARMdecls.sdfy"
+include "valedecls.sdfy"
 include "kom_utils.sdfy"
 include "sha/hmac.sdfy"
 include "attest.sdfy"

@@ -3,7 +3,7 @@
 
 //include "assembly.s.dfy"
 include "../words_and_bytes.s.dfy"
-include "../ARMdef.dfy"
+include "../ARMdef.s.dfy"
 
 function method{:axiom} BitwiseAdd32(x:word, y:word):word
     ensures BitwiseAdd32(x, y) == TruncateWord((x as int) + (y as int));

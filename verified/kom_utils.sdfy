@@ -1,7 +1,7 @@
 include {:verbatim} "kom_common.i.dfy"
 include {:verbatim} "bitvectors.i.dfy"
 include {:verbatim} "pagedb.i.dfy"
-include "ARMdecls.sdfy"
+include "valedecls.sdfy"
 
 procedure page_paddr_impl(out operand phys:reg, operand pagenr:reg, out operand tmp:reg)
     reads

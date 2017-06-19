@@ -1,7 +1,7 @@
 // REQUIRES-ANY: TEST
 // RUN: %DAFNY /compile:0 %s %DARGS
 
-include "../ARMspartan.dfy"
+include "../valesupp.i.dfy"
 include "../words_and_bytes.s.dfy"
 include "../kom_common.s.dfy"
 include "../sha/sha256.i.dfy"

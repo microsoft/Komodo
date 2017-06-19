@@ -1,4 +1,4 @@
-include "ARMdef.dfy"
+include "ARMdef.s.dfy"
 include "sha/sha256.s.dfy" // for K_SHA256
 
 const KOM_MAGIC:int := 0x4b6d646f;

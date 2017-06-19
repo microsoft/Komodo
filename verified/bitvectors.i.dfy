@@ -1,5 +1,5 @@
 include "bitvectors.s.dfy"
-include "ARMdef.dfy"
+include "ARMdef.s.dfy"
 
 lemma lemma_BitShiftsRightSum(x: bv32, a: nat, b: nat)
     requires 0 <= a + b < 32

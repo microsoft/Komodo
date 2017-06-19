@@ -1,5 +1,5 @@
 include {:verbatim} "kom_common.i.dfy"
-include "ARMdecls.sdfy"
+include "valedecls.sdfy"
 
 procedure {:timeLimitMultiplier 2} memcpy_bare(operand dst:addr, operand src:addr,
                                           inout operand size:reg, out operand tmp:reg)

@@ -1,4 +1,4 @@
-include "ARMdef.dfy"
+include "ARMdef.s.dfy"
 include "kom_common.s.dfy"
 include "pagedb.s.dfy"
 

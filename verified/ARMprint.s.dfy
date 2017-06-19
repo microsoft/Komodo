@@ -1,4 +1,4 @@
-include "ARMdef.dfy"
+include "ARMdef.s.dfy"
 
 type exvector = Maybe<string>
 datatype vectbl = VecTable(

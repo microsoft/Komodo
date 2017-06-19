@@ -1,4 +1,4 @@
-include "ARMprint.dfy"
+include "ARMprint.s.dfy"
 include "smc_handler.gen.dfy"
 include "exception_handlers.gen.dfy"
 

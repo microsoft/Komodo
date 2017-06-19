@@ -9,7 +9,7 @@ include {:verbatim} "sha256.i.dfy"
 include {:verbatim} "sha256-helpers.i.dfy"
 include {:verbatim} "sha256-invariants.i.dfy"
 
-include "../ARMdecls.sdfy"
+include "../valedecls.sdfy"
 include "sha256-one-block.sdfy"
 
 procedure {:refined} sha256_loop(

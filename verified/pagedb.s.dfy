@@ -1,7 +1,7 @@
 include "kom_common.s.dfy"
 include "Maybe.dfy"
 include "Sets.dfy"
-include "ARMdef.dfy"
+include "ARMdef.s.dfy"
 include "sha/sha_common.s.dfy"
 include "sha/sha256.s.dfy"
 

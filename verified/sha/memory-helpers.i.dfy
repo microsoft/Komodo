@@ -1,5 +1,5 @@
-include "../ARMdef.dfy"
-include "../ARMspartan.dfy"
+include "../ARMdef.s.dfy"
+include "../valesupp.i.dfy"
 include "../kom_common.i.dfy"
 include "sha256-invariants.i.dfy"
 

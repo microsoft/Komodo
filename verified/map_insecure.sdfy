@@ -3,7 +3,7 @@ include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
 include {:verbatim} "ptebits.i.dfy"
 
-include "ARMdecls.sdfy"
+include "valedecls.sdfy"
 include "map_secure.sdfy"
 
 procedure mkl2pte_insecure(

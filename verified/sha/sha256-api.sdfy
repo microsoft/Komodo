@@ -11,7 +11,7 @@ include{:verbatim} "bit-vector-lemmas.i.dfy"
 include "sha256-block-data-order.sdfy"
 include{:verbatim} "memory-helpers.i.dfy"
 
-include "../ARMdecls.sdfy"
+include "../valedecls.sdfy"
 
 procedure {:refined} load_32_bit_const(
     out operand dst:word,

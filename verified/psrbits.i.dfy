@@ -1,4 +1,4 @@
-include "ARMdef.dfy"
+include "ARMdef.s.dfy"
 include "bitvectors.i.dfy"
 
 lemma lemma_update_psr'(oldpsr:word, newmode:word, f:bool, i:bool, newpsr:word)

@@ -2,7 +2,7 @@
 // RUN: %DAFNY /compile:0 %s %DARGS
 
 include "../words_and_bytes.s.dfy"
-include "../ARMdef.dfy"
+include "../ARMdef.s.dfy"
 
 //-////////////////////////////////////////////////////////////////////////////
 //- HMAC specification based on:
