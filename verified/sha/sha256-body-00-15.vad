@@ -5,7 +5,7 @@
 ///////////////////////////////////////////////////
 
 
-include "sha256-body-helpers.sdfy"
+include "sha256-body-helpers.vad"
 
 procedure {:refined} {:timeLimitMultiplier 4} Body_00_15(
     inline i:SHA_step,

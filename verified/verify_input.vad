@@ -1,4 +1,4 @@
-include "attest_helpers.sdfy"
+include "attest_helpers.vad"
 
 #verbatim
 

@@ -1,4 +1,4 @@
-include "attest_helpers.sdfy"
+include "attest_helpers.vad"
 
 procedure arrange_user_regs_in_memory() returns (ghost user_words:seq(word))
     reads

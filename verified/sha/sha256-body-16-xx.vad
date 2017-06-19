@@ -9,8 +9,8 @@ include {:verbatim} "sha256.i.dfy"
 include {:verbatim} "sha256-helpers.i.dfy"
 include {:verbatim} "sha256-invariants.i.dfy"
 
-include "../valedecls.sdfy"
-include "sha256-body-00-15.sdfy"
+include "../valedecls.vad"
+include "sha256-body-00-15.vad"
 
 procedure {:refined} {:timeLimitMultiplier 3} Body_16_XX( 
     inline i:SHA_step,

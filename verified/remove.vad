@@ -2,8 +2,8 @@ include {:verbatim} "kom_common.i.dfy"
 include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
 
-include "valedecls.sdfy"
-include "kom_utils.sdfy"
+include "valedecls.vad"
+include "kom_utils.vad"
 
 procedure kom_smc_remove_non_addr_success(
     operand page:reg,

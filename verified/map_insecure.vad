@@ -3,8 +3,8 @@ include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
 include {:verbatim} "ptebits.i.dfy"
 
-include "valedecls.sdfy"
-include "map_secure.sdfy"
+include "valedecls.vad"
+include "map_secure.vad"
 
 procedure mkl2pte_insecure(
     inout operand mapping:reg,

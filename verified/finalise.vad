@@ -2,9 +2,9 @@ include {:verbatim} "kom_common.i.dfy"
 include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
 
-include "valedecls.sdfy"
-include "kom_utils.sdfy"
-include "sha/sha256-api.sdfy"
+include "valedecls.vad"
+include "kom_utils.vad"
+include "sha/sha256-api.vad"
 
 #verbatim
 // XXX: cleanmeup: copy-and-paste from exception_handlers.sdfy

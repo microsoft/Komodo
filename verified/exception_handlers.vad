@@ -4,11 +4,11 @@ include {:verbatim} "smcapi.i.dfy"
 include {:verbatim} "entry.i.dfy"
 include {:verbatim} "exceptions.i.dfy"
 
-include "valedecls.sdfy"
-include "kom_utils.sdfy"
-include "sha/hmac.sdfy"
-include "attest.sdfy"
-include "verify.sdfy"
+include "valedecls.vad"
+include "kom_utils.vad"
+include "sha/hmac.vad"
+include "attest.vad"
+include "verify.vad"
 
 #verbatim
 function cpsr_of_state(s:state): word

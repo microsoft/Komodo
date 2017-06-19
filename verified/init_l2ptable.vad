@@ -4,11 +4,11 @@ include {:verbatim} "smcapi.i.dfy"
 include {:verbatim} "bitvectors.i.dfy"
 include {:verbatim} "ptebits.i.dfy"
 
-include "valedecls.sdfy"
-include "kom_utils.sdfy"
-include "allocate_page.sdfy"
-include "memset.sdfy"
-include "map_utils.sdfy"
+include "valedecls.vad"
+include "kom_utils.vad"
+include "allocate_page.vad"
+include "memset.vad"
+include "map_utils.vad"
 
 #verbatim
 lemma pa_implies_modl2p(p:word)

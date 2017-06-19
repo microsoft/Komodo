@@ -4,9 +4,9 @@ include {:verbatim} "smcapi.i.dfy"
 include {:verbatim} "entry.i.dfy"
 include {:verbatim} "exceptions.i.dfy"
 
-include "valedecls.sdfy"
-include "kom_utils.sdfy"
-include "sha/hmac.sdfy"
+include "valedecls.vad"
+include "kom_utils.vad"
+include "sha/hmac.vad"
 
 #verbatim
 //const STACKSIZE_ATTEST:int := 8 + 24 + 1 + 2 * SHA_BLOCKSIZE + HMAC_KEYSIZE_WORDS + STACKSIZE_HMAC;

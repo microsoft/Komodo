@@ -1,8 +1,8 @@
 
-include "sha256-api.sdfy"
+include "sha256-api.vad"
 include {:verbatim} "hmac-helpers.i.dfy"
-include "../memset.sdfy"
-include "../kom_utils.sdfy"
+include "../memset.vad"
+include "../kom_utils.vad"
 
 #verbatim
 

@@ -1,4 +1,4 @@
-include "attest_input.sdfy"
+include "attest_input.vad"
 
 #verbatim
 lemma lemma_SaneState_implies_SaneShaGlobal(s:state)

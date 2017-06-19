@@ -2,8 +2,8 @@ include {:verbatim} "Sets.dfy"
 include {:verbatim} "kom_common.i.dfy"
 include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
-include "valedecls.sdfy"
-include "kom_utils.sdfy"
+include "valedecls.vad"
+include "kom_utils.vad"
 
 #verbatim
 lemma BoundedAddrspaceRefs(d:PageDb, n:PageNr)

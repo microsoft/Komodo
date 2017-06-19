@@ -2,11 +2,11 @@ include {:verbatim} "kom_common.i.dfy"
 include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
 
-include "valedecls.sdfy"
-include "kom_utils.sdfy"
-include "allocate_page.sdfy"
-include "map_utils.sdfy"
-include "memset.sdfy"
+include "valedecls.vad"
+include "kom_utils.vad"
+include "allocate_page.vad"
+include "map_utils.vad"
+include "memset.vad"
 
 procedure init_dispatcher_page_zero(operand ptr:reg, operand tmp:reg)
     requires/ensures

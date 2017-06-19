@@ -1,5 +1,5 @@
-include "attest.sdfy"
-include "verify_input.sdfy"
+include "attest.vad"
+include "verify_input.vad"
 
 procedure {:timeLimitMultiplier 3} svc_returning_verify_inner(
     ghost exstate: state,

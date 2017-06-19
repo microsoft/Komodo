@@ -2,10 +2,10 @@ include {:verbatim} "kom_common.i.dfy"
 include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
 
-include "valedecls.sdfy"
-include "kom_utils.sdfy"
-include "memset.sdfy"
-include "sha/sha256-api.sdfy"
+include "valedecls.vad"
+include "kom_utils.vad"
+include "memset.vad"
+include "sha/sha256-api.vad"
 
 /* Register allocation for init_addrspace paths:
  * r0 temp / err out

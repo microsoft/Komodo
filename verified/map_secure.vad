@@ -3,11 +3,11 @@ include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
 include {:verbatim} "ptebits.i.dfy"
 
-include "valedecls.sdfy"
-include "kom_utils.sdfy"
-include "allocate_page.sdfy"
-include "map_utils.sdfy"
-include "memset.sdfy"
+include "valedecls.vad"
+include "kom_utils.vad"
+include "allocate_page.vad"
+include "map_utils.vad"
+include "memset.vad"
 
 #verbatim
 lemma lemma_read_l2pte_zero(pte:L2PTE)

@@ -9,8 +9,8 @@ include {:verbatim} "sha256.i.dfy"
 include {:verbatim} "sha256-helpers.i.dfy"
 include {:verbatim} "sha256-invariants.i.dfy"
 
-include "../valedecls.sdfy"
-include "sha256-one-block.sdfy"
+include "../valedecls.vad"
+include "sha256-one-block.vad"
 
 procedure {:refined} sha256_loop(
     ghost old_trace:SHA256Trace,

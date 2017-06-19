@@ -9,9 +9,9 @@ include {:verbatim} "sha256.i.dfy"
 include {:verbatim} "sha256-helpers.i.dfy"
 include {:verbatim} "sha256-invariants.i.dfy"
 
-include "../valedecls.sdfy"
-include "sha256-body-00-15.sdfy"
-include "sha256-body-16-xx.sdfy"
+include "../valedecls.vad"
+include "sha256-body-00-15.vad"
+include "sha256-body-16-xx.vad"
 
 procedure {:refined} {:timeLimitMultiplier 2} update_Hs(
     ghost base_ptr:word,

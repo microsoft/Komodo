@@ -4,8 +4,8 @@ from __future__ import print_function
 import re, sys, os.path
 
 def mkdeps(filename):
-    if filename.endswith(".sdfy"):
-        return [filename[:-len(".sdfy")] + ".verified"]
+    if filename.endswith(".vad"):
+        return [filename[:-len(".vad")] + ".verified"]
     elif filename.endswith(".gen.dfy"):
         return [filename[:-len(".gen.dfy")] + ".verified", filename]
     elif filename.endswith(".dfy"):

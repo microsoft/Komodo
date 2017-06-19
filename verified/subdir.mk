@@ -4,7 +4,7 @@ DAFNYFLAGS = /trace /errorTrace:0 /timeLimit:$(DAFNYTIMELIMIT) \
     /ironDafny /allocated:1 /induction:1 $(EXTRADAFNYFLAGS) \
     $(call mkdafnyflags,$(notdir $(*))) \
     $(if $(DAFNYPROC),/proc:"$(DAFNYPROC)")
-VALEFLAGS = -includeSuffix .sdfy .gen.dfy
+VALEFLAGS = -includeSuffix .vad .gen.dfy
 
 # dafny flags: file-specific flags plus /noNLarith unless the file is named nlarith.x
 mkdafnyflags = $(DAFNYFLAGS_$(1)) $(if $(filter nlarith.%,$(1)),,/noNLarith)
@@ -19,13 +19,13 @@ verified: $(dir)/main.S $(dir)/os_ni.i.verified $(dir)/enc_ni.i.verified
 # a given source has been verified.
 
 # Vale-to-Dafny
-%.gen.dfy: %.sdfy
+%.gen.dfy: %.vad
 	$(VALE) $(VALEFLAGS) -in $< -out $@
 	$(if $(DOS2UNIX),$(DOS2UNIX) $@)
 
 # Vale direct verification, including cheesy workaround for broken error code.
 ifeq ($(VALEDIRECT), 1)
-%.verified %.log: %.sdfy %.gen.dfy
+%.verified %.log: %.vad %.gen.dfy
 	/bin/bash -c "$(VALE) $(VALEFLAGS) -in $< -dafnyDirect \
 	$(DAFNYFLAGS) /compile:0 | tee $*.log; exit \$${PIPESTATUS[0]}"
 	@grep -q "^Dafny program verifier finished with [0-9]* verified, 0 errors[[:space:]]\?$$" $*.log $(if $(DAFNYPROC),,&& touch $*.verified)
@@ -45,7 +45,7 @@ $(dir)/main.S: $(dir)/main.exe
 	$(MONO) $< > $@
 
 # auto dependencies for Dafny/Vale code
-findsrc = $(wildcard $(1)/*.sdfy) $(filter-out %.gen.dfy,$(wildcard $(1)/*.dfy))
+findsrc = $(wildcard $(1)/*.vad) $(filter-out %.gen.dfy,$(wildcard $(1)/*.dfy))
 DEPSRC = $(call findsrc,$(dir)) $(call findsrc,$(dir)/sha)
 $(dir)/dfydeps.d: $(dir)/mkdep.py $(DEPSRC)
 	python $(dir)/mkdep.py $(DEPSRC) > $(dir)/dfydeps.d
