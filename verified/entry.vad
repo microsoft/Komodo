@@ -515,13 +515,13 @@ procedure smc_enter_err(
 {
     if (pagenr >= const(KOM_SECURE_NPAGES)) {
         assert !validPageNr(pagenr);
-        err := const(KOM_ERR_INVALID_PAGENO);
+        MOV(err, const(KOM_ERR_INVALID_PAGENO));
     } else {
         assert validPageNr(pagenr);
         load_page_type(pagenr, pagedb_base, r10, r9, pagedb);
         if( r9 != const(KOM_PAGE_DISPATCHER) ) {
             assert !(pagedb[pagenr] is PageDbEntryTyped && pagedb[pagenr].entry is Dispatcher);
-            err := const(KOM_ERR_INVALID_PAGENO);
+            MOV(err, const(KOM_ERR_INVALID_PAGENO));
         } else {
             assert pagedb[pagenr] is PageDbEntryTyped && pagedb[pagenr].entry is Dispatcher;
 
@@ -560,7 +560,7 @@ procedure smc_enter_err(
             }
 
             if( r8 != const(KOM_ADDRSPACE_FINAL) ) {
-                err := const(KOM_ERR_NOT_FINAL);
+                MOV(err, const(KOM_ERR_NOT_FINAL));
             } else {
                 assert this.m == old(this.m);
                 assert SaneState(this);
@@ -580,16 +580,16 @@ procedure smc_enter_err(
                 if (callno == const(KOM_SMC_RESUME)) {
                     // smc_resume
                     if( r9 != 1 ) {
-                        err := const(KOM_ERR_NOT_ENTERED);
+                        MOV(err, const(KOM_ERR_NOT_ENTERED));
                     } else {
-                        err := const(KOM_ERR_SUCCESS);
+                        MOV(err, const(KOM_ERR_SUCCESS));
                     }
                 } else {
                     // smc_enter
                     if( r9 == 1 ) {
-                        err := const(KOM_ERR_ALREADY_ENTERED);
+                        MOV(err, const(KOM_ERR_ALREADY_ENTERED));
                     } else {
-                        err := const(KOM_ERR_SUCCESS);
+                        MOV(err, const(KOM_ERR_SUCCESS));
                     }
                 }
             }
@@ -796,7 +796,7 @@ procedure pre_entry_enter(
     //-------------------------------------------------------------------------
     // Set SPSR to Usermode
     //-------------------------------------------------------------------------
-    r10 := 0x10;
+    MOV(r10, 0x10);
     assert psr_mask_mode(0x10) == 0x10 by {
         assert WordAsBits(0x10) == 0x10 && WordAsBits(0x1f) == 0x1f
             by { reveal WordAsBits; }
@@ -847,19 +847,19 @@ procedure pre_entry_enter(
     //-------------------------------------------------------------------------
     //  Move arguments to regs, zero the rest
     //-------------------------------------------------------------------------
-    r0 := arg1;
-    r1 := arg2;
-    r2 := arg3;
-    r3 := 0;
-    r4 := 0;
-    r5 := 0;
-    r6 := 0;
-    r7 := 0;
-    r8 := 0;
-    r9 := 0;
-    r10 := 0;
-    r11 := 0;
-    r12 := 0;
+    MOV(r0, arg1);
+    MOV(r1, arg2);
+    MOV(r2, arg3);
+    MOV(r3, 0);
+    MOV(r4, 0);
+    MOV(r5, 0);
+    MOV(r6, 0);
+    MOV(r7, 0);
+    MOV(r8, 0);
+    MOV(r9, 0);
+    MOV(r10, 0);
+    MOV(r11, 0);
+    MOV(r12, 0);
     MSR(sp_usr, r12);
     MSR(lr_usr, r12);
 
@@ -1334,11 +1334,11 @@ procedure {:frame false} kom_smc_enterresume(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
-    r5 := callno;
+    MOV(r5, callno);
     smc_enter_err(callno, disppg, pagedb_base, err, pagedb_in);
     if (err != const(KOM_ERR_SUCCESS) ) {
         pagedb := pagedb_in;
-        val := 0;
+        MOV(val, 0);
     } else {
         ghost var s0 := this;
         pagedb := smc_enterresume_success(disppg, arg1, arg2, arg3, r5, pagedb_base,

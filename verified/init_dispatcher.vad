@@ -109,7 +109,7 @@ procedure{:timeLimitMultiplier 3} init_dispatcher_page(
     assert entrypoint == old(entrypoint);
     STR(entrypoint, disp_page, const(DISPATCHER_ENTRYPOINT));
 
-    tmp := 0;
+    MOV(tmp, 0);
     STR(tmp, disp_page, const(DISPATCHER_ENTERED));
     init_dispatcher_page_zeros(disp_page, tmp);
 
@@ -168,13 +168,13 @@ procedure {:frame false} kom_smc_init_dispatcher(
     reveal smc_initDispatcher_premium;
 
     if (as_page >= const(KOM_SECURE_NPAGES)) {
-        err := const(KOM_ERR_INVALID_ADDRSPACE);
+        MOV(err, const(KOM_ERR_INVALID_ADDRSPACE));
     } else {
         assert validPageNr(as_page);
         load_page_type(as_page, pagedb_base, tmp, tmp, pagedb);
 
         if (tmp != const(KOM_PAGE_ADDRSPACE)) {
-            err := const(KOM_ERR_INVALID_ADDRSPACE);
+            MOV(err, const(KOM_ERR_INVALID_ADDRSPACE));
         } else {
             assert isAddrspace(pagedb, as_page);
             ghost var vzeros := seq(0, 0, 0, 0, 0, 0, 0, 0);
@@ -206,7 +206,7 @@ procedure {:frame false} kom_smc_init_dispatcher(
                 assert entrypoint == old(entrypoint);
                 pagedb := kom_smc_map_measure(false, r1, r2, entrypoint, seq(), 0, 0, pagedb);
                 assert pagedb == specPageDb(specResult);
-                err := const(KOM_ERR_SUCCESS);
+                MOV(err, const(KOM_ERR_SUCCESS));
             } else {
                 assert pagedb == pagedb_in;
                 assert pageDbCorresponds(this.m, pagedb);

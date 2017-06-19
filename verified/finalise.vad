@@ -177,7 +177,7 @@ procedure kom_smc_finalise_success(
         assert pageDbEntryCorresponds(d'[p], extractPageDbEntry(this.m, p));
     }
     pagedb := specPageDb(specResult);
-    err := const(KOM_ERR_SUCCESS);
+    MOV(err, const(KOM_ERR_SUCCESS));
 }
 
 procedure kom_smc_finalise(
@@ -208,14 +208,14 @@ procedure kom_smc_finalise(
     ghost var specResult := smc_finalise_premium(pagedb, as_page);
 
     if (as_page >= const(KOM_SECURE_NPAGES)) {
-        err := const(KOM_ERR_INVALID_ADDRSPACE);
+        MOV(err, const(KOM_ERR_INVALID_ADDRSPACE));
     } else {
         assert validPageNr(as_page);
         load_page_type(as_page, pagedb_base, err, err, pagedb);
 
         if (err != const(KOM_PAGE_ADDRSPACE)) {
             assert !isAddrspace(pagedb, as_page);
-            err := const(KOM_ERR_INVALID_ADDRSPACE);
+            MOV(err, const(KOM_ERR_INVALID_ADDRSPACE));
             assert err == specErr(specResult);
         } else {
             page_monvaddr_impl(r2, as_page, err);
@@ -230,11 +230,11 @@ procedure kom_smc_finalise(
 
             if(err != const(KOM_ADDRSPACE_INIT)) {
                 assert pagedb[as_page].entry.state != InitState;
-                err := const(KOM_ERR_ALREADY_FINAL);
+                MOV(err, const(KOM_ERR_ALREADY_FINAL));
                 assert err == specErr(specResult);
             } else {
                 assert pagedb[as_page].entry.state == InitState;
-                err := const(KOM_ADDRSPACE_FINAL);
+                MOV(err, const(KOM_ADDRSPACE_FINAL));
                 assert err == pageDbAddrspaceStateVal(FinalState);
                 pagedb := kom_smc_finalise_success(as_page, err, pagedb_in);
             }

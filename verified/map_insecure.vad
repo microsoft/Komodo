@@ -67,7 +67,7 @@ procedure phys_page_is_insecure_ram(
 
     if (phys_page >= ret) {
         assert !physPageIsInsecureRam(phys_page) by { reveal PageAligned; }
-        ret := 0;
+        MOV(ret, 0);
     } else {
         assert validInsecurePageNr(phys_page)
         by {
@@ -75,7 +75,7 @@ procedure phys_page_is_insecure_ram(
             assert MonitorPhysBase() / PAGESIZE <
                 KOM_PHYSMEM_LIMIT / PAGESIZE;
         }
-        ret := 1;
+        MOV(ret, 1);
     }
 }
 
@@ -112,7 +112,7 @@ procedure kom_smc_map_insecure(
             phys_page, mapping);
 
     if (as_page >= const(KOM_SECURE_NPAGES)) {
-        err := const(KOM_ERR_INVALID_ADDRSPACE);
+        MOV(err, const(KOM_ERR_INVALID_ADDRSPACE));
         assert err == specErr(specResult);
     } else {
         assert validPageNr(as_page);
@@ -120,7 +120,7 @@ procedure kom_smc_map_insecure(
 
         if (err != const(KOM_PAGE_ADDRSPACE)) {
             assert !isAddrspace(pagedb, as_page);
-            err := const(KOM_ERR_INVALID_ADDRSPACE);
+            MOV(err, const(KOM_ERR_INVALID_ADDRSPACE));
             assert err == specErr(specResult);
         } else {
             is_valid_mapping_target(as_page, mapping, r10, err, pagedb);
@@ -130,7 +130,7 @@ procedure kom_smc_map_insecure(
                 assert as_page == old(as_page);
                 phys_page_is_insecure_ram(phys_page, err);
                 if (err == 0) {
-                    err := const(KOM_ERR_INVALID_PAGENO);
+                    MOV(err, const(KOM_ERR_INVALID_PAGENO));
                     assert err == specErr(specResult);
                 } else {
                     ghost var d' := pagedb_in;
@@ -151,7 +151,7 @@ procedure kom_smc_map_insecure(
                     // FUTURE WORK: pagedb := kom_smc_map_measure(as_page, r2, mapping, pagedb);
                     assert pagedb == specPageDb(specResult);
                     assert pageDbCorresponds(this.m, pagedb);
-                    err := const(KOM_ERR_SUCCESS);
+                    MOV(err, const(KOM_ERR_SUCCESS));
                     assert err == specErr(specResult);
                 }
             }

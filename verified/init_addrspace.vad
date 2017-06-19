@@ -111,16 +111,16 @@ procedure{:timeLimitMultiplier 4} init_addrspace_mem(
     assert MemContents(this.m, addrspace_va + ADDRSPACE_L1PT)
         == page_monvaddr(old(l1pt_page));
 
-    tmp2 := 1;
+    MOV(tmp2, 1);
     STR(tmp2, addrspace_va, const(ADDRSPACE_REF));
     assert MemContents(this.m, addrspace_va + ADDRSPACE_REF) == 1;
 
-    tmp2 := const(KOM_ADDRSPACE_INIT);
+    MOV(tmp2, const(KOM_ADDRSPACE_INIT));
     STR(tmp2, addrspace_va, const(ADDRSPACE_STATE));
     assert MemContents(this.m, addrspace_va + ADDRSPACE_STATE) == KOM_ADDRSPACE_INIT;
 
-    tmp2 := 0;
-    tmp3 := const(PAGESIZE);
+    MOV(tmp2, 0);
+    MOV(tmp3, const(PAGESIZE));
     memset(tmp, tmp2, tmp3);
 
     ghost var l1pg := extractPage(this.m, old(l1pt_page));
@@ -190,7 +190,7 @@ procedure init_addrspace_pagedb(
 {
     /* update addrspace entry in pagedb */
     page_monvaddr_impl(addrspace_va, addrspace_page, tmp);
-    tmp := const(KOM_PAGE_ADDRSPACE);
+    MOV(tmp, const(KOM_PAGE_ADDRSPACE));
     update_pagedb_entry(old(addrspace_page),
                         old(initAddrspaceEntry(addrspace_page, l1pt_page)),
                         addrspace_entry,
@@ -199,7 +199,7 @@ procedure init_addrspace_pagedb(
                         pagedb_base);
 
     /* Update l1pt entry in pagedb */
-    tmp := const(KOM_PAGE_L1PTABLE);
+    MOV(tmp, const(KOM_PAGE_L1PTABLE));
     update_pagedb_entry(l1pt_page,
                         old(initL1PTEntry(addrspace_page)),
                         l1pt_entry,
@@ -337,13 +337,13 @@ procedure kom_smc_init_addrspace(
     assert err == l1pt_page % 4;
 
     if (addrspace_page == l1pt_page) {
-        err := const(KOM_ERR_INVALID_PAGENO);
+        MOV(err, const(KOM_ERR_INVALID_PAGENO));
     } else if (addrspace_page >= const(KOM_SECURE_NPAGES)) {
-        err := const(KOM_ERR_INVALID_PAGENO);
+        MOV(err, const(KOM_ERR_INVALID_PAGENO));
     } else if (l1pt_page >= const(KOM_SECURE_NPAGES)) {
-        err := const(KOM_ERR_INVALID_PAGENO);
+        MOV(err, const(KOM_ERR_INVALID_PAGENO));
     } else if (err != 0) {
-        err := const(KOM_ERR_INVALID_PAGENO);
+        MOV(err, const(KOM_ERR_INVALID_PAGENO));
     } else {
         load_page_type(addrspace_page, pagedb_base, r4, err, pagedb);
         if (err == const(KOM_PAGE_FREE)) {
@@ -353,12 +353,12 @@ procedure kom_smc_init_addrspace(
                 assert pageIsFree(pagedb, l1pt_page);
                 pagedb := init_addrspace(addrspace_page, l1pt_page, r4, r5,
                                          pagedb_base, r6, r7, r8, r9, pagedb);
-                err := const(KOM_ERR_SUCCESS);
+                MOV(err, const(KOM_ERR_SUCCESS));
             } else {
-                err := const(KOM_ERR_PAGEINUSE);
+                MOV(err, const(KOM_ERR_PAGEINUSE));
             }
         } else {
-            err := const(KOM_ERR_PAGEINUSE);
+            MOV(err, const(KOM_ERR_PAGEINUSE));
         }
     }
 

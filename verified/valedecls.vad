@@ -56,8 +56,6 @@ function MaybeUpdateOk(s:va_state, r:va_state) : va_state
 }
 #endverbatim
 
-procedure operator(:=) (out operand dst:word, operand src:word) := MOV;
-
 procedure {:bridge} {:refined} {:instruction Ins(ADD(dst, src1, src2))}
 ADD(out operand dst:word, operand src1:word, operand src2:word)
     requires

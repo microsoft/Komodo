@@ -42,7 +42,7 @@ procedure kom_smc_remove_non_addr_success(
        pagedb[as_page].entry is Addrspace {
            reveal validPageDb;
     }
-    r7 := const(KOM_PAGE_FREE);
+    MOV(r7, const(KOM_PAGE_FREE));
     assert page_type == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE;
     STRglobal(r7, PageDb(), pagedb_base, page_type);
     extractPageDbToAbstract(this.m, page);
@@ -137,7 +137,7 @@ procedure kom_smc_remove(
     pagedb := pagedb_in;
 
     if ( page >= const(KOM_SECURE_NPAGES) ){
-        err := const(KOM_ERR_INVALID_PAGENO);
+        MOV(err, const(KOM_ERR_INVALID_PAGENO));
         assert err == specE;
         assert pagedb == specD;
     } else {
@@ -145,7 +145,7 @@ procedure kom_smc_remove(
         load_page_type(page, pagedb_base, r5, r6, pagedb);
         if (r6 == const(KOM_PAGE_FREE)) {
             assert pagedb[page] is PageDbEntryFree;
-            err := const(KOM_ERR_SUCCESS);
+            MOV(err, const(KOM_ERR_SUCCESS));
             assert err == specE;
         } else {
             assert pagedb[page] is PageDbEntryTyped;
@@ -161,14 +161,14 @@ procedure kom_smc_remove(
                 }
                 if (r7 != 0) {
                     assert pagedb[page].entry.refcount != 0;
-                    err := const(KOM_ERR_PAGEINUSE);
+                    MOV(err, const(KOM_ERR_PAGEINUSE));
                     assert err == specE;
                 } else {
                     assert pagedb[page].entry.refcount == 0;
                     assert r7 == KOM_PAGE_FREE == 0;
                     assert r5 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE;
                     STRglobal(r7, PageDb(), pagedb_base, r5);
-                    err := const(KOM_ERR_SUCCESS);
+                    MOV(err, const(KOM_ERR_SUCCESS));
                     assert err == specE;
                     pagedb := specD;
                     assert pageDbCorresponds(this.m, pagedb) by {
@@ -220,14 +220,14 @@ procedure kom_smc_remove(
                 }
     
                 if ( r8 != const(KOM_ADDRSPACE_STOPPED) ) {
-                    err := const(KOM_ERR_NOT_STOPPED);
+                    MOV(err, const(KOM_ERR_NOT_STOPPED));
                     assert err == specE;
                 } else {
                     assert specE == KOM_ERR_SUCCESS;
                     assert r5 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE;
                     assert r6 == page_monvaddr(as_page);
                     pagedb := kom_smc_remove_non_addr_success(page,pagedb_base,r5,r6,pagedb);
-                    err := const(KOM_ERR_SUCCESS);
+                    MOV(err, const(KOM_ERR_SUCCESS));
                 }
             }
         }

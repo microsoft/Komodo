@@ -163,7 +163,7 @@ procedure allocate_page_success(
     AllButOnePagePreserving(entry.addrspace, old(this), this);
 
     // update pagedb
-    tmp := typeval;
+    MOV(tmp, typeval);
     lemma_LeftShift3(pagenr);
     LSL(tmp2,pagenr,const(PAGEDB_ENTRY_SHIFT));
     update_pagedb_entry(old(pagenr), pagedb[old(pagenr)], tmp2, tmp, as_va,
@@ -237,7 +237,7 @@ procedure allocate_page(
 
     if (pagenr >= const(KOM_SECURE_NPAGES)) {
         assert !validPageNr(pagenr);
-        err := const(KOM_ERR_INVALID_PAGENO);
+        MOV(err, const(KOM_ERR_INVALID_PAGENO));
         assert err == specErr(specRes);
     } else {
         assert validPageNr(pagenr);
@@ -245,7 +245,7 @@ procedure allocate_page(
 
         if (tmp != const(KOM_PAGE_FREE)) {
             assert !pageIsFree(pagedb, pagenr);
-            err := const(KOM_ERR_PAGEINUSE);
+            MOV(err, const(KOM_ERR_PAGEINUSE));
             assert err == specErr(specRes);
         } else {
             assert pageIsFree(pagedb, pagenr);
@@ -259,14 +259,14 @@ procedure allocate_page(
 
             if (tmp != const(KOM_ADDRSPACE_INIT)) {
                 assert addrsp.state != InitState;
-                err := const(KOM_ERR_ALREADY_FINAL);
+                MOV(err, const(KOM_ERR_ALREADY_FINAL));
                 assert err == specErr(specRes);
             } else {
                 assert addrsp.state == InitState;
                 ghost var st := this;
                 pagedb := allocate_page_success(pagenr, tmp2, typeval,
                                 pagedb_base, tmp, err, pagedb_in, entry);
-                err := const(KOM_ERR_SUCCESS);
+                MOV(err, const(KOM_ERR_SUCCESS));
             }
         }
     }

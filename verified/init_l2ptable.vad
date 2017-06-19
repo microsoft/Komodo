@@ -227,8 +227,8 @@ procedure init_l2ptable_success(
 
     // update L2 page contents
     page_monvaddr_impl(tmp1, l2_pg, tmp2);
-    tmp2 := 0;
-    tmp3 := const(PAGESIZE);
+    MOV(tmp2, 0);
+    MOV(tmp3, const(PAGESIZE));
     memset(tmp1, tmp2, tmp3);
 
     ghost var pg := extractPage(this.m, l2_pg);
@@ -294,16 +294,16 @@ procedure kom_smc_init_l2ptable(
     pagedb := pagedb_in;
 
     if (l1index >= const(NR_L1PTES)) {
-        err := const(KOM_ERR_INVALID_MAPPING);
+        MOV(err, const(KOM_ERR_INVALID_MAPPING));
         assert err == specErr(specResult);
     } else if (as_page >= const(KOM_SECURE_NPAGES)) {
-        err := const(KOM_ERR_INVALID_ADDRSPACE);
+        MOV(err, const(KOM_ERR_INVALID_ADDRSPACE));
         assert err == specErr(specResult);
     } else {
         load_page_type(as_page, pagedb_base, r4, r4, pagedb);
 
         if (r4 != const(KOM_PAGE_ADDRSPACE)) {
-            err := const(KOM_ERR_INVALID_ADDRSPACE);
+            MOV(err, const(KOM_ERR_INVALID_ADDRSPACE));
             assert err == specErr(specResult);
         } else {
             assert validAddrspacePage(pagedb, old(as_page)) by {
@@ -321,7 +321,7 @@ procedure kom_smc_init_l2ptable(
                 reveal pageDbAddrspaceCorresponds;
             }
             if (r5 != const(KOM_ADDRSPACE_INIT)) {
-                err := const(KOM_ERR_ALREADY_FINAL);
+                MOV(err, const(KOM_ERR_ALREADY_FINAL));
                 assert err == specErr(specResult);
             } else {
                 // check for L1 index in use
@@ -349,7 +349,7 @@ procedure kom_smc_init_l2ptable(
                 fetch_l1pte(r4, l1index, r5, r6, pagedb, l1pg);
                 if (r6 != 0) {
                     assert l1indexInUse(pagedb, old(as_page), old(l1index));
-                    err := const(KOM_ERR_ADDRINUSE);
+                    MOV(err, const(KOM_ERR_ADDRINUSE));
                     assert err == specErr(specResult);
                 } else {
                     ghost var emptyptes := SeqRepeat(NR_L2PTES, NoMapping);
@@ -361,8 +361,8 @@ procedure kom_smc_init_l2ptable(
 
                     assert err == specErr(specResult);
                     if (err == const(KOM_ERR_SUCCESS)) {
-                        r4 := pagenr;
-                        r5 := l1index;
+                        MOV(r4, pagenr);
+                        MOV(r5, l1index);
                         pagedb := init_l2ptable_success(r4, as_page, r5, r6, r7, r8,
                                                         pagedb, l1pg);
                         assert pagedb == specPageDb(specResult);

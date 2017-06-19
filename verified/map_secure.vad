@@ -256,9 +256,9 @@ procedure{:timeLimitMultiplier 2} is_valid_mapping_target_finish(
     AND(r7, r7, 3);
     lemma_read_l2pte_zero(l2pte_abs);
     if( r7 != 0 ) {
-        err := const(KOM_ERR_INVALID_MAPPING);
+        MOV(err, const(KOM_ERR_INVALID_MAPPING));
     } else {
-        err := const(KOM_ERR_SUCCESS);
+        MOV(err, const(KOM_ERR_SUCCESS));
     }
 }
 
@@ -298,7 +298,7 @@ procedure{:timeLimitMultiplier 2} is_valid_mapping_target(
         reveal pageDbAddrspaceCorresponds;
     }
     if ( r8 != const(KOM_ADDRSPACE_INIT) ){
-        err := const(KOM_ERR_ALREADY_FINAL);
+        MOV(err, const(KOM_ERR_ALREADY_FINAL));
         assert err == specResult;
     } else {
         ghost var abs_mapping := wordToMapping(mapping);
@@ -314,10 +314,10 @@ procedure{:timeLimitMultiplier 2} is_valid_mapping_target(
             assert r8 == l2indexFromMapping(mapping);
         }
         if(r7 >= const(KOM_SECURE_NPAGES)){
-            err := const(KOM_ERR_INVALID_MAPPING);
+            MOV(err, const(KOM_ERR_INVALID_MAPPING));
             assert err == specResult;
         } else if(r8 >= const(KOM_SECURE_NPAGES)){
-            err := const(KOM_ERR_INVALID_MAPPING);
+            MOV(err, const(KOM_ERR_INVALID_MAPPING));
             assert err == specResult;
         } else {
             //if(!perm.r) then KOM_ERR_INVALID_MAPPING
@@ -328,14 +328,14 @@ procedure{:timeLimitMultiplier 2} is_valid_mapping_target(
                 assert r9 != 0 <==> permFromMapping(mapping).r;
             }
             if(r9 == 0){
-                err := const(KOM_ERR_INVALID_MAPPING);
+                MOV(err, const(KOM_ERR_INVALID_MAPPING));
                 assert err == specResult;
             } else {
                 if(r7 >= const(NR_L1PTES)){
-                    err := const(KOM_ERR_INVALID_MAPPING);
+                    MOV(err, const(KOM_ERR_INVALID_MAPPING));
                     assert err == specResult;
                 } else if (r8 >= const(NR_L2PTES)) {
-                    err := const(KOM_ERR_INVALID_MAPPING);
+                    MOV(err, const(KOM_ERR_INVALID_MAPPING));
                     assert err == specResult;
                 } else {
                     LDRglobaladdr(l1pte,PageDb());
@@ -374,7 +374,7 @@ procedure{:timeLimitMultiplier 2} is_valid_mapping_target(
                     assert l1pte == 0 <==> d[l1p].entry.l1pt[l1index] == Nothing;
 
                     if( l1pte == 0 ) {
-                        err := const(KOM_ERR_INVALID_MAPPING);
+                        MOV(err, const(KOM_ERR_INVALID_MAPPING));
                     } else {
                         is_valid_mapping_target_finish(addr, mapping, l1pte, err, d);
                     }
@@ -410,10 +410,10 @@ procedure insecure_phys_to_virt(
     LSR(ret, ret, 12);
 
     if (phys_page >= ret) {
-        phys_page := 0;
-        ret := 0;
+        MOV(phys_page, 0);
+        MOV(ret, 0);
     } else {
-        ret := 1;
+        MOV(ret, 1);
     }
 
     if (phys_page != 0) {
@@ -733,7 +733,7 @@ procedure map_secure_update(
     pagedb := kom_smc_map_measure(true, r1, r2, r3, contents, old(page), r5, pagedb);
 
     assert pagedb == specPageDb(specResult);
-    err := const(KOM_ERR_SUCCESS);
+    MOV(err, const(KOM_ERR_SUCCESS));
 }
 
 procedure map_secure_success(
@@ -850,14 +850,14 @@ procedure kom_smc_map_secure(
             mapping, phys_page, maybeContentsOfPhysPage(this, phys_page));
 
     if (as_page >= const(KOM_SECURE_NPAGES)) {
-        err := const(KOM_ERR_INVALID_ADDRSPACE);
+        MOV(err, const(KOM_ERR_INVALID_ADDRSPACE));
         assert err == specErr(specResult);
     } else {
         assert validPageNr(as_page);
         load_page_type(as_page, pagedb_base, err, err, pagedb);
         if (err != const(KOM_PAGE_ADDRSPACE)) {
             assert !isAddrspace(pagedb, as_page);
-            err := const(KOM_ERR_INVALID_ADDRSPACE);
+            MOV(err, const(KOM_ERR_INVALID_ADDRSPACE));
             assert err == specErr(specResult);
         } else {
             assert as_page == old(as_page);
@@ -869,7 +869,7 @@ procedure kom_smc_map_secure(
             } else {
                 insecure_phys_to_virt(phys_page, err);
                 if (err == 0) {
-                    err := const(KOM_ERR_INVALID_PAGENO);
+                    MOV(err, const(KOM_ERR_INVALID_PAGENO));
                     assert err == specErr(specResult);
                 } else {
                     ghost var contents := maybeContentsOfPhysPage(old(this), old(phys_page));
