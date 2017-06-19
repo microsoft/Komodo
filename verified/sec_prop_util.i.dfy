@@ -25,8 +25,8 @@ lemma lemma_maybeContents_insec_ni(s1: state, s2: state, c1: Maybe<seq<word>>,
             ensures s1.m.addresses[a] == s2.m.addresses[a]
         {
         }
-        reveal_addrRangeSeq();
-        reveal_addrSeqToContents();
+        reveal addrRangeSeq();
+        reveal addrSeqToContents();
         assert c1 == Just(contentsOfPhysPage(s1, physPage));
         assert c2 == Just(contentsOfPhysPage(s2, physPage));
         assert contentsOfPhysPage(s1, physPage)
@@ -50,7 +50,7 @@ lemma lemma_unpack_validEnclaveExecution(s1:state, d1:PageDb,
     ensures retToEnclave ==> validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1)
     ensures !retToEnclave ==> rs == s5 && rd == d5
 {
-    reveal_validEnclaveExecution();
+    reveal validEnclaveExecution();
     retToEnclave := (steps > 0);
     s5, d5 :|
         validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
@@ -124,8 +124,8 @@ predicate ni_reqs_weak_(d1: PageDb, d1': PageDb, d2: PageDb, d2': PageDb, atkr: 
 predicate same_call_args(s1:state, s2: state)
     requires ValidState(s1) && ValidState(s2)
 {
-    reveal_ValidRegState();
-    reveal_ValidSRegState();
+    reveal ValidRegState();
+    reveal ValidSRegState();
     OperandContents(s1, OReg(R0))  == OperandContents(s2, OReg(R0)) &&
     OperandContents(s1, OReg(R1))  == OperandContents(s2, OReg(R1)) &&
     OperandContents(s1, OReg(R2))  == OperandContents(s2, OReg(R2)) &&

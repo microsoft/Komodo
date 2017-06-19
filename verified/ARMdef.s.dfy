@@ -85,7 +85,7 @@ function spsr_of_state(s:state): PSR
     requires ValidState(s)
     requires mode_of_state(s) != User
 {
-    reveal_ValidSRegState();
+    reveal ValidSRegState();
     decode_psr(s.sregs[spsr(mode_of_state(s))])
 }
 
@@ -132,7 +132,7 @@ function USER_REGS(): set<ARMReg>
 function user_regs(regs:map<ARMReg, word>): map<ARMReg, word>
     requires ValidRegState(regs)
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     map r | r in USER_REGS() :: regs[r]
 }
 
@@ -140,7 +140,7 @@ function user_mem(pt:AbsPTable, m:memstate): memmap
     requires WellformedAbsPTable(pt)
     requires ValidMemState(m)
 {
-    reveal_ValidMemState();
+    reveal ValidMemState();
 
     // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
     (map a:addr | ValidMem(a) && a in TheValidAddresses() && addrIsSecure(a)
@@ -217,7 +217,7 @@ function update_config_from_sreg(s:state, sr:SReg, v:word): (c:config)
     requires (sr.cpsr? || sr.spsr?) ==> ValidPsrWord(v)
     ensures ValidSRegState(s.sregs[sr := v], c)
 {
-    reveal_ValidSRegState();
+    reveal ValidSRegState();
     if sr == cpsr then s.conf.(cpsr := decode_psr(v))
     else if sr == SCR then s.conf.(scr := decode_scr(v))
     else if sr == ttbr0 then s.conf.(ttbr0 := decode_ttbr(v))
@@ -495,7 +495,7 @@ function {:opaque} update_psr(oldpsr:word, newmode:word, maskfiq:bool, maskirq:b
 function psr_of_exception(s:state, e:exception): word
     requires ValidState(s)
 {
-    reveal_ValidSRegState();
+    reveal ValidSRegState();
 
     // per B1.9 exception descriptions, this models the CPSR updates
     // as they affect our limited view of the PSRs; summary: all
@@ -599,7 +599,7 @@ function havocUserRegs(nondet:int, us:UserState, regs:map<ARMReg, word>): map<AR
     requires ValidRegState(regs)
     ensures ValidRegState(havocUserRegs(nondet, us, regs))
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     map r | r in regs ::
         if r in USER_REGS() then nondet_private_word(nondet, us, NONDET_REG(r))
         else regs[r]
@@ -640,7 +640,7 @@ predicate {:axiom} InterruptContinuationInvariant(s:state, r:state)
 function {:opaque} PageBase(addr:word): word
     ensures PageAligned(PageBase(addr))
 {
-    reveal_PageAligned();
+    reveal PageAligned();
     BitwiseMaskHigh(addr, PAGEBITS)
 }
 
@@ -852,8 +852,8 @@ function OperandContents(s:state, o:operand): word
     requires ValidState(s)
     requires ValidAnySrcOperand(s, o)
 {
-    reveal_ValidRegState();
-    reveal_ValidSRegState();
+    reveal ValidRegState();
+    reveal ValidSRegState();
     match o
         case OConst(n) => n
         case OReg(r) => s.regs[r]
@@ -867,7 +867,7 @@ function MemContents(s:memstate, m:addr): word
     requires ValidMemState(s)
     requires ValidMem(m)
 {
-    reveal_ValidMemState();
+    reveal ValidMemState();
     s.addresses[m]
 }
 
@@ -876,7 +876,7 @@ function GlobalFullContents(s:memstate, g:symbol): seq<word>
     requires ValidGlobal(g)
     ensures WordsToBytes(|GlobalFullContents(s, g)|) == SizeOfGlobal(g)
 {
-    reveal_ValidMemState();
+    reveal ValidMemState();
     s.globals[g]
 }
 
@@ -884,7 +884,7 @@ function GlobalWord(s:memstate, g:symbol, offset:word): word
     requires ValidGlobalOffset(g, offset)
     requires ValidMemState(s)
 {
-    reveal_ValidMemState();
+    reveal ValidMemState();
     GlobalFullContents(s, g)[BytesToWords(offset)]
 }
 
@@ -909,7 +909,7 @@ predicate evalUpdate(s:state, o:operand, v:word, r:state)
         && (o.sr.cpsr? || o.sr.spsr? ==> ValidPsrWord(v)))
     ensures evalUpdate(s, o, v, r) ==> ValidState(r)
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     match o
         case OReg(reg) => r == s.(regs := s.regs[o.r := v])
         case OLR => r == s.(regs := s.regs[LR(mode_of_state(s)) := v])
@@ -923,7 +923,7 @@ predicate evalMemUpdate(s:state, m:addr, v:word, r:state)
     requires ValidMem(m)
     ensures evalMemUpdate(s, m, v, r) ==> ValidState(r)
 {
-    reveal_ValidMemState();
+    reveal ValidMemState();
     r == s.(m := s.m.(addresses := s.m.addresses[m := v]))
 }
 
@@ -932,7 +932,7 @@ predicate evalGlobalUpdate(s:state, g:symbol, offset:word, v:word, r:state)
     requires ValidGlobalOffset(g, offset)
     ensures evalGlobalUpdate(s, g, offset, v, r) ==> ValidState(r) && GlobalWord(r.m, g, offset) == v
 {
-    reveal_ValidMemState();
+    reveal ValidMemState();
     var oldval := s.m.globals[g];
     var newval := oldval[BytesToWords(offset) := v];
     assert |newval| == |oldval|;
@@ -1143,7 +1143,7 @@ predicate evalCPSID_IAF(s:state, mod:word, r:state)
     ensures  evalCPSID_IAF(s, mod, r) ==> ValidState(r)
     //ensures  evalCPSID_IAF(s, mod, r) && s.ok ==> r.ok
 {
-    reveal_ValidSRegState();
+    reveal ValidSRegState();
     var newpsr := update_psr(s.sregs[cpsr], mod, true, true);
     ValidModeChange'(s, decode_mode(mod)) && ValidPsrWord(newpsr)
     && evalUpdate(s, OSReg(cpsr), newpsr, r)

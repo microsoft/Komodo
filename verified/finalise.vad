@@ -13,11 +13,11 @@ lemma lemma_SaneState_implies_SaneShaGlobal2(s:state)
     ensures  SaneShaGlobal(va_get_globals(s));
 {
     var globals := va_get_globals(s);
-    reveal_SaneShaGlobal(); 
+    reveal SaneShaGlobal(); 
     assert ValidGlobalStateOpaque(globals) by {
-        reveal_ValidGlobalStateOpaque(); 
+        reveal ValidGlobalStateOpaque();
         assert ValidGlobalState(globals) by {
-            reveal_ValidMemState();   // Which we get from ValidState
+            reveal ValidMemState();   // Which we get from ValidState
         }
     }
 }
@@ -223,9 +223,9 @@ procedure kom_smc_finalise(
 
             forall :: err == pageDbAddrspaceStateVal(pagedb[as_page].entry.state)
             {
-                reveal_validPageDb();
-                reveal_pageContentsCorresponds();
-                reveal_pageDbAddrspaceCorresponds();
+                reveal validPageDb;
+                reveal pageContentsCorresponds;
+                reveal pageDbAddrspaceCorresponds;
             }
 
             if(err != const(KOM_ADDRSPACE_INIT)) {

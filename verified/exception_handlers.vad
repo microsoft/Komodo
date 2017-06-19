@@ -14,7 +14,7 @@ include "verify.vad"
 function cpsr_of_state(s:state): word
     requires ValidState(s)
     ensures ValidPsrWord(cpsr_of_state(s))
-{ reveal_ValidSRegState(); s.sregs[cpsr] }
+{ reveal ValidSRegState(); s.sregs[cpsr] }
 #endverbatim
 
 procedure {:frame false} {:instruction Ins(CPSID_IAF(mod))}
@@ -576,7 +576,7 @@ procedure {:frame false} abort_handler(
     ORR(sp, sp, 1); // report that we're done
 
     assert validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg)
-        by { reveal_validExceptionTransition(); }
+        by { reveal validExceptionTransition; }
 }
 
 procedure save_disp_context_helper(operand base:reg, ghost dispPg:PageNr)
@@ -895,7 +895,7 @@ procedure {:frame false} {:timeLimitMultiplier 2} interrupt_handler(
         ORR(sp, sp, 1);
 
         assert validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg)
-            by { reveal_validExceptionTransition(); }
+            by { reveal validExceptionTransition; }
         assert KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
     } else { // we came from another exception handler
         assert spsr_of_state(old(this)).m != User by { reveal ValidSRegState; }

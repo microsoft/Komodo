@@ -5,9 +5,9 @@ lemma  lemma_Maj(x:word, y:word, z:word, result:word)
     requires result == BitwiseXor(BitwiseAnd(BitwiseXor(y, z), BitwiseXor(x, y)), y);
     ensures  result == Maj(x, y, z);
 {
-    reveal_Maj();
-    reveal_BitXor();
-    reveal_BitAnd();
+    reveal Maj();
+    reveal BitXor();
+    reveal BitAnd();
     lemma_BitsAndWordConversions();
 }
 
@@ -15,18 +15,18 @@ lemma lemma_Ch(x:word, y:word, z:word, result:word)
     requires result == BitwiseXor(BitwiseAnd(BitwiseXor(y, z), x), z);
     ensures  result == Ch(x, y, z);
 {
-    reveal_Ch();
-    reveal_BitNot();
-    reveal_BitXor();
-    reveal_BitAnd();
+    reveal Ch();
+    reveal BitNot();
+    reveal BitXor();
+    reveal BitAnd();
     lemma_BitsAndWordConversions();
 }
 
 lemma lemma_RotateRightCommutesXorSpecific(x:word, y:word, a:shift_amount)
     ensures RotateRight(BitwiseXor(x, y), a) == BitwiseXor(RotateRight(x, a), RotateRight(y, a));
 {
-    reveal_BitXor();
-    reveal_BitRotateRight();
+    reveal BitXor();
+    reveal BitRotateRight();
     lemma_BitsAndWordConversions();
 }
 
@@ -35,7 +35,7 @@ lemma {:axiom} lemma_RotateRightAdds(x:word, a0:shift_amount, a1:shift_amount)
     requires a0 + a1 < 32;
     ensures  RotateRight(RotateRight(x, a0), a1) == RotateRight(x, a0 + a1);
 //{
-//    reveal_BitRotateRight();
+//    reveal BitRotateRight();
 //    lemma_BitsAndWordConversions();
 //    lemma_BitAddEquiv(a0, a1);
 //}
@@ -66,7 +66,7 @@ lemma lemma_XorSelfIsZero()
     forall x:word 
         ensures BitwiseXor(x, x) == 0;
     {
-        reveal_BitXor();
+        reveal BitXor();
         lemma_BitsAndWordConversions();
     }
 }

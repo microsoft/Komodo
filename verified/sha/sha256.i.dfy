@@ -147,8 +147,8 @@ lemma lemma_SHA256TransitionOKAfterSettingAtoHStep1Helper1(z:SHA256Trace, blk:in
     ensures TheAToHsAreOK(z, blk, t);
 {
     assert TBlk(blk) && TStep(t);
-    reveal_TheAToHsAreOK();
-    reveal_PartialSHA256TraceHasCorrectatohsOpaque();
+    reveal TheAToHsAreOK();
+    reveal PartialSHA256TraceHasCorrectatohsOpaque();
 }
 
 lemma Lemma_TheAToHsAreOKIsStable(z1:SHA256Trace, z2:SHA256Trace, blk:int, t:word)
@@ -165,7 +165,7 @@ lemma Lemma_TheAToHsAreOKIsStable(z1:SHA256Trace, z2:SHA256Trace, blk:int, t:wor
     requires TheAToHsAreOK(z1, blk, t);
     ensures TheAToHsAreOK(z2, blk, t);
 {
-    reveal_TheAToHsAreOK();
+    reveal TheAToHsAreOK();
 }
 
 lemma {:timeLimitMultiplier 2} lemma_SHA256TransitionOKAfterSettingAtoHStep1(
@@ -239,7 +239,7 @@ lemma {:timeLimitMultiplier 2} lemma_SHA256TransitionOKAfterSettingAtoHStep1(
                 }
                 else {
                     assert t == currentStep;
-                    calc { true; { reveal_TheAToHsAreOK(); } TheAToHsAreOK(z2, blk, t); }
+                    calc { true; { reveal TheAToHsAreOK(); } TheAToHsAreOK(z2, blk, t); }
                 }
             }
         }
@@ -313,10 +313,10 @@ lemma lemma_SHA256TransitionOKAfterSettingAtoH(
                     z2.atoh[blk][t+1].a == BitwiseAdd32(T1, T2);
         {
             assert TheAToHsAreOK(z2, blk, t);
-            reveal_TheAToHsAreOK();
+            reveal TheAToHsAreOK();
         }
     }
-    reveal_PartialSHA256TraceHasCorrectatohsOpaque();
+    reveal PartialSHA256TraceHasCorrectatohsOpaque();
     assert TBlk(|z1.H|-1);
     assert TStep(currentStep);
 
@@ -388,7 +388,7 @@ lemma lemma_SHA256DigestOneBlockHelper1(
     }
     assert PartialSHA256TraceHasCorrectWs(z');
 
-    reveal_PartialSHA256TraceHasCorrectatohsOpaque();
+    reveal PartialSHA256TraceHasCorrectatohsOpaque();
 
     assert IsSHA256TraceReadyForStep(z', 0);
 }
@@ -493,7 +493,7 @@ lemma lemma_SHA256DigestOneBlockHelper2(
             assert PartialSHA256TraceIsCorrect(z);
             assert TBlk(blk);
             assert z'.atoh[blk] == z.atoh[blk];
-            reveal_PartialSHA256TraceHasCorrectatohsOpaque();
+            reveal PartialSHA256TraceHasCorrectatohsOpaque();
         }
 
         assert PartialSHA256TraceIsCorrect(z);
@@ -593,7 +593,7 @@ lemma lemma_SHA256FinalHelper1(
 //    ensures WordToBytes(b) == [0, 0, 0, b];
 ///*    
 //{
-//    reveal_WordToBytes();
+//    reveal WordToBytes();
 //}
 //*/
 
@@ -681,7 +681,7 @@ lemma lemma_ConcatenateSeqs_M_length<T>(M:seq<seq<T>>)
 //{
 //	  assume false;
 //    if s == [] {
-//        reveal_bswap32_seq();
+//        reveal bswap32_seq();
 //    } else {
 //        var bytes := WordToBytes(s[0]);
 //        calc {
@@ -692,7 +692,7 @@ lemma lemma_ConcatenateSeqs_M_length<T>(M:seq<seq<T>>)
 //            [bswap32(s[0])] + WordSeqToBytes(s[1..]);
 //                { lemma_WordSeqToBytes_is_bswap32_seq(s[1..]); }
 //            [bswap32(s[0])] + bswap32_seq(s[1..]);
-//                { reveal_bswap32_seq(); }
+//                { reveal bswap32_seq(); }
 //            bswap32_seq(s);
 //        }
 //    }

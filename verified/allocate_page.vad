@@ -11,8 +11,8 @@ lemma BoundedAddrspaceRefs(d:PageDb, n:PageNr)
     requires isAddrspace(d, n)
     ensures d[n].entry.refcount <= KOM_SECURE_NPAGES
 {
-    reveal_validPageNrs();
-    reveal_validPageDb();
+    reveal validPageNrs();
+    reveal validPageDb();
     assert addrspaceRefs(d,n) <= validPageNrs();
     assert d[n].entry.refcount == |addrspaceRefs(d,n)|;
     SubsetCardinality(addrspaceRefs(d,n), validPageNrs());
@@ -76,8 +76,8 @@ procedure addrspace_incref(
     forall :: tmp == pagedb_in[pagenr].entry.refcount
         && tmp <= KOM_SECURE_NPAGES
     {
-        reveal_pageContentsCorresponds();
-        reveal_pageDbAddrspaceCorresponds();
+        reveal pageContentsCorresponds;
+        reveal pageDbAddrspaceCorresponds;
         assert pageDbAddrspaceCorresponds(pagenr,
                 pagedb_in[pagenr].entry, extractPage(this.m, pagenr));
         assert tmp == pagedb_in[pagenr].entry.refcount;
@@ -91,7 +91,7 @@ procedure addrspace_incref(
     forall p :| validPageNr(p) ::
         pageDbEntryCorresponds(pagedb[p], extractPageDbEntry(this.m, p))
     {
-        reveal_pageDbEntryCorresponds();
+        reveal pageDbEntryCorresponds;
         assert pageDbEntryCorresponds(pagedb_in[p],
                                       extractPageDbEntry(old(this).m, p));
         assert extractPageDbEntry(this.m, p) == extractPageDbEntry(old(this).m, p);
@@ -103,8 +103,8 @@ procedure addrspace_incref(
     forall :: pageContentsCorresponds(pagenr, pagedb[pagenr],
                                 extractPage(this.m, pagenr))
     {
-        reveal_pageContentsCorresponds();
-        reveal_pageDbAddrspaceCorresponds();
+        reveal pageContentsCorresponds;
+        reveal pageDbAddrspaceCorresponds;
     }
 }
 

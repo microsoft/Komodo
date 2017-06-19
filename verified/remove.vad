@@ -40,7 +40,7 @@ procedure kom_smc_remove_non_addr_success(
 
     forall :: pagedb[as_page] is PageDbEntryTyped &&
        pagedb[as_page].entry is Addrspace {
-           reveal_validPageDb();
+           reveal validPageDb;
     }
     r7 := const(KOM_PAGE_FREE);
     assert page_type == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE;
@@ -51,9 +51,9 @@ procedure kom_smc_remove_non_addr_success(
 
     LDR(r7, as_page_va, const(ADDRSPACE_REF));
     forall :: r7 == pagedb[as_page].entry.refcount {
-       reveal_validPageDb();
-       reveal_pageContentsCorresponds();
-       reveal_pageDbAddrspaceCorresponds();
+       reveal validPageDb;
+       reveal pageContentsCorresponds;
+       reveal pageDbAddrspaceCorresponds;
     }
     SUB(r7, r7, 1);
     assert r7 == pagedb[as_page].entry.refcount - 1;
@@ -61,23 +61,23 @@ procedure kom_smc_remove_non_addr_success(
 
     pagedb := specD;
     assert pageDbCorresponds(this.m, pagedb) by {
-        reveal_validPageDb();
+        reveal validPageDb;
         forall :: pageDbCorrespondsOnly(this.m, specD, page)
         {   
-            reveal_pageDbEntryCorresponds(); 
-            reveal_pageContentsCorresponds();
+            reveal pageDbEntryCorresponds; 
+            reveal pageContentsCorresponds;
         }
 
         forall :: pageDbCorrespondsOnly(this.m, specD, as_page)
         {
-            reveal_pageDbEntryCorresponds();
+            reveal pageDbEntryCorresponds;
             assert pagedb[as_page].addrspace ==
                 pagedb_in[as_page].addrspace;
             assert extractPageDbEntry(this.m, as_page) ==
                 extractPageDbEntry(old(this.m), as_page);
             
-            reveal_pageContentsCorresponds();
-            reveal_pageDbAddrspaceCorresponds();
+            reveal pageContentsCorresponds;
+            reveal pageDbAddrspaceCorresponds;
             ghost var e := specD[as_page].entry;
             ghost var base := page_monvaddr(as_page);
             ghost var page := extractPage(this.m, as_page);
@@ -94,11 +94,11 @@ procedure kom_smc_remove_non_addr_success(
         forall p :| validPageNr(p) && p != as_page && p != page ::
           pageDbCorrespondsOnly(this.m, specD, p)
         {
-            reveal_pageDbEntryCorresponds();
+            reveal pageDbEntryCorresponds;
             forall p :| validPageNr(p) && p != as_page && p != page ::
                 (extractPage(this.m, p) ==
                     extractPage(old(this.m), p)) {}
-            reveal_pageContentsCorresponds();
+            reveal pageContentsCorresponds;
             forall p :| validPageNr(p) && p != as_page && p != page ::
                 (extractPageDbEntry(this.m, p) ==
                     extractPageDbEntry(old(this.m), p)) {} 
@@ -155,9 +155,9 @@ procedure kom_smc_remove(
                 assert r8 == page_monvaddr(page);
                 LDR(r7,r8,const(ADDRSPACE_REF));
                 forall :: r7 == pagedb[page].entry.refcount {
-                    reveal_validPageDb();
-                    reveal_pageContentsCorresponds();
-                    reveal_pageDbAddrspaceCorresponds();
+                    reveal validPageDb;
+                    reveal pageContentsCorresponds;
+                    reveal pageDbAddrspaceCorresponds;
                 }
                 if (r7 != 0) {
                     assert pagedb[page].entry.refcount != 0;
@@ -172,9 +172,9 @@ procedure kom_smc_remove(
                     assert err == specE;
                     pagedb := specD;
                     assert pageDbCorresponds(this.m, pagedb) by {
-                        reveal_validPageDb();
-                        reveal_pageDbEntryCorresponds();
-                        reveal_pageContentsCorresponds();
+                        reveal validPageDb;
+                        reveal pageDbEntryCorresponds;
+                        reveal pageContentsCorresponds;
                         assert specD[page] is PageDbEntryFree;
                         extractPageDbToAbstract(this.m, page);
                         assert pageDbEntryCorresponds(specD[page], 
@@ -182,9 +182,9 @@ procedure kom_smc_remove(
                         assert pageDbCorrespondsOnly(this.m, specD, page);
                         forall :: pageDbCorrespondsExcluding(this.m, specD, page)
                         {
-                            reveal_validPageDb();
-                            reveal_pageContentsCorresponds();
-                            reveal_pageDbAddrspaceCorresponds();
+                            reveal validPageDb;
+                            reveal pageContentsCorresponds;
+                            reveal pageDbAddrspaceCorresponds;
                             ghost var d' := specPageDb(specResult);
                             assert pageDbCorrespondsExcluding(old(this).m, pagedb, page);
                             forall :: pageDbCorrespondsExcluding(this.m, pagedb, page)
@@ -203,20 +203,20 @@ procedure kom_smc_remove(
                 LDRglobal(r6, PageDb(), pagedb_base, r6);
                 ghost var as_page := pagedb[page].addrspace;
                 forall :: r6 == page_monvaddr(as_page) {
-                    reveal_pageDbEntryCorresponds();
+                    reveal pageDbEntryCorresponds;
                     extractPageDbToAbstract(this.m, page);
                 }
 
                 forall :: pagedb[as_page] is PageDbEntryTyped &&
                     pagedb[as_page].entry is Addrspace {
-                    reveal_validPageDb();
+                    reveal validPageDb;
                 }
                 //page_monvaddr_impl(r7,r6,r8);
                 LDR(r8,r6,const(ADDRSPACE_STATE));
                 forall :: r8 == pageDbAddrspaceStateVal(pagedb[as_page].entry.state)
                 {
-                    reveal_pageContentsCorresponds();
-                    reveal_pageDbAddrspaceCorresponds();
+                    reveal pageContentsCorresponds;
+                    reveal pageDbAddrspaceCorresponds;
                 }
     
                 if ( r8 != const(KOM_ADDRSPACE_STOPPED) ) {

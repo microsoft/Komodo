@@ -15,7 +15,7 @@ lemma pa_implies_modl2p(p:word)
     requires PageAligned(p)
     ensures  p % ARM_L2PTABLE_BYTES == 0
 {
-    assert p % PAGESIZE == 0 by { reveal_PageAligned(); }
+    assert p % PAGESIZE == 0 by { reveal PageAligned(); }
     lemma_PageAlignedImplies1KAligned(p);
 }
 
@@ -37,7 +37,7 @@ lemma lemma_SecurePage(pagebase:word)
 {
     var lower := KOM_DIRECTMAP_VBASE + SecurePhysBase();
     var upper := lower + KOM_SECURE_RESERVE;
-    reveal_PageAligned();
+    reveal PageAligned();
     assert PageAligned(lower);
     assert PageAligned(upper);
     assert lower <= pagebase < upper;
@@ -147,7 +147,7 @@ procedure install_l1ptes(
     ghost var oldpg := extractPage(old(this).m, l1pg);
     forall :: pageDbL1PTableCorresponds(l1pg, pagedb[l1pg].entry, oldpg)
     {
-        reveal_pageContentsCorresponds();
+        reveal pageContentsCorresponds;
     }
 
     ghost var oldl1pt := pagedb[l1pg].entry;
@@ -168,7 +168,7 @@ procedure install_l1ptes(
                     == mkL1Pte(Just(old(l2_pg)), i);
         assert forall i, j :: 0 <= i < NR_L1PTES && 0 <= j < 4 && i != old(l1index)
             ==> (let o := l1pteoffset(l1pt_va, i, j) in pg[o] == oldpg[o]);
-        reveal_pageDbL1PTableCorresponds();
+        reveal pageDbL1PTableCorresponds;
     }
 
     pagedb := installL1PTEInPageDb(pagedb, l1pg, old(l2_pg), old(l1index));
@@ -177,9 +177,9 @@ procedure install_l1ptes(
     {
         assert pageContentsCorresponds(l1pg, pagedb_in[l1pg], oldpg);
         assert pagedb[l1pg] == pagedb_in[l1pg].(entry := newl1pt);
-        reveal_pageContentsCorresponds();
+        reveal pageContentsCorresponds;
         assert pageContentsCorresponds(l1pg, pagedb[l1pg], pg);
-        reveal_pageDbEntryCorresponds();
+        reveal pageDbEntryCorresponds;
     }
 
     forall p :| validPageNr(p) && p != l1pg :: pageDbCorrespondsOnly(this.m, pagedb, p)

@@ -35,8 +35,8 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
     ensures enc_eqpdb(d14, d24, atkr)
     ensures atkr_entry(d14, d24, dispPg, atkr)
 {
-    // reveal_evalUserspaceExecution();
-    reveal_enc_eqpdb();
+    // reveal evalUserspaceExecution();
+    reveal enc_eqpdb();
 
     assert validPageDb(d14) && validPageDb(d24);
 
@@ -44,13 +44,13 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
         ensures pgInAddrSpc(d14, n, atkr) <==> pgInAddrSpc(d1, n, atkr)
         ensures d14[n].PageDbEntryTyped? <==> d1[n].PageDbEntryTyped?
         ensures d14[atkr].entry == d1[atkr].entry;
-        { reveal_updateUserPagesFromState(); }
+        { reveal updateUserPagesFromState(); }
 
     forall( n : PageNr) 
         ensures pgInAddrSpc(d24, n, atkr) <==> pgInAddrSpc(d2, n, atkr)
         ensures d24[n].PageDbEntryTyped? <==> d2[n].PageDbEntryTyped?
         ensures d24[atkr].entry == d2[atkr].entry;
-        { reveal_updateUserPagesFromState(); }
+        { reveal updateUserPagesFromState(); }
 
     assert forall n : PageNr :: pgInAddrSpc(d14, n, atkr) <==>
         pgInAddrSpc(d24, n, atkr);
@@ -108,7 +108,7 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
     forall( n : PageNr | pgInAddrSpc(d14, n, atkr))
         ensures d14[n].entry == d24[n].entry
     {
-        reveal_updateUserPagesFromState();
+        reveal updateUserPagesFromState();
         assert pageSWrInAddrspace(d1, l1p, n) <==>
             pageSWrInAddrspace(d2, l1p, n);
         if(pageSWrInAddrspace(d1, l1p, n)) {
@@ -124,7 +124,7 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
         }
     }
 
-    reveal_enc_eqpdb();
+    reveal enc_eqpdb();
     assert enc_eqpdb(d14, d24, atkr);
 }
 
@@ -140,7 +140,7 @@ lemma lemma_enter_enc_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
         s1.conf.nondet == s2.conf.nondet
     ensures enc_eqpdb(d1', d2', atkr)
 {
-    reveal_enc_eqpdb();
+    reveal enc_eqpdb();
     if(!validPageNr(dispPage)){
         assert d1' == d1 &&  d2' == d2;
     } else {
@@ -278,7 +278,7 @@ lemma lemma_enter_enc_eqpdb(s1: state, d1: PageDb, s1':state, d1': PageDb,
     ensures  enc_eqpdb(d1', d2', atkr)
 {
 
-    reveal_enc_eqpdb();
+    reveal enc_eqpdb();
     var go1 := smc_enter_err(d1, disp, isresume) == KOM_ERR_SUCCESS;
     var go2 := smc_enter_err(d2, disp, isresume) == KOM_ERR_SUCCESS;
 
@@ -347,7 +347,7 @@ lemma lemma_enter_enc_eqpdb_one_go(s1: state, d1: PageDb, s1':state, d1': PageDb
             && !(smc_enter_err(d2, disp, isresume) == KOM_ERR_SUCCESS);
     ensures  enc_eqpdb(d1', d2', atkr)
 {
-   reveal_enc_eqpdb();
+   reveal enc_eqpdb();
    var go1 := smc_enter_err(d1, disp, isresume) == KOM_ERR_SUCCESS;
    var go2 := smc_enter_err(d2, disp, isresume) == KOM_ERR_SUCCESS;
    assert go1 && !go2;
@@ -441,15 +441,15 @@ lemma lemma_enter_only_affects_entered(s: state, d: PageDb, s': state, d': PageD
             assert !spsr_of_state(s1).f && !spsr_of_state(s1).i by {
                 assert psr_mask_fiq(encode_mode(User)) == 0 by {
                     assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
-                        by { reveal_WordAsBits(); }
+                        by { reveal WordAsBits(); }
                     lemma_BitsAndWordConversions();
-                    reveal_BitAnd();
+                    reveal BitAnd();
                 }
                 assert psr_mask_irq(encode_mode(User)) == 0 by {
                     assert WordAsBits(0x10) == 0x10 && WordAsBits(0x80) == 0x80
-                        by { reveal_WordAsBits(); }
+                        by { reveal WordAsBits(); }
                     lemma_BitsAndWordConversions();
-                    reveal_BitAnd();
+                    reveal BitAnd();
                 }
             }
             lemma_validEnclaveEx_oae(s1, d, s', d', disp, steps, asp);
@@ -531,7 +531,7 @@ lemma lemma_validEnclaveStepPrime_oae(
 {
     assert d4 == updateUserPagesFromState(s4, d1, disp);
     assert outside_world_same(d1, d4, disp, asp) by 
-        { reveal_updateUserPagesFromState(); }
+        { reveal updateUserPagesFromState(); }
     if (ret) {
         assert rd == svcHandled(s4, d4, disp).1;
         assert outside_world_same(d1, rd, disp, asp);
@@ -615,15 +615,15 @@ lemma lemma_enter_enc_atkr_enter(s1: state, d1: PageDb, s1':state, d1': PageDb,
             !spsr_of_state(s21).f && !spsr_of_state(s21).i by {
             assert psr_mask_fiq(encode_mode(User)) == 0 by {
                 assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
-                    by { reveal_WordAsBits(); }
+                    by { reveal WordAsBits(); }
                 lemma_BitsAndWordConversions();
-                reveal_BitAnd();
+                reveal BitAnd();
             }
             assert psr_mask_irq(encode_mode(User)) == 0 by {
                 assert WordAsBits(0x10) == 0x10 && WordAsBits(0x80) == 0x80
-                    by { reveal_WordAsBits(); }
+                    by { reveal WordAsBits(); }
                 lemma_BitsAndWordConversions();
-                reveal_BitAnd();
+                reveal BitAnd();
             }
         }
         lemma_validEnclaveEx_enc(s11, d1, s1', d1', s21, d2, s2', d2',
@@ -705,7 +705,7 @@ lemma lemma_validEnclaveEx_enc(s1: state, d1: PageDb, s1':state, d1': PageDb,
     ensures  enc_eqpdb(d1', d2', atkr)
     decreases steps1, steps2
 {
-    reveal_validEnclaveExecution();
+    reveal validEnclaveExecution();
 
     var retToEnclave1, s15, d15 := lemma_unpack_validEnclaveExecution(
         s1, d1, s1', d1', dispPg, steps1);
@@ -1043,7 +1043,7 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
 {                        
 
     assert l1pOfDispatcher(d11, dispPg) == l1pOfDispatcher(d21, dispPg) by
-        { reveal_enc_eqpdb(); }
+        { reveal enc_eqpdb(); }
     var l1p := l1pOfDispatcher(d11, dispPg);
 
     assert dataPagesCorrespond(s11.m, d11);
@@ -1300,8 +1300,8 @@ predicate lr_spsr_same(s1:state, s2:state)
     requires ValidState(s1) && ValidState(s2)
     requires mode_of_state(s1) != User && mode_of_state(s2) != User
 {
-    reveal_ValidRegState();
-    reveal_ValidSRegState();
+    reveal ValidRegState();
+    reveal ValidSRegState();
     s1.regs[LR(mode_of_state(s1))] == s2.regs[LR(mode_of_state(s2))] &&
     s1.sregs[spsr(mode_of_state(s1))] == s2.sregs[spsr(mode_of_state(s2))]
 }
@@ -1326,7 +1326,7 @@ dispPg: PageNr, atkr: PageNr)
     ensures  enc_eqpdb(d1', d2', atkr)
     ensures  atkr_entry(d1', d2', dispPg, atkr)
 {
-    reveal_enc_eqpdb();
+    reveal enc_eqpdb();
     var ex := s1.conf.ex;
     forall (n : PageNr |  n != dispPg)
         ensures d1'[n] == d1[n];
@@ -1353,7 +1353,7 @@ dispPg: PageNr, atkr: PageNr)
         var pc1 := TruncateWord(OperandContents(s1, OLR) - 4);
         var pc2 := TruncateWord(OperandContents(s2, OLR) - 4);
         assert pc1 == pc2;
-        reveal_ValidSRegState();
+        reveal ValidSRegState();
         var psr1 := s1.sregs[spsr(mode_of_state(s1))];
         var psr2 := s2.sregs[spsr(mode_of_state(s2))];
         assert psr1 == psr2;
@@ -1478,21 +1478,21 @@ lemma lemma_AllPages(d:PageDb, l1p:PageNr, pagebase:addr, pt:PageNr)
     ensures d[pt].entry.DataPage?;
     ensures d[pt].addrspace == d[l1p].addrspace;
 {
-    assert validL1PTable(d, l1p) by { reveal_validPageDb(); }
+    assert validL1PTable(d, l1p) by { reveal validPageDb(); }
     var abspt := mkAbsPTable(d, l1p);
     var l1pt := d[l1p].entry.l1pt;
     var i, j :| 0 <= i < ARM_L1PTES && 0 <= j < ARM_L2PTES
         && abspt[i].Just? && abspt[i].v[j].Just?
         && pagebase == abspt[i].v[j].v.phys + PhysBase();
     var p := monvaddr_page(pagebase);
-    reveal_mkAbsPTable();
+    reveal mkAbsPTable();
     assert p == (abspt[i].v[j].v.phys - SecurePhysBase()) / PAGESIZE;
     var n := i / 4;
     assert l1pt[n].Just?;
     var l2p := l1pt[n].v;
     assert d[l2p].PageDbEntryTyped? && d[l2p].entry.L2PTable?
         && wellFormedPageDbEntry(d[l2p]) && validL2PTable(d, l2p)
-        by { reveal_validPageDb(); }
+        by { reveal validPageDb(); }
     var l2pt := d[l2p].entry.l2pt;
     var pte := l2pt[(i%4)*ARM_L2PTES + j];
     assert validL2PTE(d, d[l2p].addrspace, pte);
@@ -1601,7 +1601,7 @@ lemma lemma_resume_enc_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
         s1.conf.nondet == s2.conf.nondet
     ensures enc_eqpdb(d1', d2', atkr)
 {
-    reveal_enc_eqpdb();
+    reveal enc_eqpdb();
     if(!validPageNr(dispPage)){
         assert d1' == d1 &&  d2' == d2;
     } else {

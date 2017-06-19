@@ -94,7 +94,7 @@ procedure arrange_real_measurement_in_memory(
     lemma_memset_result(old(this.m), this.m, offset, r1, SHA_CTXSIZE);
     assert AddrMemContentsSeq(mem, r1, SHA_CTXSIZE) == measurement;
     ghost var addrsp_pg := pagedb[dispPg].addrspace;
-    assert validAddrspacePage(pagedb, addrsp_pg) by { reveal_validPageDb(); }
+    assert validAddrspacePage(pagedb, addrsp_pg) by { reveal validPageDb; }
     ghost var addrsp := pagedb[addrsp_pg].entry;
 
     assert measurement == SHA256(WordSeqToBytes(addrsp.measurement)) by {

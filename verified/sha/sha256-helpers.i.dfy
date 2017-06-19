@@ -92,7 +92,7 @@ lemma lemma_BitwiseAdd32Commutes2(x1:word, x2:word)
 lemma lemma_BitwiseAdd32Associates3'(x1:word, x2:word, x3:word)
     ensures BitwiseAdd32(BitwiseAdd32(x1, x2), x3) == BitwiseAdd32(x1, BitwiseAdd32(x2, x3));
 {
-    reveal_TruncateWord();
+    reveal TruncateWord();
     lemma_AddWrapAssociates(x1, x2, x3);
 }
 
@@ -216,7 +216,7 @@ lemma lemma_mod_in_bounds2(i:int, base:int, old_val:int, val:int)
 
 lemma lemma_BitwiseAdd32_properties(w:word)
     ensures BitwiseAdd32(w, 0) == w;
-{ reveal_TruncateWord(); }
+{ reveal TruncateWord(); }
 
 /*
 lemma lemma_ValidSrcAddrsPreservation(old_mem:memmap, mem:memmap, base:nat, num_words:nat, taint:taint,

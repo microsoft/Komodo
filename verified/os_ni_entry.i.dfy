@@ -49,15 +49,15 @@ lemma lemma_enter_os_ni(
             && !spsr_of_state(s21).f && !spsr_of_state(s21).i by {
             assert psr_mask_fiq(encode_mode(User)) == 0 by {
                 assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
-                    by { reveal_WordAsBits(); }
+                    by { reveal WordAsBits(); }
                 lemma_BitsAndWordConversions();
-                reveal_BitAnd();
+                reveal BitAnd();
             }
             assert psr_mask_irq(encode_mode(User)) == 0 by {
                 assert WordAsBits(0x10) == 0x10 && WordAsBits(0x80) == 0x80
-                    by { reveal_WordAsBits(); }
+                    by { reveal WordAsBits(); }
                 lemma_BitsAndWordConversions();
-                reveal_BitAnd();
+                reveal BitAnd();
             }
         }
         
@@ -128,7 +128,7 @@ lemma lemma_validEnclaveEx_os(
     ensures  InsecureMemInvariant(s1', s2')
     decreases steps1, steps2
 {
-    reveal_validEnclaveExecution();
+    reveal validEnclaveExecution();
 
     var retToEnclave1, s15, d15 := lemma_unpack_validEnclaveExecution(
         s1, d1, s1', d1', dispPg, steps1);

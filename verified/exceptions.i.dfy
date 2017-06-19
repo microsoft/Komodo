@@ -83,7 +83,7 @@ lemma lemma_KomInterruptHandlerInvariant_soundness(s:state, r:state)
 
 predicate {:opaque} InterruptContinuationInvariantDef()
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     forall s:state, r:state
         | ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
           && (s.conf.ex == ExFIQ || s.conf.ex == ExIRQ)
@@ -101,7 +101,7 @@ lemma lemma_InterruptContinuationInvariantDef(s:state, r:state)
     ensures KomInterruptHandlerInvariant(s, dummyPageDb(), r, dummyPageNr())
     ensures s.conf.nondet == r.conf.nondet
 {
-    reveal_InterruptContinuationInvariantDef();
+    reveal InterruptContinuationInvariantDef();
     if priv_of_mode(spsr_of_state(s).m) == PL1 {
         assert s.conf.nondet == r.conf.nondet;
     }

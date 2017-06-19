@@ -6,11 +6,11 @@ lemma lemma_SaneState_implies_SaneShaGlobal(s:state)
     ensures  SaneShaGlobal(va_get_globals(s));
 {
     var globals := va_get_globals(s);
-    reveal_SaneShaGlobal(); 
+    reveal SaneShaGlobal(); 
     assert ValidGlobalStateOpaque(globals) by {
-        reveal_ValidGlobalStateOpaque(); 
+        reveal ValidGlobalStateOpaque();
         assert ValidGlobalState(globals) by {
-            reveal_ValidMemState();   // Which we get from ValidState
+            reveal ValidMemState();   // Which we get from ValidState
         }
     }
 }
@@ -63,7 +63,7 @@ procedure {:timeLimitMultiplier 2} compute_hmac(
         mac == HMAC_SHA256(AttestKey(), WordSeqToBytes(input));
 {
     ghost var addrspace := pagedb[dispPg].addrspace;
-    assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
+    assert validAddrspacePage(pagedb, addrspace) by { reveal validPageDb; }
 
     // Stack layout [size in words]:
     //   sp := mac_output[8] || message [8+16] || gap[1] || tmp_ptr[2*SHA_BLOCKSIZE] || key_ptr[HMAC_KEYSIZE_WORDS]
@@ -220,7 +220,7 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest_inner(
         mac == svcHmacAttest(exstate, pagedb, dispPg);
 {
     ghost var addrspace := pagedb[dispPg].addrspace;
-    assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
+    assert validAddrspacePage(pagedb, addrspace) by { reveal validPageDb; }
     ghost var spec_enclave_measurement := SHA256(WordSeqToBytes(pagedb[addrspace].entry.measurement));
     ghost var real_user_words := seq(r1, r2, r3, r4, r5, r6, r7, r8);
     // Giant OBSERVE to trigger CoreRegPreservingExcept
@@ -353,7 +353,7 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest(
         lr == old(lr);
 {
     ghost var addrspace := pagedb[dispPg].addrspace;
-    assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
+    assert validAddrspacePage(pagedb, addrspace) by { reveal validPageDb; }
 
     ghost var remaining_stack_bytes;
     remaining_stack_bytes := stack_nonvolatiles(stack_bytes);

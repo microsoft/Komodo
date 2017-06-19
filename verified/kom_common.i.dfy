@@ -38,7 +38,7 @@ predicate SRegsInvariant(s:state, s':state)
 predicate SpsrsInvariant(s:state, r:state)
     requires ValidState(s) && ValidState(r)
 {
-    reveal_ValidSRegState();
+    reveal ValidSRegState();
     forall m | m != User :: s.sregs[spsr(m)] == r.sregs[spsr(m)]
 }
 
@@ -55,7 +55,7 @@ predicate AllRegsInvariant(s:state, s':state)
 predicate StackBytesRemaining(s:state,bytes:int)
 {
     ValidState(s) && SaneStack(s) &&
-    (reveal_ValidRegState();
+    (reveal ValidRegState();
     var sp := s.regs[SP(Monitor)];
     StackLimit() + bytes < sp <= StackBase())
 }
@@ -63,7 +63,7 @@ predicate StackBytesRemaining(s:state,bytes:int)
 predicate ParentStackPreserving(s:state, r:state)
     requires ValidState(s) && ValidState(r) && SaneConstants()
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     var sp := s.regs[SP(Monitor)];
     SaneStack(s) &&
     forall a:addr | sp <= a < StackBase() :: MemContents(s.m, a) == MemContents(r.m, a)
@@ -72,7 +72,7 @@ predicate ParentStackPreserving(s:state, r:state)
 predicate StackPreserving(s:state, r:state)
     requires ValidState(s) && ValidState(r) && SaneConstants()
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     s.regs[SP(Monitor)] == r.regs[SP(Monitor)] && ParentStackPreserving(s, r)
 }
 
@@ -104,7 +104,7 @@ predicate GlobalsPreservingExcept(s:state, r:state, trashed:set<symbol>)
     requires ValidState(s) && ValidState(r);
     requires forall g :: g in trashed ==> ValidGlobal(g);
 {
-    reveal_ValidMemState();
+    reveal ValidMemState();
     forall glob | glob !in trashed && ValidGlobal(glob) ::
         s.m.globals[glob] == r.m.globals[glob]
 }
@@ -112,7 +112,7 @@ predicate GlobalsPreservingExcept(s:state, r:state, trashed:set<symbol>)
 predicate BankedRegsInvariant(s:state, r:state)
     requires ValidState(s) && ValidState(r)
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
 
     // LR and SP invariant for all modes other than the current one (i.e. monitor)
     forall m | m != mode_of_state(s) ::

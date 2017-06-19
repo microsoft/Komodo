@@ -206,11 +206,11 @@ lemma lemma_memset_result(m:memstate, m':memstate, src:word, dst:word, num_words
             [AddrMemContents(m'.addresses, dst)];
                 calc {
                     AddrMemContents(m'.addresses, dst);
-                        { reveal_ValidAddrMemStateOpaque(); }
+                        { reveal ValidAddrMemStateOpaque(); }
                     m'.addresses[dst];
                     MemContents(m', dst);
                     MemContents(m, src);
-                        { reveal_ValidAddrMemStateOpaque(); }
+                        { reveal ValidAddrMemStateOpaque(); }
                     m.addresses[src];
                     AddrMemContents(m.addresses, src);
                 }
@@ -227,11 +227,11 @@ lemma lemma_memset_result(m:memstate, m':memstate, src:word, dst:word, num_words
             [AddrMemContents(m'.addresses, dst)] + AddrMemContentsSeq(m'.addresses, dst + WORDSIZE, num_words - 1);
                 calc {
                     AddrMemContents(m'.addresses, dst);
-                        { reveal_ValidAddrMemStateOpaque(); }
+                        { reveal ValidAddrMemStateOpaque(); }
                     m'.addresses[dst];
                     MemContents(m', dst);
                     MemContents(m, src);
-                        { reveal_ValidAddrMemStateOpaque(); }
+                        { reveal ValidAddrMemStateOpaque(); }
                     m.addresses[src];
                     AddrMemContents(m.addresses, src);
                 }

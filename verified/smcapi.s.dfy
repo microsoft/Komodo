@@ -14,7 +14,7 @@ predicate l1indexInUse(d: PageDb, a: PageNr, l1index: int)
     requires !stoppedAddrspace(d[a])
     requires 0 <= l1index < NR_L1PTES
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     assert validAddrspace(d, a);
     var l1ptnr := d[a].entry.l1ptnr;
     var l1pt := d[l1ptnr].entry;
@@ -31,7 +31,7 @@ function updateL2Pte(d: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
     requires validL2PTE(d, a, l2e)
     ensures wellFormedPageDb(updateL2Pte(d, a, mapping, l2e))
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     var addrspace := d[a].entry;
     assert validAddrspace(d, a);
     var l1 := d[addrspace.l1ptnr].entry;
@@ -48,8 +48,8 @@ function isValidMappingTarget(d: PageDb, a: PageNr, mapping: word)
     ensures  isValidMappingTarget(d,a,mapping) == KOM_ERR_SUCCESS ==>
         validMapping(wordToMapping(mapping),d,a)
 {
-    reveal_validPageDb();
-    reveal_wordToMapping();
+    reveal validPageDb();
+    reveal wordToMapping();
     var addrspace := d[a].entry;
     var l1index := l1indexFromMapping(mapping);
     var l2index := l2indexFromMapping(mapping);
@@ -86,7 +86,7 @@ function smc_initAddrspace(pageDbIn: PageDb, addrspacePage: word, l1PTPage: word
     : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn);
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     var g := pageDbIn;
     if(!validPageNr(addrspacePage) || !validPageNr(l1PTPage) ||
         addrspacePage == l1PTPage) then
@@ -168,7 +168,7 @@ function smc_initDispatcher(pageDbIn: PageDb, page:word, addrspacePage:word,
     : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn);
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KOM_ERR_INVALID_ADDRSPACE)
     else
@@ -199,7 +199,7 @@ function installL1PTEInPageDb(pagedb: PageDb, l1ptnr: PageNr, l2page: PageNr,
     requires 0 <= l1index < NR_L1PTES
     ensures wellFormedPageDb(installL1PTEInPageDb(pagedb, l1ptnr, l2page, l1index))
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     var l1ptentry := installL1PTE(pagedb[l1ptnr].entry, l2page, l1index);
     pagedb[l1ptnr := pagedb[l1ptnr].(entry := l1ptentry)]
 }
@@ -208,7 +208,7 @@ function smc_initL2PTable(pageDbIn: PageDb, page: word, addrspacePage: word,
                           l1index: word) : (PageDb, word)
     requires validPageDb(pageDbIn)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     if(!(0<= l1index < NR_L1PTES)) then (pageDbIn, KOM_ERR_INVALID_MAPPING)
     else if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KOM_ERR_INVALID_ADDRSPACE)
@@ -250,7 +250,7 @@ function allocatePage_inner(pageDbIn: PageDb, securePage: word,
     requires validAddrspacePage(pageDbIn, addrspacePage)
     requires allocatePageEntryValid(entry)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     var addrspace := pageDbIn[addrspacePage].entry;
     if(!validPageNr(securePage)) then (pageDbIn, KOM_ERR_INVALID_PAGENO)
     else if(!pageIsFree(pageDbIn, securePage)) then (pageDbIn, KOM_ERR_PAGEINUSE)
@@ -276,7 +276,7 @@ function allocatePage(pageDbIn: PageDb, securePage: word,
     ensures  allocatePage(pageDbIn, securePage, addrspacePage, entry).1 == 
         KOM_ERR_SUCCESS ==> validPageNr(securePage);
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     allocatePagePreservesPageDBValidity(pageDbIn, securePage, addrspacePage, entry);
     allocatePage_inner(pageDbIn, securePage, addrspacePage, entry)
 }
@@ -286,7 +286,7 @@ function smc_remove(pageDbIn: PageDb, page: word)
     : (PageDb, word) // PageDbOut, KOM_ERR
     requires validPageDb(pageDbIn)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     if(!validPageNr(page)) then
         (pageDbIn, KOM_ERR_INVALID_PAGENO)
     else if(pageDbIn[page].PageDbEntryFree?) then
@@ -316,7 +316,7 @@ function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,
     requires physPage == 0 || physPageIsInsecureRam(physPage) ==> contents.Just?
     requires contents.Just? ==> |fromJust(contents)| == PAGESIZE / WORDSIZE
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KOM_ERR_INVALID_ADDRSPACE)
     else 
@@ -346,7 +346,7 @@ function smc_mapInsecure(pageDbIn: PageDb, addrspacePage: word,
     physPage: word, mapping : word) : (PageDb, word)
     requires validPageDb(pageDbIn)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KOM_ERR_INVALID_ADDRSPACE)
     else
@@ -369,7 +369,7 @@ function smc_mapInsecure(pageDbIn: PageDb, addrspacePage: word,
 function smc_finalise(pageDbIn: PageDb, addrspacePage: word) : (PageDb, word)
     requires validPageDb(pageDbIn)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     var d := pageDbIn; var a := addrspacePage;
     if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KOM_ERR_INVALID_ADDRSPACE)
@@ -384,7 +384,7 @@ function smc_stop(pageDbIn: PageDb, addrspacePage: word)
     : (PageDb, word)
     requires validPageDb(pageDbIn)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     var d := pageDbIn; var a := addrspacePage;
     if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KOM_ERR_INVALID_ADDRSPACE)
@@ -398,7 +398,7 @@ function contentsOfPhysPage(s: state, physPage: word) : seq<word>
     requires physPageIsInsecureRam(physPage)
     ensures |contentsOfPhysPage(s, physPage)| == PAGESIZE / WORDSIZE
 {
-    reveal_ValidMemState();
+    reveal ValidMemState();
     var base := physPage * PAGESIZE + KOM_DIRECTMAP_VBASE;
     assert |addrRangeSeq(base,base+PAGESIZE)| == PAGESIZE / WORDSIZE;
     addrSeqToContents(addrsInPhysPage(physPage, base), s.m)
@@ -420,7 +420,7 @@ function maybeContentsOfPhysPage(s: state, physPage: word) : Maybe<seq<word>>
 predicate smchandlerRelation(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb)
     requires ValidState(s) && validPageDb(pageDbIn) && SaneConstants()
 {
-    ValidState(s') && (reveal_ValidRegState();
+    ValidState(s') && (reveal ValidRegState();
     var callno, arg1, arg2, arg3, arg4
         := s.regs[R0], s.regs[R1], s.regs[R2], s.regs[R3], s.regs[R4];
     var err, val := s'.regs[R0], s'.regs[R1];
@@ -458,7 +458,7 @@ predicate smchandlerRelation(s: state, pageDbIn: PageDb, s':state, pageDbOut: Pa
 predicate smcNonvolatileRegInvariant(s:state, s':state)
     requires ValidState(s)
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     ValidState(s')
         && s.regs[R4] == s'.regs[R4] && s.regs[R5] == s'.regs[R5]
         && s.regs[R6] == s'.regs[R6] && s.regs[R7] == s'.regs[R7]
@@ -471,8 +471,8 @@ predicate smcNonvolatileRegInvariant(s:state, s':state)
 predicate smchandlerInvariant(s:state, s':state, entry:bool)
     requires ValidState(s) && ValidState(s')
 {
-    reveal_ValidRegState();
-    reveal_ValidSRegState();
+    reveal ValidRegState();
+    reveal ValidSRegState();
     smcNonvolatileRegInvariant(s, s') && s'.regs[R2] == s'.regs[R3] == 0
         // return in non-secure world, in same (i.e., monitor) mode
         && mode_of_state(s') == mode_of_state(s) == Monitor
@@ -505,7 +505,7 @@ lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
     ensures  validPageDb(allocatePage_inner(
         pageDbIn, securePage, addrspacePage, entry).0);
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     assert validAddrspace(pageDbIn, addrspacePage);
     var result := allocatePage_inner(pageDbIn, securePage, addrspacePage, entry);
     var pageDbOut := result.0;

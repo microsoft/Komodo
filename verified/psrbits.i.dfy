@@ -8,19 +8,19 @@ lemma lemma_update_psr'(oldpsr:word, newmode:word, f:bool, i:bool, newpsr:word)
     ensures ValidPsrWord(newpsr)
     ensures decode_psr(newpsr).m == decode_mode(newmode)
 {
-    reveal_update_psr();
+    reveal update_psr();
 
     var maskbits := BitOr(if f then 0x40 else 0, if i then 0x80 else 0);
     assert maskbits == (
         if f && i then 0xc0
         else if f then 0x40
         else if i then 0x80
-        else 0) by { reveal_BitOr(); }
+        else 0) by { reveal BitOr(); }
 
     assert BitsAsWord(0xffffffe0) == 0xffffffe0 && BitsAsWord(0x1f) == 0x1f
-        by { reveal_BitsAsWord(); }
+        by { reveal BitsAsWord(); }
     assert WordAsBits(0x10) == 0x10 && WordAsBits(0x1b) == 0x1b
-        by { reveal_WordAsBits(); }
+        by { reveal WordAsBits(); }
 
     var newpsr := update_psr(oldpsr, newmode, f, i);
     var oldpsrb := WordAsBits(oldpsr);
@@ -42,7 +42,7 @@ lemma lemma_update_psr'(oldpsr:word, newmode:word, f:bool, i:bool, newpsr:word)
         { lemma_BitsAndWordConversions(); }
         BitsAsWord(BitAnd(BitOr(BitAnd(oldpsrb, 0xffffffe0),
             BitOr(newmodeb, maskbits)), 0x1f));
-        { reveal_BitAnd(); reveal_BitOr(); }
+        { reveal BitAnd(); reveal_BitOr(); }
         BitsAsWord(newmodeb);
         { lemma_BitsAndWordConversions(); }
         newmode;
@@ -56,21 +56,21 @@ lemma lemma_update_psr(oldpsr:word, newmode:word, f:bool, i:bool)
     ensures decode_psr(update_psr(oldpsr, newmode, f, i))
         == var o := decode_psr(oldpsr); PSR(decode_mode(newmode), f || o.f, i || o.i)
 {
-    reveal_update_psr();
+    reveal update_psr();
 
     var maskbits := BitOr(if f then 0x40 else 0, if i then 0x80 else 0);
     assert maskbits == (
         if f && i then 0xc0
         else if f then 0x40
         else if i then 0x80
-        else 0) by { reveal_BitOr(); }
+        else 0) by { reveal BitOr(); }
 
     assert BitsAsWord(0xc0) == 0xc0 && BitsAsWord(0x40) == 0x40
         && BitsAsWord(0x80) == 0x80 && BitsAsWord(0xffffffe0) == 0xffffffe0
         && BitsAsWord(0x1f) == 0x1f
-        by { reveal_BitsAsWord(); }
+        by { reveal BitsAsWord(); }
     assert WordAsBits(0x10) == 0x10 && WordAsBits(0x1b) == 0x1b
-        by { reveal_WordAsBits(); }
+        by { reveal WordAsBits(); }
 
     var newpsr := update_psr(oldpsr, newmode, f, i);
     var oldpsrb := WordAsBits(oldpsr);
@@ -97,7 +97,7 @@ lemma lemma_update_psr(oldpsr:word, newmode:word, f:bool, i:bool)
         { calc {
             BitAnd(BitOr(BitAnd(oldpsrb, 0xffffffe0),
                 BitOr(newmodeb, maskbits)), 0x40);
-            { reveal_BitAnd(); reveal_BitOr(); }
+            { reveal BitAnd(); reveal_BitOr(); }
             BitAnd(BitOr(oldpsrb, maskbits), 0x40);
         } }
         BitsAsWord(BitAnd(BitOr(oldpsrb, maskbits), 0x40)) != 0;
@@ -109,9 +109,9 @@ lemma lemma_update_psr(oldpsr:word, newmode:word, f:bool, i:bool)
                 BitAnd(oldpsrb, 0x40) != 0;
             }
 
-            assert (BitAnd(maskbits, 0x40) != 0) == f by { reveal_BitAnd(); }
+            assert (BitAnd(maskbits, 0x40) != 0) == f by { reveal BitAnd(); }
 
-            reveal_BitAnd(); reveal_BitOr();
+            reveal BitAnd(); reveal_BitOr();
             reveal WordAligned(); // why?
         }
         f || decode_psr(oldpsr).f;
@@ -126,7 +126,7 @@ lemma lemma_update_psr(oldpsr:word, newmode:word, f:bool, i:bool)
         { calc {
             BitAnd(BitOr(BitAnd(oldpsrb, 0xffffffe0),
                 BitOr(newmodeb, maskbits)), 0x80);
-            { reveal_BitAnd(); reveal_BitOr(); }
+            { reveal BitAnd(); reveal_BitOr(); }
             BitAnd(BitOr(oldpsrb, maskbits), 0x80);
         } }
         BitsAsWord(BitAnd(BitOr(oldpsrb, maskbits), 0x80)) != 0;
@@ -138,9 +138,9 @@ lemma lemma_update_psr(oldpsr:word, newmode:word, f:bool, i:bool)
                 BitAnd(oldpsrb, 0x80) != 0;
             }
 
-            assert (BitAnd(maskbits, 0x80) != 0) == i by { reveal_BitAnd(); }
+            assert (BitAnd(maskbits, 0x80) != 0) == i by { reveal BitAnd(); }
 
-            reveal_BitAnd(); reveal_BitOr();
+            reveal BitAnd(); reveal_BitOr();
             reveal WordAligned(); // why?
         }
         i || decode_psr(oldpsr).i;
@@ -151,7 +151,7 @@ lemma lemma_psr_of_exception(s:state, ex:exception)
     requires ValidState(s)
     ensures ValidPsrWord(psr_of_exception(s, ex))
 {
-    reveal_ValidSRegState();
+    reveal ValidSRegState();
     var oldpsr := s.sregs[cpsr];
     var newmode := mode_of_exception(s.conf, ex);
     assert ValidPsrWord(oldpsr);
@@ -169,12 +169,12 @@ lemma lemma_psr_still_valid(oldpsr:word, newpsr:word, newbits:word)
 {
     assert WordAsBits(ARM_PSR_MODE_MASK) == 0x1f && WordAsBits(0xd1) == 0xd1
         && WordAsBits(0x92) == 0x92 && WordAsBits(0x11) == 0x11
-        && WordAsBits(0x12) == 0x12 by { reveal_WordAsBits(); }
+        && WordAsBits(0x12) == 0x12 by { reveal WordAsBits(); }
     lemma_BitsAndWordConversions();
 
     var tmp := LeftShift(RightShift(oldpsr, 5), 5);
     assert psr_mask_mode(tmp) == 0
-        by { reveal_BitShiftLeft(); reveal_BitShiftRight(); reveal_BitAnd(); }
+        by { reveal BitShiftLeft(); reveal_BitShiftRight(); reveal_BitAnd(); }
 
     calc {
         psr_mask_mode(newpsr);
@@ -184,13 +184,13 @@ lemma lemma_psr_still_valid(oldpsr:word, newpsr:word, newbits:word)
         { lemma_BitOrAndRelation(WordAsBits(tmp), WordAsBits(newbits), WordAsBits(ARM_PSR_MODE_MASK)); }
         BitsAsWord(BitOr(BitAnd(WordAsBits(tmp), WordAsBits(ARM_PSR_MODE_MASK)), BitAnd(WordAsBits(newbits), WordAsBits(ARM_PSR_MODE_MASK))));
         BitsAsWord(BitOr(0, BitAnd(WordAsBits(newbits), WordAsBits(ARM_PSR_MODE_MASK))));
-        { reveal_BitOr(); }
+        { reveal BitOr(); }
         BitwiseAnd(newbits, ARM_PSR_MODE_MASK);
     }
 
     if newbits == 0xd1 {
-        assert psr_mask_mode(newpsr) == encode_mode(FIQ) by { reveal_BitAnd(); }
+        assert psr_mask_mode(newpsr) == encode_mode(FIQ) by { reveal BitAnd(); }
     } else if newbits == 0x92 {
-        assert psr_mask_mode(newpsr) == encode_mode(IRQ) by { reveal_BitAnd(); }
+        assert psr_mask_mode(newpsr) == encode_mode(IRQ) by { reveal BitAnd(); }
     }
 }

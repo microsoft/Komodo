@@ -282,7 +282,7 @@ procedure init_addrspace(
 lemma lemma_mask3IsMod4(x:word)
     ensures BitwiseAnd(x, 3) == x % 4;
 {
-    assert pow2(2) == 4 by { reveal_pow2(); }
+    assert pow2(2) == 4 by { reveal pow2(); }
     calc {
         BitwiseAnd(x, 3);
         BitsAsWord(BitAnd(WordAsBits(x), WordAsBits(3)));
@@ -290,10 +290,10 @@ lemma lemma_mask3IsMod4(x:word)
           BitmaskLow(2);
           BitAtPos(2) - 1;
           { assert BitsAsWord(BitAtPos(2)) == 4;
-            reveal_BitsAsWord(); }
+            reveal BitsAsWord(); }
           4 - 1;
           3;
-        } reveal_WordAsBits(); }
+        } reveal WordAsBits(); }
         BitsAsWord(BitAnd(WordAsBits(x), BitmaskLow(2)));
         { lemma_BitmaskAsWord(x, 2); }
         x % pow2(2);
@@ -327,9 +327,9 @@ procedure kom_smc_init_addrspace(
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
-    reveal_pageDbEntryCorresponds();
+    reveal pageDbEntryCorresponds;
     pagedb := pagedb_in;
-    reveal_smc_initAddrspace_premium();
+    reveal smc_initAddrspace_premium;
 
     // check alignment of l1pt page
     AND(err, l1pt_page, 3);

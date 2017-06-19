@@ -4,32 +4,32 @@ include "ARMdef.s.dfy"
 lemma lemma_BitShiftsRightSum(x: bv32, a: nat, b: nat)
     requires 0 <= a + b < 32
     ensures BitShiftRight(x, a + b) == BitShiftRight(BitShiftRight(x, a), b)
-{ reveal_BitShiftRight(); }
+{ reveal BitShiftRight(); }
 
 lemma lemma_BitShiftsLeftSum(x: bv32, a: nat, b: nat)
     requires 0 <= a + b < 32
     ensures BitShiftLeft(x, a + b) == BitShiftLeft(BitShiftLeft(x, a), b)
-{ reveal_BitShiftLeft(); }
+{ reveal BitShiftLeft(); }
 
 lemma lemma_BitOrCommutative(a: bv32, b:bv32)
     ensures BitOr(a, b) == BitOr(b, a)
-{ reveal_BitOr(); }
+{ reveal BitOr(); }
 
 lemma lemma_BitOrAssociative(a: bv32, b:bv32, c: bv32)
     ensures BitOr(a, BitOr(b, c)) == BitOr(BitOr(a, b), c)
-{ reveal_BitOr(); }
+{ reveal BitOr(); }
 
 lemma lemma_BitAndCommutative(a: bv32, b:bv32)
     ensures BitAnd(a, b) == BitAnd(b, a)
-{ reveal_BitAnd(); }
+{ reveal BitAnd(); }
 
 lemma lemma_BitAndAssociative(a: bv32, b:bv32, c: bv32)
     ensures BitAnd(a, BitAnd(b, c)) == BitAnd(BitAnd(a, b), c)
-{ reveal_BitAnd(); }
+{ reveal BitAnd(); }
 
 lemma lemma_BitOrAndRelation(a: bv32, b:bv32, c: bv32)
     ensures BitAnd(BitOr(a, b), c) == BitOr(BitAnd(a, c), BitAnd(b, c))
-{ reveal_BitAnd(); reveal_BitOr(); }
+{ reveal BitAnd(); reveal_BitOr(); }
 
 lemma lemma_BitPos12()
     ensures BitsAsWord(BitAtPos(12)) == 0x1000
@@ -41,9 +41,9 @@ lemma lemma_BitOrOneIsLikePlus'(b: bv32)
     requires BitMod(b, 2) == 0
     ensures BitAdd(b, 1) == BitOr(b, 1)
 {
-    reveal_BitMod();
-    reveal_BitOr();
-    reveal_BitAdd();
+    reveal BitMod();
+    reveal BitOr();
+    reveal BitAdd();
 }
 
 lemma lemma_BitOrOneIsLikePlus(i: word)
@@ -52,8 +52,8 @@ lemma lemma_BitOrOneIsLikePlus(i: word)
     ensures i + 1 == BitwiseOr(i, 1)
 {
     var b := WordAsBits(i);
-    reveal_WordAsBits();
-    reveal_BitsAsWord();
+    reveal WordAsBits();
+    reveal BitsAsWord();
     lemma_BitModEquiv(i, 2);
     lemma_BitOrOneIsLikePlus'(b);
     lemma_BitAddEquiv(i, 1);
@@ -65,10 +65,10 @@ lemma lemma_BitShiftLeft1(x: bv32)
 {
     calc {
         BitShiftLeft(x, 1);
-        { reveal_BitShiftLeft(); }
+        { reveal BitShiftLeft(); }
         x << 1;
         x * 2;
-        { reveal_BitMul(); }
+        { reveal BitMul(); }
         BitMul(x, 2);
     }
 }
@@ -78,10 +78,10 @@ lemma lemma_BitShiftRight1(x: bv32)
 {
     calc {
         BitShiftRight(x, 1);
-        { reveal_BitShiftRight(); }
+        { reveal BitShiftRight(); }
         x >> 1;
         x / 2;
-        { reveal_BitDiv(); }
+        { reveal BitDiv(); }
         BitDiv(x, 2);
     }
 }
@@ -94,10 +94,10 @@ lemma lemma_LeftShift1(x: word)
         LeftShift(x, 1);
         BitsAsWord(BitShiftLeft(WordAsBits(x), 1));
         { lemma_BitCmpEquiv(x, 0x80000000);
-          assert WordAsBits(0x80000000) == 0x80000000 by { reveal_WordAsBits(); }
+          assert WordAsBits(0x80000000) == 0x80000000 by { reveal WordAsBits(); }
           lemma_BitShiftLeft1(WordAsBits(x)); }
         BitsAsWord(BitMul(WordAsBits(x), 2));
-        { assert WordAsBits(2) == 2 by { reveal_WordAsBits(); } }
+        { assert WordAsBits(2) == 2 by { reveal WordAsBits(); } }
         BitsAsWord(BitMul(WordAsBits(x), WordAsBits(2)));
         { lemma_BitMulEquiv(x, 2); }
         x * 2;
@@ -112,7 +112,7 @@ lemma lemma_RightShift1(x: word)
         BitsAsWord(BitShiftRight(WordAsBits(x), 1));
         { lemma_BitShiftRight1(WordAsBits(x)); }
         BitsAsWord(BitDiv(WordAsBits(x), 2));
-        { assert WordAsBits(2) == 2 by { reveal_WordAsBits(); } }
+        { assert WordAsBits(2) == 2 by { reveal WordAsBits(); } }
         BitsAsWord(BitDiv(WordAsBits(x), WordAsBits(2)));
         { lemma_BitDivEquiv(x, 2); }
         x / 2;
@@ -242,7 +242,7 @@ lemma lemma_Bitmask12()
         WordAsBits(pow2(12)) - 1;
         { lemma_pow2_properties(12); }
         WordAsBits(0x1000) - 1;
-        { assert WordAsBits(0x1000) == 0x1000 by { reveal_WordAsBits(); }
+        { assert WordAsBits(0x1000) == 0x1000 by { reveal WordAsBits(); }
           lemma_BitSubEquiv(0x1000, 1); }
         0xfff;
     }
@@ -251,7 +251,7 @@ lemma lemma_Bitmask12()
         BitmaskHigh(12);
         BitNot(BitmaskLow(12));
         BitNot(0xfff);
-        { reveal_BitNot(); }
+        { reveal BitNot(); }
         0xfffff000;
     }
 }
@@ -268,7 +268,7 @@ lemma lemma_Bitmask10()
         WordAsBits(pow2(10)) - 1;
         { lemma_pow2_properties(10); }
         WordAsBits(0x400) - 1;
-        { assert WordAsBits(0x400) == 0x400 by { reveal_WordAsBits(); }
+        { assert WordAsBits(0x400) == 0x400 by { reveal WordAsBits(); }
           lemma_BitSubEquiv(0x400, 1); }
         0x3ff;
     }
@@ -277,7 +277,7 @@ lemma lemma_Bitmask10()
         BitmaskHigh(10);
         BitNot(BitmaskLow(10));
         BitNot(0x3ff);
-        { reveal_BitNot(); }
+        { reveal BitNot(); }
         0xfffffc00;
     }
 }

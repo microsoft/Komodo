@@ -30,7 +30,7 @@ lemma lemma_enc_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         callno == KOM_SMC_STOP && asp == atkr) ==>
         enc_eqpdb(d1', d2', atkr)
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     var callno, arg1, arg2, arg3, arg4
         := s1.regs[R0], s1.regs[R1], s1.regs[R2], s1.regs[R3], s1.regs[R4];
     var e1', e2' := s1'.regs[R0], s2'.regs[R0];
@@ -38,7 +38,7 @@ lemma lemma_enc_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     if(callno == KOM_SMC_QUERY || callno == KOM_SMC_GETPHYSPAGES){
         assert d1' == d1;
         assert d2' == d2;
-        reveal_enc_eqpdb();
+        reveal enc_eqpdb();
     }
     else if(callno == KOM_SMC_INIT_ADDRSPACE){
         lemma_initAddrspace_enc_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, atkr);
@@ -51,7 +51,7 @@ lemma lemma_enc_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     }
     else if(callno == KOM_SMC_MAP_SECURE){
         assert enc_eqpdb(d1', d2', atkr) by {
-            reveal_enc_eqpdb();
+            reveal enc_eqpdb();
             var c1 := maybeContentsOfPhysPage(s1, arg4);
             var c2 := maybeContentsOfPhysPage(s2, arg4);
             assert contentsOk(arg4, c1) && contentsOk(arg4, c2);
@@ -79,7 +79,7 @@ lemma lemma_enc_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         lemma_stop_enc_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
     }
     else {
-        reveal_enc_eqpdb();
+        reveal enc_eqpdb();
         assert e1' == KOM_ERR_INVALID;
         assert e2' == KOM_ERR_INVALID;
         assert d1' == d1;
@@ -109,11 +109,11 @@ lemma lemma_mapSecure_enc_ni_both_go(
     ensures  enc_eqpdb(d1', d2', atkr) 
 {
     assert d1'[atkr].PageDbEntryTyped? <==> d1[atkr].PageDbEntryTyped? by
-        { reveal_enc_eqpdb(); }
+        { reveal enc_eqpdb(); }
     assert d2'[atkr].PageDbEntryTyped? <==> d2[atkr].PageDbEntryTyped? by
-        { reveal_enc_eqpdb(); }
+        { reveal enc_eqpdb(); }
     assert d2'[atkr].PageDbEntryTyped? <==> d1'[atkr].PageDbEntryTyped? by
-        { reveal_enc_eqpdb(); }
+        { reveal enc_eqpdb(); }
     if( d1'[atkr].PageDbEntryTyped? ){
         assert c1 == c2;
         var data := DataPage(fromJust(c1)); 
@@ -299,7 +299,7 @@ lemma lemma_mapSecure_enc_ni(d1: PageDb, c1: Maybe<seq<word>>, d1': PageDb, e1':
     requires enc_eqpdb(d1, d2, atkr)
     ensures  enc_eqpdb(d1', d2', atkr) 
 {
-    reveal_enc_eqpdb();
+    reveal enc_eqpdb();
     var go1, go2 := e1' == KOM_ERR_SUCCESS, e2' == KOM_ERR_SUCCESS; 
     if( go1 && go2 ) {
         assert enc_eqpdb(d1', d2', atkr) by {
@@ -324,7 +324,7 @@ lemma lemma_mapSecure_enc_ni(d1: PageDb, c1: Maybe<seq<word>>, d1': PageDb, e1':
     if( !go1 && !go2 ) {
         assert d1' == d1;
         assert d2' == d2;
-        reveal_enc_eqpdb();
+        reveal enc_eqpdb();
         assert enc_eqpdb(d1', d2', atkr);
     }
 }
@@ -339,7 +339,7 @@ lemma lemma_initAddrspace_enc_ni(d1: PageDb, d1': PageDb, e1':word,
     requires enc_eqpdb(d1, d2, atkr)
     ensures  enc_eqpdb(d1', d2', atkr) 
 {
-    reveal_enc_eqpdb();
+    reveal enc_eqpdb();
     //var atkr_asp := d1[atkr].addrspace;
     if( atkr == addrspacePage ) {
         assert enc_eqpdb(d1', d2', atkr);
@@ -439,7 +439,7 @@ lemma lemma_initDispatcher_enc_ni(d1: PageDb, d1': PageDb, e1':word,
     requires enc_eqpdb(d1, d2, atkr)
     ensures  enc_eqpdb(d1', d2', atkr) 
 {
-    reveal_enc_eqpdb();
+    reveal enc_eqpdb();
     if(isAddrspace(d1, addrspacePage) && isAddrspace(d2, addrspacePage)) {
         var disp := Dispatcher(entrypoint, false, initDispCtxt(),
                                [0, 0, 0, 0, 0, 0, 0, 0],
@@ -481,7 +481,7 @@ lemma lemma_initL2PTable_enc_ni_one_go(d1: PageDb, d1': PageDb, e1':word,
     requires enc_eqpdb(d1, d2, atkr)
     ensures enc_eqpdb(d1', d2', atkr) 
 {
-    reveal_enc_eqpdb();
+    reveal enc_eqpdb();
     assert atkr != addrspacePage by
         { reveal validPageDb(); }
     var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
@@ -504,7 +504,7 @@ lemma_initL2PTable_enc_ni(d1: PageDb, d1': PageDb, e1':word,
     requires enc_eqpdb(d1, d2, atkr)
     ensures enc_eqpdb(d1', d2', atkr) 
 {
-    reveal_enc_eqpdb();
+    reveal enc_eqpdb();
     var ex1_alloc := l2initgo(e1');
     var ex2_alloc := l2initgo(e2');
     if( ex1_alloc && ex2_alloc) {
@@ -600,7 +600,7 @@ lemma lemma_remove_enc_ni(d1: PageDb, d1': PageDb, e1':word,
     requires enc_eqpdb(d1, d2, atkr)
     ensures  enc_eqpdb(d1', d2', atkr) 
 {
-    reveal_enc_eqpdb();
+    reveal enc_eqpdb();
     if(!validPageNr(page) || d1[page].PageDbEntryFree? || 
         d2[page].PageDbEntryFree?) {
         assert d1' == d1;
@@ -667,7 +667,7 @@ lemma lemma_finalise_enc_ni(d1: PageDb, d1': PageDb, e1':word,
     requires enc_eqpdb(d1, d2, atkr)
     ensures  enc_eqpdb(d1', d2', atkr) 
 {
-    reveal_enc_eqpdb();
+    reveal enc_eqpdb();
     if(atkr == addrspacePage) {
         assert e1' == KOM_ERR_SUCCESS <==> e2' == KOM_ERR_SUCCESS;
         if(e1' == KOM_ERR_SUCCESS){
@@ -699,7 +699,7 @@ lemma lemma_stop_enc_ni(d1: PageDb, d1': PageDb, e1':word,
     requires enc_eqpdb(d1, d2, atkr)
     ensures  addrspacePage != atkr ==> enc_eqpdb(d1', d2', atkr) 
 {
-    reveal_enc_eqpdb();
+    reveal enc_eqpdb();
     if(atkr == addrspacePage) {
         assert addrspacePage != atkr ==> enc_eqpdb(d1', d2', atkr); 
     } else {
@@ -725,7 +725,7 @@ lemma lemma_allocatePage_enc_ni(d1: PageDb, d1': PageDb, e1':word,
     ensures  enc_eqpdb(d1', d2', atkr) 
     ensures  addrspacePage == atkr ==> e1' == e2'
 {
-    reveal_enc_eqpdb();
+    reveal enc_eqpdb();
     assert allocatePage_inner(d1, page, addrspacePage, entry) == (d1', e1');
     assert allocatePage_inner(d2, page, addrspacePage, entry) == (d2', e2');
     if( atkr == addrspacePage ) {
@@ -803,7 +803,7 @@ lemma lemma_updateL2Pte_enc_ni(d1: PageDb, d1': PageDb,
     requires enc_eqpdb(d1, d2, atkr)
     ensures  enc_eqpdb(d1', d2', atkr) 
 {
-    reveal_enc_eqpdb();
+    reveal enc_eqpdb();
     assert d1[a].addrspace == a;
     assert d2[a].addrspace == a;
     var l11 := d1[d1[a].entry.l1ptnr].entry;

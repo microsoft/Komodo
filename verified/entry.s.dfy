@@ -8,7 +8,7 @@ include "sha/sha256.s.dfy"
 function smc_enter_err(d: PageDb, p: word, isresume: bool): word
     requires validPageDb(d)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     if (!(validPageNr(p) && d[p].PageDbEntryTyped? && d[p].entry.Dispatcher?)) then
         KOM_ERR_INVALID_PAGENO
     else if (var a := d[p].addrspace; d[a].entry.state != FinalState) then
@@ -60,7 +60,7 @@ lemma lemma_updateUserPagesFromState_validPageDb(s:state, d:PageDb, dispPg:PageN
     ensures validPageDb(updateUserPagesFromState'(s, d, dispPg))
 {
     var d' := updateUserPagesFromState'(s, d, dispPg);
-    reveal_validPageDb();
+    reveal validPageDb();
     forall (p:PageNr)
         ensures validPageDbEntry(d', p)
     {
@@ -98,7 +98,7 @@ predicate validEnclaveExecutionStep'(s1:state, d1:PageDb,
         && (if retToEnclave then
             var (retRegs, rd') := svcHandled(s4, d4, dispPg);
             rd == rd' && preEntryReturn(s4, rs, retRegs, rd, dispPg)
-          else reveal_ValidRegState();
+          else reveal ValidRegState();
             (rs.regs[R0], rs.regs[R1], rd) == exceptionHandled(s4, d4, dispPg))
 }
 
@@ -118,8 +118,8 @@ predicate {:opaque} validEnclaveExecution(s1:state, d1:PageDb,
     requires finalDispatcher(d1, dispPg)
     decreases steps
 {
-    reveal_validEnclaveExecutionStep();
-    reveal_updateUserPagesFromState();
+    reveal validEnclaveExecutionStep();
+    reveal updateUserPagesFromState();
     var retToEnclave := (steps > 0);
     exists s5, d5 {:trigger validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)} ::
         validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
@@ -134,7 +134,7 @@ predicate smc_enter(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb,
     requires ValidState(s) && validPageDb(pageDbIn) && ValidState(s')
     requires SaneConstants()
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     var err := smc_enter_err(pageDbIn, dispPg, false);
     if err != KOM_ERR_SUCCESS then
         pageDbOut == pageDbIn && s'.regs[R0] == err && s'.regs[R1] == 0 &&
@@ -149,7 +149,7 @@ predicate smc_resume(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb,
     requires ValidState(s) && validPageDb(pageDbIn) && ValidState(s')
     requires SaneConstants()
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     var err := smc_enter_err(pageDbIn, dispPg, true);
     if err != KOM_ERR_SUCCESS then
         pageDbOut == pageDbIn && s'.regs[R0] == err && s'.regs[R1] == 0 &&
@@ -182,14 +182,14 @@ predicate preEntryEnter(s:state,s':state,d:PageDb,
             KOM_SECURE_NPAGES * PAGESIZE
         && nonStoppedL1(d, securePageFromPhysAddr(s'.conf.ttbr0.ptbase))
 {
-    reveal_validPageDb();
-    reveal_ValidRegState();
+    reveal validPageDb();
+    reveal ValidRegState();
 
     s.conf.nondet == s'.conf.nondet && preEntryCommon(s', d, dispPage)
     && s'.regs[R0] == a1 && s'.regs[R1] == a2 && s'.regs[R2] == a3
     && (forall r | r in (USER_REGS() - {R0, R1, R2}) :: s'.regs[r] == 0)
     && OperandContents(s', OLR) == d[dispPage].entry.entrypoint
-    && (reveal_ValidSRegState();
+    && (reveal ValidSRegState();
         s'.sregs[spsr(mode_of_state(s'))] == encode_mode(User))
     && InsecureMemInvariant(s, s')
 }
@@ -204,15 +204,15 @@ predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
     ensures preEntryResume(s,s',d,dispPage) ==>
         nonStoppedL1(d, securePageFromPhysAddr(s'.conf.ttbr0.ptbase));
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     var disp := d[dispPage].entry;
     var l1p := l1pOfDispatcher(d, dispPage);
     
     s.conf.nondet == s'.conf.nondet && preEntryCommon(s', d, dispPage)
-    && (reveal_ValidRegState();
+    && (reveal ValidRegState();
         forall r | r in USER_REGS() :: s'.regs[r] == disp.ctxt.regs[r])
     && OperandContents(s', OLR) == disp.ctxt.pc
-    && (reveal_ValidSRegState();
+    && (reveal ValidSRegState();
         s'.sregs[spsr(mode_of_state(s'))] == disp.ctxt.cpsr)
     && InsecureMemInvariant(s, s')
 }
@@ -220,7 +220,7 @@ predicate preEntryResume(s:state, s':state, d:PageDb, dispPage:PageNr)
 predicate preEntryReturnRegsMatch(s:state, retregs:SvcReturnRegs)
     requires ValidState(s)
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     s.regs[R0] == retregs.0
     && s.regs[R1] == retregs.1
     && s.regs[R2] == retregs.2
@@ -247,12 +247,12 @@ predicate preEntryReturnPreserved(s1:state, s2:state)
 predicate preEntryReturn(exs:state, s:state, retregs:SvcReturnRegs, d:PageDb, dispPg:PageNr)
     requires ValidState(exs) && ValidState(s)
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     preEntryCommon(s, d, dispPg)
     && s.conf.nondet == nondet_int(exs.conf.nondet, NONDET_GENERATOR())
     // returning to same PC
     && OperandContents(s, OLR) == OperandContents(exs, OLR)
-    && (reveal_ValidSRegState();
+    && (reveal ValidSRegState();
         s.sregs[spsr(mode_of_state(s))] == encode_mode(User))
     // R0-R8 return values
     && preEntryReturnRegsMatch(s, retregs)
@@ -294,7 +294,7 @@ predicate {:opaque} userspaceExecutionAndException(s:state, r:state)
 predicate isReturningSvc(s:state)
     requires ValidState(s) && mode_of_state(s) != User
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     s.conf.ex.ExSVC? && s.regs[R0] != KOM_SVC_EXIT
 }
 
@@ -380,8 +380,8 @@ function exceptionHandled(s:state, d:PageDb, dispPg:PageNr): (word, word, PageDb
     ensures var (r0, r1, d') := exceptionHandled(s, d, dispPg);
         wellFormedPageDb(d')
 {
-    reveal_validPageDb();
-    reveal_ValidRegState();
+    reveal validPageDb();
+    reveal ValidRegState();
     if s.conf.ex.ExSVC? || s.conf.ex.ExAbt? || s.conf.ex.ExUnd? then (
         // voluntary exit / fault
         var p := dispPg;
@@ -392,7 +392,7 @@ function exceptionHandled(s:state, d:PageDb, dispPg:PageNr): (word, word, PageDb
             (KOM_ERR_FAULT, 0, d')
     ) else (
         assert s.conf.ex.ExIRQ? || s.conf.ex.ExFIQ?;
-        reveal_ValidSRegState();
+        reveal ValidSRegState();
         var p := dispPg;
         // ARM spec B1.8.3 "Link values saved on exception entry"
         var pc := TruncateWord(OperandContents(s, OLR) - 4);
@@ -431,7 +431,7 @@ predicate WSMemInvariantExceptAddrspaceAtPage(hw:state, hw':state,
 predicate pageSWrInAddrspace(d:PageDb, l1p:PageNr, p:PageNr)
     requires validPageNr(p) && nonStoppedL1(d, l1p)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     !hasStoppedAddrspace(d, l1p) && 
     var l1pt := d[l1p].entry.l1pt;
     exists p' :: Just(p') in l1pt && assert validL1PTE(d, p'); pageSWrInL2PT(d[p'].entry.l2pt,p)

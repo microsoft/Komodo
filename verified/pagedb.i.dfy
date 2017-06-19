@@ -343,16 +343,16 @@ function pageDbAddrspaceStateVal(s: AddrspaceState): word
 
 lemma globalUnmodifiedImpliesCorrespondingPreserved(d:PageDb,m:memstate,m':memstate)
     requires SaneMem(m) && SaneMem(m') && validPageDb(d)
-    requires (reveal_ValidMemState();
+    requires (reveal ValidMemState();
         m.globals[PageDb()] == m'.globals[PageDb()] &&
         m.addresses == m'.addresses)
     requires pageDbCorresponds(m,  d)
     ensures  pageDbCorresponds(m', d)
 {
-    reveal_PageDb();
-    reveal_ValidMemState();
-    reveal_pageDbEntryCorresponds();
-    reveal_pageContentsCorresponds();
+    reveal PageDb();
+    reveal ValidMemState();
+    reveal pageDbEntryCorresponds();
+    reveal pageContentsCorresponds();
    
     forall ( p | validPageNr(p) )
         ensures pageDbEntryCorresponds(d[p], extractPageDbEntry(m',p));
@@ -373,7 +373,7 @@ lemma ValidPageDbImpliesValidAddrspace(d:PageDb, n:PageNr)
     requires isAddrspace(d, n)
     ensures validAddrspace(d, n)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     assert validPageDbEntryTyped(d, n);
 }
 
@@ -470,7 +470,7 @@ lemma allOnlyCorrespondImpliesCorresponds(s:memstate,d:PageDb)
     requires SaneMem(s)
     ensures pageDbCorresponds(s,d)
 {
-    reveal_pageDbEntryCorresponds
+    reveal pageDbEntryCorresponds
 }
 */
 

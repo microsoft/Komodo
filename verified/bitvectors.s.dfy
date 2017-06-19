@@ -246,7 +246,7 @@ predicate pow2_properties(n:nat)
 lemma lemma_pow2_properties(n:nat)
     ensures pow2_properties(n)
 {
-    reveal_pow2();
+    reveal pow2();
 }
 
 function {:opaque} BitwiseMaskHigh(i:word, bitpos:int): word

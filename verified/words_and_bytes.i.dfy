@@ -132,7 +132,7 @@ lemma bswap32_seq_indexing(s:seq<word>, i:nat, j:nat)
     requires 0 <= i < j <= |s|;
     ensures bswap32_seq(s)[i..j] == bswap32_seq(s[i..j]);
 {
-    reveal_bswap32_seq();
+    reveal bswap32_seq();
     if i == 0 {
     } else {
         
@@ -146,11 +146,11 @@ lemma bswap32_seq_adds(s:seq<word>, s':seq<word>)
     } else {
         calc {
             bswap32_seq(s) + bswap32_seq(s');
-                { reveal_bswap32_seq(); }
+                { reveal bswap32_seq(); }
             [bswap32(s[0])] + bswap32_seq(s[1..]) + bswap32_seq(s');
                 { bswap32_seq_adds(s[1..], s'); }
             [bswap32(s[0])] + bswap32_seq(s[1..] + s');
-                { reveal_bswap32_seq(); }
+                { reveal bswap32_seq(); }
             bswap32_seq(s + s');
         }
     }
@@ -159,7 +159,7 @@ lemma bswap32_seq_adds(s:seq<word>, s':seq<word>)
 lemma {:fuel BEUintToSeqByte, 5} WordToBytes_zero()
     ensures WordToBytes(0) == [0, 0, 0, 0];
 {
-    reveal_WordToBytes();
+    reveal WordToBytes();
 }
 
 lemma BEByteSeqToInt_on_zero(s:seq<byte>)
@@ -177,14 +177,14 @@ lemma bswap32_seq_on_zero(s:seq<word>)
     ensures  bswap32_seq(s) == s;
 {
     if |s| == 0 {
-        reveal_bswap32_seq();
+        reveal bswap32_seq();
     } else {
         calc {
             bswap32_seq(s);
-                { reveal_bswap32_seq(); }
+                { reveal bswap32_seq(); }
             [bswap32(s[0])] + bswap32_seq(s[1..]);
             [bswap32(0)] + bswap32_seq(s[1..]);
-                { WordToBytes_zero(); reveal_BytesToWord(); BEByteSeqToInt_on_zero([0,0,0,0]); }
+                { WordToBytes_zero(); reveal BytesToWord(); BEByteSeqToInt_on_zero([0,0,0,0]); }
             [0] + bswap32_seq(s[1..]);
                 { bswap32_seq_on_zero(s[1..]); }
             [0] + s[1..];

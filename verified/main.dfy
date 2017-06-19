@@ -126,8 +126,8 @@ predicate GlobalAssumptions()
 // this is what we assume about the initial state on entry to the SMC handler
 predicate InitialSMCState(s:state)
 {
-    reveal_ValidRegState();
-    reveal_ValidSRegState();
+    reveal ValidRegState();
+    reveal ValidSRegState();
 
     ValidState(s) && s.ok
         && SaneMem(s.m)
@@ -258,7 +258,7 @@ lemma lemma_evalHandler(s:state, r:state, pagedb:PageDb, dispPg: PageNr)
     ensures KomExceptionHandlerInvariant(s, pagedb, r, dispPg)
 {
     var block := va_CCons(exHandler(s.conf.ex), va_CNil());
-    reveal_va_eval();
+    reveal va_eval();
     assert va_eval(Block(block), s, r) by { assert evalBlock(block, s, r); }
     if s.conf.ex == ExIRQ || s.conf.ex == ExFIQ {
         var _, _, p := va_lemma_interrupt_handler(block, s, r, s.conf.ex, pagedb, dispPg);
@@ -281,7 +281,7 @@ lemma lemma_SMCHandlerIsCorrect()
     {
         var stack_bytes := KOM_STACK_SIZE - WORDSIZE;
         assert StackBytesRemaining(s1, stack_bytes);
-        reveal_va_eval();
+        reveal va_eval();
         var block := va_CCons(smc_handler(), va_CNil());
         assert va_eval(Block(block), s1, s2) by { assert evalBlock(block, s1, s2); }
         var _, _, p2' := va_lemma_smc_handler(block, s1, s2, stack_bytes, p1);
@@ -320,7 +320,7 @@ lemma lemma_ExceptionHandlersAreCorrect()
     {
         var pagedb, dispPg := lemma_UsermodeContinuationPreconditionDef(s0);
         lemma_PrivExceptionStateSideEffects(s0, s1, ex, pagedb, dispPg);
-        reveal_va_eval();
+        reveal va_eval();
         var block := va_CCons(exHandler(ex), va_CNil());
         assert va_eval(Block(block), s1, r) by { assert evalBlock(block, s1, r); }
         var _, _, p := va_lemma_interrupt_handler(block, s1, r, ex, pagedb, dispPg);

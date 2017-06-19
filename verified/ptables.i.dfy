@@ -10,7 +10,7 @@ lemma lemma_PageAlignedAdd(x:nat, y:nat)
     ensures PageAligned(x + y)
 {
     // sigh. why do I need a lemma to prove this??
-    reveal_PageAligned();
+    reveal PageAligned();
 }
 
 // XXX: this is placed at the top of the file to work around timeout
@@ -27,7 +27,7 @@ lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
     var l1pt := d[l1p].entry.l1pt;
     var l1base := page_monvaddr(l1p);
 
-    assert validL1PTable(d, l1p) by {reveal_validPageDb();}
+    assert validL1PTable(d, l1p) by { reveal_validPageDb(); }
     lemma_memstatecontainspage(s, l1p);
 
     assert ARM_L1PTES == 4 * NR_L1PTES;
@@ -39,7 +39,7 @@ lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
     {
         assert pageDbL1PTableCorresponds(l1p, d[l1p].entry, extractPage(s, l1p))
             by { reveal_pageContentsCorresponds(); }
-        reveal_pageDbL1PTableCorresponds();
+        reveal pageDbL1PTableCorresponds();
         lemma_l1ptesmatch(l1pt[k / 4], k % 4);
     }
 
@@ -55,7 +55,7 @@ lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
         assert pageDbL2PTableCorresponds(l2p, d[l2p].entry, extractPage(s, l2p))
             by { reveal_pageContentsCorresponds(); }
         lemma_l2tablesmatch(s, l2p, d[l2p].entry);
-        reveal_l2tablesmatch_opaque();
+        reveal l2tablesmatch_opaque();
 
         assert 4 * ARM_L2PTABLE_BYTES == PAGESIZE;
         assert page_paddr(l2p) < SecurePhysBase() + KOM_SECURE_RESERVE;
@@ -90,14 +90,14 @@ lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
                 {
                     assert absl1pte.v + KOM_DIRECTMAP_VBASE
                             == page_monvaddr(l2p) + j * ARM_L2PTABLE_BYTES;
-                    reveal_l2tablesmatch_opaque();
+                    reveal l2tablesmatch_opaque();
                 }
                 Just(mkAbsL2PTable(d[l2p].entry, j));
-                { reveal_mkAbsPTable(); }
+                { reveal mkAbsPTable(); }
                 mkAbsPTable(d, l1p)[k];
             }
         } else {
-            reveal_mkAbsPTable();
+            reveal mkAbsPTable();
             assert mkAbsL1PTE(l1e, j) == Nothing;
             assert mkAbsPTable(d, l1p)[k] == Nothing;
         }
@@ -143,7 +143,7 @@ lemma lemma_memstatecontainspage(s:memstate, p:PageNr)
 {
     var va := page_monvaddr(p);
     assert ValidMemRange(va, va + PAGESIZE);
-    reveal_ValidMemState();
+    reveal ValidMemState();
 }
 
 predicate {:opaque} l2tablesmatch_opaque(s:memstate, p:PageNr, e:PageDbEntryTyped)
@@ -163,7 +163,7 @@ lemma lemma_l2tablesmatch(s:memstate, p:PageNr, e:PageDbEntryTyped)
 {
     var l2pt := e.l2pt;
     var base := page_monvaddr(p);
-    reveal_l2tablesmatch_opaque();
+    reveal l2tablesmatch_opaque();
 
     assert ARM_L2PTES * 4 == NR_L2PTES;
 
@@ -187,7 +187,7 @@ lemma lemma_l2tablesmatch(s:memstate, p:PageNr, e:PageDbEntryTyped)
 
             assert ValidAbsL2PTEWord(w) && ExtractAbsL2PTE(w) == mkAbsPTE(pte) by {
                 lemma_memstatecontainspage(s, p);
-                reveal_pageDbL2PTableCorresponds();
+                reveal pageDbL2PTableCorresponds();
                 assert w == mkL2Pte(pte);
                 assert i * ARM_L2PTABLE_BYTES + WordsToBytes(j) == WordsToBytes(idx);
                 lemma_l2ptesmatch(pte);
@@ -214,7 +214,7 @@ lemma lemma_WritablePages(d:PageDb, l1p:PageNr, pagebase:addr)
         && abspt[i].Just? && abspt[i].v[j].Just? && abspt[i].v[j].v.write
         && pagebase == abspt[i].v[j].v.phys + PhysBase();
     var p := monvaddr_page(pagebase);
-    reveal_mkAbsPTable();
+    reveal mkAbsPTable();
     assert p == (abspt[i].v[j].v.phys - SecurePhysBase()) / PAGESIZE;
     var n := i / 4;
     assert l1pt[n].Just?;
@@ -290,7 +290,7 @@ lemma lemma_bitMaskAddrInPage(a:addr, p:PageNr)
 
     calc {
         pagebase;
-        { reveal_PageAligned(); }
+        { reveal PageAligned(); }
         a / PAGESIZE * PAGESIZE;
     }
 

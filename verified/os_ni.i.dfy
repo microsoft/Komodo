@@ -31,7 +31,7 @@ lemma lemma_os_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     // then (s1', d1') =_{os} (s2', d2')
     ensures os_eq(s1', d1', s2', d2')
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     var callno, arg1, arg2, arg3, arg4
         := s1.regs[R0], s1.regs[R1], s1.regs[R2], s1.regs[R3], s1.regs[R4];
     var e1', e2' := s1'.regs[R0], s2'.regs[R0];
@@ -61,7 +61,7 @@ lemma lemma_os_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         var c1 := maybeContentsOfPhysPage(s1, arg4);
         var c2 := maybeContentsOfPhysPage(s2, arg4);
         assert contentsOk(arg4, c1) && contentsOk(arg4, c2) by
-            { reveal_os_eqpdb(); }
+            { reveal os_eqpdb(); }
         lemma_maybeContents_insec_ni(s1, s2, c1, c2, arg4);
         assert c1 == c2;
         lemma_mapSecure_os_ni(d1, d1', e1', c1, d2, d2', e2', c2,
@@ -118,8 +118,8 @@ lemma lemma_os_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
 predicate non_ret_os_regs_equiv(s1: state, s2: state)
     requires ValidState(s1) && ValidState(s2)
 {
-   reveal_ValidRegState();
-   reveal_ValidSRegState();
+   reveal ValidRegState();
+   reveal ValidSRegState();
    s1.regs[R2]  == s2.regs[R2] &&
    s1.regs[R3]  == s2.regs[R3] &&
    s1.regs[R4]  == s2.regs[R4] &&
@@ -148,8 +148,8 @@ predicate non_ret_os_regs_equiv(s1: state, s2: state)
 predicate most_modes_regs_equiv(s1: state, s2: state)
     requires ValidState(s1) && ValidState(s2)
 {
-   reveal_ValidRegState();
-   reveal_ValidSRegState();
+   reveal ValidRegState();
+   reveal ValidSRegState();
    s1.regs[R2]  == s2.regs[R2] &&
    s1.regs[R3]  == s2.regs[R3] &&
    s1.regs[R4]  == s2.regs[R4] &&
@@ -176,7 +176,7 @@ predicate most_modes_regs_equiv(s1: state, s2: state)
 predicate most_modes_ctrl_eq(s1: state, s2: state)
     requires ValidState(s1) && ValidState(s2)
 {
-    reveal_ValidSRegState();
+    reveal ValidSRegState();
     var spsr_s  := spsr(Supervisor);
     var spsr_a  := spsr(Abort);
     var spsr_u  := spsr(Undefined);
@@ -188,7 +188,7 @@ predicate most_modes_ctrl_eq(s1: state, s2: state)
 predicate ret_regs_equiv(s1:state, s2:state)
     requires ValidState(s1) && ValidState(s2)
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     s1.regs[R0] == s2.regs[R0] &&
     s1.regs[R1] == s2.regs[R1]
 }

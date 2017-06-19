@@ -13,7 +13,7 @@ lemma lemma_userspaceExecutionFn_ok(s:state, pc:word)
     requires ExtractAbsPageTable(s).Just?
     ensures userspaceExecutionFn(s, pc).0.ok
 {
-    reveal_userspaceExecutionFn();
+    reveal userspaceExecutionFn();
 }
 
 lemma lemma_evalMOVSPCLRUC_ok(s:state, r:state)
@@ -23,7 +23,7 @@ lemma lemma_evalMOVSPCLRUC_ok(s:state, r:state)
     ensures r.ok
 {
     var pc := OperandContents(s, OLR);
-    reveal_evalMOVSPCLRUC();
+    reveal evalMOVSPCLRUC();
     assert ExtractAbsPageTable(s).Just?;
     var s2, s4 :|
         evalEnterUserspace(s, s2)
@@ -77,7 +77,7 @@ lemma lemma_wellformed_banked_regs_stackframe_preserved(m1:memstate, m2:memstate
         ==> MemContents(m1, p) == MemContents(m2, p)
     ensures wellformed_banked_regs_stackframe(m2, a)
 {
-    reveal_wellformed_banked_regs_stackframe();
+    reveal wellformed_banked_regs_stackframe();
     forall i:int | 12 <= i <= 17
         ensures ValidPsrWord(MemContents(m2, WordOffset(a, i)));
     {
@@ -89,9 +89,9 @@ predicate {:opaque} banked_regs_stackframe(s:state, m:memstate, a:addr)
     requires ValidState(s) && ValidMemState(m)
     ensures banked_regs_stackframe(s,m,a) ==> wellformed_banked_regs_stackframe(m, a)
 {
-    reveal_ValidRegState();
-    reveal_ValidSRegState();
-    reveal_wellformed_banked_regs_stackframe();
+    reveal ValidRegState();
+    reveal ValidSRegState();
+    reveal wellformed_banked_regs_stackframe();
 
     wellformed_banked_regs_stackframe(m, a)
     && MemContents(m, WordOffset(a, 0))  == s.regs[SP(User)]
@@ -123,7 +123,7 @@ lemma lemma_stackunstack_banked_regs(s1:state, m1:memstate, s2:state, m2:memstat
         ==> MemContents(m1, p) == MemContents(m2, p)
     ensures BankedRegsInvariant(s1, s2) && SpsrsInvariant(s1, s2)
 {
-    reveal_wellformed_banked_regs_stackframe();
+    reveal wellformed_banked_regs_stackframe();
 
     // sigh. help Dafny see that we're enumerating all constructors of a datatype
     assert forall m:mode {:trigger SP(m)} {:trigger LR(m)} {:trigger spsr(m)} ::
@@ -131,17 +131,17 @@ lemma lemma_stackunstack_banked_regs(s1:state, m1:memstate, s2:state, m2:memstat
         || m.Monitor?;
 
     assert BankedRegsInvariant(s1, s2) by {
-        reveal_ValidRegState();
+        reveal ValidRegState();
         forall m | m != Monitor
             ensures s1.regs[SP(m)] == s2.regs[SP(m)] && s1.regs[LR(m)] == s2.regs[LR(m)]
-            { reveal_banked_regs_stackframe(); }
+            { reveal banked_regs_stackframe(); }
     }
 
     assert SpsrsInvariant(s1, s2) by {
-        reveal_ValidSRegState();
+        reveal ValidSRegState();
         forall m | m != User
             ensures s1.sregs[spsr(m)] == s2.sregs[spsr(m)]
-            { reveal_banked_regs_stackframe(); }
+            { reveal banked_regs_stackframe(); }
     }
 }
 #endverbatim
@@ -343,7 +343,7 @@ procedure LDR_MSR_spsr(
     ghost var a := base + WordsToBytes(wofs);
     assert isUInt32(a) && a == WordOffset(base, wofs) && ValidMem(a)
         && ValidPsrWord(MemContents(this.m, a))
-        by { reveal_wellformed_banked_regs_stackframe(); }
+        by { reveal wellformed_banked_regs_stackframe; }
     LDR(tmp, base, ofs);
     MSR(reg, tmp);
 }
@@ -482,7 +482,7 @@ procedure unstack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
     assert this.m == old(this.m);
     unstack_banked_regs3(tmp);
 
-    reveal_banked_regs_stackframe();
+    reveal banked_regs_stackframe;
     assert sp == old(sp)
         && banked_regs_stackframe(this, old(this.m), old(sp));
     assert {:split_here} true;
@@ -530,10 +530,10 @@ procedure smc_enter_err(
 
             LDRglobal(r8, PageDb(), pagedb_base, r10);
             ghost var addrspace := pagedb[pagenr].addrspace;
-            assert validPageNr(addrspace) by { reveal_validPageDb(); }
+            assert validPageNr(addrspace) by { reveal validPageDb; }
             assert r8 == page_monvaddr(addrspace) && WordAligned(r8) by {
-                reveal_pageDbEntryCorresponds();
-                reveal_validPageDb();
+                reveal pageDbEntryCorresponds;
+                reveal validPageDb;
                 assert pageDbCorrespondsOnly(this.m, pagedb, pagenr);
                 ghost var entryWords := extractPageDbEntry(this.m, pagenr);
                 assert entryWords[BytesToWords(PAGEDB_ENTRY_ADDRSPACE)] == 
@@ -549,14 +549,14 @@ procedure smc_enter_err(
             }
             lemma_WordAlignedAdd(r8,ADDRSPACE_STATE);
 
-            assert ValidMem(r8 + ADDRSPACE_STATE) by { reveal_validPageDb(); }
+            assert ValidMem(r8 + ADDRSPACE_STATE) by { reveal validPageDb; }
             LDR(r8, r8, const(ADDRSPACE_STATE));
             assert r8 == KOM_ADDRSPACE_FINAL
                 <==> pagedb[addrspace].entry.state == FinalState
             by {
-                reveal_validPageDb();
-                reveal_pageContentsCorresponds();
-                reveal_pageDbAddrspaceCorresponds();
+                reveal validPageDb;
+                reveal pageContentsCorresponds;
+                reveal pageDbAddrspaceCorresponds;
             }
 
             if( r8 != const(KOM_ADDRSPACE_FINAL) ) {
@@ -569,8 +569,8 @@ procedure smc_enter_err(
                 assert MemContents(this.m, page_monvaddr(pagenr) + 
                     DISPATCHER_ENTERED) == to_i(pagedb[pagenr].entry.entered)
                 by {
-                    reveal_pageContentsCorresponds();
-                    reveal_pageDbDispatcherCorresponds();
+                    reveal pageContentsCorresponds;
+                    reveal pageDbDispatcherCorresponds;
                 }
                 LDR(r9,r9,const(DISPATCHER_ENTERED));
                 
@@ -625,7 +625,7 @@ lemma lemma_PageAligned_PageBase(x:word, y:word)
         { reveal BitwiseMaskHigh(); }
         BitwiseMaskHigh(x, PAGEBITS);
         {
-            assert PageBase(x) == x / PAGESIZE * PAGESIZE by { reveal_PageBase(); }
+            assert PageBase(x) == x / PAGESIZE * PAGESIZE by { reveal PageBase(); }
             reveal PageAligned();
         }
         x;
@@ -680,7 +680,7 @@ procedure switch_addrspace(
     // load l1p into ttbr0
     //-------------------------------------------------------------------------
     ghost var addrspace := pagedb[pagenr].addrspace;
-    assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
+    assert validAddrspacePage(pagedb, addrspace) by { reveal validPageDb; }
     ghost var l1p := l1pOfDispatcher(pagedb, pagenr);
 
     lemma_LeftShift3(pagenr);
@@ -691,7 +691,7 @@ procedure switch_addrspace(
 
     LDRglobal(r11, PageDb(), pagedb_base, r10);
     assert r11 == page_monvaddr(addrspace) by {
-        reveal_pageDbEntryCorresponds();
+        reveal pageDbEntryCorresponds;
         assert validAddrspacePage(pagedb, addrspace);
     }
 
@@ -703,9 +703,9 @@ procedure switch_addrspace(
         by {
             assert validAddrspacePage(pagedb, addrspace);
             assert pageDbCorrespondsOnly(this.m, pagedb, addrspace);
-            reveal_pageContentsCorresponds();
+            reveal pageContentsCorresponds;
         }
-        reveal_pageDbAddrspaceCorresponds();
+        reveal pageDbAddrspaceCorresponds;
     }
 
     assert r10 == page_paddr(l1p);
@@ -832,10 +832,10 @@ procedure pre_entry_enter(
     by {
         assert pageDbCorrespondsOnly(this.m,pagedb,pagenr);
         assert validDispatcherPage(pagedb,pagenr);
-        reveal_pageContentsCorresponds();
+        reveal pageContentsCorresponds;
         assert pageContentsCorresponds(pagenr,pagedb[pagenr],
             extractPage(this.m,pagenr));
-        reveal_pageDbDispatcherCorresponds();
+        reveal pageDbDispatcherCorresponds;
     }
 
     //-------------------------------------------------------------------------
@@ -987,7 +987,7 @@ procedure pre_entry_resume(
     //-------------------------------------------------------------------------
     // Restore SPSR
     //-------------------------------------------------------------------------
-    assert validDispatcherContext(pagedb[dispPg].entry.ctxt) by { reveal_validPageDb(); }
+    assert validDispatcherContext(pagedb[dispPg].entry.ctxt) by { reveal validPageDb; }
 
     LDR(r0,lr,const(DISP_CTXT_PSR));
     assert r0 == pagedb[dispPg].entry.ctxt.cpsr by
@@ -1034,12 +1034,12 @@ lemma lemma_sp_bit_helper(x:word, y:word)
     ensures y - 1 == x
 {
     reveal OpaqueEven();
-    assert BitsAsWord(1) == 1 && BitsAsWord(2) == 2 by { reveal_BitsAsWord(); }
+    assert BitsAsWord(1) == 1 && BitsAsWord(2) == 2 by { reveal BitsAsWord(); }
     lemma_BitsAndWordConversions();
 
-    assert BitwiseAnd(y, 1) == 1 by { reveal_BitAnd(); }
+    assert BitwiseAnd(y, 1) == 1 by { reveal BitAnd(); }
     assert BitMod(WordAsBits(x), 2) == 0 by { lemma_BitModEquiv(x, 2); }
-    assert y != x by { reveal_BitAnd(); reveal_BitMod(); }
+    assert y != x by { reveal BitAnd(); reveal BitMod(); }
     lemma_BitOrOneIsLikePlus(x);
 }
 
@@ -1182,7 +1182,7 @@ lemma lemma_ValidEntryPost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp
         ==> smc_enter(s, sd, r2, rd, dp, a1, a2, a3)
     ensures smc_resume(s, sd, r1, rd, dp) ==> smc_resume(s, sd, r2, rd, dp)
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
 
     if smc_enter(s, sd, r1, rd, dp, a1, a2, a3) {
         if smc_enter_err(sd, dp, false) == KOM_ERR_SUCCESS {
@@ -1285,7 +1285,7 @@ procedure {:frame false} {:timeLimitMultiplier 2} smc_enterresume_success(
     lemma_stackunstack_banked_regs(old(this), s0.m, this, s6.m, s6_sp);
 
     assert validExceptionTransition(s6, pagedb, this, pagedb, dispPg)
-        by { reveal_validExceptionTransition(); }
+        by { reveal validExceptionTransition; }
     lemma_ValidEntryPost(old(this), pagedb_in, s6, pagedb, this,
                          dispPg, old(arg1), old(arg2), old(arg3));
 }

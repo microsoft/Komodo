@@ -294,23 +294,23 @@ procedure{:timeLimitMultiplier 2} is_valid_mapping_target(
     LDR(r8,r7,const(ADDRSPACE_STATE));
     forall :: r8 == pageDbAddrspaceStateVal(d[addr].entry.state)
     {
-        reveal_pageContentsCorresponds();
-        reveal_pageDbAddrspaceCorresponds();
+        reveal pageContentsCorresponds;
+        reveal pageDbAddrspaceCorresponds;
     }
     if ( r8 != const(KOM_ADDRSPACE_INIT) ){
         err := const(KOM_ERR_ALREADY_FINAL);
         assert err == specResult;
     } else {
         ghost var abs_mapping := wordToMapping(mapping);
-        reveal_wordToMapping();
+        reveal wordToMapping;
         LSR(r7,mapping,20); 
         forall :: r7 == abs_mapping.l1index {
-            reveal_wordToMapping();
+            reveal wordToMapping;
         }
         LSR(r8,mapping,12);
         AND(r8,r8,0xff);
         forall :: r8 == abs_mapping.l2index {
-            reveal_wordToMapping();
+            reveal wordToMapping;
             assert r8 == l2indexFromMapping(mapping);
         }
         if(r7 >= const(KOM_SECURE_NPAGES)){
@@ -324,7 +324,7 @@ procedure{:timeLimitMultiplier 2} is_valid_mapping_target(
             AND(r9,mapping,const(KOM_MAPPING_R));
             forall :: r9 == 0 <==> !abs_mapping.perm.r
             {
-                reveal_wordToMapping();
+                reveal wordToMapping;
                 assert r9 != 0 <==> permFromMapping(mapping).r;
             }
             if(r9 == 0){
@@ -355,17 +355,17 @@ procedure{:timeLimitMultiplier 2} is_valid_mapping_target(
                     forall :: validL1PTPage(d,l1p)
                     { 
                         assert validAddrspacePage(d, addr);
-                        reveal_validPageDb();
+                        reveal validPageDb;
                     
                     }
                     forall :: r9 == page_monvaddr(l1p)
                     {
                         assert pageDbCorrespondsOnly(this.m, d, addr);
                         assert validAddrspacePage(d, addr);
-                        reveal_pageContentsCorresponds();
+                        reveal pageContentsCorresponds;
                         assert pageContentsCorresponds(addr, d[addr],
                             extractPage(this.m, addr));
-                        reveal_pageDbAddrspaceCorresponds();
+                        reveal pageDbAddrspaceCorresponds;
                     }
                     
                     assert r7 == abs_mapping.l1index;
@@ -471,17 +471,17 @@ lemma lemma_extract_kom_mapping_w(mapping:word, res:word)
     ensures res == KOM_MAPPING_W || res == 0
     ensures res == 0 <==> wordToMapping(mapping).perm.w
 {
-    assert WordAsBits(KOM_MAPPING_W) == 2 by { reveal_WordAsBits(); }
+    assert WordAsBits(KOM_MAPPING_W) == 2 by { reveal WordAsBits(); }
     lemma_WordBitEquiv(KOM_MAPPING_W, 2);
 
     var tmp := BitwiseAnd(mapping,KOM_MAPPING_W);
     assert (tmp == KOM_MAPPING_W || tmp == 0)
-        by { reveal_BitAnd(); }
+        by { reveal BitAnd(); }
     assert wordToMapping(mapping).perm.w <==> tmp != 0
-        by { reveal_wordToMapping(); }
+        by { reveal wordToMapping(); }
 
     assert res == if tmp == 0 then KOM_MAPPING_W else 0
-        by { reveal_BitXor(); }
+        by { reveal BitXor(); }
 }
 
 lemma lemma_extract_kom_mapping_x(mapping:word, res:word)
@@ -489,35 +489,35 @@ lemma lemma_extract_kom_mapping_x(mapping:word, res:word)
     ensures res == KOM_MAPPING_X || res == 0
     ensures res == 0 <==> wordToMapping(mapping).perm.x
 {
-    assert WordAsBits(KOM_MAPPING_X) == 4 by { reveal_WordAsBits(); }
+    assert WordAsBits(KOM_MAPPING_X) == 4 by { reveal WordAsBits(); }
     lemma_WordBitEquiv(KOM_MAPPING_X, 4);
 
     var tmp := BitwiseAnd(mapping,KOM_MAPPING_X);
     assert (tmp == KOM_MAPPING_X || tmp == 0)
-        by { reveal_BitAnd(); }
+        by { reveal BitAnd(); }
     assert wordToMapping(mapping).perm.x <==> tmp != 0
-        by { reveal_wordToMapping(); }
+        by { reveal wordToMapping(); }
 
     assert res == if tmp == 0 then KOM_MAPPING_X else 0
-        by { reveal_BitXor(); }
+        by { reveal BitXor(); }
 }
 
 lemma lemma_shift_robit()
     ensures LeftShift(0, 8) == 0;
     ensures LeftShift(KOM_MAPPING_W, 8) == BitsAsWord(ARM_L2PTE_RO_BIT);
 {
-    assert WordAsBits(KOM_MAPPING_W) == 2 by { reveal_WordAsBits(); }
-    assert BitsAsWord(ARM_L2PTE_RO_BIT) == 0x200 by { reveal_BitsAsWord(); }
-    reveal_BitShiftLeft();
+    assert WordAsBits(KOM_MAPPING_W) == 2 by { reveal WordAsBits(); }
+    assert BitsAsWord(ARM_L2PTE_RO_BIT) == 0x200 by { reveal BitsAsWord(); }
+    reveal BitShiftLeft();
 }
 
 lemma lemma_shift_nxbit()
     ensures RightShift(0, 2) == 0;
     ensures RightShift(KOM_MAPPING_X, 2) == BitsAsWord(ARM_L2PTE_NX_BIT)
 {
-    assert WordAsBits(KOM_MAPPING_X) == 4 by { reveal_WordAsBits(); }
-    assert BitsAsWord(ARM_L2PTE_NX_BIT) == 1 by { reveal_BitsAsWord(); }
-    reveal_BitShiftRight();
+    assert WordAsBits(KOM_MAPPING_X) == 4 by { reveal WordAsBits(); }
+    assert BitsAsWord(ARM_L2PTE_NX_BIT) == 1 by { reveal BitsAsWord(); }
+    reveal BitShiftRight();
 }
 
 lemma lemma_ARM_L2PTE_impl(pa: word, w: bool, x:bool, ptew: word)
@@ -528,7 +528,7 @@ lemma lemma_ARM_L2PTE_impl(pa: word, w: bool, x:bool, ptew: word)
     ensures ptew == ARM_L2PTE(pa, w, x)
 {
     var constbits := ARM_L2PTE_CONST_BITS | 0x2;
-    assert L2PTE_CONST_WORD() == BitsAsWord(constbits) by { reveal_BitsAsWord(); }
+    assert L2PTE_CONST_WORD() == BitsAsWord(constbits) by { reveal BitsAsWord(); }
     lemma_WordBitEquiv(L2PTE_CONST_WORD(), constbits);
     var nxbit := if x then 0 else ARM_L2PTE_NX_BIT;
     var nxword := BitsAsWord(nxbit);

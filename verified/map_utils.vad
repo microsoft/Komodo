@@ -86,11 +86,11 @@ lemma lemma_SaneState_implies_SaneShaGlobal3(s:state)
     ensures  SaneShaGlobal(va_get_globals(s));
 {
     var globals := va_get_globals(s);
-    reveal_SaneShaGlobal(); 
+    reveal SaneShaGlobal(); 
     assert ValidGlobalStateOpaque(globals) by {
-        reveal_ValidGlobalStateOpaque(); 
+        reveal ValidGlobalStateOpaque();
         assert ValidGlobalState(globals) by {
-            reveal_ValidMemState();   // Which we get from ValidState
+            reveal ValidMemState();   // Which we get from ValidState
         }
     }
 }

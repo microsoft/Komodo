@@ -46,7 +46,7 @@ procedure {:timeLimitMultiplier 3} svc_returning_verify_inner(
         mac == svcHmacVerify(exstate, pagedb, dispPg);
 {
     ghost var addrspace := pagedb[dispPg].addrspace;
-    assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
+    assert validAddrspacePage(pagedb, addrspace) by { reveal validPageDb; }
 
     // Stack layout [size in words]:
     //   sp := mac_output[8] || message [8+16] || gap[1] || tmp_ptr[2*SHA_BLOCKSIZE] || key_ptr[HMAC_KEYSIZE_WORDS]
@@ -130,7 +130,7 @@ lemma lemma_comparison_invariant_implies(r1:word, regs:seq<word>, contents:seq<w
     requires comparison_invariant(r1, |regs|, regs, contents);
     ensures  r1 == |regs| <==> regs == contents;
 {
-    reveal_comparison_invariant();
+    reveal comparison_invariant();
     assert SeqDrop(regs, |regs|) == regs;
     assert SeqDrop(contents, |regs|) == contents;
 }
@@ -143,7 +143,7 @@ lemma lemma_extend_comparison_invariant(old_r1:word, r1:word, index:nat, regs:se
     requires old_r1 != r1 ==> r1 == old_r1 + 1 && regs[index] == contents[index];
     ensures  comparison_invariant(r1, index + 1, regs, contents);
 {
-    reveal_comparison_invariant();
+    reveal comparison_invariant();
 //    
 //    if old_r1 == index {
 //        if old_r1 == r1 {
@@ -309,7 +309,7 @@ procedure {:frame false} {:timeLimitMultiplier 2} svc_returning_verify_inner'(
     regs := seq(r1, r2, r3, r4, r5, r6, r7, r8);
 
     ghost var addrspace := pagedb[dispPg].addrspace;
-    assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
+    assert validAddrspacePage(pagedb, addrspace) by { reveal validPageDb; }
 
     ghost var remaining_stack_bytes;
     remaining_stack_bytes := stack_all_regs(stack_bytes);
@@ -347,7 +347,7 @@ lemma lemma_BankedRegsInvariant_framing(s:state, s':state)
     requires mode_of_state(s) == mode_of_state(s')
     ensures s'.regs == va_update_olr(s', va_update_osp(s', va_update_reg(R12, s', va_update_reg(R11, s', va_update_reg(R10, s', va_update_reg(R9, s', va_update_reg(R8, s', va_update_reg(R7, s', va_update_reg(R6, s', va_update_reg(R5, s', va_update_reg(R4, s', va_update_reg(R3, s', va_update_reg(R2, s', va_update_reg(R1, s', va_update_reg(R0, s', s))))))))))))))).regs
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     // sigh. help Dafny see that we're enumerating all constructors of a datatype
     assert forall r | r in s'.regs :: r.R0? || r.R1? || r.R2? || r.R3? || r.R4? || r.R5? || r.R6? || r.R7? || r.R8? || r.R9? || r.R10? || r.R11? || r.R12? || r.SP? || r.LR?;
 }
@@ -413,7 +413,7 @@ procedure svc_returning_verify(
 
 
     ghost var addrspace := pagedb[dispPg].addrspace;
-    assert validAddrspacePage(pagedb, addrspace) by { reveal_validPageDb(); }
+    assert validAddrspacePage(pagedb, addrspace) by { reveal validPageDb; }
     ghost var dummy:word := 0;
     ghost var hmac := svcHmacVerify(exstate, pagedb, dispPg);
     ghost var ok := if regs == hmac then 1 else 0;

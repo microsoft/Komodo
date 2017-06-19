@@ -139,7 +139,7 @@ procedure kom_smc_map_insecure(
                     ghost var l2pte := InsecureMapping(phys_page, 
                         abs_mapping.perm.w);
                     assert validL2PTE(d', as_page, l2pte);
-                    forall :: wellFormedPageDb(d') { reveal_validPageDb(); }
+                    forall :: wellFormedPageDb(d') { reveal validPageDb; }
                     MOV(r6, mapping);
                     mkl2pte_insecure(mapping, phys_page, abs_mapping, l2pte);
                     MOV(mapping, r6);

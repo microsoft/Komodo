@@ -165,7 +165,7 @@ procedure {:frame false} kom_smc_init_dispatcher(
 {
     ghost var specResult := smc_initDispatcher(pagedb_in, disp_page, as_page, entrypoint);
     pagedb := pagedb_in;
-    reveal_smc_initDispatcher_premium();
+    reveal smc_initDispatcher_premium;
 
     if (as_page >= const(KOM_SECURE_NPAGES)) {
         err := const(KOM_ERR_INVALID_ADDRSPACE);

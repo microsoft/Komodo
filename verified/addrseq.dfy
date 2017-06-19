@@ -29,7 +29,7 @@ function addrsInPhysPage(physPage: word, base: addr) : seq<addr>
     requires SaneConstants()
     ensures forall a : addr | a in addrsInPhysPage(physPage, base) :: ValidMem(a)
 {
-    reveal_PageAligned(); // why?
+    reveal PageAligned(); // why?
     addrRangeSeq(base, base+PAGESIZE)
 }
 

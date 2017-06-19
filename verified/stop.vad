@@ -53,12 +53,12 @@ procedure kom_smc_stop(
                     as_page)
             by {
                 ghost var d' := specPageDb(specResult);
-                reveal_validPageDb();
-                reveal_pageContentsCorresponds();
-                reveal_pageDbAddrspaceCorresponds();
+                reveal validPageDb;
+                reveal pageContentsCorresponds;
+                reveal pageDbAddrspaceCorresponds;
                 assert pageContentsCorresponds(as_page, d'[as_page], 
                         extractPage(this.m, as_page));
-                reveal_pageDbEntryCorresponds();
+                reveal pageDbEntryCorresponds;
                 assert pageDbEntryCorresponds(d'[as_page], 
                 extractPageDbEntry(this.m, as_page));
                 
@@ -66,9 +66,9 @@ procedure kom_smc_stop(
             assert pageDbCorrespondsExcluding(this.m, 
                 specPageDb(specResult), as_page)
             by {
-                reveal_validPageDb();
-                reveal_pageContentsCorresponds();
-                reveal_pageDbAddrspaceCorresponds();
+                reveal validPageDb;
+                reveal pageContentsCorresponds;
+                reveal pageDbAddrspaceCorresponds;
                 ghost var d' := specPageDb(specResult);
                 assert pageDbCorrespondsExcluding(old(this).m, pagedb, as_page);
                 assert pageDbCorrespondsExcluding(this.m, pagedb, as_page)

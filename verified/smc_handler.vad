@@ -99,19 +99,19 @@ procedure {:frame false} smc_handler_inner(
         pagedb := kom_smc_init_addrspace(arg1, arg2, r12, err, pagedb_in);
         MOV(retval, 0);
         assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
-            by { reveal_smc_initAddrspace_premium(); }
+            by { reveal smc_initAddrspace_premium; }
         assert InsecureMemInvariant(old(this), this);
     } else if (callno == const(KOM_SMC_INIT_DISPATCHER)) {
         pagedb := kom_smc_init_dispatcher(arg1, arg2, arg3, r12, err, r4, r5, pagedb_in);
         MOV(retval, 0);
         assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
-            by { reveal_smc_initDispatcher_premium(); }
+            by { reveal smc_initDispatcher_premium; }
         assert InsecureMemInvariant(old(this), this);
     } else if (callno == const(KOM_SMC_INIT_L2PTABLE)) {
         pagedb := kom_smc_init_l2ptable(arg1, arg2, arg3, r12, err, pagedb_in);
         MOV(retval, 0);
         assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
-            by { reveal_smc_initL2PTable_premium(); }
+            by { reveal smc_initL2PTable_premium; }
         assert InsecureMemInvariant(old(this), this);
     } else if (callno == const(KOM_SMC_MAP_SECURE)) {
         ghost if (!(arg4 == 0 || !physPageIsInsecureRam(arg4))) {
@@ -121,31 +121,31 @@ procedure {:frame false} smc_handler_inner(
         pagedb := kom_smc_map_secure(arg1, arg2, arg3, arg4, r12, err, pagedb_in);
         MOV(retval, 0);
         assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
-            by { reveal_smc_mapSecure_premium(); }
+            by { reveal smc_mapSecure_premium; }
         assert InsecureMemInvariant(old(this), this);
     } else if (callno == const(KOM_SMC_MAP_INSECURE)) {
         pagedb := kom_smc_map_insecure(arg1, arg2, arg3, r12, err, pagedb_in);
         MOV(retval, 0);
         assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
-            by { reveal_smc_mapInsecure_premium(); }
+            by { reveal smc_mapInsecure_premium; }
         assert InsecureMemInvariant(old(this), this);
     } else if (callno == const(KOM_SMC_REMOVE)) {
         pagedb := kom_smc_remove(arg1, r12, err, pagedb_in);
         MOV(retval, 0);
         assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
-            by { reveal_smc_remove_premium(); }
+            by { reveal smc_remove_premium; }
         assert InsecureMemInvariant(old(this), this);
     } else if (callno == const(KOM_SMC_FINALISE)) {
         pagedb := kom_smc_finalise(arg1, r12, err, pagedb_in);
         MOV(retval, 0);
         assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
-            by { reveal_smc_finalise_premium(); }
+            by { reveal smc_finalise_premium; }
         assert InsecureMemInvariant(old(this), this);
     } else if (callno == const(KOM_SMC_STOP)) {
         pagedb := kom_smc_stop(arg1, r12, err, pagedb_in);
         MOV(retval, 0);
         assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
-            by { reveal_smc_stop_premium(); }
+            by { reveal smc_stop_premium; }
         assert InsecureMemInvariant(old(this), this);
     } else {
         pagedb := pagedb_in;
@@ -162,8 +162,8 @@ const ARM_SCTLR_V:word := 0x2000; // SCTLR vectors bit (1 = "hivecs" setting)
 predicate maybe_inject_interrupt_invariants(s:state, r:state)
     requires ValidState(s) && ValidState(r)
 {
-    reveal_ValidRegState();
-    reveal_ValidSRegState();
+    reveal ValidRegState();
+    reveal ValidSRegState();
 
     (forall m :: m !in {Monitor, IRQ, FIQ}
         ==> (m != User ==> s.sregs[spsr(m)] == r.sregs[spsr(m)])
@@ -391,7 +391,7 @@ lemma{:fuel WordAligned, 0}{:timeLimitMultiplier 2} va_lemma_smc_handler(va_b0:v
   ensures  validPageDb(pagedb)
   ensures  pageDbCorresponds(va_sM.m, pagedb)
 {
-  reveal_va_code_smc_handler();
+  reveal va_code_smc_handler();
   var va_old_s:va_state := va_s0;
   ghost var va_ltmp1, va_cM:va_code, va_ltmp2 := va_lemma_block(va_b0, va_s0, va_sN);
   va_sM := va_ltmp1;
@@ -446,7 +446,7 @@ lemma{:fuel WordAligned, 0}{:timeLimitMultiplier 2} va_lemma_smc_handler(va_b0:v
     forall
       ensures validExceptionTransition(prePopThis, pagedb, va_s24, pagedb, va_get_reg(R1, va_old_s))
     {
-      reveal_validExceptionTransition();
+      reveal validExceptionTransition();
     }
     lemma_ValidEntryPost(va_old_s, pagedb_in, prePopThis, pagedb, va_s24, va_get_reg(R1, va_old_s),
       va_get_reg(R2, va_old_s), va_get_reg(R3, va_old_s), va_get_reg(R4, va_old_s));

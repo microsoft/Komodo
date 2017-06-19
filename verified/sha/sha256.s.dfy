@@ -119,7 +119,7 @@ predicate DoesTraceDemonstrateSHA256(z:SHA256Trace, message:seq<byte>, hash:seq<
 
 function InitialSHA256Trace(): SHA256Trace
 {
-    reveal_InitialH_SHA256();
+    reveal InitialH_SHA256();
     var initial_Hs := [1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225];
     SHA256Trace_c([], // Empty M
                   [initial_Hs], // Initial Hs

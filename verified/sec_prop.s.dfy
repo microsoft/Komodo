@@ -22,8 +22,8 @@ predicate pgInAddrSpc(d: PageDb, n: PageNr, a: PageNr)
 predicate usr_regs_equiv(s1:state, s2:state)
     requires ValidState(s1) && ValidState(s2)
 {
-    reveal_ValidRegState();
-    reveal_ValidSRegState();
+    reveal ValidRegState();
+    reveal ValidSRegState();
     s1.regs[R0]  == s2.regs[R0] &&
     s1.regs[R1]  == s2.regs[R1] &&
     s1.regs[R2]  == s2.regs[R2] &&
@@ -96,7 +96,7 @@ predicate os_eq(s1: state, d1: PageDb, s2: state, d2: PageDb)
     requires ValidState(s1) && ValidState(s2)
     requires validPageDb(d1) && validPageDb(d2)
 {
-    reveal_ValidMemState();
+    reveal ValidMemState();
     os_regs_equiv(s1, s2) &&
     os_ctrl_eq(s1, s2) &&
     InsecureMemInvariant(s1, s2) &&
@@ -106,7 +106,7 @@ predicate os_eq(s1: state, d1: PageDb, s2: state, d2: PageDb)
 predicate os_ctrl_eq(s1: state, s2: state)
     requires ValidState(s1) && ValidState(s2)
 {
-    reveal_ValidSRegState();
+    reveal ValidSRegState();
     forall m | m in {Supervisor, Abort, Undefined} ::
         s1.sregs[spsr(m)] == s2.sregs[spsr(m)]
 
@@ -115,8 +115,8 @@ predicate os_ctrl_eq(s1: state, s2: state)
 predicate os_regs_equiv(s1: state, s2: state)
     requires ValidState(s1) && ValidState(s2)
 {
-   reveal_ValidRegState();
-   reveal_ValidSRegState();
+   reveal ValidRegState();
+   reveal ValidSRegState();
    s1.regs[R0]  == s2.regs[R0] &&
    s1.regs[R1]  == s2.regs[R1] &&
    s1.regs[R2]  == s2.regs[R2] &&

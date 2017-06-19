@@ -93,7 +93,7 @@ function va_get_ok(s:state):bool { s.ok }
 function va_get_reg(r:ARMReg, s:state):word
     requires ValidRegState(s.regs)
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     s.regs[r]
 }
 
@@ -107,23 +107,23 @@ function va_get_sreg(sr:SReg, s:state):word
 function va_get_mem(s:state):memmap
     requires ValidState(s)
     ensures ValidAddrMemStateOpaque(va_get_mem(s))
-{ reveal_ValidMemState(); reveal_ValidAddrMemStateOpaque(); s.m.addresses }
+{ reveal ValidMemState(); reveal_ValidAddrMemStateOpaque(); s.m.addresses }
 
 function va_get_globals(s:state):globalsmap
     requires ValidState(s)
     ensures ValidGlobalStateOpaque(va_get_globals(s))
-{ reveal_ValidMemState(); reveal_ValidGlobalStateOpaque(); s.m.globals }
+{ reveal ValidMemState(); reveal_ValidGlobalStateOpaque(); s.m.globals }
 
 function va_get_osp(s:state):word 
     requires ValidRegState(s.regs)
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     s.regs[SP(mode_of_state(s))]
 }
 function va_get_olr(s:state):word 
     requires ValidRegState(s.regs)
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     s.regs[LR(mode_of_state(s))]
 }
 
@@ -132,7 +132,7 @@ function va_update_reg(r:ARMReg, sM:state, sK:state):state
     requires ValidRegState(sK.regs) && ValidRegState(sM.regs)
     ensures ValidRegState(va_update_reg(r, sM, sK).regs)
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     sK.(regs := sK.regs[r := sM.regs[r]])
 }
 
@@ -140,14 +140,14 @@ lemma lemma_SRegDom(r:SReg, s:state)
     requires ValidSReg(r)
     requires ValidSRegState(s.sregs, s.conf)
     ensures r in s.sregs
-{ reveal_ValidSRegState(); }
+{ reveal ValidSRegState(); }
 
 function va_update_sreg(sr:SReg, sM:state, sK:state):state 
     requires ValidSReg(sr)
     requires ValidSRegState(sK.sregs, sK.conf) && ValidSRegState(sM.sregs, sM.conf)
     ensures ValidSRegState(va_update_sreg(sr, sM, sK).sregs, va_update_sreg(sr, sM, sK).conf)
 {
-    reveal_ValidSRegState();
+    reveal ValidSRegState();
     lemma_SRegDom(sr, sM);
     var v := sM.sregs[sr];
     sK.(sregs := sK.sregs[sr := v], conf := update_config_from_sreg(sK, sr, v))
@@ -157,7 +157,7 @@ function va_update_mem(sM:state, sK:state):state
     ensures ValidMemState(va_update_mem(sM, sK).m)
     ensures ValidAddrMemStateOpaque(va_update_mem(sM, sK).m.addresses)
 {
-    reveal_ValidMemState(); reveal_ValidAddrMemStateOpaque();
+    reveal ValidMemState(); reveal_ValidAddrMemStateOpaque();
     sK.(m := sK.m.(addresses := sM.m.addresses))
 }
 function va_update_globals(sM:state, sK:state):state
@@ -165,7 +165,7 @@ function va_update_globals(sM:state, sK:state):state
     ensures ValidMemState(va_update_mem(sM, sK).m)
     ensures ValidGlobalStateOpaque(va_update_mem(sM, sK).m.globals)
 {
-    reveal_ValidMemState(); reveal_ValidGlobalStateOpaque();
+    reveal ValidMemState(); reveal_ValidGlobalStateOpaque();
     sK.(m := sK.m.(globals := sM.m.globals))
 }
 function va_update_osp(sM:state, sK:state):state 
@@ -282,7 +282,7 @@ function AddrMemContents(m:memmap, a:int): word
     requires ValidAddrMemStateOpaque(m)
     requires ValidMem(a)
 {
-    reveal_ValidAddrMemStateOpaque();
+    reveal ValidAddrMemStateOpaque();
     m[a]
 }
 
@@ -291,7 +291,7 @@ function AddrMemUpdate(m:memmap, a:int, v:word): memmap
     requires ValidMem(a)
     ensures ValidAddrMemStateOpaque(AddrMemUpdate(m, a, v))
 {
-    reveal_ValidAddrMemStateOpaque();
+    reveal ValidAddrMemStateOpaque();
     m[a := v]
 }
 
@@ -304,7 +304,7 @@ function GlobalContents(gm: globalsmap, g:symbol, addr:int): word
     requires ValidGlobalStateOpaque(gm)
     requires ValidGlobalAddr(g, addr)
 {
-    reveal_ValidGlobalStateOpaque();
+    reveal ValidGlobalStateOpaque();
     gm[g][BytesToWords(addr - AddressOfGlobal(g))]
 }
 
@@ -313,7 +313,7 @@ function GlobalUpdate(gm: globalsmap, g:symbol, a:int, v:word): globalsmap
     requires ValidGlobalAddr(g, a)
     ensures ValidGlobalStateOpaque(GlobalUpdate(gm, g, a, v))
 {
-    reveal_ValidGlobalStateOpaque();
+    reveal ValidGlobalStateOpaque();
     gm[g := gm[g][BytesToWords(a - AddressOfGlobal(g)) := v]]
 }
 
@@ -330,7 +330,7 @@ lemma va_lemma_empty(s:va_state, r:va_state) returns(r':va_state)
     ensures  s.ok ==> r == s
     ensures  forall b, s' :: va_eval(b, r, s') ==> va_eval(b, s, s')
 {
-    reveal_va_eval();
+    reveal va_eval();
     r' := s;
 }
 
@@ -427,7 +427,7 @@ lemma va_lemma_block(b:codes, s0:va_state, r:va_state) returns(r1:va_state, c0:c
     ensures  va_eval(c0, s0, r1)
     ensures  va_eval(Block(b1), r1, r)
 {
-    reveal_va_eval();
+    reveal va_eval();
     c0 := b.hd;
     b1 := b.tl;
     if s0.ok {
@@ -456,7 +456,7 @@ lemma va_lemma_ifElse(ifb:obool, ct:code, cf:code, s:va_state, r:va_state) retur
              else
                  true //!r.ok;
 {
-    reveal_va_eval();
+    reveal va_eval();
     if s.ok {
         assert evalIfElse(ifb, ct, cf, s, r);
         cond := evalOBool(s, ifb);
@@ -489,8 +489,8 @@ lemma va_lemma_while(b:obool, c:code, s:va_state, r:va_state) returns(n:nat, r':
     ensures  r' == s
     ensures  forall c', t, t' :: va_eval(c', t, t') == (t.ok ==> va_eval(c', t, t'));
 {
-    reveal_va_eval();
-    reveal_evalWhileOpaque();
+    reveal va_eval();
+    reveal evalWhileOpaque();
 //    unpack_eval_while(b, c, s, r);
     if s.ok {
         assert evalCode(While(b, c), s, r);
@@ -520,8 +520,8 @@ lemma va_lemma_whileTrue(b:obool, c:code, n:va_int, s:va_state, r:va_state) retu
              else
                  true //!r.ok;
 {
-    reveal_va_eval();
-    reveal_evalWhileOpaque();
+    reveal va_eval();
+    reveal evalWhileOpaque();
 
     if !s.ok {
         s' := s;
@@ -559,8 +559,8 @@ lemma va_lemma_whileFalse(b:obool, c:code, s:va_state, r:va_state) returns(r':va
             else
                 r' == s
 {
-    reveal_va_eval();
-    reveal_evalWhileOpaque();
+    reveal va_eval();
+    reveal evalWhileOpaque();
 
     if !s.ok {
         r' := s;

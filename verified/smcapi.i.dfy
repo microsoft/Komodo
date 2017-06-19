@@ -111,8 +111,8 @@ lemma BoundedAddrspaceRefs'(d:PageDb, n:PageNr)
     requires isAddrspace(d, n)
     ensures d[n].entry.refcount <= KOM_SECURE_NPAGES
 {
-    reveal_validPageNrs();
-    reveal_validPageDb();
+    reveal validPageNrs();
+    reveal validPageDb();
     assert addrspaceRefs(d,n) <= validPageNrs();
     assert d[n].entry.refcount == |addrspaceRefs(d,n)|;
     SubsetCardinality(addrspaceRefs(d,n), validPageNrs());
@@ -208,7 +208,7 @@ lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
     requires validPageDb(pageDbIn)
     ensures validPageDb(smc_initAddrspace(pageDbIn, addrspacePage, l1PTPage).0)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     var result := smc_initAddrspace(pageDbIn, addrspacePage, l1PTPage);
     var pageDbOut := result.0;
     var errOut := result.1;
@@ -243,7 +243,7 @@ lemma initDispatcherPreservesPageDBValidity(pageDbIn:PageDb, page:word, addrspac
     requires validPageDb(pageDbIn)
     ensures validPageDb(smc_initDispatcher(pageDbIn, page, addrspacePage, entrypoint).0)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     var result := smc_initDispatcher(pageDbIn, page, addrspacePage, entrypoint);
     var pageDbOut := result.0;
     var errOut := result.1;
@@ -276,7 +276,7 @@ lemma installL1PTEPreservesPageDbValidity(pageDbIn: PageDb, l1ptnr: PageNr,
     requires 0 <= l1index < NR_L1PTES
     ensures validPageDb(installL1PTEInPageDb(pageDbIn, l1ptnr, l2page, l1index))
 {
-    reveal_validPageDb();
+    reveal validPageDb();
 
     assert validL1PTable(pageDbIn, l1ptnr);
     var pageDbOut := installL1PTEInPageDb(pageDbIn, l1ptnr, l2page, l1index);
@@ -297,7 +297,7 @@ lemma initL2PTablePreservesPageDBValidity(pageDbIn: PageDb, page: word,
     requires validPageDb(pageDbIn)
     ensures validPageDb(smc_initL2PTable(pageDbIn, page, addrspacePage, l1index).0)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     var (pageDbOut, errOut)
         := smc_initL2PTable(pageDbIn, page, addrspacePage, l1index);
     if( errOut != KOM_ERR_SUCCESS ) {
@@ -326,7 +326,7 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: word)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_remove(pageDbIn, page).0)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     var result := smc_remove(pageDbIn, page);
     var pageDbOut := result.0;
     var errOut := result.1;
@@ -414,7 +414,7 @@ lemma mapSecurePreservesPageDBValidity(pageDbIn: PageDb, page: word,
     ensures  validPageDb(smc_mapSecure(pageDbIn, page, addrspacePage,
         map_word, physPage, contents).0)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     var mapping := wordToMapping(map_word);
     var pageDbOut := smc_mapSecure(
         pageDbIn, page, addrspacePage, map_word, physPage, contents).0;
@@ -468,7 +468,7 @@ lemma mapInsecurePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word,
     ensures  validPageDb(smc_mapInsecure(pageDbIn, addrspacePage, physPage, 
         map_word).0)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     var mapping := wordToMapping(map_word);
     var pageDbOut := smc_mapInsecure(
         pageDbIn, addrspacePage, physPage, map_word).0;
@@ -512,7 +512,7 @@ lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_finalise(pageDbIn, addrspacePage).0)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     var pageDbOut := smc_finalise(pageDbIn, addrspacePage).0;
     var err := smc_finalise(pageDbIn, addrspacePage).1;
 
@@ -544,7 +544,7 @@ lemma lemma_userspaceExecutionAndException_spsr(s:state, r:state)
     ensures !spsr_of_state(r).f && !spsr_of_state(r).i
 {
     assert ValidOperand(OLR);
-    reveal_userspaceExecutionAndException();
+    reveal userspaceExecutionAndException();
     assert ExtractAbsPageTable(s).Just?;
     var s', s2 :| equivStates(s, s')
         && evalEnterUserspace(s', s2)
@@ -552,7 +552,7 @@ lemma lemma_userspaceExecutionAndException_spsr(s:state, r:state)
            var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
             evalExceptionTaken(s3, ex, expc, r));
     var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
-    assert mode_of_state(s3) == User by { reveal_userspaceExecutionFn(); }
+    assert mode_of_state(s3) == User by { reveal userspaceExecutionFn(); }
     lemma_evalExceptionTaken_Mode(s3, ex, expc, r);
     calc {
         !spsr_of_state(s).f && !spsr_of_state(s).i;
@@ -574,8 +574,8 @@ lemma lemma_validEnclaveExecutionStep_validPageDb(s1:state, d1:PageDb,
     ensures validPageDb(rd)
     ensures finalDispatcher(rd, dispPg)
 {
-    reveal_validEnclaveExecutionStep();
-    reveal_updateUserPagesFromState();
+    reveal validEnclaveExecutionStep();
+    reveal updateUserPagesFromState();
 
     if !retToEnclave {
         var s4, d4 :| userspaceExecutionAndException(s1, s4)
@@ -597,7 +597,7 @@ lemma lemma_validEnclaveExecution(s1:state, d1:PageDb,
     ensures validPageDb(rd)
     decreases steps
 {
-    reveal_validEnclaveExecution();
+    reveal validEnclaveExecution();
     var retToEnclave := (steps > 0);
     var s5, d5 :|
         validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
@@ -645,7 +645,7 @@ lemma stopPreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word)
     requires validPageDb(pageDbIn)
     ensures  validPageDb(smc_stop(pageDbIn, addrspacePage).0)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     var pageDbOut := smc_stop(pageDbIn, addrspacePage).0;
     var err := smc_stop(pageDbIn, addrspacePage).1;
 
@@ -686,7 +686,7 @@ lemma lemma_allocatePage_preservesMappingGoodness(
         KOM_ERR_SUCCESS;
     ensures validPageDb(pageDbOut)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
 }
 
 
@@ -696,7 +696,7 @@ lemma smchandlerPreservesPageDbValidity(s: state, pageDbIn: PageDb, s':state,
     requires smchandler(s, pageDbIn, s', pageDbOut)
     ensures validPageDb(pageDbOut)
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     var callno, arg1, arg2, arg3, arg4
         := s.regs[R0], s.regs[R1], s.regs[R2], s.regs[R3], s.regs[R4];
     var err, val := s'.regs[R0], s'.regs[R1];
@@ -733,7 +733,7 @@ lemma lemma_updateL2PtePreservesPageDb(d:PageDb,a:PageNr,mapping:Mapping,l2e:L2P
     requires validL2PTE(d,a,l2e)
     ensures validPageDb(updateL2Pte(d,a,mapping,l2e))
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     var d' := updateL2Pte(d,a,mapping,l2e);
     
     var addrspace := d[a].entry;

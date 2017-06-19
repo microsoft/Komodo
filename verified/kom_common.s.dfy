@@ -124,13 +124,13 @@ predicate DistinctGlobals()
 lemma lemma_DistinctGlobals()
     ensures DistinctGlobals()
 {
-    reveal_PageDb();
-    reveal_MonitorPhysBaseOp();
-    reveal_SecurePhysBaseOp();
-    reveal_CurDispatcherOp();
-    reveal_PendingInterruptOp();
-    reveal_K_SHA256s();
-    reveal_AttestKeyOp();
+    reveal PageDb();
+    reveal MonitorPhysBaseOp();
+    reveal SecurePhysBaseOp();
+    reveal CurDispatcherOp();
+    reveal PendingInterruptOp();
+    reveal K_SHA256s();
+    reveal AttestKeyOp();
 }
 
 // the phys bases are unknown, but never change
@@ -178,7 +178,7 @@ predicate SaneStackPointer(sp:word)
 predicate SaneStack(s:state)
     requires ValidState(s)
 {
-    reveal_ValidRegState();
+    reveal ValidRegState();
     var sp := s.regs[SP(Monitor)];
     SaneStackPointer(sp)
 }

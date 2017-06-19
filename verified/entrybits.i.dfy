@@ -7,7 +7,7 @@ lemma lemma_scr_entry(pre: word, post: word)
 {
     assert WordAsBits(1) == 1 && WordAsBits(2) == 2 && WordAsBits(4) == 4
            && WordAsBits(6) == 6 && WordAsBits(0xfffffffe) == 0xfffffffe
-        by { reveal_WordAsBits(); }
+        by { reveal WordAsBits(); }
     lemma_WordBitEquiv(1,1);
 
     calc {
@@ -21,7 +21,7 @@ lemma lemma_scr_entry(pre: word, post: word)
         BitwiseAnd(post, 1);
         { lemma_BitsAndWordConversions(); }
         BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffffe), 6), 1));
-        { reveal_BitAnd(); reveal_BitOr(); }
+        { reveal BitAnd(); reveal_BitOr(); }
         BitsAsWord(0);
     }
 
@@ -34,9 +34,9 @@ lemma lemma_scr_entry(pre: word, post: word)
         BitsAsWord(BitAnd(BitOr(x, 6), 2));
         { lemma_BitOrAndRelation(x, 6, 2); }
         BitsAsWord(BitOr(BitAnd(x, 2), BitAnd(6, 2)));
-        { reveal_BitAnd(); }
+        { reveal BitAnd(); }
         BitsAsWord(BitOr(BitAnd(x, 2), 2));
-        != { reveal_BitOr(); }
+        != { reveal BitOr(); }
         BitsAsWord(0);
     }
 
@@ -47,9 +47,9 @@ lemma lemma_scr_entry(pre: word, post: word)
         BitsAsWord(BitAnd(BitOr(x, 6), 4));
         { lemma_BitOrAndRelation(x, 6, 4); }
         BitsAsWord(BitOr(BitAnd(x, 4), BitAnd(6, 4)));
-        { reveal_BitAnd(); }
+        { reveal BitAnd(); }
         BitsAsWord(BitOr(BitAnd(x, 4), 4));
-        != { reveal_BitOr(); }
+        != { reveal BitOr(); }
         BitsAsWord(0);
     }
 }
@@ -60,7 +60,7 @@ lemma lemma_scr_exit(pre: word, post: word)
 {
     assert WordAsBits(1) == 1 && WordAsBits(2) == 2 && WordAsBits(4) == 4
            && WordAsBits(0xfffffff9) == 0xfffffff9
-        by { reveal_WordAsBits(); }
+        by { reveal WordAsBits(); }
     lemma_WordBitEquiv(1,1);
 
     calc {
@@ -74,7 +74,7 @@ lemma lemma_scr_exit(pre: word, post: word)
         BitwiseAnd(post, 1);
         { lemma_BitsAndWordConversions(); }
         BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffff9), 1), 1));
-        { reveal_BitAnd(); reveal_BitOr(); }
+        { reveal BitAnd(); reveal_BitOr(); }
         BitsAsWord(1);
     }
 
@@ -82,7 +82,7 @@ lemma lemma_scr_exit(pre: word, post: word)
         BitwiseAnd(post, 2);
         { lemma_BitsAndWordConversions(); }
         BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffff9), 1), 2));
-        { reveal_BitAnd(); reveal_BitOr(); }
+        { reveal BitAnd(); reveal_BitOr(); }
         BitsAsWord(0);
     }
 
@@ -90,7 +90,7 @@ lemma lemma_scr_exit(pre: word, post: word)
         BitwiseAnd(post, 4);
         { lemma_BitsAndWordConversions(); }
         BitsAsWord(BitAnd(BitOr(BitAnd(WordAsBits(pre), 0xfffffff9), 1), 4));
-        { reveal_BitAnd(); reveal_BitOr(); }
+        { reveal BitAnd(); reveal_BitOr(); }
         BitsAsWord(0);
     }
 }

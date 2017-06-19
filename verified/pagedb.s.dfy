@@ -34,7 +34,7 @@ function page_paddr(p: PageNr): addr
     ensures PageAligned(page_paddr(p))
     ensures SecurePhysBase() <= page_paddr(p) < SecurePhysBase() + KOM_SECURE_RESERVE
 {
-    reveal_PageAligned();
+    reveal PageAligned();
     assert PageAligned(PAGESIZE);
     assert PageAligned(SecurePhysBase());
     SecurePhysBase() + p * PAGESIZE
@@ -48,7 +48,7 @@ function page_monvaddr(p: PageNr): addr
     assert p < KOM_SECURE_NPAGES;
     var pa := page_paddr(p);
     assert pa < SecurePhysBase() + KOM_SECURE_RESERVE;
-    reveal_PageAligned();
+    reveal PageAligned();
     pa + KOM_DIRECTMAP_VBASE
 }
 
@@ -132,7 +132,7 @@ predicate {:opaque} validPageDb(d: PageDb)
 lemma validPageDbImpliesWellFormed(d:PageDb)
     requires validPageDb(d)
     ensures wellFormedPageDb(d)
-    { reveal_validPageDb(); }
+    { reveal validPageDb(); }
 
 predicate wellformedDispatcherContext(dc:DispatcherContext)
 {
@@ -360,7 +360,7 @@ function l1pOfDispatcher(d:PageDb, p:PageNr) : PageNr
     requires nonStoppedDispatcher(d, p)
     ensures  nonStoppedL1(d,l1pOfDispatcher(d,p))
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     d[d[p].addrspace].entry.l1ptnr
 }
 
@@ -372,7 +372,7 @@ datatype Perm = Perm(r: bool, w: bool, x: bool)
 
 predicate validMapping(m:Mapping,d:PageDb,a:PageNr)
 {
-    reveal_validPageDb();
+    reveal validPageDb();
     validPageDb(d) && isAddrspace(d,a) && validAddrspace(d,a) 
     && validPageNr(m.l1index) && 0 <= m.l1index < NR_L1PTES
     && validPageNr(m.l2index) && 0 <= m.l2index < NR_L2PTES
@@ -414,7 +414,7 @@ function extractPage(s:memstate, p:PageNr): memmap
     requires SaneConstants() && ValidMemState(s)
     ensures memContainsPage(extractPage(s,p), p)
 {
-    reveal_ValidMemState();
+    reveal ValidMemState();
     // XXX: expanded addrInPage() to help Dafny see a bounded set
     var res := (map m:addr {:trigger addrInPage(m, p)} {:trigger MemContents(s, m)}
         | page_monvaddr(p) <= m < page_monvaddr(p) + PAGESIZE
