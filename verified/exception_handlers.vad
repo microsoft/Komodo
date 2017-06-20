@@ -785,6 +785,7 @@ procedure save_disp_context(inout operand base: reg,
             }
         }
 
+        assert WordAligned(DISP_CTXT_PSR) by { reveal WordAligned; }
         lemma_pageDbDispatcherVerifyStateCorresponds(dispPg, orig_disp, orig_pg, disp, pg);
         reveal pageDbDispatcherCorresponds;
 
