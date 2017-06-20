@@ -12,48 +12,13 @@ include "sha256-block-data-order.vad"
 include{:verbatim} "memory-helpers.i.dfy"
 
 include "../valedecls.vad"
-
-#verbatim /* grotty kludges to avoid making code in bitvectors.s 'function method' */
-function method {:opaque} WordAsBitsFM(i:word): bv32
-    ensures WordAsBitsFM(i) == WordAsBits(i)
-{
-    reveal WordAsBits();
-    i as bv32
-}
-
-function method {:opaque} BitsAsWordFM(b:bv32): word
-    ensures BitsAsWordFM(b) == BitsAsWord(b)
-{
-    reveal BitsAsWord();
-    (b as int) as word
-}
-
-function method TopHalf(x:word): word
-{
-    BitsAsWordFM(WordAsBitsFM(x) >> 16)
-}
-#endverbatim
-
-procedure {:refined} load_32_bit_const(
-    out operand dst:word,
-    inline c:word
-    )
-requires {:refined false}
-    !interrupts_enabled(this);
-ensures 
-    dst == c;
-{
-    MOVW(dst, const(c % 0x10000));
-    MOVT(dst, const(TopHalf(c)));
-    lemma_load_32_bit_const(c);
-}
+include "../kom_utils.vad"
 
 procedure {:refined} sha256_init() returns (ghost trace_out:SHA256Trace)
 requires/ensures
     ValidAddrMemStateOpaque(mem);
 requires
-    WordAligned(r0) && isUInt32(r0 + WordsToBytes(SHA_CTXSIZE));
-    ValidMemRange(r0, r0 + WordsToBytes(SHA_CTXSIZE));
+    ValidMemWords(r0, SHA_CTXSIZE);
 requires {:refined false}
     !interrupts_enabled(this);
     mode_of_state(this) == Monitor;
@@ -102,8 +67,39 @@ ensures
     assert {:split_here}{:refined} true;    // Split right before we try to prove the preconditions for the abstract lemma
 }
 
-#verbatim
+// XXX: trivial wrapper to work around vale limitation returning ghost
+// state from bridge procs
+procedure {:bridge} {:refined} sha256_init_bridge()
+requires/ensures
+    ValidAddrMemStateOpaque(mem);
+requires
+    ValidMemWords(r0, SHA_CTXSIZE);
+requires {:refined false}
+    !interrupts_enabled(this);
+    mode_of_state(this) == Monitor;
+reads r0; 
+modifies mem; r1;
+ensures
+    AddrMemPreservingExcept(old(mem), mem, old(r0), WordOffset(old(r0), SHA_CTXSIZE));
+    exists trace_out:SHA256Trace :: IsCompleteSHA256Trace(trace_out)
+    && SHA256TraceIsCorrect(trace_out)
+    && SeqLength(trace_out.M) == 0
+    && (forall i :: 0 <= i < SHA_CTXSIZE ==> trace_out.H[0][i] == AddrMemContents(mem, WordOffset(old(r0), i)))
+    && ValidMemWords(r0, 8)
+    && last(trace_out.H)[0] == AddrMemContents(mem, WordOffset(r0, 0))
+    && last(trace_out.H)[1] == AddrMemContents(mem, WordOffset(r0, 1))
+    && last(trace_out.H)[2] == AddrMemContents(mem, WordOffset(r0, 2))
+    && last(trace_out.H)[3] == AddrMemContents(mem, WordOffset(r0, 3))
+    && last(trace_out.H)[4] == AddrMemContents(mem, WordOffset(r0, 4))
+    && last(trace_out.H)[5] == AddrMemContents(mem, WordOffset(r0, 5))
+    && last(trace_out.H)[6] == AddrMemContents(mem, WordOffset(r0, 6))
+    && last(trace_out.H)[7] == AddrMemContents(mem, WordOffset(r0, 7))
+    ;
+{
+    (ghost var trace) := sha256_init();
+}
 
+#verbatim
 const STACKSIZE_SHA_FINALIZE:int := 16 + STACKSIZE_SHA_UPDATE;    // Need 16 more words to store the padding block
 
 #endverbatim

@@ -31,38 +31,6 @@ function initL1PTEntry(addrspace_page:PageNr): PageDbEntry
 }
 #endverbatim
 
-// TODO: move this to another file
-procedure {:refined}{:bridge} sha256_initialize()
-requires/ensures
-    ValidAddrMemStateOpaque(mem);
-requires
-    ValidMemRange(r0, r0 + SHA_CTXSIZE * WORDSIZE);
-requires {:refined false}
-    !interrupts_enabled(this);
-    mode_of_state(this) == Monitor;
-reads r0; 
-modifies mem; r1;
-ensures
-    AddrMemPreservingExcept(old(mem), mem, old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE);
-    exists trace_out:SHA256Trace ::
-        IsCompleteSHA256Trace(trace_out)
-     && SHA256TraceIsCorrect(trace_out)
-     && SeqLength(trace_out.M) == 0
-     && (forall i :: 0 <= i < SHA_CTXSIZE ==> trace_out.H[0][i] == AddrMemContents(mem, old(r0) + i*WORDSIZE))
-     && (forall i :: 0 <= i < 8 ==> ValidMem(r0 + i * WORDSIZE))
-     && (last(trace_out.H)[0] == AddrMemContents(mem, r0 + 0 * WORDSIZE))
-     && (last(trace_out.H)[1] == AddrMemContents(mem, r0 + 1 * WORDSIZE))
-     && (last(trace_out.H)[2] == AddrMemContents(mem, r0 + 2 * WORDSIZE))
-     && (last(trace_out.H)[3] == AddrMemContents(mem, r0 + 3 * WORDSIZE))
-     && (last(trace_out.H)[4] == AddrMemContents(mem, r0 + 4 * WORDSIZE))
-     && (last(trace_out.H)[5] == AddrMemContents(mem, r0 + 5 * WORDSIZE))
-     && (last(trace_out.H)[6] == AddrMemContents(mem, r0 + 6 * WORDSIZE))
-     && (last(trace_out.H)[7] == AddrMemContents(mem, r0 + 7 * WORDSIZE))
-     ;
-{
-    (ghost var trace) := sha256_init();
-}
-
 procedure{:timeLimitMultiplier 4} init_addrspace_mem(
     operand addrspace_page:reg,
     operand l1pt_page:reg,
@@ -142,7 +110,7 @@ procedure{:timeLimitMultiplier 4} init_addrspace_mem(
     MOV(r0, 0);
     STR(r0, addrspace_va, const(ADDRSPACE_HASHED_BLOCK_COUNT));
     ADD(r0, addrspace_va, const(ADDRSPACE_HASH));
-    sha256_initialize();
+    sha256_init_bridge();
 
     assert pageContentsCorresponds(old(addrspace_page),
                     old(initAddrspaceEntry(addrspace_page, l1pt_page)),

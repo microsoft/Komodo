@@ -15,7 +15,7 @@ lemma{:fuel AddrMemContentsSeq, 0} lemma_grab_user_words(
     requires memContainsPage(extractPage(s.m, dispPg), dispPg);
     requires validDispatcherPage(pagedb, dispPg);
     requires GlobalFullContents(s.m, CurDispatcherOp()) == [page_monvaddr(dispPg)];
-    requires ValidMemRange(base, base + SHA_CTXSIZE * WORDSIZE);
+    requires ValidMemWords(base, SHA_CTXSIZE);
 
     requires AddrMemContentsSeq(s.m.addresses, base, SHA_CTXSIZE) 
           == AddrMemContentsSeq(s.m.addresses, page_monvaddr(dispPg) + DISP_CTXT_USER_WORDS, SHA_CTXSIZE);
@@ -76,7 +76,7 @@ lemma{:fuel AddrMemContentsSeq, 0} lemma_grab_measurement(
     requires memContainsPage(extractPage(s.m, dispPg), dispPg);
     requires validDispatcherPage(pagedb, dispPg);
     requires GlobalFullContents(s.m, CurDispatcherOp()) == [page_monvaddr(dispPg)];
-    requires ValidMemRange(base, base + SHA_CTXSIZE * WORDSIZE);
+    requires ValidMemWords(base, SHA_CTXSIZE);
 
     requires AddrMemContentsSeq(s.m.addresses, base, SHA_CTXSIZE) 
           == AddrMemContentsSeq(s.m.addresses, page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT, SHA_CTXSIZE);
@@ -121,8 +121,8 @@ procedure arrange_user_words_in_memory(
         pageDbCorresponds(this.m, pagedb);
         validDispatcherPage(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
-        ValidMemRange(sp + SHA_CTXSIZE * WORDSIZE, sp + 2 * SHA_CTXSIZE * WORDSIZE);
-        sp + 2 * SHA_CTXSIZE * WORDSIZE <= StackBase();           
+        ValidMemWords(sp + WordsToBytes(SHA_CTXSIZE), SHA_CTXSIZE);
+        WordOffset(sp, 2 * SHA_CTXSIZE) <= StackBase();           
     requires
         validDispatcherPage(pagedb, dispPg);
     ensures
@@ -182,8 +182,8 @@ procedure arrange_verify_measurement_in_memory(
         pageDbCorresponds(this.m, pagedb);
         validDispatcherPage(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
-        ValidMemRange(sp + 2*SHA_CTXSIZE * WORDSIZE, sp + 3 * SHA_CTXSIZE * WORDSIZE);
-        sp + 3 * SHA_CTXSIZE * WORDSIZE <= StackBase();           
+        ValidMemWords(sp + WordsToBytes(2*SHA_CTXSIZE), SHA_CTXSIZE);
+        WordOffset(sp, 3 * SHA_CTXSIZE) <= StackBase();           
     requires
         validDispatcherPage(pagedb, dispPg);
     ensures
@@ -240,7 +240,7 @@ procedure{:timeLimitMultiplier 2} arrange_verification_input(
         mem; r1; r2; r3; r4; r10; r11; r12;
     requires/ensures
         SaneState(this);
-        ValidMemRange(sp + SHA_CTXSIZE * WORDSIZE, sp + (SHA_CTXSIZE + 3 * SHA_CTXSIZE) * WORDSIZE);
+        ValidMemWords(WordOffset(sp, SHA_CTXSIZE), 3 * SHA_CTXSIZE);
     requires
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);

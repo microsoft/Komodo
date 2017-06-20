@@ -82,11 +82,7 @@ procedure {:frame false} smc_handler_inner(
     } else if (callno == const(KOM_SMC_QUERY)) {
         pagedb := pagedb_in;
         MOV(retval, 0);
-        MOVW(err, 0x646f);
-        // TODO: use MOVT
-        ADD(err, err, 0x4b000000);
-        ADD(err, err, 0x6d0000);
-        assert err == KOM_MAGIC; // 0x4b6d646f
+        load_32_bit_const(err, KOM_MAGIC);
         assert smchandlerRelation(old(this), pagedb_in, this, pagedb);
         assert InsecureMemInvariant(old(this), this);
     } else if (callno == const(KOM_SMC_GETPHYSPAGES)) {
@@ -233,8 +229,7 @@ procedure {:frame false} maybe_inject_interrupt(out operand tmp1:reg,
         MRC(lr, sctlr); // read SCTLR
         if (tst_ne(lr, const(ARM_SCTLR_V))) {
            // if the HIVECS bit is set, vectors are at 0xffff0000
-           MOVW(lr, 0);
-           MOVT(lr, 0xffff);
+           load_32_bit_const(lr, 0xffff0000);
        } else {
            // no HIVECS, read VBAR
            MRC(lr, vbar);

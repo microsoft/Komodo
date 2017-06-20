@@ -368,7 +368,7 @@ procedure svc_returning_verify(
         StackBytesRemaining(this, stack_bytes);
     requires
         ValidState(exstate) && mode_of_state(exstate) != User;
-        stack_bytes >= (STACKSIZE_ATTEST + 14) * WORDSIZE;  // +14 to store reigsters
+        stack_bytes >= WordsToBytes(STACKSIZE_ATTEST + 14);  // +14 to store reigsters
         isReturningSvc(exstate);
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
         validPageDb(pagedb);
@@ -378,7 +378,7 @@ procedure svc_returning_verify(
         r0 == KOM_SVC_VERIFY_STEP2;
 //        r10 == page_monvaddr(dispPg);
 //        r11 == page_monvaddr(pagedb[dispPg].addrspace);
-        ValidMemRange(sp - (STACKSIZE_ATTEST + 14) * WORDSIZE, sp);
+        ValidMemRange(WordAlignedSub(sp, WordsToBytes(STACKSIZE_ATTEST + 14)), sp);
         //sp - STACKSIZE_ATTEST * WORDSIZE >= KOM_DIRECTMAP_VBASE + MonitorPhysBase();
     ensures
         pageDbCorresponds(this.m, pagedb);

@@ -60,12 +60,13 @@ MOVS_PCLR_TO_USERMODE_AND_CONTINUE()
 }
 
 #verbatim
-const BANKED_FRAMESIZE:int := 18*WORDSIZE;
+const BANKED_FRAME_WORDS:int := 18;
+const BANKED_FRAMESIZE:int := BANKED_FRAME_WORDS*WORDSIZE;
 
 predicate {:opaque} wellformed_banked_regs_stackframe(m:memstate, a:addr)
     requires ValidMemState(m)
 {
-    ValidMemRange(a, a + BANKED_FRAMESIZE)
+    ValidMemWords(a, BANKED_FRAME_WORDS)
     && forall i:int | 12 <= i <= 17 ::
         ValidPsrWord(MemContents(m, WordOffset(a, i)))
 }

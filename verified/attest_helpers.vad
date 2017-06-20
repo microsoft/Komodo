@@ -66,39 +66,38 @@ procedure load_attestion_key_inner()
         mem; r2; r3; 
     requires/ensures
         SaneState(this);
-        ValidMemRange(r4, r4 + SHA_CTXSIZE * WORDSIZE);
+        ValidMemWords(r4, SHA_CTXSIZE);
     ensures
-        AddrMemPreservingExcept(old(mem), mem, r4, r4 + SHA_CTXSIZE * WORDSIZE);
-        ValidMemRange(r4, r4 + SHA_CTXSIZE * WORDSIZE);
+        AddrMemPreservingExcept(old(mem), mem, r4, WordOffset(r4, SHA_CTXSIZE));
         //ValidMemRange(AddressOfGlobal(AttestKeyOp()), AddressOfGlobal(AttestKeyOp()) + SHA_CTXSIZE * WORDSIZE);
-        AddrMemContents(mem, r4 + 0 * WORDSIZE) == GlobalContents(globals, AttestKeyOp(), AddressOfGlobal(AttestKeyOp()) + 0 * WORDSIZE);
-        AddrMemContents(mem, r4 + 1 * WORDSIZE) == GlobalContents(globals, AttestKeyOp(), AddressOfGlobal(AttestKeyOp()) + 1 * WORDSIZE);
-        AddrMemContents(mem, r4 + 2 * WORDSIZE) == GlobalContents(globals, AttestKeyOp(), AddressOfGlobal(AttestKeyOp()) + 2 * WORDSIZE);
-        AddrMemContents(mem, r4 + 3 * WORDSIZE) == GlobalContents(globals, AttestKeyOp(), AddressOfGlobal(AttestKeyOp()) + 3 * WORDSIZE);
-        AddrMemContents(mem, r4 + 4 * WORDSIZE) == GlobalContents(globals, AttestKeyOp(), AddressOfGlobal(AttestKeyOp()) + 4 * WORDSIZE);
-        AddrMemContents(mem, r4 + 5 * WORDSIZE) == GlobalContents(globals, AttestKeyOp(), AddressOfGlobal(AttestKeyOp()) + 5 * WORDSIZE);
-        AddrMemContents(mem, r4 + 6 * WORDSIZE) == GlobalContents(globals, AttestKeyOp(), AddressOfGlobal(AttestKeyOp()) + 6 * WORDSIZE);
-        AddrMemContents(mem, r4 + 7 * WORDSIZE) == GlobalContents(globals, AttestKeyOp(), AddressOfGlobal(AttestKeyOp()) + 7 * WORDSIZE);
+        AddrMemContents(mem, WordOffset(r4, 0)) == GlobalContents(globals, AttestKeyOp(), AddressOfGlobal(AttestKeyOp()) + WordsToBytes(0));
+        AddrMemContents(mem, WordOffset(r4, 1)) == GlobalContents(globals, AttestKeyOp(), AddressOfGlobal(AttestKeyOp()) + WordsToBytes(1));
+        AddrMemContents(mem, WordOffset(r4, 2)) == GlobalContents(globals, AttestKeyOp(), AddressOfGlobal(AttestKeyOp()) + WordsToBytes(2));
+        AddrMemContents(mem, WordOffset(r4, 3)) == GlobalContents(globals, AttestKeyOp(), AddressOfGlobal(AttestKeyOp()) + WordsToBytes(3));
+        AddrMemContents(mem, WordOffset(r4, 4)) == GlobalContents(globals, AttestKeyOp(), AddressOfGlobal(AttestKeyOp()) + WordsToBytes(4));
+        AddrMemContents(mem, WordOffset(r4, 5)) == GlobalContents(globals, AttestKeyOp(), AddressOfGlobal(AttestKeyOp()) + WordsToBytes(5));
+        AddrMemContents(mem, WordOffset(r4, 6)) == GlobalContents(globals, AttestKeyOp(), AddressOfGlobal(AttestKeyOp()) + WordsToBytes(6));
+        AddrMemContents(mem, WordOffset(r4, 7)) == GlobalContents(globals, AttestKeyOp(), AddressOfGlobal(AttestKeyOp()) + WordsToBytes(7));
 {
     assert ValidGlobal(AttestKeyOp()) by { reveal SaneShaGlobal; }
     LDRglobaladdr(r2, AttestKeyOp());
 
-    LDRglobal(r3, AttestKeyOp(), r2, const(0 * WORDSIZE));
-    STR(r3, r4, const(0 * WORDSIZE));
-    LDRglobal(r3, AttestKeyOp(), r2, const(1 * WORDSIZE));
-    STR(r3, r4, const(1 * WORDSIZE));
-    LDRglobal(r3, AttestKeyOp(), r2, const(2 * WORDSIZE));
-    STR(r3, r4, const(2 * WORDSIZE));
-    LDRglobal(r3, AttestKeyOp(), r2, const(3 * WORDSIZE));
-    STR(r3, r4, const(3 * WORDSIZE));
-    LDRglobal(r3, AttestKeyOp(), r2, const(4 * WORDSIZE));
-    STR(r3, r4, const(4 * WORDSIZE));
-    LDRglobal(r3, AttestKeyOp(), r2, const(5 * WORDSIZE));
-    STR(r3, r4, const(5 * WORDSIZE));
-    LDRglobal(r3, AttestKeyOp(), r2, const(6 * WORDSIZE));
-    STR(r3, r4, const(6 * WORDSIZE));
-    LDRglobal(r3, AttestKeyOp(), r2, const(7 * WORDSIZE));
-    STR(r3, r4, const(7 * WORDSIZE));
+    LDRglobal(r3, AttestKeyOp(), r2, const(WordsToBytes(0)));
+    STR(r3, r4, const(WordsToBytes(0)));
+    LDRglobal(r3, AttestKeyOp(), r2, const(WordsToBytes(1)));
+    STR(r3, r4, const(WordsToBytes(1)));
+    LDRglobal(r3, AttestKeyOp(), r2, const(WordsToBytes(2)));
+    STR(r3, r4, const(WordsToBytes(2)));
+    LDRglobal(r3, AttestKeyOp(), r2, const(WordsToBytes(3)));
+    STR(r3, r4, const(WordsToBytes(3)));
+    LDRglobal(r3, AttestKeyOp(), r2, const(WordsToBytes(4)));
+    STR(r3, r4, const(WordsToBytes(4)));
+    LDRglobal(r3, AttestKeyOp(), r2, const(WordsToBytes(5)));
+    STR(r3, r4, const(WordsToBytes(5)));
+    LDRglobal(r3, AttestKeyOp(), r2, const(WordsToBytes(6)));
+    STR(r3, r4, const(WordsToBytes(6)));
+    LDRglobal(r3, AttestKeyOp(), r2, const(WordsToBytes(7)));
+    STR(r3, r4, const(WordsToBytes(7)));
 }
 
 procedure mem_move_global(operand src:word, inline g:symbol, inline src_offset:word,
@@ -130,51 +129,12 @@ procedure load_attestion_key() returns (ghost key:seq(word))
         mem; r0; r2; r3; 
     requires/ensures
         SaneState(this);
-        ValidMemRange(r4, r4 + SHA_CTXSIZE * WORDSIZE);
+        ValidMemWords(r4, SHA_CTXSIZE);
     ensures
-        AddrMemPreservingExcept(old(mem), mem, r4, r4 + SHA_CTXSIZE * WORDSIZE);
+        AddrMemPreservingExcept(old(mem), mem, r4, WordOffset(r4, SHA_CTXSIZE));
         AddrMemContentsSeq(mem, r4, SHA_CTXSIZE) == key == AttestKey();
 {
-//    assert ValidGlobal(AttestKeyOp()) by { reveal SaneShaGlobal; }
-//    LDRglobaladdr(r2, AttestKeyOp());
-//
-//    mem_move_global(r2, AttestKeyOp(), 0, r4, 0, r3);
-//    mem_move_global(r2, AttestKeyOp(), 1, r4, 1, r3);
-//    mem_move_global(r2, AttestKeyOp(), 2, r4, 2, r3);
-//    mem_move_global(r2, AttestKeyOp(), 3, r4, 3, r3);
-//    mem_move_global(r2, AttestKeyOp(), 4, r4, 4, r3);
-//    mem_move_global(r2, AttestKeyOp(), 5, r4, 5, r3);
-//    mem_move_global(r2, AttestKeyOp(), 6, r4, 6, r3);
-//    mem_move_global(r2, AttestKeyOp(), 7, r4, 7, r3);
-//
-//
-//    LDRglobal(r3, AttestKeyOp(), r2, const(0 * WORDSIZE));
-//    STR(r3, r4, const(0 * WORDSIZE));
-//    LDRglobal(r3, AttestKeyOp(), r2, const(1 * WORDSIZE));
-//    STR(r3, r4, const(1 * WORDSIZE));
-//    LDRglobal(r3, AttestKeyOp(), r2, const(2 * WORDSIZE));
-//    STR(r3, r4, const(2 * WORDSIZE));
-//    LDRglobal(r3, AttestKeyOp(), r2, const(3 * WORDSIZE));
-//    STR(r3, r4, const(3 * WORDSIZE));
-//    LDRglobal(r3, AttestKeyOp(), r2, const(4 * WORDSIZE));
-//    STR(r3, r4, const(4 * WORDSIZE));
-//    LDRglobal(r3, AttestKeyOp(), r2, const(5 * WORDSIZE));
-//    STR(r3, r4, const(5 * WORDSIZE));
-//    LDRglobal(r3, AttestKeyOp(), r2, const(6 * WORDSIZE));
-//    STR(r3, r4, const(6 * WORDSIZE));
-//    LDRglobal(r3, AttestKeyOp(), r2, const(7 * WORDSIZE));
-//    STR(r3, r4, const(7 * WORDSIZE));
-    //key := AttestKey();
-
     load_attestion_key_inner();
-
-//    assert ValidGlobal(AttestKeyOp()) by { reveal SaneShaGlobal; }
-//    LDRglobaladdr(r2, AttestKeyOp());
-//
-//    MOV(r3, const(SHA_CTXSIZE * WORDSIZE));
-//    memcpy_bare(r4, r2, r3, r0);
-//
-//    lemma_memset_result(old(this.m), this.m, r4, r2, SHA_CTXSIZE);
 
     assert WordAligned(r4);
     key := 
@@ -200,7 +160,7 @@ procedure load_memory_into_regs(ghost contents:seq(word))
     requires/ensures
         SaneState(this);
     requires
-        ValidMemRange(r0, r0 + SHA_CTXSIZE * WORDSIZE);
+        ValidMemWords(r0, SHA_CTXSIZE);
         SeqLength(contents) == 8;
         AddrMemContentsSeq(mem, r0, SHA_CTXSIZE) == contents;
     ensures
@@ -246,20 +206,20 @@ procedure zero_pad_memory()
         mem; r2; 
     requires/ensures
         SaneState(this);
-        ValidMemRange(r1, r1 + SHA_CTXSIZE * WORDSIZE);
+        ValidMemWords(r1, SHA_CTXSIZE);
     ensures
-        AddrMemPreservingExcept(old(mem), mem, r1, r1 + SHA_CTXSIZE * WORDSIZE);
+        AddrMemPreservingExcept(old(mem), mem, r1, WordOffset(r1, SHA_CTXSIZE));
         AddrMemContentsSeq(mem, r1, SHA_CTXSIZE) == SeqRepeat(8, 0);
 {
     MOV(r2, 0);
-    STR(r2, r1, const(0 * WORDSIZE));
-    STR(r2, r1, const(1 * WORDSIZE));
-    STR(r2, r1, const(2 * WORDSIZE));
-    STR(r2, r1, const(3 * WORDSIZE));
-    STR(r2, r1, const(4 * WORDSIZE));
-    STR(r2, r1, const(5 * WORDSIZE));
-    STR(r2, r1, const(6 * WORDSIZE));
-    STR(r2, r1, const(7 * WORDSIZE));
+    STR(r2, r1, const(WordsToBytes(0)));
+    STR(r2, r1, const(WordsToBytes(1)));
+    STR(r2, r1, const(WordsToBytes(2)));
+    STR(r2, r1, const(WordsToBytes(3)));
+    STR(r2, r1, const(WordsToBytes(4)));
+    STR(r2, r1, const(WordsToBytes(5)));
+    STR(r2, r1, const(WordsToBytes(6)));
+    STR(r2, r1, const(WordsToBytes(7)));
     
     ghost var zeroes := seq(0, 0, 0, 0, 0, 0, 0, 0);
     lemma_package_hash_result(mem, r1, zeroes);    
@@ -275,7 +235,7 @@ lemma lemma_arrange_attestation_input_helper(
         base:nat,
         user_words:seq<word>,
         measurement:seq<word>)
-    requires ValidMemRange(base, base + 3 * SHA_CTXSIZE * WORDSIZE);
+    requires ValidMemWords(base, 3 * SHA_CTXSIZE);
     requires ValidAddrMemStateOpaque(user_words_mem)
           && ValidAddrMemStateOpaque(measurement_mem)
           && ValidAddrMemStateOpaque(mem);
@@ -285,11 +245,11 @@ lemma lemma_arrange_attestation_input_helper(
     requires SeqRepeat(8, 0) == AddrMemContentsSeq(mem,             base + 2 * SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE);
 
     requires AddrMemPreservingExcept(user_words_mem, measurement_mem, 
-                                     base +     SHA_CTXSIZE * WORDSIZE, 
-                                     base + 2 * SHA_CTXSIZE * WORDSIZE)
+                                     WordOffset(base, SHA_CTXSIZE), 
+                                     WordOffset(base, 2 * SHA_CTXSIZE))
     requires AddrMemPreservingExcept(measurement_mem, mem,
-                                     base + 2 * SHA_CTXSIZE * WORDSIZE, 
-                                     base + 3 * SHA_CTXSIZE * WORDSIZE)
+                                     WordOffset(base, 2 * SHA_CTXSIZE), 
+                                     WordOffset(base, 3 * SHA_CTXSIZE))
     ensures AddrMemContentsSeq(mem, base, 3 * SHA_CTXSIZE) == user_words + measurement + SeqRepeat(8, 0);
 {
     calc {

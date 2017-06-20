@@ -243,6 +243,7 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest_inner(
     // Total stack usage == 8 + 24 + 1 + 2 * SHA_BLOCKSIZE + HMAC_KEYSIZE_WORDS
     // Plus STACKSIZE_HMAC
     SUB(sp, sp, const(WordsToBytes(STACKSIZE_ATTEST - STACKSIZE_HMAC)));
+    assert ValidMemWords(sp, STACKSIZE_ATTEST - STACKSIZE_HMAC);
     assert StackBytesRemaining(this, WordsToBytes(STACKSIZE_HMAC));
     //WordAlignedAdd(sp, (0 - 1) * (STACKSIZE_ATTEST - STACKSIZE_HMAC) * WORDSIZE);
     
@@ -284,9 +285,9 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest_inner(
     // Prove stack memory is valid
     calc {
         true;
-        ValidMemRange(old(sp) - WordsToBytes(STACKSIZE_ATTEST), old(sp));
-            { lemma_ValidMemRange_offset(old(sp) - WordsToBytes(STACKSIZE_ATTEST), STACKSIZE_ATTEST, STACKSIZE_ATTEST - STACKSIZE_HMAC); }
-        ValidMemRange(old(sp) - WordsToBytes(STACKSIZE_ATTEST - STACKSIZE_HMAC), old(sp));
+        ValidMemRange(WordAlignedSub(old(sp), WordsToBytes(STACKSIZE_ATTEST)), old(sp));
+            { lemma_ValidMemRange_offset(WordAlignedSub(old(sp), WordsToBytes(STACKSIZE_ATTEST)), STACKSIZE_ATTEST, STACKSIZE_ATTEST - STACKSIZE_HMAC); }
+        ValidMemRange(WordAlignedSub(old(sp),  WordsToBytes(STACKSIZE_ATTEST - STACKSIZE_HMAC)), old(sp));
         ValidMemRange(sp, old(sp));
             { lemma_ValidMemRange_reduced(sp, STACKSIZE_LOCAL, STACKSIZE_LOCAL - SHA_CTXSIZE); }
         ValidMemRange(WordOffset(sp, SHA_CTXSIZE), old(sp));
@@ -326,7 +327,7 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest(
         StackBytesRemaining(this, stack_bytes);
     requires
         ValidState(exstate) && mode_of_state(exstate) != User;
-        stack_bytes >= (STACKSIZE_ATTEST + 10) * WORDSIZE;  // +10 to store volatile reigsters
+        stack_bytes >= WordsToBytes(STACKSIZE_ATTEST + 10);  // +10 to store volatile reigsters
         isReturningSvc(exstate);
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
         //OperandContents(this, OLR) == OperandContents(exstate, OLR);
@@ -338,7 +339,6 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest(
         r0 == KOM_SVC_ATTEST;
 //        r10 == page_monvaddr(dispPg);
 //        r11 == page_monvaddr(pagedb[dispPg].addrspace);
-        ValidMemRange(sp - (STACKSIZE_ATTEST + 10) * WORDSIZE, sp);
         //sp - STACKSIZE_ATTEST * WORDSIZE >= KOM_DIRECTMAP_VBASE + MonitorPhysBase();
     ensures
         pageDbCorresponds(this.m, pagedb);
@@ -356,18 +356,19 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest(
     assert validAddrspacePage(pagedb, addrspace) by { reveal validPageDb; }
 
     ghost var remaining_stack_bytes;
+    assert ValidMemRange(sp - WordsToBytes(STACKSIZE_ATTEST + 10), sp);
     remaining_stack_bytes := stack_nonvolatiles(stack_bytes);
     lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
 
     // Prove we still have a valid stack region after pushing registers onto the stack
-    assert sp == old(sp) - 40;
+    assert sp == old(sp) - WordsToBytes(10);
     calc {
         true;
-        ValidMemRange(old(sp) - (STACKSIZE_ATTEST + 10) * WORDSIZE, old(sp));
-        ValidMemRange(sp + 40 - (STACKSIZE_ATTEST + 10) * WORDSIZE, sp + 40);
-        ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp + 40);
-            { lemma_ValidMemRange_reduced(sp - STACKSIZE_ATTEST * WORDSIZE, 10 + STACKSIZE_ATTEST, 10); }
-        ValidMemRange(sp - STACKSIZE_ATTEST * WORDSIZE, sp);
+        ValidMemRange(old(sp) - WordsToBytes(STACKSIZE_ATTEST + 10), old(sp));
+        ValidMemRange(sp + WordsToBytes(10) - WordsToBytes(STACKSIZE_ATTEST + 10), sp + WordsToBytes(10));
+        ValidMemRange(sp - WordsToBytes(STACKSIZE_ATTEST), sp + WordsToBytes(10));
+            { lemma_ValidMemRange_reduced(sp - WordsToBytes(STACKSIZE_ATTEST), 10 + STACKSIZE_ATTEST, 10); }
+        ValidMemRange(sp - WordsToBytes(STACKSIZE_ATTEST), sp);
     }
 
     ghost var mac_ptr:word;
@@ -375,9 +376,10 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest(
     mac_ptr, mac := svc_returning_attest_inner(exstate, remaining_stack_bytes, pagedb, dispPg);
     remaining_stack_bytes := unstack_nonvolatiles(remaining_stack_bytes);
 
-    assert mac_ptr == sp - (STACKSIZE_ATTEST - STACKSIZE_HMAC + 10) * WORDSIZE;
+    assert mac_ptr == sp - WordsToBytes(STACKSIZE_ATTEST - STACKSIZE_HMAC + 10);
     // Load the mac into registers
-    SUB(r0, sp, const((STACKSIZE_ATTEST - STACKSIZE_HMAC + 10) * WORDSIZE));
+    lemma_WordAlignedSub(sp, WordsToBytes(STACKSIZE_ATTEST - STACKSIZE_HMAC + 10));
+    SUB(r0, sp, const(WordsToBytes(STACKSIZE_ATTEST - STACKSIZE_HMAC + 10)));
     load_memory_into_regs(mac);
 
     MOV(r0, const(encode_mode(User)));

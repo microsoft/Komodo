@@ -12,7 +12,7 @@ include "types.s.dfy"
 lemma {:axiom} lemma_WordAsBits(i:word)
     ensures i == 0 ==> i as bv32 == 0
 
-function {:opaque} WordAsBits(i:word): bv32
+function method {:opaque} WordAsBits(i:word): bv32
     ensures i == 0 <==> WordAsBits(i) == 0
 {
     lemma_WordAsBits(i);
@@ -23,7 +23,7 @@ lemma {:axiom} lemma_BitsAsWord(b:bv32)
     ensures isUInt32(b as int)
     ensures b == 0 ==> b as int == 0
 
-function {:opaque} BitsAsWord(b:bv32): word
+function method {:opaque} BitsAsWord(b:bv32): word
     ensures b == 0 <==> BitsAsWord(b) == 0
 {
     lemma_BitsAsWord(b);

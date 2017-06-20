@@ -1,8 +1,8 @@
 include "../valesupp.i.dfy"
 include "../words_and_bytes.s.dfy"
 include "../kom_common.s.dfy"
-include "../sha/sha256.i.dfy"
-include "../sha/bit-vector-lemmas.i.dfy"
+include "sha256.i.dfy"
+include "bit-vector-lemmas.i.dfy"
 
 const K_SHA256_BYTES:int := K_SHA256_WORDS * WORDSIZE;
 
@@ -57,23 +57,21 @@ predicate BlockInvariant(
  && ValidAddrMemStateOpaque(mem)
  // Stack is accessible
  && SaneStackPointer(sp)
- && ValidMemRange(sp, WordOffset(sp, SHA_STACKSIZE))
+ && ValidMemWords(sp, SHA_STACKSIZE)
 
  // Pointer into our in-memory H[8] is valid
  && ctx_ptr == AddrMemContents(mem, WordOffset(sp, SHA_BLOCKSIZE))
- && WordAligned(ctx_ptr) && isUInt32(ctx_ptr + WordsToBytes(SHA_CTXSIZE))
+ && ValidMemWords(ctx_ptr, SHA_CTXSIZE)
  && (WordOffset(ctx_ptr, SHA_CTXSIZE) < sp || ctx_ptr > WordOffset(sp, SHA_STACKSIZE))
- && ValidMemRange(ctx_ptr, WordOffset(ctx_ptr, SHA_CTXSIZE))
 
  // Input properties
  && block <= num_blocks
  && SeqLength(input) == num_blocks * SHA_BLOCKSIZE
- && WordAligned(input_ptr) && isUInt32(input_ptr + WordsToBytes(num_blocks * SHA_BLOCKSIZE))
+ && ValidMemWords(input_ptr, num_blocks * SHA_BLOCKSIZE)
  && r1 == WordOffset(input_ptr, block * SHA_BLOCKSIZE)
  && WordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE) == AddrMemContents(mem, WordOffset(sp, 18)) == r12
  && (WordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE) < sp || WordOffset(sp, SHA_STACKSIZE) <= input_ptr)  // Doesn't alias sp
  && (WordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE) < ctx_ptr || WordOffset(ctx_ptr, SHA_CTXSIZE) <= input_ptr)  // Doesn't alias input_ptr
- && ValidMemRange(input_ptr, WordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE))
 // && (forall j {:trigger ValidMem(input_ptr + j * WORDSIZE)} :: 0 <= j < num_blocks * SHA_BLOCKSIZE
 //    ==> AddrMemContents(mem, input_ptr + j * WORDSIZE) == input[j])
  && (forall j:int :: 0 <= j < num_blocks * SHA_BLOCKSIZE

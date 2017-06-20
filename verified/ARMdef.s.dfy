@@ -415,8 +415,14 @@ predicate ValidMem(addr:int)
 
 predicate ValidMemRange(base:int, limit:int)
 {
-    ValidMem(base) && ValidMem(limit - WORDSIZE)
-    && forall a:addr :: base <= a < limit && WordAligned(a) ==> ValidMem(a)
+    ValidMem(base) && WordAligned(limit)
+    && forall a:int :: base <= a < limit && WordAligned(a) ==> ValidMem(a)
+}
+
+predicate ValidMemWords(base:int, nwords:int)
+{
+    isUInt32(base) && ValidWordOffset(base, nwords)
+        && ValidMemRange(base, WordOffset(base, nwords))
 }
 
 predicate ValidShiftOperand(s:state, o:operand)
@@ -711,7 +717,7 @@ function WritablePagesInTable(pt:AbsPTable): set<addr>
 predicate ValidAbsL1PTable(m:memstate, vbase:int)
     requires ValidMemState(m)
 {
-    WordAligned(vbase) && ValidMemRange(vbase, vbase + ARM_L1PTABLE_BYTES)
+    ValidMemWords(vbase, ARM_L1PTES)
     // all L1 PTEs are valid, and all non-zero PTEs point to valid L2 tables
     && forall i | 0 <= i < ARM_L1PTES :: (
         var ptew := MemContents(m, WordOffset(vbase, i));
@@ -761,9 +767,8 @@ function ExtractAbsL1PTE(pte:word): Maybe<addr>
 predicate ValidAbsL2PTable(m:memstate, vbase:addr)
     requires ValidMemState(m)
 {
-    WordAligned(vbase)
-        && ValidMemRange(vbase, vbase + ARM_L2PTABLE_BYTES)
-        && forall i | 0 <= i < ARM_L2PTES :: ValidAbsL2PTEWord(MemContents(m, WordOffset(vbase, i)))
+    ValidMemWords(vbase, ARM_L2PTES)
+    && forall i | 0 <= i < ARM_L2PTES :: ValidAbsL2PTEWord(MemContents(m, WordOffset(vbase, i)))
 }
 
 function ExtractAbsL2PTable(m:memstate, vbase:addr): AbsL2PTable

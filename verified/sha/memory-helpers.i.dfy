@@ -5,76 +5,66 @@ include "sha256-invariants.i.dfy"
 
 lemma lemma_AddrMemContentsSeq_adds(m:memmap, begin_ptr:nat, count:nat, count':nat)
   requires ValidAddrMemStateOpaque(m);
-  requires count > 0 ==> ValidMemRange(begin_ptr, begin_ptr + count * WORDSIZE);
+  requires count > 0 ==> ValidMemWords(begin_ptr, count);
   requires count' < count;
   decreases count;
-  ensures  count - count' > 0 ==> ValidMemRange(begin_ptr + count' * WORDSIZE, begin_ptr + (count - count') * WORDSIZE);
+  ensures  count - count' > 0 ==> ValidMemWords(WordOffset(begin_ptr, count'), count - count');
   ensures  AddrMemContentsSeq(m, begin_ptr, count) == AddrMemContentsSeq(m, begin_ptr, count') 
-                                                    + AddrMemContentsSeq(m, begin_ptr + count' * WORDSIZE, count - count') 
+                                                    + AddrMemContentsSeq(m, WordOffset(begin_ptr, count'), count - count')
 {
     if count' == 0 {
     } else {
         reveal WordAligned();
-        lemma_AddrMemContentsSeq_adds(m, begin_ptr + WORDSIZE, count - 1, count' - 1);
+        lemma_AddrMemContentsSeq_adds(m, WordOffset(begin_ptr, 1), count - 1, count' - 1);
     }
 }
 
 lemma lemma_ValidMemRange_offset_word(base:int, count:nat)
-    requires ValidMemRange(base, base + count * WORDSIZE);
-    ensures  count > 1 ==> ValidMemRange(base + WORDSIZE, base + WORDSIZE + (count - 1) * WORDSIZE);
-{
-    var offset := base + WORDSIZE;
-    var limit := base + WORDSIZE + (count - 1) * WORDSIZE;
-    //assert isUInt32(offset);
-    //assert base <= offset < base + count * WORDSIZE;
-    assert WordAligned(offset);
-    //assert ValidMem(offset);
-    //assert ValidMem(limit);
-}
+    requires ValidMemWords(base, count);
+    ensures  count > 1 ==> ValidMemWords(WordOffset(base, 1), count - 1);
+{}
 
 lemma lemma_ValidMemRange_reduced(base:int, count:nat, count':nat)
-    requires ValidMemRange(base, base + WordsToBytes(count));
+    requires ValidMemWords(base, count);
     requires count' < count;
-    ensures  ValidMemRange(base, base + WordsToBytes(count - count'));
+    ensures  ValidMemWords(base, count - count');
 {
-    var offset := base + count'*WORDSIZE;
-    var limit := base + WORDSIZE + (count - count') * WORDSIZE;
-    assert WordAligned(offset);
     if count' == 0 {
     } else {
+        var offset := WordOffset(base, count');
+        var limit := WordOffset(base, 1 + count - count');
         lemma_ValidMemRange_offset(base, count, count' - 1);
-        assert ValidMemRange(base, base + (count - count' + 1) * WORDSIZE);
+        assert ValidMemWords(base, count - count' + 1);
     }
 }
 
 lemma lemma_ValidMemRange_offset(base:int, count:nat, count':nat)
-    requires ValidMemRange(base, base + count * WORDSIZE);
+    requires ValidMemWords(base, count);
     requires count' < count;
-    ensures  ValidMemRange(base + count'*WORDSIZE, base + (count - count') * WORDSIZE);
-    ensures  ValidMemRange(base + count'*WORDSIZE, base + count * WORDSIZE);
+    ensures  ValidMemWords(WordOffset(base, count'), count - count');
+    ensures  ValidMemRange(WordOffset(base, count'), WordOffset(base, count));
 {
-    var offset := base + count'*WORDSIZE;
-    var limit := base + WORDSIZE + (count - count') * WORDSIZE;
-    assert WordAligned(offset);
     if count' == 0 {
     } else {
+        var offset := WordOffset(base, count');
+        var limit := WordOffset(base, 1 + count - count');
         lemma_ValidMemRange_offset(base, count, count' - 1);
-        assert ValidMemRange(base + (count' - 1)*WORDSIZE, base + (count - count' + 1) * WORDSIZE);
-        lemma_ValidMemRange_offset_word(base + (count' - 1)*WORDSIZE, (count - count' + 1));
+        //assert ValidMemRange(base + (count' - 1)*WORDSIZE, base + (count - count' + 1) * WORDSIZE);
+        lemma_ValidMemRange_offset_word(WordOffset(base, count' - 1), count - count' + 1);
     }
 }
 
-function AddrMemContentsSeq(m:memmap, begin_ptr:nat, count:nat) : seq<word>
+function {:opaque} AddrMemContentsSeq(m:memmap, begin_ptr:nat, count:nat) : seq<word>
   requires ValidAddrMemStateOpaque(m);
-  requires count > 0 ==> ValidMemRange(begin_ptr, begin_ptr + count * WORDSIZE);
+  requires count > 0 ==> ValidMemWords(begin_ptr, count);
   decreases count;
   ensures  |AddrMemContentsSeq(m, begin_ptr, count)| == count;
-  ensures  forall i :: 0 <= i < count ==> AddrMemContents(m, begin_ptr + i * WORDSIZE) == AddrMemContentsSeq(m, begin_ptr, count)[i];
+  ensures  forall i :: 0 <= i < count ==> AddrMemContents(m, WordOffset(begin_ptr, i)) == AddrMemContentsSeq(m, begin_ptr, count)[i];
 {
   if count == 0 then []
   else
       lemma_ValidMemRange_offset_word(begin_ptr, count);
-      [AddrMemContents(m, begin_ptr)] + AddrMemContentsSeq(m, begin_ptr + WORDSIZE, count - 1)
+      [AddrMemContents(m, begin_ptr)] + AddrMemContentsSeq(m, WordOffset(begin_ptr, 1), count - 1)
 }
 
 lemma lemma_MemPreservingExcept_implies_AddrMemPreservingExcept(s:state, r:state, base:nat, limit:nat)
@@ -135,66 +125,63 @@ lemma lemma_AddrMemPreservingExcept3_condensed(m:memmap, m':memmap,
 {
 }
 
-lemma lemma_AddrMemContentsSeq_framing1(m:memmap, m':memmap, begin_ptr:nat, count:nat, l1:nat, h1:nat)
+lemma lemma_AddrMemContentsSeq_framing1(m:memmap, m':memmap, begin_ptr:addr, count:nat, l1:nat, h1:nat)
     requires ValidAddrMemStateOpaque(m) && ValidAddrMemStateOpaque(m');
     requires l1 <= h1;
     requires AddrMemPreservingExcept(m, m', l1, h1);
-    requires h1 <= begin_ptr || l1 >= begin_ptr + count * WORDSIZE;
-    requires count > 0 ==> ValidMemRange(begin_ptr, begin_ptr + count * WORDSIZE);
+    requires count > 0 ==> ValidMemWords(begin_ptr, count);
+    requires h1 <= begin_ptr || l1 >= WordOffset(begin_ptr, count);
     decreases count;
     ensures  AddrMemContentsSeq(m, begin_ptr, count) == AddrMemContentsSeq(m', begin_ptr, count);
 {
-    if count == 0 {
-    } else {
+    if count != 0 {
         lemma_ValidMemRange_offset_word(begin_ptr, count);
-        lemma_AddrMemContentsSeq_framing1(m, m', begin_ptr + WORDSIZE, count - 1, l1, h1);
+        lemma_AddrMemContentsSeq_framing1(m, m', WordOffset(begin_ptr, 1), count - 1, l1, h1);
     }
 }
 
-lemma lemma_AddrMemContentsSeq_framing2(m:memmap, m':memmap, begin_ptr:nat, count:nat, l1:nat, h1:nat, l2:nat, h2:nat)
+lemma lemma_AddrMemContentsSeq_framing2(m:memmap, m':memmap, begin_ptr:addr, count:nat, l1:nat, h1:nat, l2:nat, h2:nat)
     requires ValidAddrMemStateOpaque(m) && ValidAddrMemStateOpaque(m');
     requires l1 <= h1 && l2 <= h2;
     requires AddrMemPreservingExcept2(m, m', l1, h1, l2, h2);
-    requires h1 < begin_ptr || l1 > begin_ptr + count * WORDSIZE;
-    requires h2 < begin_ptr || l2 > begin_ptr + count * WORDSIZE;
-    requires count > 0 ==> ValidMemRange(begin_ptr, begin_ptr + count * WORDSIZE);
+    requires count > 0 ==> ValidMemWords(begin_ptr, count);
+    requires h1 < begin_ptr || l1 > WordOffset(begin_ptr, count);
+    requires h2 < begin_ptr || l2 > WordOffset(begin_ptr, count);
     decreases count;
     ensures  AddrMemContentsSeq(m, begin_ptr, count) == AddrMemContentsSeq(m', begin_ptr, count);
 {
-    if count == 0 {
-    } else {
+    if count != 0 {
         lemma_ValidMemRange_offset_word(begin_ptr, count);
-        lemma_AddrMemContentsSeq_framing2(m, m', begin_ptr + WORDSIZE, count - 1, l1, h1, l2, h2);
+        lemma_AddrMemContentsSeq_framing2(m, m', WordOffset(begin_ptr, 1), count - 1, l1, h1, l2, h2);
     }
 }
 
-lemma lemma_AddrMemContentsSeq_framing3(m:memmap, m':memmap, begin_ptr:nat, count:nat, 
+lemma lemma_AddrMemContentsSeq_framing3(m:memmap, m':memmap, begin_ptr:addr, count:nat, 
                                         l1:nat, h1:nat, 
                                         l2:nat, h2:nat, 
                                         l3:nat, h3:nat)
     requires ValidAddrMemStateOpaque(m) && ValidAddrMemStateOpaque(m');
     requires l1 <= h1 && l2 <= h2 && l3 <= h3;
     requires AddrMemPreservingExcept3(m, m', l1, h1, l2, h2, l3, h3);
-    requires h1 < begin_ptr || l1 > begin_ptr + count * WORDSIZE;
-    requires h2 < begin_ptr || l2 > begin_ptr + count * WORDSIZE;
-    requires h3 <= begin_ptr || l3 >= begin_ptr + count * WORDSIZE;
-    requires count > 0 ==> ValidMemRange(begin_ptr, begin_ptr + count * WORDSIZE);
+    requires count > 0 ==> ValidMemWords(begin_ptr, count);
+    requires h1 < begin_ptr || l1 > WordOffset(begin_ptr, count);
+    requires h2 < begin_ptr || l2 > WordOffset(begin_ptr, count);
+    requires h3 <= begin_ptr || l3 >= WordOffset(begin_ptr, count);
     decreases count;
     ensures  AddrMemContentsSeq(m, begin_ptr, count) == AddrMemContentsSeq(m', begin_ptr, count);
 {
-    if count == 0 {
-    } else {
+    if count != 0 {
         lemma_ValidMemRange_offset_word(begin_ptr, count);
-        lemma_AddrMemContentsSeq_framing3(m, m', begin_ptr + WORDSIZE, count - 1, l1, h1, l2, h2, l3, h3);
+        lemma_AddrMemContentsSeq_framing3(m, m', WordOffset(begin_ptr, 1), count - 1, l1, h1, l2, h2, l3, h3);
     }
 }
 
 lemma lemma_memset_result(m:memstate, m':memstate, src:word, dst:word, num_words:word)
     requires ValidMemState(m) && ValidMemState(m');
     requires ValidAddrMemStateOpaque(m.addresses) && ValidAddrMemStateOpaque(m'.addresses);
-    requires ValidMemRange(dst, dst + num_words * WORDSIZE);
-    requires ValidMemRange(src, src + num_words * WORDSIZE);
-    requires forall a:addr :: dst <= a < dst + num_words * WORDSIZE
+    requires ValidMemWords(dst, num_words);
+    requires ValidMemWords(src, num_words);
+    requires forall a:addr :: dst <= a < WordOffset(dst, num_words)
                 ==> MemContents(m', a) == MemContents(m, a - dst + src);
     decreases num_words;
     ensures  AddrMemContentsSeq(m'.addresses, dst, num_words) == AddrMemContentsSeq(m.addresses, src, num_words);
@@ -222,7 +209,7 @@ lemma lemma_memset_result(m:memstate, m':memstate, src:word, dst:word, num_words
     } else {
         lemma_ValidMemRange_offset_word(dst, num_words);
         lemma_ValidMemRange_offset_word(src, num_words);
-        lemma_memset_result(m, m', src + WORDSIZE, dst + WORDSIZE, num_words - 1);
+        lemma_memset_result(m, m', WordOffset(src, 1), WordOffset(dst, 1), num_words - 1);
         calc {
             AddrMemContentsSeq(m'.addresses, dst, num_words);
             [AddrMemContents(m'.addresses, dst)] + AddrMemContentsSeq(m'.addresses, dst + WORDSIZE, num_words - 1);
@@ -244,16 +231,14 @@ lemma lemma_memset_result(m:memstate, m':memstate, src:word, dst:word, num_words
 
 lemma {:fuel AddrMemContentsSeq,9} lemma_package_hash_result(m:memmap, base:word, s:seq<word>)
     requires ValidAddrMemStateOpaque(m);
-    requires ValidMemRange(base, base + SHA_CTXSIZE * WORDSIZE);
-    requires s == [ AddrMemContents(m, base + 0*WORDSIZE),
-                    AddrMemContents(m, base + 1*WORDSIZE),
-                    AddrMemContents(m, base + 2*WORDSIZE),
-                    AddrMemContents(m, base + 3*WORDSIZE),
-                    AddrMemContents(m, base + 4*WORDSIZE),
-                    AddrMemContents(m, base + 5*WORDSIZE),
-                    AddrMemContents(m, base + 6*WORDSIZE),
-                    AddrMemContents(m, base + 7*WORDSIZE) ];
+    requires ValidMemWords(base, SHA_CTXSIZE);
+    requires s == [ AddrMemContents(m, WordOffset(base, 0)),
+                    AddrMemContents(m, WordOffset(base, 1)),
+                    AddrMemContents(m, WordOffset(base, 2)),
+                    AddrMemContents(m, WordOffset(base, 3)),
+                    AddrMemContents(m, WordOffset(base, 4)),
+                    AddrMemContents(m, WordOffset(base, 5)),
+                    AddrMemContents(m, WordOffset(base, 6)),
+                    AddrMemContents(m, WordOffset(base, 7)) ];
     ensures  s == AddrMemContentsSeq(m, base, SHA_CTXSIZE);
-{
-
-}
+{}

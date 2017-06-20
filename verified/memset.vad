@@ -16,7 +16,7 @@ procedure {:timeLimitMultiplier 2} memcpy_bare(operand dst:addr, operand src:add
     ensures
         MemPreservingExcept(old(this), this, old(dst), old(dst + size));
         forall a:addr :: old(dst) <= a < old(dst + size)
-            ==> MemContents(this.m, a) == old(MemContents(this.m, a - dst + src));
+            ==> MemContents(this.m, a) == old(MemContents(this.m, WordAlignedAdd(a - dst, src)));
 {
     assert @dst != @src && @dst != @size && @dst != @tmp && @src != @size
         && @src != @tmp && @size != @tmp && @size != OSP && @tmp != OSP;
@@ -29,15 +29,17 @@ procedure {:timeLimitMultiplier 2} memcpy_bare(operand dst:addr, operand src:add
             dst == old(dst) && src == old(src);
             MemPreservingExcept(old(this), this, dst + size, dst + old(size));
             forall a:addr :: dst + size <= a < dst + old(size)
-                ==> MemContents(this.m, a) == old(MemContents(this.m, a - dst + src));
+                ==> MemContents(this.m, a) == old(MemContents(this.m, WordAlignedAdd(a - dst, src)));
         decreases
             size;
     {
         ghost var prevThis := this;
         lemma_WordAlignedSub(size, WORDSIZE);
         SUB(size, size, const(WORDSIZE));
+        lemma_WordAlignedAdd(src, size);
         LDR(tmp, src, size);
         assert tmp == MemContents(old(this.m), src + size);
+        lemma_WordAlignedAdd(dst, size);
         STR(tmp, dst, size);
         assert MemContents(this.m, dst + size) == MemContents(old(this.m), src + size);
     }
@@ -62,7 +64,7 @@ procedure memcpy(operand dst:addr, operand src:addr,
         SmcProcedureInvariant(old(this),this);
         MemPreservingExcept(old(this), this, old(dst), old(dst + size));
         forall a:addr :: old(dst) <= a < old(dst + size)
-            ==> MemContents(this.m, a) == old(MemContents(this.m, a - dst + src));
+            ==> MemContents(this.m, a) == old(MemContents(this.m, WordAlignedAdd(a - dst, src)));
 {
     memcpy_bare(dst, src, size, tmp);
 }
@@ -82,7 +84,7 @@ procedure memset(operand base:addr, operand val:word, inout operand size:reg)
     ensures
         SmcProcedureInvariant(old(this),this);
         MemPreservingExcept(old(this), this, old(base), old(base + size));
-        forall a :: old(base) <= a < old(base + size) && WordAligned(a)
+        forall a:addr :: old(base) <= a < old(base + size)
             ==> MemContents(this.m, a) == old(val);
 {
     while (size > 0)
@@ -93,16 +95,17 @@ procedure memset(operand base:addr, operand val:word, inout operand size:reg)
             RegPreservingExcept(old(this), this, set(@size));
             WordAligned(size) && 0 <= size <= old(size);
             MemPreservingExcept(old(this), this, base + size, base + old(size));
-            forall a :: (old(base) + size <= a < old(base + size)) && WordAligned(a)
+            forall a:addr :: old(base) + size <= a < old(base + size)
                 ==> MemContents(this.m, a) == val;
         decreases
             size;
     {
         ghost var prevThis := this;
-        SUB(size, size, 4);
-        assert WordAligned(size);
+        lemma_WordAlignedSub(size, WORDSIZE);
+        SUB(size, size, const(WORDSIZE));
+        lemma_WordAlignedAdd(base, size);
         STR(val, base, size);
-        assert MemContents(this.m, base + size) == val;
+        assert MemContents(this.m, WordAlignedAdd(base, size)) == val;
         assert forall p :: ValidMem(p) && p != base + size
             ==> MemContents(prevThis.m, p) == MemContents(this.m, p);
     }

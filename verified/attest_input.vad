@@ -7,26 +7,26 @@ procedure arrange_user_regs_in_memory() returns (ghost user_words:seq(word))
         mem; 
     requires/ensures
         SaneState(this);
-        ValidMemRange(sp + SHA_CTXSIZE * WORDSIZE, sp + (SHA_CTXSIZE + 8) * WORDSIZE);
+        ValidMemWords(sp + WordsToBytes(SHA_CTXSIZE), 8);
     ensures
-        AddrMemPreservingExcept(old(mem), mem, sp + SHA_CTXSIZE * WORDSIZE, sp + (SHA_CTXSIZE + 8) * WORDSIZE);
-        AddrMemContentsSeq(mem, sp + SHA_CTXSIZE * WORDSIZE, SHA_CTXSIZE) == user_words;
+        AddrMemPreservingExcept(old(mem), mem, sp + WordsToBytes(SHA_CTXSIZE), sp + WordsToBytes(SHA_CTXSIZE + 8));
+        AddrMemContentsSeq(mem, sp + WordsToBytes(SHA_CTXSIZE), SHA_CTXSIZE) == user_words;
         user_words == old(seq(r1, r2, r3, r4, r5, r6, r7, r8));
 {
     user_words := seq(r1, r2, r3, r4, r5, r6, r7, r8);
 
     // Arrange the user words in memory after the gap for the MAC output
-    STR(r1, sp, const((SHA_CTXSIZE + 0) * WORDSIZE));
-    STR(r2, sp, const((SHA_CTXSIZE + 1) * WORDSIZE));
-    STR(r3, sp, const((SHA_CTXSIZE + 2) * WORDSIZE));
-    STR(r4, sp, const((SHA_CTXSIZE + 3) * WORDSIZE));
-    STR(r5, sp, const((SHA_CTXSIZE + 4) * WORDSIZE));
-    STR(r6, sp, const((SHA_CTXSIZE + 5) * WORDSIZE));
-    STR(r7, sp, const((SHA_CTXSIZE + 6) * WORDSIZE));
-    STR(r8, sp, const((SHA_CTXSIZE + 7) * WORDSIZE));
+    STR(r1, sp, const(WordsToBytes(SHA_CTXSIZE + 0)));
+    STR(r2, sp, const(WordsToBytes(SHA_CTXSIZE + 1)));
+    STR(r3, sp, const(WordsToBytes(SHA_CTXSIZE + 2)));
+    STR(r4, sp, const(WordsToBytes(SHA_CTXSIZE + 3)));
+    STR(r5, sp, const(WordsToBytes(SHA_CTXSIZE + 4)));
+    STR(r6, sp, const(WordsToBytes(SHA_CTXSIZE + 5)));
+    STR(r7, sp, const(WordsToBytes(SHA_CTXSIZE + 6)));
+    STR(r8, sp, const(WordsToBytes(SHA_CTXSIZE + 7)));
 
     assert WordAligned(sp);
-    lemma_package_hash_result(mem, sp + SHA_CTXSIZE * WORDSIZE, user_words);    
+    lemma_package_hash_result(mem, sp + WordsToBytes(SHA_CTXSIZE), user_words);    
 }
 
 procedure arrange_real_measurement_in_memory(
@@ -39,7 +39,7 @@ procedure arrange_real_measurement_in_memory(
         mem; r2; r3; r4; r10; r11; r12;
     requires/ensures
         SaneState(this);
-        ValidMemRange(r1, r1 + SHA_CTXSIZE * WORDSIZE);
+        ValidMemWords(r1, SHA_CTXSIZE);
     requires
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);

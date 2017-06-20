@@ -333,3 +333,21 @@ procedure MRS_STR(
     MRS(tmp, reg);
     STR(tmp, base, ofs);
 }
+
+#verbatim
+function method TopHalfOfWord(c:word): word { BitsAsWord(WordAsBits(c) >> 16) }
+#endverbatim
+
+procedure {:refined} load_32_bit_const(
+    out operand dst:word,
+    inline c:word
+    )
+requires {:refined false}
+    !interrupts_enabled(this);
+ensures 
+    dst == c;
+{
+    MOVW(dst, const(c % 0x10000));
+    MOVT(dst, const(TopHalfOfWord(c)));
+    lemma_load_32_bit_const(c);
+}

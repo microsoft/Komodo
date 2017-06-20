@@ -338,3 +338,60 @@ lemma lemma_BitsAndWordConversions()
     }
 }
 
+lemma lemma_shift16maskhigh(x:bv32)
+    requires 0 <= x <= 0xffffffff
+    ensures (x >> 16) << 16 == x & 0xffff0000
+{}
+
+lemma lemma_masklow16(c:word)
+    ensures BitwiseMaskLow(c % 0x10000, 16) == BitsAsWord(WordAsBits(c) & 0xffff)
+{
+    ghost var cb := WordAsBits(c);
+    assert WordAsBits(0x10000) == 0x10000 by { reveal WordAsBits(); }
+    calc {
+        BitwiseMaskLow(c % 0x10000, 16);
+        { reveal BitwiseMaskLow(); }
+        BitsAsWord(BitAnd(WordAsBits(c % 0x10000), BitmaskLow(16)));
+        { assert BitmaskLow(16) == 0xffff by { reveal BitAtPos(); } }
+        BitsAsWord(BitAnd(WordAsBits(c % 0x10000), 0xffff));
+        { lemma_BitModEquiv(c, 0x10000); }
+        BitsAsWord(BitAnd(WordAsBits(BitsAsWord(BitMod(cb, 0x10000))), 0xffff));
+        { lemma_BitsAsWordAsBits(BitMod(cb, 0x10000)); }
+        BitsAsWord(BitAnd(BitMod(cb, 0x10000), 0xffff));
+        { reveal BitAnd(); reveal BitMod(); }
+        BitsAsWord(cb & 0xffff);
+    }
+}
+
+lemma lemma_load_32_bit_const(c:word)
+    ensures c == UpdateTopBits(c % 0x10000, BitsAsWord(WordAsBits(c) >> 16))
+{
+    ghost var bottom := c % 0x10000;
+    ghost var cb := WordAsBits(c);
+    ghost var top := BitsAsWord(cb >> 16);
+
+    assert BitsAsWord(0x10000) == 0x10000 by { reveal BitsAsWord(); }
+    lemma_WordBitEquiv(0x10000, 0x10000);
+
+    calc {
+        UpdateTopBits(bottom, top);
+        { reveal UpdateTopBits(); }
+        BitwiseOr(LeftShift(top, 16), BitwiseMaskLow(bottom, 16));
+        { calc {
+                LeftShift(top, 16);
+                { reveal BitShiftLeft(); }
+                BitsAsWord(WordAsBits(BitsAsWord(cb >> 16)) << 16);
+                { lemma_BitsAsWordAsBits(cb >> 16); lemma_shift16maskhigh(cb); }
+                BitsAsWord(cb & 0xffff0000);
+        } }
+        BitwiseOr(BitsAsWord(cb & 0xffff0000), BitwiseMaskLow(bottom, 16));
+        { lemma_masklow16(c); }
+        BitwiseOr(BitsAsWord(cb & 0xffff0000), BitsAsWord(cb & 0xffff));
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitOr(cb & 0xffff0000, cb & 0xffff));
+        { reveal BitOr(); }
+        BitsAsWord(cb);
+        { lemma_WordAsBitsAsWord(c); }
+        c;
+    }
+}
