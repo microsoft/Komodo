@@ -22,10 +22,17 @@ function method BytesToWords(b:int): int
 function {:opaque} TruncateWord(x:int): word
 { x % UINT32_LIM }
 
+// version of WordOffset with weak pre/post-conds
+function method WordOffset'(b:word, i:int): int
+    ensures WordAligned(b) ==> WordAligned(WordOffset'(b, i))
+{ reveal WordAligned(); b + WordsToBytes(i) }
+
+predicate ValidWordOffset(a:word, i:int)
+{ WordAligned(a) && isUInt32(a + WordsToBytes(i)) }
+
 function method WordOffset(a:addr, i:int): addr
     requires isUInt32(a + WordsToBytes(i))
-    ensures WordAligned(WordOffset(a, i))
-{ a + WordsToBytes(i) }
+{ WordOffset'(a, i) }
 
 const PAGESIZE:int := 0x1000;
 const PAGEBITS:int := 12;

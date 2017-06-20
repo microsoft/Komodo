@@ -30,6 +30,7 @@ function addrsInPhysPage(physPage: word, base: addr) : seq<addr>
     ensures forall a : addr | a in addrsInPhysPage(physPage, base) :: ValidMem(a)
 {
     reveal PageAligned(); // why?
+    assert PageAligned(base);
     addrRangeSeq(base, base+PAGESIZE)
 }
 

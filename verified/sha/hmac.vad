@@ -11,7 +11,7 @@ predicate disjoint(base:int, limit:int, base':int, limit':int)
     limit' < base || base > limit'
 }
 
-const HMAC_KEYSIZE_BYTES:int := 32;
+const HMAC_KEYSIZE_BYTES:int := HMAC_KEYSIZE_WORDS * WORDSIZE;
 const HMAC_KEYSIZE_WORDS:int := 8;
 
 const STACKSIZE_HMAC:int := 10 + STACKSIZE_SHA_ONE_SHOT;   // Make space to preserve registers
@@ -29,7 +29,7 @@ reads
 modifies
     mem; r10;
 ensures
-    AddrMemPreservingExcept(old(mem), mem, r1 + offset, r1 + offset + 4);
+    AddrMemPreservingExcept(old(mem), mem, r1 + offset, r1 + offset + WORDSIZE);
     AddrMemContents(mem, r1 + offset) == BitwiseXor(old(AddrMemContents(mem, r1 + offset)) , 0x5c5c5c5c);
 {
     LDR(r10, r1, offset);
@@ -54,14 +54,14 @@ ensures
     AddrMemContentsSeq(mem, r1, HMAC_KEYSIZE_WORDS) == 
       SeqXor(AddrMemContentsSeq(old(mem), r1, HMAC_KEYSIZE_WORDS), Opad(HMAC_KEYSIZE_WORDS));
 {
-    apply_one_opad(0);
-    apply_one_opad(4);
-    apply_one_opad(8);
-    apply_one_opad(12);
-    apply_one_opad(16);
-    apply_one_opad(20);
-    apply_one_opad(24);
-    apply_one_opad(28);
+    apply_one_opad(WordsToBytes(0));
+    apply_one_opad(WordsToBytes(1));
+    apply_one_opad(WordsToBytes(2));
+    apply_one_opad(WordsToBytes(3));
+    apply_one_opad(WordsToBytes(4));
+    apply_one_opad(WordsToBytes(5));
+    apply_one_opad(WordsToBytes(6));
+    apply_one_opad(WordsToBytes(7));
 
     lemma_apply_opad_complete(old(mem), mem, r1, HMAC_KEYSIZE_WORDS);
 }
@@ -77,7 +77,7 @@ reads
 modifies
     mem; r10;
 ensures
-    AddrMemPreservingExcept(old(mem), mem, r1 + offset, r1 + offset + 4);
+    AddrMemPreservingExcept(old(mem), mem, r1 + offset, r1 + offset + WORDSIZE);
     AddrMemContents(mem, r1 + offset) == BitwiseXor(old(AddrMemContents(mem, r1 + offset)) , 0x36363636);
 {
     LDR(r10, r1, offset);
@@ -102,14 +102,14 @@ ensures
     AddrMemContentsSeq(mem, r1, HMAC_KEYSIZE_WORDS) == 
       SeqXor(AddrMemContentsSeq(old(mem), r1, HMAC_KEYSIZE_WORDS), Ipad(HMAC_KEYSIZE_WORDS));
 {
-    apply_one_ipad(0);
-    apply_one_ipad(4);
-    apply_one_ipad(8);
-    apply_one_ipad(12);
-    apply_one_ipad(16);
-    apply_one_ipad(20);
-    apply_one_ipad(24);
-    apply_one_ipad(28);
+    apply_one_ipad(WordsToBytes(0));
+    apply_one_ipad(WordsToBytes(1));
+    apply_one_ipad(WordsToBytes(2));
+    apply_one_ipad(WordsToBytes(3));
+    apply_one_ipad(WordsToBytes(4));
+    apply_one_ipad(WordsToBytes(5));
+    apply_one_ipad(WordsToBytes(6));
+    apply_one_ipad(WordsToBytes(7));
 
     lemma_apply_ipad_complete(old(mem), mem, r1, HMAC_KEYSIZE_WORDS);
 }
@@ -126,18 +126,20 @@ requires
     let key_ptr := r4 in
 
      // key points to reasonable memory location
-        ValidMemRange(key_ptr, key_ptr + HMAC_KEYSIZE_BYTES)
+        ValidWordOffset(key_ptr, HMAC_KEYSIZE_WORDS)
+     && ValidMemRange(key_ptr, WordOffset(key_ptr, HMAC_KEYSIZE_WORDS))
      && key == AddrMemContentsSeq(mem, key_ptr, HMAC_KEYSIZE_WORDS)
      
      // tmp_ptr points to reasonable memory location with at least num_blocks+1 space
-     && ValidMemRange(tmp_ptr, tmp_ptr + SHA_BLOCKSIZE * WORDSIZE)
+     && ValidWordOffset(tmp_ptr, SHA_BLOCKSIZE)
+     && ValidMemRange(tmp_ptr, WordOffset(tmp_ptr, SHA_BLOCKSIZE))
 
      // Non-refined requirements
      //&& (tmp_ptr >= StackBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
      && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= KOM_DIRECTMAP_VBASE )
 
      // Anti-aliasing via direct layout of  sp, ctx, input, tmp, key
-     && tmp_ptr + SHA_BLOCKSIZE*WORDSIZE <= key_ptr
+     && WordOffset(tmp_ptr, SHA_BLOCKSIZE) <= key_ptr
      ;
 reads 
     r1; r4;
@@ -150,7 +152,7 @@ ensures
 
     // Memory framing:  We only touch one block in the tmp buffer
     AddrMemPreservingExcept(old(mem), mem, r1, r1 + HMAC_KEYSIZE_BYTES);
-    ValidMemRange(r1, r1 + SHA_BLOCKSIZE * WORDSIZE);
+    ValidMemRange(r1, WordOffset'(r1, SHA_BLOCKSIZE));
 
     AddrMemContentsSeq(mem, r1, HMAC_KEYSIZE_WORDS) == SeqXor(key, Ipad(HMAC_KEYSIZE_WORDS));
 
@@ -183,20 +185,20 @@ requires
     let tmp_ptr := r7 in
 
      // In-memory input is reasonable
-        isUInt32(input_ptr + (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE)
-     && ValidMemRange(input_ptr, input_ptr + (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE)
+       ValidWordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE)
+     && ValidMemRange(input_ptr, WordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE))
      && input == AddrMemContentsSeq(mem, input_ptr, (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE))
 
      // tmp_ptr points to reasonable memory location with at least num_blocks space
-     && isUInt32(tmp_ptr + (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE)
-     && ValidMemRange(tmp_ptr, tmp_ptr + (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE)
+     && ValidWordOffset(tmp_ptr, num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE)
+     && ValidMemRange(tmp_ptr, WordOffset(tmp_ptr, num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE))
 
      // Non-refined requirements
      //&& (tmp_ptr >= StackBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
      && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || tmp_ptr + (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE <= KOM_DIRECTMAP_VBASE )
 
      // Anti-aliasing via direct layout of  sp, ctx, input, tmp, key
-     && input_ptr + (num_blocks*SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE <= tmp_ptr
+     && WordOffset(input_ptr, num_blocks*SHA_BLOCKSIZE + SHA_CTXSIZE) <= tmp_ptr
       ;
 reads
     r2; r3; r7;
@@ -208,8 +210,8 @@ ensures
     ValidAddrMemStateOpaque(mem); 
 
     // Memory framing:  We only touch the tmp buffer
-    AddrMemPreservingExcept(old(mem), mem, r7, r7 + (r2 * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE);
-    ValidMemRange(r7, r7 + (r2 * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE);
+    AddrMemPreservingExcept(old(mem), mem, r7, r7 + WordsToBytes(r2 * SHA_BLOCKSIZE + SHA_CTXSIZE));
+    ValidMemRange(r7, r7 + WordsToBytes(r2 * SHA_BLOCKSIZE + SHA_CTXSIZE));
 
     AddrMemContentsSeq(mem, r7, r2 * SHA_BLOCKSIZE + SHA_CTXSIZE) == input;
 
@@ -245,17 +247,18 @@ requires
     let key_ptr := r4 in
 
      // key points to reasonable memory location
-        ValidMemRange(key_ptr, key_ptr + HMAC_KEYSIZE_BYTES)
+        ValidWordOffset(key_ptr, HMAC_KEYSIZE_WORDS)
+     && ValidMemRange(key_ptr, WordOffset(key_ptr, HMAC_KEYSIZE_WORDS))
      && key == AddrMemContentsSeq(mem, key_ptr, HMAC_KEYSIZE_WORDS)
      
      // In-memory input is reasonable
-     && isUInt32(input_ptr + (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE)
+     && ValidWordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE)
      && ValidMemRange(input_ptr, input_ptr + (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE)
      && input == AddrMemContentsSeq(mem, input_ptr, (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE))
 
      // tmp_ptr points to reasonable memory location with at least num_blocks+1 space
-     && isUInt32(tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE)
-     && ValidMemRange(tmp_ptr, tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE)
+     && ValidWordOffset(tmp_ptr, (num_blocks + 1) * SHA_BLOCKSIZE)
+     && ValidMemRange(tmp_ptr, WordOffset(tmp_ptr, (num_blocks + 1) * SHA_BLOCKSIZE))
 
      // We aren't hashing too many bits
      && isUInt32((num_blocks + 1) * (SHA_BLOCKSIZE * WORDSIZE * SHA_CTXSIZE))
@@ -263,11 +266,11 @@ requires
      // Non-refined requirements
 //     && disjoint(tmp_ptr, tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE, StackBase(), StackLimit())
      //&& (tmp_ptr >= StackBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
-     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
+     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || WordOffset(tmp_ptr, (num_blocks + 1) * SHA_BLOCKSIZE) <= KOM_DIRECTMAP_VBASE)
 
      // Anti-aliasing via direct layout of input, tmp, key
-     && input_ptr + (num_blocks*SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE <= tmp_ptr
-     && tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= key_ptr
+     && WordOffset(input_ptr, num_blocks*SHA_BLOCKSIZE + SHA_CTXSIZE) <= tmp_ptr
+     && WordOffset(tmp_ptr, (num_blocks + 1) * SHA_BLOCKSIZE) <= key_ptr
       ;
 reads
     globals; r1; r3; r4; 
@@ -279,8 +282,9 @@ ensures
     ValidAddrMemStateOpaque(mem); 
 
     // Memory framing:  We only touch one block in the tmp buffer
-    AddrMemPreservingExcept(old(mem), mem, r1, r1 + r2 * SHA_BLOCKSIZE * WORDSIZE);
-    ValidMemRange(r1, r1 + r2 * SHA_BLOCKSIZE * WORDSIZE);
+    ValidWordOffset(r1, r2 * SHA_BLOCKSIZE);
+    AddrMemPreservingExcept(old(mem), mem, r1, WordOffset(r1, r2 * SHA_BLOCKSIZE));
+    ValidMemRange(r1, WordOffset(r1, r2 * SHA_BLOCKSIZE));
 
     r2 == old(r2) + 1;
 
@@ -346,14 +350,11 @@ procedure hmac_inner(
 requires/ensures
     ValidAddrMemStateOpaque(mem);
     SaneState(this);
+    StackBytesRemaining(this, WordsToBytes(STACKSIZE_SHA_ONE_SHOT));
 requires 
     !interrupts_enabled(this);
     mode_of_state(this) == Monitor;
 requires
-    // Stack is accessible
-    sp >= STACKSIZE_SHA_ONE_SHOT * WORDSIZE; 
-    ValidMemRange(sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE, sp);
-
     // K table is valid
     SaneShaGlobal(globals);
     lr == AddressOfGlobal(K_SHA256s());
@@ -365,20 +366,22 @@ requires
     let key_ptr := r4 in
 
      // ctx points to a reasonable memory location
-        ValidMemRange(ctx, ctx + SHA_CTXSIZE * WORDSIZE)
+       ValidWordOffset(ctx, SHA_CTXSIZE)
+     && ValidMemRange(ctx, WordOffset(ctx, SHA_CTXSIZE))
 
      // key points to reasonable memory location
-     && ValidMemRange(key_ptr, key_ptr + HMAC_KEYSIZE_BYTES)
+     && ValidWordOffset(key_ptr, HMAC_KEYSIZE_WORDS)
+     && ValidMemRange(key_ptr, WordOffset(key_ptr, HMAC_KEYSIZE_WORDS))
      && key == AddrMemContentsSeq(mem, key_ptr, HMAC_KEYSIZE_WORDS)
      
      // In-memory input is reasonable
-     && isUInt32(input_ptr + (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE)
-     && ValidMemRange(input_ptr, input_ptr + (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE)
+     && ValidWordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE)
+     && ValidMemRange(input_ptr, WordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE))
      && input == AddrMemContentsSeq(mem, input_ptr, num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE)
 
      // tmp_ptr points to reasonable memory location with at least num_blocks+1 space
-     && isUInt32(tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE)
-     && ValidMemRange(tmp_ptr, tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE)
+     && ValidWordOffset(tmp_ptr, (num_blocks + 1) * SHA_BLOCKSIZE)
+     && ValidMemRange(tmp_ptr, WordOffset(tmp_ptr, (num_blocks + 1) * SHA_BLOCKSIZE))
 
      // We aren't hashing too many bits
      && isUInt32((num_blocks + 1) * (SHA_BLOCKSIZE * WORDSIZE * HMAC_KEYSIZE_WORDS))
@@ -386,13 +389,13 @@ requires
      // Non-refined requirements
 //     && disjoint(tmp_ptr, tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE, StackBase(), StackLimit())
      //&& (tmp_ptr >= StackBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
-     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
+     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || WordOffset(tmp_ptr, (num_blocks + 1) * SHA_BLOCKSIZE) <= KOM_DIRECTMAP_VBASE)
 
      // Anti-aliasing via direct layout of  sp, ctx, input, tmp, key
      && sp <= ctx
-     && ctx + SHA_CTXSIZE*WORDSIZE <= input_ptr
-     && input_ptr + (num_blocks*SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE < tmp_ptr
-     && tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE <= key_ptr
+     && WordOffset(ctx, SHA_CTXSIZE) <= input_ptr
+     && WordOffset(input_ptr, num_blocks*SHA_BLOCKSIZE + SHA_CTXSIZE) < tmp_ptr
+     && WordOffset(tmp_ptr, (num_blocks + 1) * SHA_BLOCKSIZE) <= key_ptr
       ;
 reads
     globals;
@@ -688,14 +691,8 @@ procedure {:timeLimitMultiplier 2} hmac_outer(
 requires/ensures
     ValidAddrMemStateOpaque(mem);
     SaneState(this);
-requires 
-    !interrupts_enabled(this);
-    mode_of_state(this) == Monitor;
+    StackBytesRemaining(this, WordsToBytes(STACKSIZE_SHA_ONE_SHOT));
 requires
-    // Stack is accessible
-    sp >= STACKSIZE_SHA_ONE_SHOT * WORDSIZE; 
-    ValidMemRange(sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE, sp);
-
     // K table is valid
     SaneShaGlobal(globals);
     lr == AddressOfGlobal(K_SHA256s());
@@ -705,16 +702,18 @@ requires
     let key_ptr := r4 in
 
      // ctx points to a reasonable memory location
-        ValidMemRange(ctx_ptr, ctx_ptr + SHA_CTXSIZE * WORDSIZE)
+     ValidWordOffset(ctx_ptr, SHA_CTXSIZE)
+     && ValidMemRange(ctx_ptr, WordOffset(ctx_ptr, SHA_CTXSIZE))
      && inner_hash == AddrMemContentsSeq(mem, ctx_ptr, SHA_CTXSIZE)
 
      // key points to reasonable memory location
-     && ValidMemRange(key_ptr, key_ptr + HMAC_KEYSIZE_BYTES)
+     && ValidWordOffset(key_ptr, HMAC_KEYSIZE_WORDS)
+     && ValidMemRange(key_ptr, WordOffset(key_ptr, HMAC_KEYSIZE_WORDS))
      && key == AddrMemContentsSeq(mem, key_ptr, HMAC_KEYSIZE_WORDS)
      
      // tmp_ptr points to reasonable memory location with at least 1 block of space
-     && isUInt32(tmp_ptr + SHA_BLOCKSIZE * WORDSIZE)
-     && ValidMemRange(tmp_ptr, tmp_ptr + SHA_BLOCKSIZE * WORDSIZE)
+     && ValidWordOffset(tmp_ptr, SHA_BLOCKSIZE)
+     && ValidMemRange(tmp_ptr, WordOffset(tmp_ptr, SHA_BLOCKSIZE))
 
      // We aren't hashing too many bits
      && isUInt32(SHA_BLOCKSIZE * WORDSIZE * HMAC_KEYSIZE_WORDS)
@@ -722,12 +721,12 @@ requires
      // Non-refined requirements
 //     && disjoint(tmp_ptr, tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE, StackBase(), StackLimit())
      //&& (tmp_ptr >= StackBase() || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
-     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || tmp_ptr + SHA_BLOCKSIZE * WORDSIZE <= KOM_DIRECTMAP_VBASE )
+     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || WordOffset(tmp_ptr, SHA_BLOCKSIZE) <= KOM_DIRECTMAP_VBASE)
 
      // Anti-aliasing via direct layout of  sp, ctx, input, tmp, key
      && sp <= ctx_ptr
-     && ctx_ptr + SHA_CTXSIZE*WORDSIZE < tmp_ptr
-     && tmp_ptr + SHA_BLOCKSIZE * WORDSIZE <= key_ptr
+     && WordOffset(ctx_ptr, SHA_CTXSIZE) < tmp_ptr
+     && WordOffset(tmp_ptr, SHA_BLOCKSIZE) <= key_ptr
       ;
 reads
     globals;
@@ -740,10 +739,11 @@ ensures
 
     // Memory framing:  We only touch the stack and 8 words pointed to by ctx_ptr
     AddrMemPreservingExcept3(old(mem), mem, 
-                             sp - STACKSIZE_SHA_ONE_SHOT * WORDSIZE, sp, 
-                             old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE,
-                             old(r1), old(r1) + SHA_BLOCKSIZE * WORDSIZE);
-    ValidMemRange(r0, r0 + SHA_CTXSIZE * WORDSIZE);
+                             sp - WordsToBytes(STACKSIZE_SHA_ONE_SHOT), sp, 
+                             old(r0), WordOffset(old(r0), SHA_CTXSIZE),
+                             old(r1), WordOffset(old(r1), SHA_BLOCKSIZE));
+    ValidWordOffset(r0, SHA_CTXSIZE);
+    ValidMemRange(r0, WordOffset(r0, SHA_CTXSIZE));
 
     // Register framing
     r0 == old(r0);
@@ -814,14 +814,7 @@ requires/ensures
     ValidAddrMemStateOpaque(mem);
     SaneState(this);
 requires 
-    !interrupts_enabled(this);
-    mode_of_state(this) == Monitor;
-    StackBytesRemaining(this, STACKSIZE_HMAC * WORDSIZE);
-requires
-    // Stack is accessible
-    sp >= STACKSIZE_HMAC * WORDSIZE; 
-    ValidMemRange(sp - STACKSIZE_HMAC * WORDSIZE, sp);
-
+    StackBytesRemaining(this, WordsToBytes(STACKSIZE_HMAC));
     // K table is valid
     SaneShaGlobal(globals);
     lr == AddressOfGlobal(K_SHA256s());
@@ -833,20 +826,22 @@ requires
     let key_ptr := r4 in
 
      // ctx points to a reasonable memory location
-        ValidMemRange(ctx, ctx + SHA_CTXSIZE * WORDSIZE)
+       ValidWordOffset(ctx, SHA_CTXSIZE)
+     && ValidMemRange(ctx, WordOffset(ctx, SHA_CTXSIZE))
 
      // key points to reasonable memory location
-     && ValidMemRange(key_ptr, key_ptr + HMAC_KEYSIZE_BYTES)
+     && ValidWordOffset(key_ptr, HMAC_KEYSIZE_WORDS)
+     && ValidMemRange(key_ptr, WordOffset(key_ptr, HMAC_KEYSIZE_WORDS))
      && key == AddrMemContentsSeq(mem, key_ptr, HMAC_KEYSIZE_WORDS)
      
      // In-memory input is reasonable
-     && isUInt32(input_ptr + (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE)
-     && ValidMemRange(input_ptr, input_ptr + (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE)
+     && ValidWordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE)
+     && ValidMemRange(input_ptr, WordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE))
      && input == AddrMemContentsSeq(mem, input_ptr, num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE)
 
      // tmp_ptr points to reasonable memory location with at least num_blocks+1 space
-     && isUInt32(tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE)
-     && ValidMemRange(tmp_ptr, tmp_ptr + (num_blocks + 1) * SHA_BLOCKSIZE * WORDSIZE)
+     && ValidWordOffset(tmp_ptr, (num_blocks + 1) * SHA_BLOCKSIZE)
+     && ValidMemRange(tmp_ptr, WordOffset(tmp_ptr, (num_blocks + 1) * SHA_BLOCKSIZE))
 
      // We aren't hashing too many bits
      && isUInt32((num_blocks + 1) * (SHA_BLOCKSIZE * WORDSIZE * HMAC_KEYSIZE_WORDS))
@@ -855,13 +850,13 @@ requires
 // TODO: Removed these so that attest can call it.  Still need to deal with the consequences
 //     && ctx >= StackBase()    
 //     && tmp_ptr >= StackBase() // || tmp_ptr + HMAC_KEYSIZE_BYTES <= StackLimit())
-     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || tmp_ptr + (num_blocks + 1)*SHA_BLOCKSIZE*WORDSIZE <= KOM_DIRECTMAP_VBASE)
+     && (tmp_ptr >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || WordOffset(tmp_ptr, (num_blocks + 1)*SHA_BLOCKSIZE) <= KOM_DIRECTMAP_VBASE)
 
      // Anti-aliasing via direct layout of  sp, ctx, input, tmp, key
      && sp <= ctx
-     && ctx + SHA_CTXSIZE * WORDSIZE <= input_ptr
-     && input_ptr + (num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) * WORDSIZE < tmp_ptr
-     && tmp_ptr + (num_blocks + 1)*SHA_BLOCKSIZE*WORDSIZE <= key_ptr
+     && WordOffset(ctx, SHA_CTXSIZE) <= input_ptr
+     && WordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE + SHA_CTXSIZE) < tmp_ptr
+     && WordOffset(tmp_ptr, (num_blocks + 1)*SHA_BLOCKSIZE) <= key_ptr
       ;
 reads
     globals;
@@ -930,15 +925,6 @@ ensures
                              StackLimit(), old(sp),
                              old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE,
                              old(r1), old(r1) + (old(r2) + 1) * SHA_BLOCKSIZE * WORDSIZE);
-    assert WordAligned(sp);
-    lemma_WordAlignedAdd(sp, 32);
-    lemma_WordAlignedAdd(sp, 28);
-    lemma_WordAlignedAdd(sp, 24);
-    lemma_WordAlignedAdd(sp, 20);
-    lemma_WordAlignedAdd(sp, 16);
-    lemma_WordAlignedAdd(sp, 12);
-    lemma_WordAlignedAdd(sp,  8);
-    lemma_WordAlignedAdd(sp,  4);
 
     // Prove that the key is still intact
     lemma_AddrMemContentsSeq_framing3(pre_inner_mem, mem, 

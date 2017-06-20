@@ -52,12 +52,17 @@ predicate AllRegsInvariant(s:state, s':state)
 // Stack/procedure invariants
 //-----------------------------------------------------------------------------
 
+predicate StackPointerBytesRemaining(sp:word, bytes:int)
+{
+    SaneStackPointer(sp) && StackLimit() + bytes < sp <= StackBase()
+}
+
 predicate StackBytesRemaining(s:state,bytes:int)
 {
-    ValidState(s) && SaneStack(s) &&
+    ValidState(s) && 
     (reveal ValidRegState();
     var sp := s.regs[SP(Monitor)];
-    StackLimit() + bytes < sp <= StackBase())
+    StackPointerBytesRemaining(sp, bytes))
 }
 
 predicate ParentStackPreserving(s:state, r:state)

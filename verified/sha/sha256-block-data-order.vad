@@ -8,6 +8,7 @@
 include {:verbatim} "sha256.i.dfy"
 include {:verbatim} "sha256-helpers.i.dfy"
 include {:verbatim} "sha256-invariants.i.dfy"
+include {:verbatim} "../kom_common.i.dfy"
 
 include "../valedecls.vad"
 include "sha256-one-block.vad"
@@ -60,11 +61,12 @@ procedure {:refined} {:timeLimitMultiplier 2} sha256_block_data_order_inner(
 
 requires/ensures
     ValidAddrMemStateOpaque(mem);
+    SaneStackPointer(sp);
 requires {:refined false}
     !interrupts_enabled(this);
 requires
     // Stack is accessible
-    ValidMemRange(sp, sp + SHA_STACKSIZE * WORDSIZE);
+    ValidMemRange(sp, WordOffset(sp, SHA_STACKSIZE));
 
     IsCompleteSHA256Trace(trace_in);
     SHA256TraceIsCorrect(trace_in);
@@ -79,27 +81,28 @@ requires
     let num_blocks := r2 in // Number of 64-byte blocks to process
 
      // Old H values are laid out in memory pointed at by ctx
-        ValidMemRange(ctx, ctx + SHA_CTXSIZE * WORDSIZE)
-     && last(trace_in.H)[0] == AddrMemContents(mem, ctx + 0*WORDSIZE)
-     && last(trace_in.H)[1] == AddrMemContents(mem, ctx + 1*WORDSIZE)
-     && last(trace_in.H)[2] == AddrMemContents(mem, ctx + 2*WORDSIZE)
-     && last(trace_in.H)[3] == AddrMemContents(mem, ctx + 3*WORDSIZE)
-     && last(trace_in.H)[4] == AddrMemContents(mem, ctx + 4*WORDSIZE)
-     && last(trace_in.H)[5] == AddrMemContents(mem, ctx + 5*WORDSIZE)
-     && last(trace_in.H)[6] == AddrMemContents(mem, ctx + 6*WORDSIZE)
-     && last(trace_in.H)[7] == AddrMemContents(mem, ctx + 7*WORDSIZE)
+        WordAligned(ctx) && isUInt32(ctx + WordsToBytes(SHA_CTXSIZE))
+     && ValidMemRange(ctx, WordOffset(ctx, SHA_CTXSIZE))
+     && last(trace_in.H)[0] == AddrMemContents(mem, WordOffset(ctx, 0))
+     && last(trace_in.H)[1] == AddrMemContents(mem, WordOffset(ctx, 1))
+     && last(trace_in.H)[2] == AddrMemContents(mem, WordOffset(ctx, 2))
+     && last(trace_in.H)[3] == AddrMemContents(mem, WordOffset(ctx, 3))
+     && last(trace_in.H)[4] == AddrMemContents(mem, WordOffset(ctx, 4))
+     && last(trace_in.H)[5] == AddrMemContents(mem, WordOffset(ctx, 5))
+     && last(trace_in.H)[6] == AddrMemContents(mem, WordOffset(ctx, 6))
+     && last(trace_in.H)[7] == AddrMemContents(mem, WordOffset(ctx, 7))
 
      // Ghost input matches in-memory input
      && SeqLength(input) == num_blocks * SHA_BLOCKSIZE
-     && isUInt32(input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
-     && ValidMemRange(input_ptr, input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
-     && (forall j :: 0 <= j < num_blocks * SHA_BLOCKSIZE ==> AddrMemContents(mem, input_ptr + j*WORDSIZE) == input[j]
+     && WordAligned(input_ptr) && isUInt32(input_ptr + WordsToBytes(num_blocks * SHA_BLOCKSIZE))
+     && ValidMemRange(input_ptr, WordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE))
+     && (forall j :: 0 <= j < num_blocks * SHA_BLOCKSIZE ==> AddrMemContents(mem, WordOffset(input_ptr, j)) == input[j]
          )
 
      // Anti-aliasing
-     && (ctx + SHA_CTXSIZE*WORDSIZE < input_ptr || ctx > input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE)    // input_ptr != ctx
-     && (ctx + SHA_CTXSIZE*WORDSIZE < sp || ctx > sp + SHA_STACKSIZE*WORDSIZE)                             // ctx != sp
-     && (input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE < sp || input_ptr >= sp + SHA_STACKSIZE*WORDSIZE);  // input_ptr != sp
+     && (WordOffset(ctx, SHA_CTXSIZE) < input_ptr || ctx > WordOffset(input_ptr, num_blocks*SHA_BLOCKSIZE))    // input_ptr != ctx
+     && (WordOffset(ctx, SHA_CTXSIZE) < sp || ctx > WordOffset(sp, SHA_STACKSIZE))                             // ctx != sp
+     && (WordOffset(input_ptr, num_blocks*SHA_BLOCKSIZE) < sp || input_ptr >= WordOffset(sp, SHA_STACKSIZE));  // input_ptr != sp
 
 reads
     sp; globals;
@@ -107,8 +110,8 @@ modifies
     mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
 ensures
     // Memory framing:  We only touch the stack and 8 bytes pointed to by ctx_ptr
-    AddrMemPreservingExcept2(old(mem), mem, sp, sp + SHA_STACKSIZE * WORDSIZE,
-                             old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE);
+    AddrMemPreservingExcept2(old(mem), mem, sp, WordOffset(sp, SHA_STACKSIZE),
+                             old(r0), WordOffset(old(r0), SHA_CTXSIZE));
 
     IsCompleteSHA256Trace(trace_out);
     SHA256TraceIsCorrect(trace_out);
@@ -116,14 +119,14 @@ ensures
     trace_in.M == SeqSlice(trace_out.M, 0, SeqLength(trace_in.M));  // trace_in.M is a prefix of trace_out.M
     (forall i :: 0 <= i < old(r2)
       ==> trace_out.M[SeqLength(trace_in.M) + i] == SeqSlice(input, i*16, (i+1)*16)) ;
-    last(trace_out.H)[0] == AddrMemContents(mem, old(r0) + 0*WORDSIZE);
-    last(trace_out.H)[1] == AddrMemContents(mem, old(r0) + 1*WORDSIZE);
-    last(trace_out.H)[2] == AddrMemContents(mem, old(r0) + 2*WORDSIZE);
-    last(trace_out.H)[3] == AddrMemContents(mem, old(r0) + 3*WORDSIZE);
-    last(trace_out.H)[4] == AddrMemContents(mem, old(r0) + 4*WORDSIZE);
-    last(trace_out.H)[5] == AddrMemContents(mem, old(r0) + 5*WORDSIZE);
-    last(trace_out.H)[6] == AddrMemContents(mem, old(r0) + 6*WORDSIZE);
-    last(trace_out.H)[7] == AddrMemContents(mem, old(r0) + 7*WORDSIZE);
+    last(trace_out.H)[0] == AddrMemContents(mem, WordOffset(old(r0), 0));
+    last(trace_out.H)[1] == AddrMemContents(mem, WordOffset(old(r0), 1));
+    last(trace_out.H)[2] == AddrMemContents(mem, WordOffset(old(r0), 2));
+    last(trace_out.H)[3] == AddrMemContents(mem, WordOffset(old(r0), 3));
+    last(trace_out.H)[4] == AddrMemContents(mem, WordOffset(old(r0), 4));
+    last(trace_out.H)[5] == AddrMemContents(mem, WordOffset(old(r0), 5));
+    last(trace_out.H)[6] == AddrMemContents(mem, WordOffset(old(r0), 6));
+    last(trace_out.H)[7] == AddrMemContents(mem, WordOffset(old(r0), 7));
 
 {
     assert ValidGlobal(K_SHA256s()) by { reveal SaneShaGlobal; }
@@ -163,19 +166,18 @@ ensures
     //     assert ValidMem(sp + j*4);
     // }
 
-
-    forall addr :| input_ptr <= addr < input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE && (addr - input_ptr) % WORDSIZE == 0
+    forall addr :| input_ptr <= addr < WordOffset(input_ptr, num_blocks*SHA_BLOCKSIZE) && WordAligned(addr)
         :: ValidMem(addr)
     {
         assert ValidMem(addr);
     }
-    assert ValidMemRange(input_ptr, input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE);
+    assert ValidMemRange(input_ptr, WordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE));
 
 
 
-    forall j :| 0 <= j < num_blocks * SHA_BLOCKSIZE :: AddrMemContents(mem, input_ptr + j*WORDSIZE) == input[j]
+    forall j :| 0 <= j < num_blocks * SHA_BLOCKSIZE :: AddrMemContents(mem, WordOffset(input_ptr, j)) == input[j]
     {
-        assert ValidMem(input_ptr + j*WORDSIZE);
+        assert ValidMem(WordOffset(input_ptr, j));
     }
 
     // OBSERVE
@@ -210,6 +212,7 @@ procedure {:refined} {:timeLimitMultiplier 3} sha256_block_data_order(
     )
 requires/ensures
     ValidAddrMemStateOpaque(mem);
+    SaneStackPointer(sp);
 requires {:refined false}
     !interrupts_enabled(this);
 requires
@@ -217,8 +220,9 @@ requires
     SHA256TraceIsCorrect(trace_in);
 
     // Stack is accessible
-    sp >= STACKSIZE_SHA_UPDATE*WORDSIZE;
-    ValidMemRange(sp-STACKSIZE_SHA_UPDATE*WORDSIZE, sp);
+    sp >= WordsToBytes(STACKSIZE_SHA_UPDATE);
+    ValidMemRange(sp-WordsToBytes(STACKSIZE_SHA_UPDATE), sp);
+    StackPointerBytesRemaining(sp, WordsToBytes(STACKSIZE_SHA_UPDATE));
 
     // K table is valid
     SaneShaGlobal(globals);
@@ -230,26 +234,27 @@ requires
     let num_blocks := r2 in // Number of 64-byte blocks to process
 
      // Old H values are laid out in memory pointed at by ctx
-        ValidMemRange(ctx, ctx + SHA_CTXSIZE * WORDSIZE)
-     && last(trace_in.H)[0] == AddrMemContents(mem, ctx + 0*WORDSIZE)
-     && last(trace_in.H)[1] == AddrMemContents(mem, ctx + 1*WORDSIZE)
-     && last(trace_in.H)[2] == AddrMemContents(mem, ctx + 2*WORDSIZE)
-     && last(trace_in.H)[3] == AddrMemContents(mem, ctx + 3*WORDSIZE)
-     && last(trace_in.H)[4] == AddrMemContents(mem, ctx + 4*WORDSIZE)
-     && last(trace_in.H)[5] == AddrMemContents(mem, ctx + 5*WORDSIZE)
-     && last(trace_in.H)[6] == AddrMemContents(mem, ctx + 6*WORDSIZE)
-     && last(trace_in.H)[7] == AddrMemContents(mem, ctx + 7*WORDSIZE)
+        WordAligned(ctx) && isUInt32(ctx + WordsToBytes(SHA_CTXSIZE))
+     && ValidMemRange(ctx, ctx + SHA_CTXSIZE * WORDSIZE)
+     && last(trace_in.H)[0] == AddrMemContents(mem, WordOffset(ctx, 0))
+     && last(trace_in.H)[1] == AddrMemContents(mem, WordOffset(ctx, 1))
+     && last(trace_in.H)[2] == AddrMemContents(mem, WordOffset(ctx, 2))
+     && last(trace_in.H)[3] == AddrMemContents(mem, WordOffset(ctx, 3))
+     && last(trace_in.H)[4] == AddrMemContents(mem, WordOffset(ctx, 4))
+     && last(trace_in.H)[5] == AddrMemContents(mem, WordOffset(ctx, 5))
+     && last(trace_in.H)[6] == AddrMemContents(mem, WordOffset(ctx, 6))
+     && last(trace_in.H)[7] == AddrMemContents(mem, WordOffset(ctx, 7))
 
      // Ghost input matches in-memory input
      && SeqLength(input) == num_blocks * SHA_BLOCKSIZE
-     && isUInt32(input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
-     && ValidMemRange(input_ptr, input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
-     && (forall j :: 0 <= j < num_blocks*SHA_BLOCKSIZE ==> AddrMemContents(mem, input_ptr + j*WORDSIZE) == input[j])
+     && WordAligned(input_ptr) && isUInt32(input_ptr + WordsToBytes(num_blocks * SHA_BLOCKSIZE))
+     && ValidMemRange(input_ptr, WordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE))
+     && (forall j :: 0 <= j < num_blocks*SHA_BLOCKSIZE ==> AddrMemContents(mem, WordOffset(input_ptr, j)) == input[j])
 
      // Anti-aliasing
-     && (ctx + SHA_CTXSIZE*WORDSIZE < input_ptr || ctx > input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE)    // input_ptr != ctx
-     && (ctx + SHA_CTXSIZE*WORDSIZE < sp - STACKSIZE_SHA_UPDATE*WORDSIZE || ctx >= sp)                              // ctx != sp
-     && (input_ptr + num_blocks*SHA_BLOCKSIZE*WORDSIZE < sp - STACKSIZE_SHA_UPDATE*WORDSIZE || input_ptr >= sp);   // input_ptr != sp
+     && (WordOffset(ctx, SHA_CTXSIZE) < input_ptr || ctx > WordOffset(input_ptr, num_blocks*SHA_BLOCKSIZE))    // input_ptr != ctx
+     && (WordOffset(ctx, SHA_CTXSIZE) < sp - WordsToBytes(STACKSIZE_SHA_UPDATE) || ctx >= sp)                              // ctx != sp
+     && (WordOffset(input_ptr, num_blocks*SHA_BLOCKSIZE) < sp - WordsToBytes(STACKSIZE_SHA_UPDATE) || input_ptr >= sp);   // input_ptr != sp
 
 reads
     globals;
@@ -269,8 +274,8 @@ ensures
     lr == old(lr);
 
     // Memory framing:  We only touch the stack and 8 bytes pointed to by ctx_ptr
-    AddrMemPreservingExcept2(old(mem), mem, sp - STACKSIZE_SHA_UPDATE*WORDSIZE, sp, old(r0),
-                            old(r0) + SHA_CTXSIZE * WORDSIZE);
+    AddrMemPreservingExcept2(old(mem), mem, sp - WordsToBytes(STACKSIZE_SHA_UPDATE), sp, old(r0),
+                            old(r0) + WordsToBytes(SHA_CTXSIZE));
 
     // SHA results
     IsCompleteSHA256Trace(trace_out);
@@ -279,52 +284,53 @@ ensures
     trace_in.M == SeqSlice(trace_out.M, 0, SeqLength(trace_in.M));  // trace_in.M is a prefix of trace_out.M
     (forall i :: 0 <= i < old(r2) 
       ==> trace_out.M[SeqLength(trace_in.M) + i] == SeqSlice(input, i*SHA_BLOCKSIZE, (i+1)*SHA_BLOCKSIZE));
-    last(trace_out.H)[0] == AddrMemContents(mem, old(r0) + 0*WORDSIZE);
-    last(trace_out.H)[1] == AddrMemContents(mem, old(r0) + 1*WORDSIZE);
-    last(trace_out.H)[2] == AddrMemContents(mem, old(r0) + 2*WORDSIZE);
-    last(trace_out.H)[3] == AddrMemContents(mem, old(r0) + 3*WORDSIZE);
-    last(trace_out.H)[4] == AddrMemContents(mem, old(r0) + 4*WORDSIZE);
-    last(trace_out.H)[5] == AddrMemContents(mem, old(r0) + 5*WORDSIZE);
-    last(trace_out.H)[6] == AddrMemContents(mem, old(r0) + 6*WORDSIZE);
-    last(trace_out.H)[7] == AddrMemContents(mem, old(r0) + 7*WORDSIZE);
+    last(trace_out.H)[0] == AddrMemContents(mem, WordOffset(old(r0), 0));
+    last(trace_out.H)[1] == AddrMemContents(mem, WordOffset(old(r0), 1));
+    last(trace_out.H)[2] == AddrMemContents(mem, WordOffset(old(r0), 2));
+    last(trace_out.H)[3] == AddrMemContents(mem, WordOffset(old(r0), 3));
+    last(trace_out.H)[4] == AddrMemContents(mem, WordOffset(old(r0), 4));
+    last(trace_out.H)[5] == AddrMemContents(mem, WordOffset(old(r0), 5));
+    last(trace_out.H)[6] == AddrMemContents(mem, WordOffset(old(r0), 6));
+    last(trace_out.H)[7] == AddrMemContents(mem, WordOffset(old(r0), 7));
 {
     // We need 10 slots to save/restore registers, and then the inner routine needs 19 slots for scratch space
-    SUB(sp, sp, 116);
+    SUB(sp, sp, const(WordsToBytes(SHA_STACKSIZE+10)));
+    assert SaneStackPointer(sp);
 
     // Save nonvolatile registers
-    STR(lr,  sp, 112);
-    STR(r4,  sp, 108);
-    STR(r5,  sp, 104);
-    STR(r6,  sp, 100);
-    STR(r7,  sp, 96);
-    STR(r8,  sp, 92);
-    STR(r9,  sp, 88);
-    STR(r10, sp, 84);
-    STR(r11, sp, 80);
-    STR(r12, sp, 76);
+    STR(lr,  sp, const(WordsToBytes(SHA_STACKSIZE+9)));
+    STR(r4,  sp, const(WordsToBytes(SHA_STACKSIZE+8)));
+    STR(r5,  sp, const(WordsToBytes(SHA_STACKSIZE+7)));
+    STR(r6,  sp, const(WordsToBytes(SHA_STACKSIZE+6)));
+    STR(r7,  sp, const(WordsToBytes(SHA_STACKSIZE+5)));
+    STR(r8,  sp, const(WordsToBytes(SHA_STACKSIZE+4)));
+    STR(r9,  sp, const(WordsToBytes(SHA_STACKSIZE+3)));
+    STR(r10, sp, const(WordsToBytes(SHA_STACKSIZE+2)));
+    STR(r11, sp, const(WordsToBytes(SHA_STACKSIZE+1)));
+    STR(r12, sp, const(WordsToBytes(SHA_STACKSIZE)));
 
     ghost var old_mem := mem;
     assert forall j :: 0 <= j < r2*16 ==> AddrMemContents(mem, r1 + j*WORDSIZE)
             == AddrMemContents(old(mem), r1 + j*WORDSIZE) == input[j];
     trace_out := sha256_block_data_order_inner(trace_in, input);
 
-    assert AddrMemPreservingExcept2(old_mem, mem, sp, sp + SHA_STACKSIZE * WORDSIZE,
-                                    old(r0), old(r0) + SHA_CTXSIZE * WORDSIZE);
+    assert AddrMemPreservingExcept2(old_mem, mem, sp, WordOffset(sp, SHA_STACKSIZE),
+                                    old(r0), WordOffset(old(r0), SHA_CTXSIZE));
 
     // Restore the nonvolatile registers
-    LDR(lr,  sp, 112);
-    LDR(r4,  sp, 108);
-    LDR(r5,  sp, 104);
-    LDR(r6,  sp, 100);
-    LDR(r7,  sp, 96);
-    LDR(r8,  sp, 92);
-    LDR(r9,  sp, 88);
-    LDR(r10, sp, 84);
-    LDR(r11, sp, 80);
-    LDR(r12, sp, 76);
+    LDR(lr,  sp, const(WordsToBytes(SHA_STACKSIZE+9)));
+    LDR(r4,  sp, const(WordsToBytes(SHA_STACKSIZE+8)));
+    LDR(r5,  sp, const(WordsToBytes(SHA_STACKSIZE+7)));
+    LDR(r6,  sp, const(WordsToBytes(SHA_STACKSIZE+6)));
+    LDR(r7,  sp, const(WordsToBytes(SHA_STACKSIZE+5)));
+    LDR(r8,  sp, const(WordsToBytes(SHA_STACKSIZE+4)));
+    LDR(r9,  sp, const(WordsToBytes(SHA_STACKSIZE+3)));
+    LDR(r10, sp, const(WordsToBytes(SHA_STACKSIZE+2)));
+    LDR(r11, sp, const(WordsToBytes(SHA_STACKSIZE+1)));
+    LDR(r12, sp, const(WordsToBytes(SHA_STACKSIZE)));
 
     // Restore the stack pointer
-    ADD(sp, sp, 116);
+    ADD(sp, sp, const(WordsToBytes(SHA_STACKSIZE+10)));
 
     assert {:split_here} {:refined} true;
 }

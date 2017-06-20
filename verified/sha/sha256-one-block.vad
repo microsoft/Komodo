@@ -111,26 +111,28 @@ ensures
 }
 
 procedure {:refined} {:timeLimitMultiplier 3} sha256_one_block(
-    ghost base_ptr:word,
+    ghost base_ptr:addr,
     ghost trace_in:SHA256Trace,
     ghost input:seq(word)
     )
 requires/ensures
     ValidAddrMemStateOpaque(mem);
+    SaneStackPointer(sp);
 
 requires {:refined false}
     !interrupts_enabled(this);
 requires
     // Stack is accessible
-    ValidMemRange(sp, sp + SHA_STACKSIZE * WORDSIZE);
+    ValidMemRange(sp, WordOffset(sp, SHA_STACKSIZE));
 
-    base_ptr == AddrMemContents(mem, sp + 16*WORDSIZE);
+    base_ptr == AddrMemContents(mem, WordOffset(sp, 16));
 
     // Base_ptr doesn't alias the stack
-    base_ptr + SHA_CTXSIZE*WORDSIZE < sp || base_ptr > sp + SHA_STACKSIZE*WORDSIZE;
+    WordAligned(base_ptr) && isUInt32(base_ptr + WordsToBytes(SHA_CTXSIZE));
+    WordOffset(base_ptr, SHA_CTXSIZE) < sp || base_ptr > WordOffset(sp, SHA_STACKSIZE);
 
     // Stack slot 16 holds a pointer to a valid region of memory with 8 words of data in it
-    ValidMemRange(base_ptr, base_ptr + SHA_CTXSIZE * WORDSIZE);
+    ValidMemRange(base_ptr, WordOffset(base_ptr, SHA_CTXSIZE));
 
     // SHA semantics
     IsCompleteSHA256Trace(trace_in);
@@ -158,21 +160,21 @@ requires
     let ctx := r0 in
     let input_ptr := r1 in
     let num_blocks := r2 in // Number of 64-byte blocks to process
-        last(trace_in.H)[0] == AddrMemContents(mem, base_ptr + 0*WORDSIZE) == a
-     && last(trace_in.H)[1] == AddrMemContents(mem, base_ptr + 1*WORDSIZE) == b
-     && last(trace_in.H)[2] == AddrMemContents(mem, base_ptr + 2*WORDSIZE) == c
-     && last(trace_in.H)[3] == AddrMemContents(mem, base_ptr + 3*WORDSIZE) == d
-     && last(trace_in.H)[4] == AddrMemContents(mem, base_ptr + 4*WORDSIZE) == e
-     && last(trace_in.H)[5] == AddrMemContents(mem, base_ptr + 5*WORDSIZE) == f
-     && last(trace_in.H)[6] == AddrMemContents(mem, base_ptr + 6*WORDSIZE) == g
-     && last(trace_in.H)[7] == AddrMemContents(mem, base_ptr + 7*WORDSIZE) == h
+        last(trace_in.H)[0] == AddrMemContents(mem, WordOffset(base_ptr, 0)) == a
+     && last(trace_in.H)[1] == AddrMemContents(mem, WordOffset(base_ptr, 1)) == b
+     && last(trace_in.H)[2] == AddrMemContents(mem, WordOffset(base_ptr, 2)) == c
+     && last(trace_in.H)[3] == AddrMemContents(mem, WordOffset(base_ptr, 3)) == d
+     && last(trace_in.H)[4] == AddrMemContents(mem, WordOffset(base_ptr, 4)) == e
+     && last(trace_in.H)[5] == AddrMemContents(mem, WordOffset(base_ptr, 5)) == f
+     && last(trace_in.H)[6] == AddrMemContents(mem, WordOffset(base_ptr, 6)) == g
+     && last(trace_in.H)[7] == AddrMemContents(mem, WordOffset(base_ptr, 7)) == h
 
      // Ghost input matches in-memory input
      && SeqLength(input) == SHA_BLOCKSIZE
-     && isUInt32(input_ptr + SHA_BLOCKSIZE*WORDSIZE)
-     && (input_ptr + SHA_BLOCKSIZE*WORDSIZE < sp || sp + SHA_STACKSIZE*WORDSIZE <= input_ptr)    // input_ptr doesn't alias the stack
-     && ValidMemRange(input_ptr, input_ptr + SHA_BLOCKSIZE * WORDSIZE)
-     && (forall j :: 0 <= j < SHA_BLOCKSIZE ==> AddrMemContents(mem, input_ptr + j*WORDSIZE) == input[j])
+     && WordAligned(input_ptr) && isUInt32(input_ptr + WordsToBytes(SHA_BLOCKSIZE))
+     && (WordOffset(input_ptr, SHA_BLOCKSIZE) < sp || WordOffset(sp, SHA_STACKSIZE) <= input_ptr)    // input_ptr doesn't alias the stack
+     && ValidMemRange(input_ptr, WordOffset(input_ptr, SHA_BLOCKSIZE))
+     && (forall j :: 0 <= j < SHA_BLOCKSIZE ==> AddrMemContents(mem, WordOffset(input_ptr, j)) == input[j])
      ;
 reads
     sp; globals;
@@ -180,28 +182,28 @@ modifies
     mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr;
 ensures
     // Memory framing: We only touch the stack and 8 bytes pointed to by the base_ptr
-    AddrMemPreservingExcept2(old(mem), mem, sp, sp + SHA_STACKSIZE * WORDSIZE, base_ptr,
-                            base_ptr + SHA_CTXSIZE * WORDSIZE);
+    AddrMemPreservingExcept2(old(mem), mem, sp, WordOffset(sp, SHA_STACKSIZE), base_ptr,
+                            WordOffset(base_ptr, SHA_CTXSIZE));
 
     lr == AddressOfGlobal(K_SHA256s()) + 256;
 
-    AddrMemContents(mem, sp + 16*WORDSIZE) == AddrMemContents(old(mem), sp + 16*WORDSIZE);
-    AddrMemContents(mem, sp + 17*WORDSIZE) == old(r1) + 64;
-    AddrMemContents(mem, sp + 18*WORDSIZE) == AddrMemContents(old(mem), sp + 18*WORDSIZE);
+    AddrMemContents(mem, WordOffset(sp, 16)) == AddrMemContents(old(mem), WordOffset(sp, 16));
+    AddrMemContents(mem, WordOffset(sp, 17)) == old(r1) + 64;
+    AddrMemContents(mem, WordOffset(sp, 18)) == AddrMemContents(old(mem), WordOffset(sp, 18));
 
     exists trace_out:SHA256Trace ::
            IsCompleteSHA256Trace(trace_out)
         && SHA256TraceIsCorrect(trace_out)
         && trace_out.M == trace_in.M + seq(input)
         && ValidAddrMemStateOpaque(mem)
-        && AddrMemContents(mem, base_ptr + 0*WORDSIZE) ==  r4 == last(trace_out.H)[0]
-        && AddrMemContents(mem, base_ptr + 1*WORDSIZE) ==  r5 == last(trace_out.H)[1]
-        && AddrMemContents(mem, base_ptr + 2*WORDSIZE) ==  r6 == last(trace_out.H)[2]
-        && AddrMemContents(mem, base_ptr + 3*WORDSIZE) ==  r7 == last(trace_out.H)[3]
-        && AddrMemContents(mem, base_ptr + 4*WORDSIZE) ==  r8 == last(trace_out.H)[4]
-        && AddrMemContents(mem, base_ptr + 5*WORDSIZE) ==  r9 == last(trace_out.H)[5]
-        && AddrMemContents(mem, base_ptr + 6*WORDSIZE) == r10 == last(trace_out.H)[6]
-        && AddrMemContents(mem, base_ptr + 7*WORDSIZE) == r11 == last(trace_out.H)[7];
+        && AddrMemContents(mem, WordOffset(base_ptr, 0)) ==  r4 == last(trace_out.H)[0]
+        && AddrMemContents(mem, WordOffset(base_ptr, 1)) ==  r5 == last(trace_out.H)[1]
+        && AddrMemContents(mem, WordOffset(base_ptr, 2)) ==  r6 == last(trace_out.H)[2]
+        && AddrMemContents(mem, WordOffset(base_ptr, 3)) ==  r7 == last(trace_out.H)[3]
+        && AddrMemContents(mem, WordOffset(base_ptr, 4)) ==  r8 == last(trace_out.H)[4]
+        && AddrMemContents(mem, WordOffset(base_ptr, 5)) ==  r9 == last(trace_out.H)[5]
+        && AddrMemContents(mem, WordOffset(base_ptr, 6)) == r10 == last(trace_out.H)[6]
+        && AddrMemContents(mem, WordOffset(base_ptr, 7)) == r11 == last(trace_out.H)[7];
 {
     // Prepare the incoming trace by incorporating the input we're about to digest
     ghost var new_Ws := ComputeWs(input);
@@ -213,7 +215,7 @@ ensures
     assert IsSHA256TraceReadyForStep(new_trace_in, 0);
 
     // Set up the initial conditions for BODY_00_15
-    assert ValidMem(r1 + 0*WORDSIZE);    // OBSERVE that r1 aka t1 is a ValidAddr
+    assert ValidMem(WordOffset(r1, 0));    // OBSERVE that r1 aka t1 is a ValidAddr
     LDR(r2, r1, 0);        // t1 <- input[0]
     assert r2 == input[0];
     ADD(r1, r1, const(WORDSIZE));        // TODO: OpenSSL does this with a single LDR instruction
@@ -245,22 +247,22 @@ ensures
         ==> ValidMem(addr);
     update_Hs(base_ptr, r0, r2, r12, r3, r4, r5, r6, r7, r8, r9, r10, r11);
 
-    ghost var old_H := seq( AddrMemContents(old(mem), base_ptr +  0),
-                            AddrMemContents(old(mem), base_ptr +  4),
-                            AddrMemContents(old(mem), base_ptr +  8),
-                            AddrMemContents(old(mem), base_ptr + 12),
-                            AddrMemContents(old(mem), base_ptr + 16),
-                            AddrMemContents(old(mem), base_ptr + 20),
-                            AddrMemContents(old(mem), base_ptr + 24),
-                            AddrMemContents(old(mem), base_ptr + 28));
-    ghost var new_H := seq( AddrMemContents(mem, base_ptr +  0),
-                            AddrMemContents(mem, base_ptr +  4),
-                            AddrMemContents(mem, base_ptr +  8),
-                            AddrMemContents(mem, base_ptr + 12),
-                            AddrMemContents(mem, base_ptr + 16),
-                            AddrMemContents(mem, base_ptr + 20),
-                            AddrMemContents(mem, base_ptr + 24),
-                            AddrMemContents(mem, base_ptr + 28));
+    ghost var old_H := seq( AddrMemContents(old(mem), WordOffset(base_ptr, 0)),
+                            AddrMemContents(old(mem), WordOffset(base_ptr, 1)),
+                            AddrMemContents(old(mem), WordOffset(base_ptr, 2)),
+                            AddrMemContents(old(mem), WordOffset(base_ptr, 3)),
+                            AddrMemContents(old(mem), WordOffset(base_ptr, 4)),
+                            AddrMemContents(old(mem), WordOffset(base_ptr, 5)),
+                            AddrMemContents(old(mem), WordOffset(base_ptr, 6)),
+                            AddrMemContents(old(mem), WordOffset(base_ptr, 7)));
+    ghost var new_H := seq( AddrMemContents(mem, WordOffset(base_ptr, 0)),
+                            AddrMemContents(mem, WordOffset(base_ptr, 1)),
+                            AddrMemContents(mem, WordOffset(base_ptr, 2)),
+                            AddrMemContents(mem, WordOffset(base_ptr, 3)),
+                            AddrMemContents(mem, WordOffset(base_ptr, 4)),
+                            AddrMemContents(mem, WordOffset(base_ptr, 5)),
+                            AddrMemContents(mem, WordOffset(base_ptr, 6)),
+                            AddrMemContents(mem, WordOffset(base_ptr, 7)));
     ghost var trace_out := lemma_SHA256DigestOneBlockHelper2(trace_16_XX, old_H, new_H);
 }
 
@@ -277,7 +279,9 @@ procedure {:refined} sha256_loop_body(
 requires block < num_blocks;
 requires {:refined false}
     !interrupts_enabled(this);
-requires exists trace_in ::
+requires
+    SaneStackPointer(sp);
+    exists trace_in ::
          BlockInvariant(trace_in, old_trace, input, globals, old_M_length, old_mem, mem, sp, lr, r1, r12,
                         r4, r5, r6, r7, r8, r9, r10, r11,
                         input_ptr, ctx_ptr, num_blocks, block);
@@ -293,11 +297,11 @@ ensures exists trace_out ::
     ghost var block_input := SeqSlice(input, block*16, (block+1)*16);
 
     ghost var current_input_ptr := r1;  // == input_ptr + block*16*WORDSIZE
-    forall j :| 0 <= j < 16 :: ValidMem(current_input_ptr + j*WORDSIZE)
-                            && AddrMemContents(mem, current_input_ptr + j*WORDSIZE) == block_input[j]
+    forall j :| 0 <= j < 16 :: ValidMem(WordOffset(current_input_ptr, j))
+                            && AddrMemContents(mem, WordOffset(current_input_ptr, j)) == block_input[j]
     {
-        assert current_input_ptr + j*WORDSIZE == input_ptr + (block*16+j)*WORDSIZE;
-        assert ValidMem(current_input_ptr + j*WORDSIZE);
+        assert WordOffset(current_input_ptr, j) == WordOffset(input_ptr, block*16+j);
+        assert ValidMem(WordOffset(current_input_ptr, j));
     }
     ghost var prev_mem := mem;
     exists trace_in ::
@@ -310,29 +314,29 @@ ensures exists trace_out ::
         && SHA256TraceIsCorrect(trace_out)
         //&& trace_out.M == SeqSlice(old_trace.M, 0, SeqLength(old_trace.M))  // old_trace.M is a prefix of trace_out.M
         && trace_out.M == trace_in.M + seq(block_input)
-        && AddrMemContents(mem, ctx_ptr + 0*WORDSIZE) ==  r4 == last(trace_out.H)[0]
-        && AddrMemContents(mem, ctx_ptr + 1*WORDSIZE) ==  r5 == last(trace_out.H)[1]
-        && AddrMemContents(mem, ctx_ptr + 2*WORDSIZE) ==  r6 == last(trace_out.H)[2]
-        && AddrMemContents(mem, ctx_ptr + 3*WORDSIZE) ==  r7 == last(trace_out.H)[3]
-        && AddrMemContents(mem, ctx_ptr + 4*WORDSIZE) ==  r8 == last(trace_out.H)[4]
-        && AddrMemContents(mem, ctx_ptr + 5*WORDSIZE) ==  r9 == last(trace_out.H)[5]
-        && AddrMemContents(mem, ctx_ptr + 6*WORDSIZE) == r10 == last(trace_out.H)[6]
-        && AddrMemContents(mem, ctx_ptr + 7*WORDSIZE) == r11 == last(trace_out.H)[7];
+        && AddrMemContents(mem, WordOffset(ctx_ptr, 0)) ==  r4 == last(trace_out.H)[0]
+        && AddrMemContents(mem, WordOffset(ctx_ptr, 1)) ==  r5 == last(trace_out.H)[1]
+        && AddrMemContents(mem, WordOffset(ctx_ptr, 2)) ==  r6 == last(trace_out.H)[2]
+        && AddrMemContents(mem, WordOffset(ctx_ptr, 3)) ==  r7 == last(trace_out.H)[3]
+        && AddrMemContents(mem, WordOffset(ctx_ptr, 4)) ==  r8 == last(trace_out.H)[4]
+        && AddrMemContents(mem, WordOffset(ctx_ptr, 5)) ==  r9 == last(trace_out.H)[5]
+        && AddrMemContents(mem, WordOffset(ctx_ptr, 6)) == r10 == last(trace_out.H)[6]
+        && AddrMemContents(mem, WordOffset(ctx_ptr, 7)) == r11 == last(trace_out.H)[7];
 
     LDR(r1, sp, const(17*WORDSIZE));  // Reload input_ptr
     LDR(r12, sp, const(18*WORDSIZE)); // Reload end_ptr
     SUB(lr, lr, 256); // Reset lr
 
-    forall addr :| input_ptr <= addr < input_ptr + (num_blocks*16)*WORDSIZE && (addr - input_ptr) % 4 == 0
+    forall addr :| input_ptr <= addr < WordOffset(input_ptr, num_blocks*16) && WordAligned(addr)
                 :: ValidMem(addr)
     {
         assert ValidMem(addr);
     }
-    assert ValidMemRange(input_ptr, input_ptr + num_blocks*16 * WORDSIZE);
+    assert ValidMemRange(input_ptr, WordOffset(input_ptr, num_blocks*16));
 
-    forall j :| 0 <= j < num_blocks * 16 :: AddrMemContents(mem, input_ptr + j*WORDSIZE) == input[j]
+    forall j :| 0 <= j < num_blocks * 16 :: AddrMemContents(mem, WordOffset(input_ptr, j)) == input[j]
     {
-        assert ValidMem(input_ptr + j*WORDSIZE);
+        assert ValidMem(WordOffset(input_ptr, j));
     }
 
     assert trace_out.M == trace_in.M + seq(block_input);

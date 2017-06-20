@@ -656,7 +656,7 @@ ghost method SHA_padding_words2bytes(words:seq<word>, length:word) returns (byte
             { RepeatByte_adds(0, 3, 52); }
         [0x80] + RepeatByte(0, 55) + bytes[56..64];
         [bytes[0]] + bytes[1..56] + bytes[56..64];
-        { reveal WordAligned(); } // why?
+        [bytes[0]] + bytes[1..64];
         bytes;
     }
 }

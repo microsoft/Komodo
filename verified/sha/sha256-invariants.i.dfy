@@ -13,7 +13,7 @@ predicate {:opaque} SaneShaGlobal(gm: globalsmap)
  && ValidGlobal(K_SHA256s())
  && SizeOfGlobal(K_SHA256s()) == K_SHA256_BYTES
  && isUInt32(AddressOfGlobal(K_SHA256s()) + K_SHA256_BYTES) // We won't wrap around while accessing K_SHA256s
- && forall j :: 0 <= j < K_SHA256_WORDS ==> GlobalContents(gm, K_SHA256s(), AddressOfGlobal(K_SHA256s()) + j * WORDSIZE) == K_SHA256(j)
+ && forall j :: 0 <= j < K_SHA256_WORDS ==> GlobalContents(gm, K_SHA256s(), AddressOfGlobal(K_SHA256s()) + WordsToBytes(j)) == K_SHA256(j)
 }
 
 predicate AddrMemPreservingExcept(sm:memmap, rm:memmap, base:int, limit:int)
@@ -56,26 +56,28 @@ predicate BlockInvariant(
     ValidAddrMemStateOpaque(old_mem)
  && ValidAddrMemStateOpaque(mem)
  // Stack is accessible
- && ValidMemRange(sp, sp + SHA_STACKSIZE * WORDSIZE)
+ && SaneStackPointer(sp)
+ && ValidMemRange(sp, WordOffset(sp, SHA_STACKSIZE))
 
  // Pointer into our in-memory H[8] is valid
- && ctx_ptr == AddrMemContents(mem, sp + SHA_BLOCKSIZE * WORDSIZE)
- && (ctx_ptr + SHA_CTXSIZE * WORDSIZE < sp || ctx_ptr > sp + SHA_STACKSIZE * WORDSIZE)
- && ValidMemRange(ctx_ptr, ctx_ptr + SHA_CTXSIZE * WORDSIZE)
+ && ctx_ptr == AddrMemContents(mem, WordOffset(sp, SHA_BLOCKSIZE))
+ && WordAligned(ctx_ptr) && isUInt32(ctx_ptr + WordsToBytes(SHA_CTXSIZE))
+ && (WordOffset(ctx_ptr, SHA_CTXSIZE) < sp || ctx_ptr > WordOffset(sp, SHA_STACKSIZE))
+ && ValidMemRange(ctx_ptr, WordOffset(ctx_ptr, SHA_CTXSIZE))
 
  // Input properties
  && block <= num_blocks
  && SeqLength(input) == num_blocks * SHA_BLOCKSIZE
- && r1 == input_ptr + block * SHA_BLOCKSIZE * WORDSIZE
- && isUInt32(input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
- && input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE == AddrMemContents(mem, sp + 18*WORDSIZE) == r12
- && (input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE < sp || sp + SHA_STACKSIZE * WORDSIZE <= input_ptr)  // Doesn't alias sp
- && (input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE < ctx_ptr || ctx_ptr + SHA_CTXSIZE * WORDSIZE <= input_ptr)  // Doesn't alias input_ptr
- && ValidMemRange(input_ptr, input_ptr + num_blocks * SHA_BLOCKSIZE * WORDSIZE)
+ && WordAligned(input_ptr) && isUInt32(input_ptr + WordsToBytes(num_blocks * SHA_BLOCKSIZE))
+ && r1 == WordOffset(input_ptr, block * SHA_BLOCKSIZE)
+ && WordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE) == AddrMemContents(mem, WordOffset(sp, 18)) == r12
+ && (WordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE) < sp || WordOffset(sp, SHA_STACKSIZE) <= input_ptr)  // Doesn't alias sp
+ && (WordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE) < ctx_ptr || WordOffset(ctx_ptr, SHA_CTXSIZE) <= input_ptr)  // Doesn't alias input_ptr
+ && ValidMemRange(input_ptr, WordOffset(input_ptr, num_blocks * SHA_BLOCKSIZE))
 // && (forall j {:trigger ValidMem(input_ptr + j * WORDSIZE)} :: 0 <= j < num_blocks * SHA_BLOCKSIZE
 //    ==> AddrMemContents(mem, input_ptr + j * WORDSIZE) == input[j])
  && (forall j:int :: 0 <= j < num_blocks * SHA_BLOCKSIZE
-    ==> AddrMemContents(mem, input_ptr + j * WORDSIZE) == input[j])
+    ==> AddrMemContents(mem, WordOffset(input_ptr, j)) == input[j])
 
  // Trace properties
  && IsCompleteSHA256Trace(trace)
@@ -91,16 +93,16 @@ predicate BlockInvariant(
  && lr == AddressOfGlobal(K_SHA256s()) 
 
  // Hs match memory and our registers
- && last(trace.H)[0] == AddrMemContents(mem, ctx_ptr + 0 * WORDSIZE) == a 
- && last(trace.H)[1] == AddrMemContents(mem, ctx_ptr + 1 * WORDSIZE) == b 
- && last(trace.H)[2] == AddrMemContents(mem, ctx_ptr + 2 * WORDSIZE) == c 
- && last(trace.H)[3] == AddrMemContents(mem, ctx_ptr + 3 * WORDSIZE) == d 
- && last(trace.H)[4] == AddrMemContents(mem, ctx_ptr + 4 * WORDSIZE) == e 
- && last(trace.H)[5] == AddrMemContents(mem, ctx_ptr + 5 * WORDSIZE) == f 
- && last(trace.H)[6] == AddrMemContents(mem, ctx_ptr + 6 * WORDSIZE) == g 
- && last(trace.H)[7] == AddrMemContents(mem, ctx_ptr + 7 * WORDSIZE) == h 
+ && last(trace.H)[0] == AddrMemContents(mem, WordOffset(ctx_ptr, 0)) == a 
+ && last(trace.H)[1] == AddrMemContents(mem, WordOffset(ctx_ptr, 1)) == b 
+ && last(trace.H)[2] == AddrMemContents(mem, WordOffset(ctx_ptr, 2)) == c 
+ && last(trace.H)[3] == AddrMemContents(mem, WordOffset(ctx_ptr, 3)) == d 
+ && last(trace.H)[4] == AddrMemContents(mem, WordOffset(ctx_ptr, 4)) == e 
+ && last(trace.H)[5] == AddrMemContents(mem, WordOffset(ctx_ptr, 5)) == f 
+ && last(trace.H)[6] == AddrMemContents(mem, WordOffset(ctx_ptr, 6)) == g 
+ && last(trace.H)[7] == AddrMemContents(mem, WordOffset(ctx_ptr, 7)) == h 
 
  // Memory framing:  We only touch the stack and 8 words pointed to by ctx_ptr
- && AddrMemPreservingExcept2(old_mem, mem, sp, sp + SHA_STACKSIZE * WORDSIZE, ctx_ptr,
-                            ctx_ptr + SHA_CTXSIZE * WORDSIZE)
+ && AddrMemPreservingExcept2(old_mem, mem, sp, WordOffset(sp, SHA_STACKSIZE), ctx_ptr,
+                            WordOffset(ctx_ptr, SHA_CTXSIZE))
 }

@@ -14,6 +14,7 @@ lemma lemma_AddrMemContentsSeq_adds(m:memmap, begin_ptr:nat, count:nat, count':n
 {
     if count' == 0 {
     } else {
+        reveal WordAligned();
         lemma_AddrMemContentsSeq_adds(m, begin_ptr + WORDSIZE, count - 1, count' - 1);
     }
 }

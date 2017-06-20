@@ -195,6 +195,16 @@ lemma lemma_LeftShift12(x: word)
     assert x''' == LeftShift(x, 12);
 }
 
+lemma lemma_LeftShift16(x: word)
+    requires x < 0x10000
+    ensures LeftShift(x, 16) == x * 0x10000
+{
+    var x' := LeftShift(x, 4);
+    lemma_LeftShift4(x);
+    lemma_LeftShift12(x');
+    lemma_ShiftsAdd(x, 4, 12);
+}
+
 lemma lemma_RightShift2(x: word)
     ensures RightShift(x, 2) == x / 4
 {
@@ -228,6 +238,15 @@ lemma lemma_RightShift12(x: word)
     assert x''' == x / 4096;
     lemma_ShiftsAdd(x, 8, 4);
     assert x''' == RightShift(x, 12);
+}
+
+lemma lemma_RightShift16(x: word)
+    ensures RightShift(x, 16) == x / 0x10000
+{
+    var x' := RightShift(x, 4);
+    lemma_RightShift4(x);
+    lemma_RightShift12(x');
+    lemma_ShiftsAdd(x, 4, 12);
 }
 
 lemma lemma_Bitmask12()

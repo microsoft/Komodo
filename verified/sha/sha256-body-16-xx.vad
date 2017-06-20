@@ -35,7 +35,8 @@ procedure {:refined} {:timeLimitMultiplier 3} Body_16_XX(
 
 requires/ensures
     // Stack is accessible
-    ValidMemRange(sp, sp + 19 * WORDSIZE);
+    SaneStackPointer(sp);
+    ValidMemRange(sp, WordOffset(sp, 19));
 reads 
     sp; globals;
 modifies 
@@ -58,21 +59,21 @@ requires {:refined false}
 
 requires
     i >= SHA_BLOCKSIZE;
-    input_slot == CheapMod16(i)*WORDSIZE;
-    input_slot_9 == CheapMod16(i+9)*WORDSIZE;
+    input_slot == WordsToBytes(CheapMod16(i));
+    input_slot_9 == WordsToBytes(CheapMod16(i+9));
     ValidMem(sp + input_slot);
     ValidMem(sp + input_slot_9); 
     ValidAddrMemStateOpaque(mem);
 
     // K table adjusted properly
     SaneShaGlobal(globals);
-    lr == AddressOfGlobal(K_SHA256s()) + i*WORDSIZE;
+    lr == AddressOfGlobal(K_SHA256s()) + WordsToBytes(i);
     //ValidGlobalAddr(K_SHA256s(), lr);
 
     SeqLength(input) == SHA_BLOCKSIZE;
 
-    ValidMem(sp + CheapMod16(i +  2)*WORDSIZE);
-    ValidMem(sp + CheapMod16(i + 15)*WORDSIZE);
+    ValidMem(WordOffset(sp, CheapMod16(i +  2)));
+    ValidMem(WordOffset(sp, CheapMod16(i + 15)));
 
     t3 == BitwiseXor(b, c);
 
@@ -85,23 +86,23 @@ requires
     forall j :: 0 <= j < 16 ==> last(trace_in.W)[j] == input[j];
 
     // All previous Ws are in memory where we expect them
-    16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(trace_in.W)[j] == AddrMemContents(mem, sp + CheapMod16(j)*WORDSIZE));
+    16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(trace_in.W)[j] == AddrMemContents(mem, WordOffset(sp, CheapMod16(j))));
 
     // t1 and t4 should already hold previous W values
-    t1 == AddrMemContents(mem, sp + CheapMod16(i+1)*WORDSIZE);
-    t4 == AddrMemContents(mem, sp + CheapMod16(i+14)*WORDSIZE);
+    t1 == AddrMemContents(mem, WordOffset(sp, CheapMod16(i+1)));
+    t4 == AddrMemContents(mem, WordOffset(sp, CheapMod16(i+14)));
 ensures 
     ValidAddrMemStateOpaque(mem);
     t2 == BitwiseXor(a, b);
     lr == old(lr) + 4;
-    t4 == AddrMemContents(mem, sp+CheapMod16(i + 15)*WORDSIZE);
+    t4 == AddrMemContents(mem, WordOffset(sp, CheapMod16(i + 15)));
 
-    AddrMemContents(mem, sp+17*WORDSIZE) == AddrMemContents(old(mem), sp+17*WORDSIZE);         // We preserved the input ptr on the stack
+    AddrMemContents(mem, WordOffset(sp, 17)) == AddrMemContents(old(mem), WordOffset(sp, 17));         // We preserved the input ptr on the stack
 
     // Memory framing: We only touch the stack
-    AddrMemPreservingExcept(old(mem), mem, sp, sp + SHA_STACKSIZE * WORDSIZE);
-    AddrMemContents(mem, sp + 16*WORDSIZE) == AddrMemContents(old(mem), sp + 16*WORDSIZE);
-    AddrMemContents(mem, sp + 18*WORDSIZE) == AddrMemContents(old(mem), sp + 18*WORDSIZE);
+    AddrMemPreservingExcept(old(mem), mem, sp, WordOffset(sp, SHA_STACKSIZE));
+    AddrMemContents(mem, WordOffset(sp, 16)) == AddrMemContents(old(mem), WordOffset(sp, 16));
+    AddrMemContents(mem, WordOffset(sp, 18)) == AddrMemContents(old(mem), WordOffset(sp, 18));
 
     exists trace_out:SHA256Trace ::
         IsSHA256TraceReadyForStep(trace_out, i+1)
@@ -112,7 +113,7 @@ ensures
      && t1 == (if i + 1 <= 64 then AddrMemContents(mem, sp + CheapMod16(i + 2)*WORDSIZE) else t1) 
 
      // Remaining Ws are laid out in memory
-     && (i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> ValidMem(sp + CheapMod16(j)*WORDSIZE) && last(trace_out.W)[j] == AddrMemContents(mem, sp + CheapMod16(j)*WORDSIZE)))
+     && (i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> ValidMem(WordOffset(sp, CheapMod16(j))) && last(trace_out.W)[j] == AddrMemContents(mem, WordOffset(sp, CheapMod16(j)))))
 
      // The atohs almost match the outgoing variables
      //&& (let old_a := (if i == 0 || i >= 16 then old(a) else old(BitwiseAdd32(a, t2))) in
@@ -157,7 +158,7 @@ ensures
     ghost var mid_t2 := t2;
     ghost var dummy_input_ptr:word;  // Body_00_15 only cares about the value for i < 16
     ghost var trace_out:SHA256Trace;
-    trace_out := Body_00_15(i, perm, input_slot, CheapMod16(i + 2)*WORDSIZE, CheapMod16(i + 15)*WORDSIZE, 
+    trace_out := Body_00_15(i, perm, input_slot, WordsToBytes(CheapMod16(i + 2)), WordsToBytes(CheapMod16(i + 15)),
                             dummy_input_ptr, trace_in, input,
                             t0, t1, t2, t3, t4, 
                             a, b, c, d, e, f, g, h);
@@ -271,8 +272,9 @@ procedure {:refined} Body_16_XXWrap(
         @g  == OReg(GetReg(4+ApplyPerm(6, perm)));
         @h  == OReg(GetReg(4+ApplyPerm(7, perm)));
     requires
-        input_slot == CheapMod16(i)*WORDSIZE;
-        input_slot_9 == CheapMod16(i+9)*WORDSIZE;
+        SaneStackPointer(sp);
+        input_slot == WordsToBytes(CheapMod16(i));
+        input_slot_9 == WordsToBytes(CheapMod16(i+9));
     requires Body_16_XXLoopStateInvariantBreakdown(orig_mem, mem, orig_trace, trace_in, i, sp, globals, lr,
                                                    t1, t2, t3, t4, input,
                                                    a, b, c, d, e, f, g, h);
@@ -290,8 +292,8 @@ procedure {:refined} Body_16_XXWrap(
          && trace_out_tmp.M == trace_in.M
          && trace_out_tmp.H == trace_in.H
          && trace_out_tmp.W == trace_in.W
-         && t1 == (if i + 1 <= 64 then AddrMemContents(mem, sp + CheapMod16(i + 2)*WORDSIZE) else t1)
-         && (i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out_tmp.W)[j] == AddrMemContents(mem, sp + CheapMod16(j)*WORDSIZE)))
+         && t1 == (if i + 1 <= 64 then AddrMemContents(mem, WordOffset(sp, CheapMod16(i + 2))) else t1)
+         && (i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> last(trace_out_tmp.W)[j] == AddrMemContents(mem, WordOffset(sp, CheapMod16(j)))))
          && last(last(trace_out_tmp.atoh)) == atoh_c(BitwiseAdd32(h, t3), a, b, c, d, e, f, g);
 
     trace_out := trace_out_tmp;
@@ -346,11 +348,12 @@ procedure {:refined}{:recursive}{:timeLimitMultiplier 2} Body_16_XXUnroller(
         0 <= i <= 64;
         n == 64 - i;
     requires
+        SaneStackPointer(sp);
         0 <= i <= 64;
         n == 64 - i;
         perm == OpaqueMod(i, 8);
-        input_slot == CheapMod16(i)*WORDSIZE;
-        input_slot_9 == CheapMod16(i+9)*WORDSIZE;
+        input_slot == WordsToBytes(CheapMod16(i));
+        input_slot_9 == WordsToBytes(CheapMod16(i+9));
         Body_16_XXLoopStateInvariantBreakdown(orig_mem, mem, orig_trace, trace_in, i, sp, globals, lr,
             t1, t2, t3, t4, input, a, b, c, d, e, f, g, h);
     ensures
@@ -378,7 +381,9 @@ procedure {:refined} Body_16_XXLoopUnrolled(
     ghost trace_in:SHA256Trace,
     ghost input:seq(word)
     )
-    requires Body_16_XXLoopStateInvariantBreakdown(mem, mem, trace_in, trace_in, 16, sp, globals, lr,
+    requires
+        SaneStackPointer(sp);
+        Body_16_XXLoopStateInvariantBreakdown(mem, mem, trace_in, trace_in, 16, sp, globals, lr,
                                                    r2, r12, r3, r1, input,
                                                    r4, r5, r6, r7, r8, r9, r10, r11);
     requires {:refined false} !interrupts_enabled(this);
