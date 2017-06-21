@@ -385,7 +385,3 @@ method printBss(gdecls: globaldecls)
         syms := syms - {s};
     }
 }
-
-method printFooter()
-{
-}
