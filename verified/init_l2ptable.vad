@@ -34,6 +34,7 @@ lemma lemma_SecurePage(pagebase:word)
     requires SaneConstants()
     requires PageAligned(pagebase) && address_is_secure(pagebase)
     ensures ValidMemRange(pagebase, pagebase + PAGESIZE)
+    ensures ValidMemWords(pagebase, PAGESIZE/WORDSIZE)
 {
     var lower := KOM_DIRECTMAP_VBASE + SecurePhysBase();
     var upper := lower + KOM_SECURE_RESERVE;
@@ -62,11 +63,11 @@ procedure install_l1ptes'(
         mem;
     ensures
         SmcProcedureInvariant(old(this),this);
-        MemPreservingExcept(old(this),this, l1base + old(l1index) * 16,
-                            l1base + (old(l1index) + 1) * 16);
-        ValidMemRange(old(l1base) + old(l1index) * 16, old(l1base) + old(l1index + 1) * 16);
+        ValidMemWords(WordOffset'(old(l1base), old(l1index) * 4), 4);
+        MemPreservingExcept(old(this), this, WordOffset(old(l1base), 4 * old(l1index)),
+                            WordOffset(old(l1base), 4 * (old(l1index) + 1)));
         forall i :: 0 <= i < 4 ==>
-            MemContents(this.m, old(l1base) + old(l1index) * 16 + i*4)
+            MemContents(this.m, WordOffset(old(l1base), old(l1index) * 4 + i))
                 == mkL1Pte(Just(l2pg), i);
 {
     lemma_SecurePage(l1base);
@@ -74,6 +75,7 @@ procedure install_l1ptes'(
     lemma_LeftShift4(l1index);
     LSL(l1index, l1index, 4);
     assert l1index == old(l1index) * 16;
+    assert WordAligned(l1index) by { reveal WordAligned; }
 
     pa_implies_modl2p(old(l2base));
     lemma_ARM_L1PTE_Dual(old(l2base));
@@ -84,29 +86,32 @@ procedure install_l1ptes'(
 
     assert RegPreservingExcept(old(this),this,set(@l1index, @l2base));
 
-    ADD(l1index, l1index, 4);
-    assert l1index == old(l1index) * 16 + WordsToBytes(1);
+    ADD(l1index, l1index, const(WORDSIZE));
+    assert l1index == WordAlignedAdd(old(l1index) * 16, WordsToBytes(1));
     lemma_ARM_L1PTE_Dual(old(l2base) + 1 * ARM_L2PTABLE_BYTES);
     ADD(l2base, l2base, const(ARM_L2PTABLE_BYTES));
     assert l2base == mkL1Pte(Just(l2pg), 1);
+    lemma_WordAlignedAdd(l1base, l1index);
     STR(l2base, l1base, l1index);
 
     assert RegPreservingExcept(old(this),this,set(@l1index, @l2base));
 
-    ADD(l1index, l1index, 4);
-    assert l1index == old(l1index) * 16 + WordsToBytes(2);
+    ADD(l1index, l1index, const(WORDSIZE));
+    assert l1index == WordAlignedAdd(old(l1index) * 16, WordsToBytes(2));
     lemma_ARM_L1PTE_Dual(old(l2base) + 2 * ARM_L2PTABLE_BYTES);
     ADD(l2base, l2base, const(ARM_L2PTABLE_BYTES));
     assert l2base == mkL1Pte(Just(l2pg), 2);
+    lemma_WordAlignedAdd(l1base, l1index);
     STR(l2base, l1base, l1index);
 
     assert RegPreservingExcept(old(this),this,set(@l1index, @l2base));
 
-    ADD(l1index, l1index, 4);
-    assert l1index == old(l1index) * 16 + WordsToBytes(3);
+    ADD(l1index, l1index, const(WORDSIZE));
+    assert l1index == WordAlignedAdd(old(l1index) * 16, WordsToBytes(3));
     lemma_ARM_L1PTE_Dual(old(l2base) + 3 * ARM_L2PTABLE_BYTES);
     ADD(l2base, l2base, const(ARM_L2PTABLE_BYTES));
     assert l2base == mkL1Pte(Just(l2pg), 3);
+    lemma_WordAlignedAdd(l1base, l1index);
     STR(l2base, l1base, l1index);
 }
 

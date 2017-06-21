@@ -394,14 +394,14 @@ procedure svc_returning_verify_step1(
 lemma lemma_svc_returning_WordAlignedStack(s:state, stack_bytes:int)
     requires SaneState(s)
     requires StackBytesRemaining(s, stack_bytes)
-    requires stack_bytes >= (STACKSIZE_ATTEST + 14) * WORDSIZE
-    ensures ValidMemRange(va_get_osp(s) - (STACKSIZE_ATTEST + 14) * WORDSIZE, va_get_osp(s))
-    ensures ValidMemRange(va_get_osp(s) - (STACKSIZE_ATTEST + 10) * WORDSIZE, va_get_osp(s))
+    requires stack_bytes >= WordsToBytes(STACKSIZE_ATTEST + 14)
+    ensures ValidMemRange(va_get_osp(s) - WordsToBytes(STACKSIZE_ATTEST + 14), va_get_osp(s))
+    ensures ValidMemRange(va_get_osp(s) - WordsToBytes(STACKSIZE_ATTEST + 10), va_get_osp(s))
 {
 }
 #endverbatim
 
-procedure {:frame false} svc_returning(
+procedure {:frame false}{:timeLimitMultiplier 2} svc_returning(
     ghost exstate: state,
     ghost stack_bytes: int,
     ghost pagedb: PageDb,
@@ -468,16 +468,19 @@ procedure {:frame false} svc_returning(
         pagedb' := pagedb;
         assert pageDbCorresponds(this.m, pagedb');
         assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
+        assert BankedRegsInvariant(old(this), this);
     } else if (r0 == const(KOM_SVC_VERIFY_STEP0)) {
         // Store the user provided words to verify
         pagedb' := svc_returning_verify_step0(exstate, stack_bytes, pagedb, dispPg);
         assert pageDbCorresponds(this.m, pagedb');
         assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
+        assert BankedRegsInvariant(old(this), this);
     } else if (r0 == const(KOM_SVC_VERIFY_STEP1)) {
         // Store the user provided measurement to verify
         pagedb' := svc_returning_verify_step1(exstate, stack_bytes, pagedb, dispPg);
         assert pageDbCorresponds(this.m, pagedb');
         assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
+        assert BankedRegsInvariant(old(this), this);
     } else if (r0 == const(KOM_SVC_VERIFY_STEP2)) {
         // Do some verification
         svc_returning_verify(exstate, stack_bytes, pagedb, dispPg);
@@ -491,11 +494,13 @@ procedure {:frame false} svc_returning(
             OperandContents(exstate, OLR);
         }
         assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
+        assert BankedRegsInvariant(old(this), this);
     } else {
         // Fall back position
         svc_returning_default(exstate, stack_bytes, pagedb, dispPg);
         pagedb' := pagedb;
         assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
+        assert BankedRegsInvariant(old(this), this);
     }
 }
 
@@ -681,7 +686,7 @@ lemma lemma_pageDbEntryCorresponds_helper(e1:PageDbEntry, e2:PageDbEntry, ms1:me
 }
 #endverbatim
 
-procedure save_disp_context(inout operand base: reg,
+procedure {:timeLimitMultiplier 2} save_disp_context(inout operand base: reg,
                             ghost ex:exception, ghost exstate:state,
                             ghost dispPg:PageNr, ghost pagedb_in:PageDb)
                         returns  (ghost pagedb:PageDb)
@@ -741,6 +746,10 @@ procedure save_disp_context(inout operand base: reg,
 
     ghost var disp := pagedb[dispPg].entry;
     ghost var pg := extractPage(this.m, dispPg);
+
+    assert MemPreservingExcept(old(this), this, old(base),
+                               old(base) + DISP_CTXT_PSR + WORDSIZE);
+
     assert pageDbDispatcherCorresponds(dispPg, disp, pg) by {
         ghost var ctxt := disp.ctxt;
         ghost var pgbase := page_monvaddr(dispPg);
@@ -785,7 +794,9 @@ procedure save_disp_context(inout operand base: reg,
             }
         }
 
-        assert WordAligned(DISP_CTXT_PSR) by { reveal WordAligned; }
+        forall a :| orig_pg ?[a]
+           :: pg ?[a] && (a > old(base) + DISP_CTXT_PSR ==> orig_pg[a] == pg[a])
+        { reveal WordAligned; }
         lemma_pageDbDispatcherVerifyStateCorresponds(dispPg, orig_disp, orig_pg, disp, pg);
         reveal pageDbDispatcherCorresponds;
 

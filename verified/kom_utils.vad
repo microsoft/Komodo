@@ -338,7 +338,7 @@ procedure MRS_STR(
 function method TopHalfOfWord(c:word): word { BitsAsWord(WordAsBits(c) >> 16) }
 #endverbatim
 
-procedure {:refined} load_32_bit_const(
+procedure {:refined}{:bridge} load_32_bit_const(
     out operand dst:word,
     inline c:word
     )
