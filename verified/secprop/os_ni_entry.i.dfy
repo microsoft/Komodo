@@ -1,8 +1,8 @@
 include "sec_prop.s.dfy"
-include "pagedb.s.dfy"
-include "entry.s.dfy"
+include "../pagedb.s.dfy"
+include "../entry.s.dfy"
 include "sec_prop_util.i.dfy"
-include "smcapi.i.dfy"
+include "../smcapi.i.dfy"
 
 predicate same_ret(s1:state, s2:state)
     requires ValidState(s1) && ValidState(s2)

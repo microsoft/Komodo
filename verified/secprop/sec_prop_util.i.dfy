@@ -1,6 +1,6 @@
 include "sec_prop.s.dfy"
-include "pagedb.s.dfy"
-include "entry.s.dfy"
+include "../pagedb.s.dfy"
+include "../entry.s.dfy"
 include "os_declass.s.dfy"
 
 predicate contentsOk(physPage: word, contents: Maybe<seq<word>>)

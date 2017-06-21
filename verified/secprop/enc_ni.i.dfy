@@ -1,6 +1,6 @@
 include "sec_prop.s.dfy"
-include "pagedb.s.dfy"
-include "entry.s.dfy"
+include "../pagedb.s.dfy"
+include "../entry.s.dfy"
 include "sec_prop_util.i.dfy"
 include "enc_ni_entry.i.dfy"
 

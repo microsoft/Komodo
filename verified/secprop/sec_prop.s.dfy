@@ -1,5 +1,5 @@
-include "smcapi.s.dfy"
-include "pagedb.s.dfy"
+include "../smcapi.s.dfy"
+include "../pagedb.s.dfy"
 
 predicate valDispPage(d: PageDb, n: PageNr)
     requires validPageDb(d)

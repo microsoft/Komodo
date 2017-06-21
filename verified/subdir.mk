@@ -13,7 +13,7 @@ DOS2UNIX := $(if $(shell which dos2unix 2>/dev/null),dos2unix)
 
 # top-level target
 .PHONY: verified
-verified: $(dir)/main.S $(dir)/os_ni.i.verified $(dir)/enc_ni.i.verified
+verified: $(dir)/main.S $(dir)/secprop/os_ni.i.verified $(dir)/secprop/enc_ni.i.verified
 
 # We use .verified files as a timestamp/placeholder to indicate that
 # a given source has been verified.
