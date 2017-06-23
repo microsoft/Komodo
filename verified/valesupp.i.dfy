@@ -487,7 +487,7 @@ lemma va_lemma_while(b:obool, c:code, s:va_state, r:va_state) returns(n:nat, r':
     //ensures  r'.ok
     ensures  ValidState(r');
     ensures  r' == s
-    ensures  forall c', t, t' :: va_eval(c', t, t') == (t.ok ==> va_eval(c', t, t'));
+    //ensures  forall c', t, t' :: va_eval(c', t, t') == (t.ok ==> va_eval(c', t, t'));
 {
     reveal va_eval();
     reveal evalWhileOpaque();
@@ -506,19 +506,10 @@ lemma va_lemma_whileTrue(b:obool, c:code, n:va_int, s:va_state, r:va_state) retu
     requires n > 0
     requires evalWhileLax(b, c, n, s, r)
     //ensures  ValidState(s) && r'.ok ==> ValidState(r');
-    ensures  ValidState(s) ==> ValidState(s');
+    ensures  ValidState(s');
     ensures  evalWhileLax(b, c, n-1, r', r)
     ensures  va_eval(c, s', r');
-    ensures  ValidState(s) ==> if s.ok then evalGuard(s, b, s') else s' == s;
-    ensures  forall c', t, t' :: va_eval(c', t, t') == (t.ok ==> va_eval(c', t, t'));
-    ensures  if s.ok then
-                    s'.ok
-                 //&& evalGuard(s, b, s')
-                 && evalOBool(s, b)
-                 //&& va_eval(c, s', r')
-                 //&& evalWhileOpaque(b, c, n - 1, r', r)
-             else
-                 true //!r.ok;
+    ensures  if s.ok then evalGuard(s, b, s') && s'.ok && evalOBool(s, b) else s' == s;
 {
     reveal va_eval();
     reveal evalWhileOpaque();
@@ -547,15 +538,9 @@ lemma va_lemma_whileFalse(b:obool, c:code, s:va_state, r:va_state) returns(r':va
     requires evalWhileLax(b, c, 0, s, r)
     ensures  forall c', t, t' :: va_eval(c', t, t') == (t.ok ==> va_eval(c', t, t'));
     ensures  if s.ok then
-                    (if ValidState(s) then
-                        (r'.ok ==> ValidState(r'))
+                    r.ok && r' == r && ValidState(r')
                      && evalGuard(s, b, r')
                      && !evalOBool(s, b)
-                     && r.ok
-                     && r' == r
-                     else 
-                        true)
-                 && r' == r
             else
                 r' == s
 {

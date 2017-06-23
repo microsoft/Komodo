@@ -1044,18 +1044,13 @@ lemma lemma_sp_bit_helper(x:word, y:word)
     lemma_BitOrOneIsLikePlus(x);
 }
 
-lemma lemma_obvious_sp(s:state)
-    requires ValidState(s)
-    ensures va_get_osp(s) == OperandContents(s, OSP)
-{}
-
 lemma lemma_aligned_sp(s:state)
     requires SaneState(s)
     ensures OpaqueEven(va_get_osp(s))
 { reveal OpaqueEven(); reveal WordAligned(); }
 #endverbatim
 
-procedure {:frame false}{:timeLimitMultiplier 2} enclaveexecution_loop(
+procedure {:frame false} enclaveexecution_loop(
         ghost pagedb_in: PageDb,
         ghost dispPg: PageNr)
     returns (ghost pagedb:PageDb, ghost steps:nat)
@@ -1087,10 +1082,9 @@ procedure {:frame false}{:timeLimitMultiplier 2} enclaveexecution_loop(
     pagedb := pagedb_in;
     ghost var states := seq(tuple(this, pagedb));
 
-    lemma_obvious_sp(this);
     lemma_aligned_sp(this);
     lemma_sp_alignment(old(sp));
-    ghost var loop1_sp := sp;
+    ghost var loopcmp := OCmp(OTstEq, OSP, OConst(1));
 
     while (tst_eq(sp, 1)) // test bottom bit of SP for this kludge
         invariant
@@ -1110,22 +1104,20 @@ procedure {:frame false}{:timeLimitMultiplier 2} enclaveexecution_loop(
             if retToEnclave then states[steps] == tuple(loop1, pagedb)
                 else validEnclaveExecution(old(this), pagedb_in, loop1, pagedb, dispPg, steps);
             equivStates(loop1, this);
-            sp == loop1_sp == OperandContents(loop1, OSP);
         decreases *;
     {
         ghost var loop_pagedb := pagedb;
         loop0 := this;
 
+        // XXX: trigger wonky vale loop condition lemmas
+        assert exists s :: ValidState(s) && evalGuard(s, loopcmp, this) && evalOBool(s, loopcmp);
+
         // SP & 1 == 0 => go to usermode
-        assume evalOBool(loop1, OCmp(OTstEq, OSP, OConst(1))); // from tst_eq
-        assert BitwiseAnd(loop1_sp, 1) == 0;
         assert sp == old(sp) && retToEnclave by { lemma_sp_bit_helper1(old(sp), sp); }
 
         calc {
             OperandContents(loop0, OSP);
-            { lemma_obvious_sp(this); }
             sp;
-            loop1_sp;
             old(sp);
         }
 
@@ -1134,7 +1126,6 @@ procedure {:frame false}{:timeLimitMultiplier 2} enclaveexecution_loop(
         MOVS_PCLR_TO_USERMODE_AND_CONTINUE();
 
         pagedb, retToEnclave := lemma_evalMOVSPCLRUC(loop0, loop_pagedb, this, dispPg);
-        lemma_obvious_sp(this);
         lemma_validEnclaveExecutionStep_PageDb(loop0, loop_pagedb, this, pagedb,
                                                dispPg, retToEnclave);
 
@@ -1146,19 +1137,18 @@ procedure {:frame false}{:timeLimitMultiplier 2} enclaveexecution_loop(
             lemma_partialEnclaveExecution_append(states, this, pagedb, dispPg, steps);
             states := states + seq(tuple(this, pagedb));
             steps := steps + 1;
-            //assert states[0] == states'[0] == tuple(old(this), pagedb_in);
-            //assert states[steps] == tuple(this, pagedb);
         } else {
             assert sp == BitwiseOr(old(sp), 1);
             lemma_partialEnclaveExecution_done(states, this, pagedb, dispPg, steps);
             assert validEnclaveExecution(old(this), pagedb_in, this, pagedb, dispPg, steps);
         }
         loop1 := this;
-        loop1_sp := sp;
     }
 
+    // XXX: trigger wonky vale loop condition lemmas
+    assert exists s :: ValidState(s) && evalGuard(s, loopcmp, this) && !evalOBool(s, loopcmp);
+
     // clear lower bit of SP, which was set to exit the loop
-    assume BitwiseAnd(sp, 1) != 0; // from tst_eq
     lemma_sp_bit_helper(old(sp), sp);
     assert !retToEnclave;
     SUB(sp, sp, 1);
