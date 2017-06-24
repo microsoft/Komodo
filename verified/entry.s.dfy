@@ -1,8 +1,8 @@
 include "ARMdef.s.dfy"
 include "pagedb.s.dfy"
 include "ptables.s.dfy"
+include "svcapi.s.dfy"
 include "addrseq.dfy"
-include "sha/sha256.s.dfy"
 
 // common success/failure checks for enter and resume
 function smc_enter_err(d: PageDb, p: word, isresume: bool): word
@@ -291,88 +291,6 @@ predicate {:opaque} userspaceExecutionAndException(s:state, r:state)
 //-----------------------------------------------------------------------------
 // Exception Handler Spec
 //-----------------------------------------------------------------------------
-predicate isReturningSvc(s:state)
-    requires ValidState(s) && mode_of_state(s) != User
-{
-    reveal ValidRegState();
-    s.conf.ex.ExSVC? && s.regs[R0] != KOM_SVC_EXIT
-}
-
-// SVCs return 9 registers
-type SvcReturnRegs = (word, word, word, word, word, word, word, word, word)
-
-function svcHmacAttest(s:state, d:PageDb, dispPg:PageNr): seq<word>
-    requires validPageDb(d) && validDispatcherPage(d, dispPg)
-    requires ValidState(s) && mode_of_state(s) != User
-    requires isReturningSvc(s)
-{
-    var addrspace := d[dispPg].addrspace;
-    assert validAddrspacePage(d, addrspace) by { reveal_validPageDb(); }
-    var enclave_measurement := SHA256(WordSeqToBytes(d[addrspace].entry.measurement));
-    var user_words := [s.regs[R1], s.regs[R2], s.regs[R3], s.regs[R4],
-        s.regs[R5], s.regs[R6], s.regs[R7], s.regs[R8]];
-
-    // produce an attestation
-    var message := user_words + enclave_measurement + SeqRepeat(8, 0);
-    var hmac := HMAC_SHA256(AttestKey(), WordSeqToBytes(message));
-    hmac
-}
-
-function svcHmacVerify(s:state, d:PageDb, dispPg:PageNr): seq<word>
-    requires validPageDb(d) && validDispatcherPage(d, dispPg)
-    requires ValidState(s) && mode_of_state(s) != User
-    requires isReturningSvc(s)
-{
-    var addrspace := d[dispPg].addrspace;
-    assert validAddrspacePage(d, addrspace) by { reveal_validPageDb(); }
-
-    // produce an attestation
-    var message := d[dispPg].entry.verify_words + d[dispPg].entry.verify_measurement + SeqRepeat(8, 0);
-    var hmac := HMAC_SHA256(AttestKey(), WordSeqToBytes(message));
-    hmac
-}
-
-
-function svcHandled(s:state, d:PageDb, dispPg:PageNr): (SvcReturnRegs, PageDb)
-    requires validPageDb(d) && validDispatcherPage(d, dispPg)
-    requires ValidState(s) && mode_of_state(s) != User
-    requires isReturningSvc(s)
-{
-    var addrspace := d[dispPg].addrspace;
-    assert validAddrspacePage(d, addrspace) by { reveal_validPageDb(); }
-    var enclave_measurement := SHA256(WordSeqToBytes(d[addrspace].entry.measurement));
-    var dummy:word := 0;
-    var user_words := [s.regs[R1], s.regs[R2], s.regs[R3], s.regs[R4],
-        s.regs[R5], s.regs[R6], s.regs[R7], s.regs[R8]];
-
-    if OperandContents(s, OReg(R0)) == KOM_SVC_ATTEST then
-        // produce an attestation
-        //var message := user_words + enclave_measurement + SeqRepeat(8, 0);
-        var hmac := svcHmacAttest(s, d, dispPg); //HMAC_SHA256(AttestKey(), WordSeqToBytes(message));
-        ((KOM_ERR_SUCCESS, hmac[0], hmac[1], hmac[2], hmac[3], hmac[4], hmac[5],
-            hmac[6], hmac[7]), d)
-    else if OperandContents(s, OReg(R0)) == KOM_SVC_VERIFY_STEP0 then
-        // stash user-provided words in pagedb for a subsequent STEP1 call
-        // (this is a cheesy workaround to avoid reading enclave memory)
-        var regs := (KOM_ERR_SUCCESS, dummy, dummy, dummy, dummy, dummy, dummy, dummy, dummy);
-        var ret_pagedb := d[dispPg := d[dispPg].(entry := d[dispPg].entry.(verify_words := user_words))];
-        (regs, ret_pagedb)
-    else if OperandContents(s, OReg(R0)) == KOM_SVC_VERIFY_STEP1 then
-        // stash user-provided words in pagedb for a subsequent STEP1 call
-        // (this is a cheesy workaround to avoid reading enclave memory)
-        var regs := (KOM_ERR_SUCCESS, dummy, dummy, dummy, dummy, dummy, dummy, dummy, dummy);
-        var ret_pagedb := d[dispPg := d[dispPg].(entry := d[dispPg].entry.(verify_measurement := user_words))];
-        (regs, ret_pagedb)
-    else if OperandContents(s, OReg(R0)) == KOM_SVC_VERIFY_STEP2 then
-        // verify the attestation provided by the previous step0 call plus this
-        var hmac := svcHmacVerify(s, d, dispPg);
-        var ok := if user_words == hmac then 1 else 0;
-        var regs := (KOM_ERR_SUCCESS, ok, dummy, dummy, dummy, dummy, dummy, dummy, dummy);
-        (regs, d)
-    else
-        ((KOM_ERR_INVALID, dummy, dummy, dummy, dummy, dummy, dummy, dummy, dummy), d)
-}
-
 function exceptionHandled(s:state, d:PageDb, dispPg:PageNr): (word, word, PageDb)
     requires validPageDb(d) && validDispatcherPage(d, dispPg)
     requires ValidState(s) && mode_of_state(s) != User

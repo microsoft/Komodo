@@ -218,8 +218,8 @@ function smc_initL2PTable(pageDbIn: PageDb, page: word, addrspacePage: word,
     // l1indexInUse check. The l1indexInUse check assumes that the l1ptnr
     // is actually an l1pt table, which is true as long as the addrspace
     // is not stopped.
-    else if(pageDbIn[addrspacePage].entry.state != InitState) then
-        (pageDbIn, KOM_ERR_ALREADY_FINAL)
+    else if(pageDbIn[addrspacePage].entry.state == StoppedState) then
+        (pageDbIn, KOM_ERR_STOPPED)
     else if(l1indexInUse(pageDbIn, addrspacePage, l1index)) then
         (pageDbIn, KOM_ERR_ADDRINUSE)
     else 
@@ -239,7 +239,8 @@ predicate allocatePageEntryValid(entry: PageDbEntryTyped)
     wellFormedPageDbEntryTyped(entry)
     && ((entry.Dispatcher? && !entry.entered)
         || (entry.L2PTable? && entry.l2pt == SeqRepeat(NR_L2PTES, NoMapping))
-        || entry.DataPage?)
+        || entry.DataPage?
+        || entry.SparePage?)
 }
 
 // This is not literally an SMC handler. Move elsewhere in file???
@@ -254,9 +255,10 @@ function allocatePage_inner(pageDbIn: PageDb, securePage: word,
     var addrspace := pageDbIn[addrspacePage].entry;
     if(!validPageNr(securePage)) then (pageDbIn, KOM_ERR_INVALID_PAGENO)
     else if(!pageIsFree(pageDbIn, securePage)) then (pageDbIn, KOM_ERR_PAGEINUSE)
-    else if(addrspace.state != InitState) then
+    else if addrspace.state == StoppedState then
+        (pageDbIn, KOM_ERR_STOPPED)
+    else if addrspace.state == FinalState && !entry.SparePage? then
         (pageDbIn,KOM_ERR_ALREADY_FINAL)
-    // TODO ?? Model page clearing for non-data pages?
     else
         var updatedAddrspace := addrspace.(refcount := addrspace.refcount + 1);
         var pageDbOut := (pageDbIn[
@@ -298,8 +300,8 @@ function smc_remove(pageDbIn: PageDb, page: word)
         if( e.Addrspace? ) then
            if(e.refcount !=0) then (pageDbIn, KOM_ERR_PAGEINUSE)
            else (pageDbIn[page := PageDbEntryFree], KOM_ERR_SUCCESS)
-        else 
-            if( !addrspace.state.StoppedState?) then
+        else
+            if( !(addrspace.state.StoppedState? || e.SparePage?) ) then
                 (pageDbIn, KOM_ERR_NOT_STOPPED)
             else 
                 var d := pageDbIn; var p := page; var a := addrspacePage;
@@ -319,7 +321,7 @@ function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,
     reveal validPageDb();
     if(!isAddrspace(pageDbIn, addrspacePage)) then
         (pageDbIn, KOM_ERR_INVALID_ADDRSPACE)
-    else 
+    else
         var err := isValidMappingTarget(pageDbIn, addrspacePage, mapping);
         if( err != KOM_ERR_SUCCESS ) then (pageDbIn, err)
         else 
@@ -340,6 +342,15 @@ function smc_mapSecure(pageDbIn: PageDb, page: word, addrspacePage: word,
                     var pageDbOut := updateMeasurement(pageDbB, addrspacePage,
                                [KOM_SMC_MAP_SECURE, mapping], fromJust(contents));
                     (pageDbOut, KOM_ERR_SUCCESS)
+}
+
+function smc_allocSpare(pageDbIn: PageDb, page: word, addrspacePage: word) : (PageDb, word) // PageDbOut, KOM_ERR
+    requires validPageDb(pageDbIn)
+{
+    if(!isAddrspace(pageDbIn, addrspacePage)) then
+        (pageDbIn, KOM_ERR_INVALID_ADDRSPACE)
+    else
+        allocatePage(pageDbIn, page, addrspacePage, SparePage)
 }
 
 function smc_mapInsecure(pageDbIn: PageDb, addrspacePage: word,
@@ -438,6 +449,8 @@ predicate smchandlerRelation(s: state, pageDbIn: PageDb, s':state, pageDbOut: Pa
     else if callno == KOM_SMC_MAP_SECURE then
         var pg := maybeContentsOfPhysPage(s, arg4);
         (pageDbOut, err) == smc_mapSecure(pageDbIn, arg1, arg2, arg3, arg4, pg) && val == 0
+    else if callno == KOM_SMC_ALLOC_SPARE then
+        (pageDbOut, err) == smc_allocSspare(pageDbIn, arg1, arg2) && val == 0
     else if callno == KOM_SMC_MAP_INSECURE then
         (pageDbOut, err) == smc_mapInsecure(pageDbIn, arg1, arg2, arg3) && val == 0
     else if callno == KOM_SMC_REMOVE then

@@ -13,6 +13,7 @@ const KOM_SMC_INIT_DISPATCHER:int   := 11;
 const KOM_SMC_INIT_L2PTABLE:int     := 12;
 const KOM_SMC_MAP_SECURE:int        := 13;
 const KOM_SMC_MAP_INSECURE:int      := 14;
+const KOM_SMC_ALLOC_SPARE:int       := 15;
 const KOM_SMC_REMOVE:int            := 20;
 const KOM_SMC_FINALISE:int          := 21;
 const KOM_SMC_ENTER:int             := 22;
@@ -24,6 +25,9 @@ const KOM_SVC_ATTEST:int            := 1;
 const KOM_SVC_VERIFY_STEP0:int      := 2;
 const KOM_SVC_VERIFY_STEP1:int      := 3;
 const KOM_SVC_VERIFY_STEP2:int      := 4;
+const KOM_SVC_MAP_DATA:int          := 10;
+const KOM_SVC_INIT_L2PTABLE:int     := 11;
+const KOM_SVC_UNMAP:int             := 12;
 
 //-----------------------------------------------------------------------------
 // Errors
@@ -41,6 +45,7 @@ const KOM_ERR_INTERRUPTED:int       := 9;
 const KOM_ERR_FAULT:int             := 10;
 const KOM_ERR_ALREADY_ENTERED:int   := 11;
 const KOM_ERR_NOT_ENTERED:int       := 12;
+const KOM_ERR_STOPPED:int           := 13;
 const KOM_ERR_INVALID:int           := 0xffffffff;
 
 //-----------------------------------------------------------------------------
@@ -136,12 +141,12 @@ lemma lemma_DistinctGlobals()
 // the phys bases are unknown, but never change
 
 // monitor phys base: phys base of monitor's own allocation
-function method {:axiom} MonitorPhysBase(): addr
+function {:axiom} MonitorPhysBase(): addr
     ensures 0 < MonitorPhysBase() <= SecurePhysBase()
     ensures PageAligned(MonitorPhysBase())
 
 // secure phys base: phys addr of alloc'able secure pages
-function method {:axiom} SecurePhysBase(): addr
+function {:axiom} SecurePhysBase(): addr
     ensures 0 < SecurePhysBase() <= KOM_PHYSMEM_LIMIT - KOM_SECURE_RESERVE
     ensures PageAligned(SecurePhysBase())
 

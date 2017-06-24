@@ -8,14 +8,6 @@ include "sha/sha256.s.dfy"
 type PageNr = x | validPageNr(x)
 type InsecurePageNr = x | validInsecurePageNr(x)
 
-// allow PageNr type decls in spartan procedures.
-// unfortunately, we can't return a PageNr, because spartan can't
-// propagate the constraints, so this is mostly just window-dressing
-function sp_eval_op_PageNr(s:state, o:operand): word
-    requires ValidState(s)
-    requires ValidOperand(o)
-    { OperandContents(s,o) }
-
 const NR_L1PTES: int := 256;
 const NR_L2PTES: int := 1024;
 
@@ -79,6 +71,7 @@ datatype PageDbEntryTyped
     | L1PTable(l1pt: seq<Maybe<PageNr>>)
     | L2PTable(l2pt: seq<L2PTE>)
     | DataPage(contents: seq<word>)
+    | SparePage // allocated to an addrspace, but not mapped/typed
 
 datatype AddrspaceState = InitState | FinalState | StoppedState
 
