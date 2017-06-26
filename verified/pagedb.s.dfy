@@ -181,9 +181,7 @@ predicate validPageDbEntryTyped(d: PageDb, n: PageNr)
        || (entry.L2PTable? && validL2PTable(d, n))
        || (entry.Dispatcher? && (entry.entered ==>
             validDispatcherContext(entry.ctxt)))
-       // AFAIK the only requirements we need to specify about data pages are 
-       // covered by wellFormedPageDbTyped
-       || (entry.DataPage?))
+       || entry.DataPage? || entry.SparePage?)
 }
 
 predicate isAddrspace(d: PageDb, n: int)
@@ -309,6 +307,11 @@ function initialPageDb(): PageDb
 //-----------------------------------------------------------------------------
 // Utilities 
 //-----------------------------------------------------------------------------
+predicate pageIsFree(d:PageDb, pg:PageNr)
+{
+    wellFormedPageDb(d) && d[pg].PageDbEntryFree?
+}
+
 predicate validL1PTPage(d:PageDb, p:PageNr)
 {
     validPageDb(d) && d[p].PageDbEntryTyped? && d[p].entry.L1PTable?
@@ -324,10 +327,10 @@ predicate validDispatcherPage(d:PageDb, p:PageNr)
     validPageDb(d) && d[p].PageDbEntryTyped? && d[p].entry.Dispatcher?
 }
 
-// a points to an address space and it is closed
+// TODO: delete this redundant alias
 predicate validAddrspacePage(d: PageDb, a: int)
 {
-    wellFormedPageDb(d) && isAddrspace(d, a)
+    isAddrspace(d, a)
 }
 
 predicate nonStoppedL1(d:PageDb, l1:PageNr)
@@ -370,7 +373,7 @@ predicate validMapping(m:Mapping,d:PageDb,a:PageNr)
     && validPageNr(m.l1index) && 0 <= m.l1index < NR_L1PTES
     && validPageNr(m.l2index) && 0 <= m.l2index < NR_L2PTES
     && (var addrspace := d[a].entry;
-        addrspace.state == InitState &&
+        addrspace.state != StoppedState &&
         (var l1 := d[addrspace.l1ptnr].entry;
         l1.l1pt[m.l1index].Just?))
 }

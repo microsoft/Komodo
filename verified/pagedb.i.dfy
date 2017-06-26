@@ -63,6 +63,7 @@ const KOM_PAGE_DISPATCHER:int   := 2;
 const KOM_PAGE_L1PTABLE:int     := 3;
 const KOM_PAGE_L2PTABLE:int     := 4;
 const KOM_PAGE_DATA:int         := 5;
+const KOM_PAGE_SPARE:int        := 6;
 
 //-----------------------------------------------------------------------------
 // Address Space States
@@ -325,6 +326,7 @@ function pageDbEntryTypeVal(e: PageDbEntry): word
         case L1PTable(pt) => KOM_PAGE_L1PTABLE
         case L2PTable(pt) => KOM_PAGE_L2PTABLE
         case DataPage(cont) => KOM_PAGE_DATA
+        case SparePage() => KOM_PAGE_SPARE
     }
 }
 

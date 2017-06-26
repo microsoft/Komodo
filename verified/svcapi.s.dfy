@@ -1,6 +1,7 @@
 include "kom_common.s.dfy"
 include "pagedb.s.dfy"
 include "sha/sha256.s.dfy"
+include "mapping.s.dfy"
 
 predicate isReturningSvc(s:state)
     requires ValidState(s) && mode_of_state(s) != User
@@ -41,27 +42,76 @@ function svcHmacVerify(s:state, d:PageDb, dispPg:PageNr): seq<word>
     HMAC_SHA256(AttestKey(), WordSeqToBytes(message))
 }
 
+predicate validSparePageForAS(d:PageDb, asPg:PageNr, page:word)
+    requires wellFormedPageDb(d)
+{
+    validPageNr(page) && d[page].PageDbEntryTyped? && d[page].addrspace == asPg
+        && d[page].entry.SparePage?
+}
+
+function allocateSparePage(d:PageDb, p:PageNr, e:PageDbEntryTyped): PageDb
+    requires wellFormedPageDb(d) && !pageIsFree(d, p)
+{
+    d[p := d[p].(entry := e)]
+}
+
+lemma lemma_allocateSparePage(d:PageDb, p:PageNr, e:PageDbEntryTyped)
+    requires validPageDb(d)
+    requires d[p].PageDbEntryTyped? && d[p].entry.SparePage?
+    requires wellFormedPageDbEntryTyped(e)
+    requires e.DataPage? || e == L2PTable(SeqRepeat(NR_L2PTES, NoMapping))
+    ensures validPageDb(allocateSparePage(d, p, e))
+{
+    reveal validPageDb();
+    var dOut := allocateSparePage(d, p, e);
+
+    forall (n:PageNr)
+        ensures validPageDbEntry(dOut, n)
+    {
+        assert addrspaceRefs(dOut, n) == addrspaceRefs(d, n);
+        assert validPageDbEntry(d, n) && validPageDbEntry(dOut, n);
+    }
+}
+
 function svcMapData(d:PageDb, asPg:PageNr, page:word, mapping:word) : (PageDb, word)
     requires validPageDb(d) && validAddrspacePage(d, asPg)
 {
-    // TODO: weaken isValidMappingTarget to permit some mappings outside the InitState
-    var mapErr := isValidMappingTarget(d, asPg, mapping);
-    if !validPageNr(page) || pageIsFree(d, page) || d[page].addrspace != asPg
-        || !d[page].entry.SparePage?
+    reveal validPageDb();
+
+    if !validSparePageForAS(d, asPg, page)
         then (d, KOM_ERR_INVALID_PAGENO)
-    else if mapErr != KOM_ERR_SUCCESS
-        then (d, mapErr)
+    else var mapErr := isValidMappingTarget'(d, asPg, mapping);
+        if mapErr != KOM_ERR_SUCCESS then (d, mapErr)
     else
         // update page to zero-filled data page, and mapping in l2
-        var d1 := d[page := d[page].(entry := DataPage(SeqRepeat(PAGESIZE/WORDSIZE, 0)))];
+        var datapg := DataPage(SeqRepeat(PAGESIZE/WORDSIZE, 0));
+        var d1 := allocateSparePage(d, page, datapg);
+        lemma_allocateSparePage(d, page, datapg);
         var abs_mapping := wordToMapping(mapping);
         var l2pte := SecureMapping(page, abs_mapping.perm.w, abs_mapping.perm.x);
         var d2 := updateL2Pte(d1, asPg, abs_mapping, l2pte);
         (d2, KOM_ERR_SUCCESS)
 }
 
+function svcInitL2PTable(d:PageDb, asPg:PageNr, page:word, l1index:word) : (PageDb, word)
+    requires validPageDb(d) && validAddrspacePage(d, asPg) && d[asPg].entry.state.FinalState?
+{
+    reveal validPageDb();
+
+    if !(0<= l1index < NR_L1PTES) then (d, KOM_ERR_INVALID_MAPPING)
+    else if !validSparePageForAS(d, asPg, page) then (d, KOM_ERR_INVALID_PAGENO)
+    else if l1indexInUse(d, asPg, l1index) then (d, KOM_ERR_ADDRINUSE)
+    else
+        var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
+        var d1 := allocateSparePage(d, page, l2pt);
+        lemma_allocateSparePage(d, page, l2pt);
+        var l1ptnr := d[asPg].entry.l1ptnr;
+        var d2 := installL1PTEInPageDb(d1, l1ptnr, page, l1index);
+        (d2, KOM_ERR_SUCCESS)
+}
+
 function svcHandled(s:state, d:PageDb, dispPg:PageNr): (SvcReturnRegs, PageDb)
-    requires validPageDb(d) && validDispatcherPage(d, dispPg)
+    requires validPageDb(d) && finalDispatcher(d, dispPg)
     requires ValidState(s) && mode_of_state(s) != User
     requires isReturningSvc(s)
 {
@@ -96,7 +146,9 @@ function svcHandled(s:state, d:PageDb, dispPg:PageNr): (SvcReturnRegs, PageDb)
     else if callno == KOM_SVC_MAP_DATA then
         var (retDb, retErr) := svcMapData(d, addrspace, s.regs[R1], s.regs[R2]);
         (success_regs.(0 := retErr), retDb)
-    // TODO: KOM_SVC_INIT_L2PTABLE, KOM_SVC_UNMAP
+    else if callno == KOM_SVC_INIT_L2PTABLE then
+        var (retDb, retErr) := svcInitL2PTable(d, addrspace, s.regs[R1], s.regs[R2]);
+        (success_regs.(0 := retErr), retDb)
     else
         (success_regs.(0 := KOM_ERR_INVALID), d)
 }

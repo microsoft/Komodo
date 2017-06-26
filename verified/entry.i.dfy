@@ -1,6 +1,7 @@
 include "entry.s.dfy"
 include "ptables.i.dfy"
 include "psrbits.i.dfy"
+include "svcapi.i.dfy"
 
 //-----------------------------------------------------------------------------
 // Functional model of user execution
@@ -633,56 +634,6 @@ lemma lemma_userspaceExecutionAndException_pre(s0:state, s1:state, r:state)
     assert userspaceExecutionAndException(s0, r);
 }
 
-lemma lemma_svcHandled_pageDbCorresponds(s4:state, d4:PageDb, r:state, dispPg:PageNr, regs:SvcReturnRegs, rd:PageDb)
-    requires ValidState(s4) && mode_of_state(s4) != User && SaneMem(s4.m)
-    requires validPageDb(d4) && pageDbCorresponds(s4.m, d4)
-    requires finalDispatcher(d4, dispPg)
-    requires KomExceptionHandlerInvariant(s4, d4, r, dispPg)
-    requires validPageDb(d4) && validDispatcherPage(d4, dispPg)
-    requires isReturningSvc(s4)
-    requires (regs, rd) == svcHandled(s4, d4, dispPg)
-    //ensures (regs, rd) == svcHandled(s4, d4, dispPg)
-    ensures pageDbCorresponds(r.m, rd)
-{
-    assert GlobalFullContents(s4.m, PageDb()) == GlobalFullContents(r.m, PageDb());
-    forall p:PageNr 
-        ensures pageDbEntryCorresponds(rd[p], extractPageDbEntry(r.m, p))
-    {
-        reveal pageDbEntryCorresponds();
-    }
-
-    forall p:PageNr 
-        ensures pageContentsCorresponds(p, rd[p], extractPage(r.m, p))
-    {
-        reveal pageContentsCorresponds();
-        reveal pageDbDispatcherCorresponds();
-    }
-}
-
-lemma lemma_svcHandled_validPageDb(s4:state, d4:PageDb, dispPg:PageNr, regs:SvcReturnRegs, rd:PageDb)
-    requires ValidState(s4) && mode_of_state(s4) != User
-    requires validPageDb(d4) && validDispatcherPage(d4, dispPg)
-    requires isReturningSvc(s4)
-    requires finalDispatcher(d4, dispPg)
-    requires validPageNr(l1pOfDispatcher(d4, dispPg))
-    requires (regs, rd) == svcHandled(s4, d4, dispPg)
-    ensures validPageDb(rd)
-{
-    forall n | validPageNr(n) ensures validPageDbEntry(rd, n)
-    {
-        var e := rd[n];
-        if (e.PageDbEntryTyped?)
-        {
-            var entry := e.entry;
-            if (entry.Addrspace?)
-            {
-                assert addrspaceRefs(rd, n) == addrspaceRefs(d4, n); // set equality
-            }
-        }
-    }
-    reveal validPageDb();
-}
-
 lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     returns (rd:PageDb, retToEnclave:bool)
     requires SaneState(s)
@@ -718,7 +669,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     if retToEnclave {
         assert ssp == rsp;
         var (regs, d4') := svcHandled(s4, d4, dispPg);
-        lemma_svcHandled_pageDbCorresponds(s4, d4, r, dispPg, regs, d4');
+        //lemma_svcHandled_pageDbCorresponds(s4, d4, r, dispPg, regs, d4');
         lemma_svcHandled_validPageDb(s4, d4, dispPg, regs, d4');
         rd := d4';
 
