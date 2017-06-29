@@ -14,7 +14,7 @@ function {:opaque} addrRangeSeq(l: addr, r: addr) : seq<addr>
     requires l <= r
     ensures |addrRangeSeq(l, r)| == BytesToWords(r-l)
     ensures forall i | 0 <= i < BytesToWords(r-l) ::
-        addrRangeSeq(l, r)[i] == l + WordsToBytes(i)
+        addrRangeSeq(l, r)[i] == WordAlignedAdd(l, WordsToBytes(i))
     //ensures forall a: addr :: l <= a <= r <==> a in addrRangeSeq(l, r)
     decreases r-l
 {
@@ -29,9 +29,10 @@ function addrsInPhysPage(physPage: word, base: addr) : seq<addr>
     requires SaneConstants()
     ensures forall a : addr | a in addrsInPhysPage(physPage, base) :: ValidMem(a)
 {
-    reveal PageAligned(); // why?
-    assert PageAligned(base);
-    addrRangeSeq(base, base+PAGESIZE)
+    assert PageAligned(base) by { reveal_PageAligned(); }
+    var res := addrRangeSeq(base, base+PAGESIZE);
+    assert forall a | a in res :: ValidMem(a) by { reveal_PageAligned(); }
+    res
 }
 
 function addrsInPage(page: PageNr, base: addr) : seq<addr>
