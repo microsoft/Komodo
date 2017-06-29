@@ -168,8 +168,9 @@ predicate validPageDbEntryTyped(d: PageDb, n: PageNr)
     var stoppedAS := hasStoppedAddrspace(d, n);
     isAddrspace(d, asPg) && match d[n].entry
         case Addrspace(_, _, _, _, _) => validAddrspace(d, n)
-        case L1PTable(l1pt) => (stoppedAS || validL1PTable(d, asPg, l1pt))
-        case L2PTable(l2pt) => (stoppedAS || validL2PTable(d, asPg, l2pt))
+        case L1PTable(l1pt) => stoppedAS || validL1PTable(d, asPg, l1pt)
+        case L2PTable(l2pt) => stoppedAS || (
+            referencedL2PTable(d, asPg, n) && validL2PTable(d, asPg, l2pt))
         case Dispatcher(_, entered, ctxt, _, _) =>
             (entered ==> validDispatcherContext(ctxt))
         case DataPage(_) => (stoppedAS || |dataPageRefs(d, asPg, n)| <= 1)
@@ -258,6 +259,16 @@ predicate validL1PTE(d: PageDb, pte: PageNr)
     requires wellFormedPageDb(d)
 {
     d[pte].PageDbEntryTyped? && d[pte].entry.L2PTable?
+}
+
+predicate referencedL2PTable(d: PageDb, asPg: PageNr, l2ptnr: PageNr)
+    requires wellFormedPageDb(d)
+{
+    isAddrspace(d, asPg) &&
+    var l1ptnr := d[asPg].entry.l1ptnr;
+    d[l1ptnr].PageDbEntryTyped? && d[l1ptnr].entry.L1PTable? &&
+    var l1pt := d[l1ptnr].entry.l1pt;
+    exists i | 0 <= i < NR_L1PTES :: l1pt[i] == Just(l2ptnr)
 }
 
 predicate validL2PTable(d: PageDb, asPg: PageNr, l2pt: seq<L2PTE>)

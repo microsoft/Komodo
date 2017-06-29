@@ -1,7 +1,8 @@
 include "mapping.s.dfy"
 
 lemma lemma_installL1PTEInPageDb_dataPageRefs(d1:PageDb, d2:PageDb, asPg: PageNr, l1ptnr: PageNr, l2page: PageNr, l1index: int, n:PageNr)
-    requires validPageDb(d1) && wellFormedPageDb(d2)
+    requires validPageDb(d1[l2page := PageDbEntryTyped(asPg, SparePage)])
+    requires wellFormedPageDb(d2)
     requires isAddrspace(d1, asPg) && !stoppedAddrspace(d1[asPg])
     requires l1ptnr == d1[asPg].entry.l1ptnr
     requires d1[l1ptnr].PageDbEntryTyped? && d1[l1ptnr].entry.L1PTable?
@@ -17,7 +18,7 @@ lemma lemma_installL1PTEInPageDb_dataPageRefs(d1:PageDb, d2:PageDb, asPg: PageNr
     ensures dataPageRefs(d1, d1[n].addrspace, n) == dataPageRefs(d2, d2[n].addrspace, n)
 {
     reveal validPageDb();
-    assert validPageDbEntryTyped(d1, n);
+    assert validPageDbEntryTyped(d1[l2page := PageDbEntryTyped(asPg, SparePage)], n);
     assert d2[n] == d1[n];
     if d1[n].addrspace == asPg {
         calc {
@@ -79,7 +80,7 @@ lemma lemma_installL1PTEInPageDb_dataPageRefs(d1:PageDb, d2:PageDb, asPg: PageNr
 
 lemma lemma_installL1PTEPreservesPageDbValidity(pageDbIn: PageDb, asPg: PageNr,
                                         l1ptnr: PageNr, l2page: PageNr, l1index: int)
-    requires validPageDb(pageDbIn)
+    requires validPageDb(pageDbIn[l2page := PageDbEntryTyped(asPg, SparePage)])
     requires isAddrspace(pageDbIn, asPg) && !stoppedAddrspace(pageDbIn[asPg])
     requires l1ptnr == pageDbIn[asPg].entry.l1ptnr
     requires pageDbIn[l1ptnr].PageDbEntryTyped? && pageDbIn[l1ptnr].entry.L1PTable?
@@ -96,21 +97,68 @@ lemma lemma_installL1PTEPreservesPageDbValidity(pageDbIn: PageDb, asPg: PageNr,
 {
     reveal validPageDb();
 
+    var tmpDb := pageDbIn[l2page := PageDbEntryTyped(asPg, SparePage)];
+    
     assert validL1PTable(pageDbIn, asPg, pageDbIn[l1ptnr].entry.l1pt);
     var pageDbOut := installL1PTEInPageDb(pageDbIn, l1ptnr, l2page, l1index);
     assert validL1PTable(pageDbOut, asPg, pageDbOut[l1ptnr].entry.l1pt);
 
-    forall (n | validPageNr(n) && n != l1ptnr)
-        ensures validPageDbEntry(pageDbOut, n)
+    forall (n:PageNr | pageDbIn[n].PageDbEntryTyped? && n != l1ptnr && n != l2page)
+        ensures validPageDbEntryTyped(pageDbOut, n)
     {
         assert pageDbOut[n] == pageDbIn[n];
-        assert validPageDbEntry(pageDbIn, n);
-        assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
-        if pageDbIn[n].PageDbEntryTyped? && pageDbIn[n].entry.DataPage?
-            && !hasStoppedAddrspace(pageDbIn, n) {
-            lemma_installL1PTEInPageDb_dataPageRefs(pageDbIn, pageDbOut, asPg,
-                                                    l1ptnr, l2page, l1index, n);
+        var a := pageDbIn[n].addrspace;
+        assert pageDbIn[a] == pageDbOut[a];
+        assert validPageDbEntryTyped(tmpDb, n);
+        assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n) == addrspaceRefs(tmpDb, n);
+        if pageDbIn[n].entry.DataPage? {
+            if !hasStoppedAddrspace(pageDbIn, n) {
+                calc {
+                    dataPageRefs(tmpDb, a, n);
+                    dataPageRefs(pageDbIn, a, n);
+                    { lemma_installL1PTEInPageDb_dataPageRefs(pageDbIn, pageDbOut,
+                                        asPg, l1ptnr, l2page, l1index, n); }
+                    dataPageRefs(pageDbOut, a, n);
+                }
+            }
+            assert validPageDbEntry(pageDbOut, n);
+        } else if pageDbIn[n].entry.L2PTable? {
+            if !hasStoppedAddrspace(pageDbIn, n) {
+                calc {
+                    true;
+                    referencedL2PTable(tmpDb, a, n);
+                    referencedL2PTable(pageDbIn, a, n);
+                    {
+                        var l1ptnr' := pageDbIn[a].entry.l1ptnr;
+                        assert l1ptnr' != l2page;
+                        var l1pt' := pageDbIn[l1ptnr'].entry.l1pt;
+                        var i :| 0 <= i < NR_L1PTES && l1pt'[i] == Just(n);
+                        if l1ptnr' == l1ptnr {
+                            assert l1index != i;
+                            assert pageDbOut[l1ptnr].entry.l1pt[i] == l1pt'[i];
+                        } else {
+                            assert pageDbOut[l1ptnr'] == pageDbIn[l1ptnr'];
+                        }
+                    }
+                    referencedL2PTable(pageDbOut, a, n);
+                }
+            }
+            assert validPageDbEntry(pageDbOut, n);
+        } else if pageDbIn[n].entry.Addrspace? {
+            assert a == n;
+            assert validAddrspace(tmpDb, n);
+            if a == asPg {
+                assert validAddrspace(pageDbOut, n);
+            } else {
+                assert validAddrspace(pageDbOut, n);
+            }
         }
+    }
+
+    assert validPageDbEntry(pageDbOut, l2page)
+    by {
+        assert pageDbOut[l1ptnr].entry.l1pt[l1index] == Just(l2page);
+        assert referencedL2PTable(pageDbOut, asPg, l2page);
     }
 }
 
@@ -124,7 +172,7 @@ predicate validAndEmptyMapping(m:Mapping, d:PageDb, a:PageNr)
     l2pt[m.l2index].NoMapping?
 }
 
-lemma lemma_updateL2Pte_dataPageRefs(d1:PageDb, d2:PageDb, a:PageNr, mapping:Mapping, l2e:L2PTE, n:PageNr)
+lemma {:fuel referencedL2PTable, 0} lemma_updateL2Pte_dataPageRefs(d1:PageDb, d2:PageDb, a:PageNr, mapping:Mapping, l2e:L2PTE, n:PageNr)
     requires validPageDb(d1) && wellFormedPageDb(d2)
     requires validMapping(mapping, d1, a) && validL2PTE(d1, a, l2e)
     requires l2e.SecureMapping? ==>

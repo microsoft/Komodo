@@ -49,22 +49,22 @@ predicate validSparePageForAS(d:PageDb, asPg:PageNr, page:word)
         && d[page].entry.SparePage?
 }
 
-function allocateSparePage(d:PageDb, p:PageNr, e:PageDbEntryTyped): PageDb
+function updatePageEntry(d:PageDb, p:PageNr, e:PageDbEntryTyped): PageDb
     requires wellFormedPageDb(d) && !pageIsFree(d, p)
 {
     d[p := d[p].(entry := e)]
 }
 
-lemma lemma_allocateSparePage(d:PageDb, p:PageNr, e:PageDbEntryTyped)
+lemma lemma_allocateSpareDataPage(d:PageDb, p:PageNr, e:PageDbEntryTyped)
     requires validPageDb(d)
     requires d[p].PageDbEntryTyped? && d[p].entry.SparePage?
     requires wellFormedPageDbEntryTyped(e)
-    requires e.DataPage? || e == L2PTable(SeqRepeat(NR_L2PTES, NoMapping))
+    requires e.DataPage?
     requires !hasStoppedAddrspace(d, p)
-    ensures validPageDb(allocateSparePage(d, p, e))
+    ensures validPageDb(updatePageEntry(d, p, e))
 {
     reveal validPageDb();
-    var dOut := allocateSparePage(d, p, e);
+    var dOut := updatePageEntry(d, p, e);
 
     forall (n:PageNr | dOut[n].PageDbEntryTyped?)
         ensures validPageDbEntryTyped(dOut, n)
@@ -114,8 +114,8 @@ function svcMapData(d:PageDb, asPg:PageNr, page:word, mapping:word) : (PageDb, w
     else
         // update page to zero-filled data page, and mapping in l2
         var datapg := DataPage(SeqRepeat(PAGESIZE/WORDSIZE, 0));
-        var d1 := allocateSparePage(d, page, datapg);
-        lemma_allocateSparePage(d, page, datapg);
+        var d1 := updatePageEntry(d, page, datapg);
+        lemma_allocateSpareDataPage(d, page, datapg);
         var abs_mapping := wordToMapping(mapping);
         var l2pte := SecureMapping(page, abs_mapping.perm.w, abs_mapping.perm.x);
         var d2 := updateL2Pte(d1, asPg, abs_mapping, l2pte);
@@ -156,7 +156,7 @@ function svcUnmapData(d:PageDb, asPg:PageNr, page:word, mapVA:word) : (PageDb, w
     else
         // revert back to a spare page, and remove the PTE
         var d1 := updateL2Pte(d, asPg, wordToMapping(mapVA), NoMapping);
-        var d2 := allocateSparePage(d1, page, SparePage);
+        var d2 := updatePageEntry(d1, page, SparePage);
         (d2, KOM_ERR_SUCCESS)
 }
 
@@ -170,8 +170,7 @@ function svcInitL2PTable(d:PageDb, asPg:PageNr, page:word, l1index:word) : (Page
     else if l1indexInUse(d, asPg, l1index) then (d, KOM_ERR_ADDRINUSE)
     else
         var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
-        var d1 := allocateSparePage(d, page, l2pt);
-        lemma_allocateSparePage(d, page, l2pt);
+        var d1 := updatePageEntry(d, page, l2pt);
         var l1ptnr := d[asPg].entry.l1ptnr;
         var d2 := installL1PTEInPageDb(d1, l1ptnr, page, l1index);
         (d2, KOM_ERR_SUCCESS)

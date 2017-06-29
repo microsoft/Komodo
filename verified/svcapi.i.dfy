@@ -29,9 +29,9 @@ lemma lemma_svcMapData_validPageDb(d:PageDb, asPg:PageNr, page:word, mapping:wor
         assert validAndEmptyMapping(abs_mapping, d, asPg)
             by { reveal wordToMapping(); }
         var l2pte := SecureMapping(page, abs_mapping.perm.w, abs_mapping.perm.x);
-        lemma_allocateSparePage(d, page, datapg);
+        lemma_allocateSpareDataPage(d, page, datapg);
         lemma_nonDataPageRefs(d, page);
-        lemma_updateL2PtePreservesPageDb(allocateSparePage(d, page, datapg),
+        lemma_updateL2PtePreservesPageDb(updatePageEntry(d, page, datapg),
             asPg, abs_mapping, l2pte);
     }
 }
@@ -55,7 +55,7 @@ lemma lemma_svcUnmapData_validPageDb(d:PageDb, asPg:PageNr, page:word, mapVA:wor
         var l2pt' := d1[l2ptnr].entry.l2pt;
         //assert l2pt' == l2pt[mapping.l2index := NoMapping];
         lemma_updateL2PtePreservesPageDb(d, asPg, mapping, NoMapping);
-        assert rd == allocateSparePage(d1, page, SparePage);
+        assert rd == updatePageEntry(d1, page, SparePage);
         //assert rd == d1[page := rd[page]];
 
         assert forall i, j | 0 <= i < NR_L1PTES && l1pt[i].Just? && 0 <= j < NR_L2PTES
@@ -165,8 +165,7 @@ lemma lemma_svcUnmapData_validPageDb(d:PageDb, asPg:PageNr, page:word, mapVA:wor
                                                pte.SecureMapping? && pte.page == page
                                         ensures n == l2ptnr
                                     {
-                                        //assert oldRefs == dataPageRefs(d, asPg, page);
-                                        // FIXME: nothing in validPageDb says all L2s are linked to the L1
+                                        assert referencedL2PTable(d, an, n);
                                         var i1 :| 0 <= i1 < NR_L1PTES && l1pt[i1] == Just(n);
                                         assert (i1, i2) in oldRefs;
                                         assert oldRefs == {(mapping.l1index, mapping.l2index)};
@@ -207,9 +206,10 @@ lemma lemma_svcInitL2PTable_validPageDb(d:PageDb, asPg:PageNr, page:word, l1inde
             assert l1pt[i].Just? ==> validL1PTE(d, fromJust(l1pt[i]));
         }
 
+        assert d[page] == PageDbEntryTyped(asPg, SparePage);
         var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
-        var d1 := allocateSparePage(d, page, l2pt);
-        lemma_allocateSparePage(d, page, l2pt);
+        var d1 := updatePageEntry(d, page, l2pt);
+        assert d == d1[page := PageDbEntryTyped(asPg, SparePage)];
         var d2 := installL1PTEInPageDb(d1, l1ptnr, page, l1index);
         lemma_installL1PTEPreservesPageDbValidity(d1, asPg, l1ptnr, page, l1index);
     }
