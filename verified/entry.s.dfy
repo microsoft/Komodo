@@ -60,12 +60,20 @@ lemma lemma_updateUserPagesFromState_validPageDb(s:state, d:PageDb, dispPg:PageN
     ensures validPageDb(updateUserPagesFromState'(s, d, dispPg))
 {
     var d' := updateUserPagesFromState'(s, d, dispPg);
+    assert forall p:PageNr | d[p].PageDbEntryTyped? :: d'[p] ==
+        if d[p].entry.DataPage?
+        then d[p].(entry := d[p].entry.(contents := d'[p].entry.contents))
+        else d[p];
     reveal validPageDb();
-    forall (p:PageNr)
-        ensures validPageDbEntry(d', p)
+    forall (p:PageNr | d[p].PageDbEntryTyped?)
+        ensures validPageDbEntryTyped(d', p)
     {
+        assert validPageDbEntryTyped(d, p);
+        if d[p].entry.DataPage? {
+            assert dataPageRefs(d, d[p].addrspace, p)
+                == dataPageRefs(d', d'[p].addrspace, p);
+        }
         assert addrspaceRefs(d', p) == addrspaceRefs(d, p);
-        assert validPageDbEntry(d, p) && validPageDbEntry(d', p);
     }
     assert pageDbEntriesValid(d');
 }
@@ -356,8 +364,7 @@ predicate pageSWrInAddrspace(d:PageDb, l1p:PageNr, p:PageNr)
 }
 
 predicate memSWrInAddrspace(d:PageDb, l1p:PageNr, m: addr)
-    requires validL1PTPage(d, l1p)
-    requires (validPageDbImpliesWellFormed(d); !hasStoppedAddrspace(d, l1p))
+    requires validL1PTPage(d, l1p) && !hasStoppedAddrspace(d, l1p)
 {
     exists p | validPageNr(p) :: pageSWrInAddrspace(d, l1p, p) && addrInPage(m, p)
 }
@@ -372,7 +379,5 @@ predicate equivalentExceptPage(d:PageDb, d':PageDb, p:PageNr)
     requires validPageNr(p)
     requires validPageDb(d) && validPageDb(d')
 {
-    validPageDbImpliesWellFormed(d);
-    validPageDbImpliesWellFormed(d');
     forall p' :: validPageNr(p') && p' != p ==> d[p'] == d'[p']
 }

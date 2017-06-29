@@ -75,8 +75,9 @@ function {:opaque} mkAbsPTable(d:PageDb, l1:PageNr): AbsPTable
     requires nonStoppedL1(d, l1)
     ensures WellformedAbsPTable(mkAbsPTable(d, l1))
 {
-    assert validL1PTable(d, l1) by { reveal_validPageDb(); }
+    assert validL1PTPage(d, l1) by { reveal_validPageDb(); }
     var l1pt := d[l1].entry.l1pt;
+    assert validL1PTable(d, d[l1].addrspace, l1pt) by { reveal_validPageDb(); }
     var fn := imap l1e:Maybe<PageNr> | l1e in l1pt :: mkAbsPTable'(d, l1e);
     SeqConcat4(IMapSeqToSeq(l1pt, fn))
 }
