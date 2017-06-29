@@ -120,13 +120,6 @@ predicate {:opaque} validPageDb(d: PageDb)
     wellFormedPageDb(d) && pageDbEntriesValid(d) && pageDbEntriesValidRefs(d)
 }
 
-// Keep this so that we can leave validPageDb opaque
-// and not reveal all of it if we just need WellFormed
-lemma validPageDbImpliesWellFormed(d:PageDb)
-    requires validPageDb(d)
-    ensures wellFormedPageDb(d)
-    { reveal validPageDb(); }
-
 predicate wellformedDispatcherContext(dc:DispatcherContext)
 {
     forall r :: r in USER_REGS() <==> r in dc.regs
@@ -143,13 +136,13 @@ predicate validDispatcherContext(dc:DispatcherContext)
 predicate pageDbEntriesValid(d:PageDb)
     requires wellFormedPageDb(d)
 {
-    forall n :: validPageNr(n) ==> validPageDbEntry(d, n)
+    forall n | validPageNr(n) :: validPageDbEntry(d, n)
 }
 
 predicate pageDbEntriesValidRefs(d: PageDb)
     requires wellFormedPageDb(d)
 {
-    forall n :: validPageNr(n) && d[n].PageDbEntryTyped? ==>  pageDbEntryValidRefs(d, n)
+    forall n | validPageNr(n) && d[n].PageDbEntryTyped? :: pageDbEntryValidRefs(d, n)
 }
 
 // Free pages and non-addrspace entries should have a refcount of 0
@@ -164,24 +157,23 @@ predicate pageDbEntryValidRefs(d: PageDb, n: PageNr)
 predicate validPageDbEntry(d: PageDb, n: PageNr)
     requires wellFormedPageDb(d)
 {
-    var e := d[n];
-    e.PageDbEntryFree? ||
-    (e.PageDbEntryTyped? && validPageDbEntryTyped(d, n))
+    d[n].PageDbEntryTyped? ==> validPageDbEntryTyped(d, n)
 }
 
 predicate validPageDbEntryTyped(d: PageDb, n: PageNr)
     requires wellFormedPageDb(d)
     requires d[n].PageDbEntryTyped?
 {
-    wellFormedPageDbEntry(d[n]) && isAddrspace(d, d[n].addrspace)
-    // Type-specific requirements
-    && (var entry := d[n].entry;
-         (entry.Addrspace? && validAddrspace(d, n))
-       || (entry.L1PTable? && validL1PTable(d, n))
-       || (entry.L2PTable? && validL2PTable(d, n))
-       || (entry.Dispatcher? && (entry.entered ==>
-            validDispatcherContext(entry.ctxt)))
-       || entry.DataPage? || entry.SparePage?)
+    var asPg := d[n].addrspace;
+    var stoppedAS := hasStoppedAddrspace(d, n);
+    isAddrspace(d, asPg) && match d[n].entry
+        case Addrspace(_, _, _, _, _) => validAddrspace(d, n)
+        case L1PTable(l1pt) => (stoppedAS || validL1PTable(d, asPg, l1pt))
+        case L2PTable(l2pt) => (stoppedAS || validL2PTable(d, asPg, l2pt))
+        case Dispatcher(_, entered, ctxt, _, _) =>
+            (entered ==> validDispatcherContext(ctxt))
+        case DataPage(_) => (stoppedAS || |dataPageRefs(d, asPg, n)| <= 1)
+        case SparePage => true
 }
 
 predicate isAddrspace(d: PageDb, n: int)
@@ -194,7 +186,7 @@ predicate isAddrspace(d: PageDb, n: int)
 
 predicate stoppedAddrspace(e: PageDbEntry)
 {
-    e.PageDbEntryTyped? && e.entry.Addrspace? && e.entry.state == StoppedState
+    e.PageDbEntryTyped? && e.entry.Addrspace? && e.entry.state.StoppedState?
 }
 
 // The addrspace of the thing pointed to by n is stopped
@@ -202,36 +194,36 @@ predicate hasStoppedAddrspace(d: PageDb, n: PageNr)
     requires wellFormedPageDb(d)
     requires d[n].PageDbEntryTyped?
 {
-    var a := d[n].addrspace;
-    isAddrspace(d, a) && d[a].entry.state == StoppedState
+    stoppedAddrspace(d[d[n].addrspace])
 }
-
 
 predicate validAddrspace(d: PageDb, n: PageNr)
     requires isAddrspace(d, n)
 {
     var addrspace := d[n].entry;
+    var l1pt := d[addrspace.l1ptnr];
     n == d[n].addrspace
-        && addrspaceL1Unique(d, n)
+        // && addrspaceL1Unique(d, n)
         && addrspace.refcount == |addrspaceRefs(d, n)|
-        && (stoppedAddrspace(d[n]) || (
-            var l1pt := d[addrspace.l1ptnr];
+        && (addrspace.state.StoppedState? || (
             l1pt.PageDbEntryTyped? && l1pt.entry.L1PTable? && l1pt.addrspace == n))
         // XXX: sha trace invariants don't need to be trusted... move out of spec
         && IsCompleteSHA256Trace(addrspace.shatrace)
         && SHA256TraceIsCorrect(addrspace.shatrace)
-        && (stoppedAddrspace(d[n]) ||
+        && (addrspace.state.StoppedState? ||
             |addrspace.shatrace.M| <= addrspace.refcount * (1 + PAGESIZE / (WORDSIZE * SHA_BLOCKSIZE)))
         && ConcatenateSeqs(addrspace.shatrace.M) == addrspace.measurement
 }
 
+/*
 predicate addrspaceL1Unique(d: PageDb, n: PageNr)
     requires isAddrspace(d, n)
 {
     var a := d[n].entry;
-    forall p :: validPageNr(p) && p != a.l1ptnr && d[p].PageDbEntryTyped? && d[p].addrspace == n
-        ==> !d[p].entry.L1PTable?
+    forall p | validPageNr(p) && d[p].PageDbEntryTyped? && d[p].addrspace == n
+        :: d[p].entry.L1PTable? ==> p == a.l1ptnr
 }
+*/
 
 function {:opaque} validPageNrs(): set<PageNr>
     ensures forall n :: n in validPageNrs() <==> validPageNr(n)
@@ -249,21 +241,17 @@ function addrspaceRefs(d: PageDb, addrspacePageNr: PageNr): set<PageNr>
         && d[n].addrspace == addrspacePageNr)
 }
 
-predicate validL1PTable(d: PageDb, n: PageNr)
+predicate validL1PTable(d: PageDb, asPg: PageNr, l1pt: seq<Maybe<PageNr>>)
     requires wellFormedPageDb(d)
-    requires d[n].PageDbEntryTyped? && d[n].entry.L1PTable?
 {
-    var l1pt := d[n].entry.l1pt;
-    var a := d[n].addrspace;
-    stoppedAddrspace(d[a]) || (
-        // each non-zero entry is a valid L2PT belonging to this address space
-        forall pte :: pte in l1pt && pte.Just? ==> (
-            var pteE := fromJust(pte);
-            d[pteE].PageDbEntryTyped? && d[pteE].addrspace == a && validL1PTE(d, pteE))
-        // no L2PT is referenced twice
-        && forall i, j :: 0 <= i < |l1pt| && 0 <= j < |l1pt| && l1pt[i].Just? && i != j
-            ==> l1pt[i] != l1pt[j]
-    )
+    // each non-zero entry is a valid L2PT belonging to this address space
+    forall pte :: pte in l1pt && pte.Just? ==> (
+        d[pte.v].PageDbEntryTyped?
+        && d[pte.v].addrspace == asPg
+        && validL1PTE(d, pte.v))
+    // no L2PT is referenced twice
+    && forall i, j :: 0 <= i < |l1pt| && 0 <= j < |l1pt| && l1pt[i].Just? && i != j
+        ==> l1pt[i] != l1pt[j]
 }
 
 predicate validL1PTE(d: PageDb, pte: PageNr)
@@ -272,14 +260,11 @@ predicate validL1PTE(d: PageDb, pte: PageNr)
     d[pte].PageDbEntryTyped? && d[pte].entry.L2PTable?
 }
 
-predicate validL2PTable(d: PageDb, n: PageNr)
+predicate validL2PTable(d: PageDb, asPg: PageNr, l2pt: seq<L2PTE>)
     requires wellFormedPageDb(d)
-    requires d[n].PageDbEntryTyped? && d[n].entry.L2PTable?
 {
-    var a := d[n].addrspace;
-    stoppedAddrspace(d[a]) ||
-        // Not needed when addrspace is stopped: valid PTEs
-        forall pte | pte in d[n].entry.l2pt :: validL2PTE(d, a, pte)
+    // Not needed when addrspace is stopped: valid PTEs
+    forall pte | pte in l2pt :: validL2PTE(d, asPg, pte)
 }
 
 predicate validL2PTE(d: PageDb, addrspace: PageNr, pte: L2PTE)
@@ -291,18 +276,23 @@ predicate validL2PTE(d: PageDb, addrspace: PageNr, pte: L2PTE)
             => d[pg].PageDbEntryTyped? && d[pg].addrspace == addrspace
                 && d[pg].PageDbEntryTyped? && d[pg].entry.DataPage?
         // each insecure entry points to non-secure RAM
-        case InsecureMapping(pg, w)
-            => physPageIsInsecureRam(pg)
+        case InsecureMapping(pg, w) => physPageIsInsecureRam(pg)
         case NoMapping => true
 }
 
-/*
-function initialPageDb(): PageDb
-  ensures validPageDb(initialPageDb())
+// returns the set of secure mappings of a given data page
+function dataPageRefs(d: PageDb, asPg:PageNr, p: PageNr): set<(int, int)>
+    requires wellFormedPageDb(d) && isAddrspace(d, asPg)
 {
-  imap n: PageNr | validPageNr(n) :: PageDbEntryFree
+    var l1ptnr := d[asPg].entry.l1ptnr;
+    (set i1, i2 {:trigger d[d[l1ptnr].entry.l1pt[i1].v].entry.l2pt[i2]} |
+        d[l1ptnr].PageDbEntryTyped? && d[l1ptnr].entry.L1PTable?
+        && 0 <= i1 < NR_L1PTES && 0 <= i2 < NR_L2PTES
+        && var l1e := d[l1ptnr].entry.l1pt[i1]; l1e.Just?
+        && d[l1e.v].PageDbEntryTyped? && d[l1e.v].entry.L2PTable?
+        && var l2e := d[l1e.v].entry.l2pt[i2]; l2e.SecureMapping?
+        && l2e.page == p :: (i1, i2))
 }
-*/
 
 //-----------------------------------------------------------------------------
 // Utilities 
@@ -340,24 +330,22 @@ predicate nonStoppedL1(d:PageDb, l1:PageNr)
 
 predicate nonStoppedDispatcher(d:PageDb, p:PageNr)
 {
-    validDispatcherPage(d,p) && (validPageDbImpliesWellFormed(d);
-        !hasStoppedAddrspace(d,p))
+    validDispatcherPage(d,p) && !hasStoppedAddrspace(d,p)
 }
 
 predicate finalDispatcher(d:PageDb, p:PageNr)
 {
-    validDispatcherPage(d,p) && (
-        validPageDbImpliesWellFormed(d);
-        var a := d[p].addrspace;
+    validDispatcherPage(d,p) && (var a := d[p].addrspace;
         isAddrspace(d, a) && d[a].entry.state == FinalState)
 }
 
 function l1pOfDispatcher(d:PageDb, p:PageNr) : PageNr
     requires nonStoppedDispatcher(d, p)
-    ensures  nonStoppedL1(d,l1pOfDispatcher(d,p))
+    ensures nonStoppedL1(d, l1pOfDispatcher(d,p))
 {
     reveal validPageDb();
-    d[d[p].addrspace].entry.l1ptnr
+    var a := d[p].addrspace;
+    d[a].entry.l1ptnr
 }
 
 //=============================================================================
@@ -369,9 +357,9 @@ datatype Perm = Perm(r: bool, w: bool, x: bool)
 predicate validMapping(m:Mapping,d:PageDb,a:PageNr)
 {
     reveal validPageDb();
-    validPageDb(d) && isAddrspace(d,a) && validAddrspace(d,a) 
-    && validPageNr(m.l1index) && 0 <= m.l1index < NR_L1PTES
-    && validPageNr(m.l2index) && 0 <= m.l2index < NR_L2PTES
+    validPageDb(d) && isAddrspace(d,a)
+    && 0 <= m.l1index < NR_L1PTES
+    && 0 <= m.l2index < NR_L2PTES
     && (var addrspace := d[a].entry;
         addrspace.state != StoppedState &&
         (var l1 := d[addrspace.l1ptnr].entry;

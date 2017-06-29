@@ -45,25 +45,18 @@ function isValidMappingTarget'(d: PageDb, a: PageNr, mapping: word)
     var l1index := l1indexFromMapping(mapping);
     var l2index := l2indexFromMapping(mapping);
     var perm := permFromMapping(mapping);
-    if addrspace.state.StoppedState? then
-        KOM_ERR_STOPPED
-    else if !validPageNr(l1indexFromMapping(mapping)) ||
-        !validPageNr(l2indexFromMapping(mapping)) then
-        KOM_ERR_INVALID_MAPPING
-    else 
-        if(!perm.r) then KOM_ERR_INVALID_MAPPING
-        else if(!(0 <= l1index < NR_L1PTES)
-            || !(0 <= l2index < NR_L2PTES) ) then
-            KOM_ERR_INVALID_MAPPING
+    if addrspace.state.StoppedState? then KOM_ERR_STOPPED
+    else if !(perm.r && 0 <= l1index < NR_L1PTES && 0 <= l2index < NR_L2PTES)
+        then KOM_ERR_INVALID_MAPPING
+    else
+        assert validAddrspace(d, a);
+        var l1 := d[addrspace.l1ptnr].entry;
+        var l1pte := l1.l1pt[l1index];
+        if l1pte.Nothing? then KOM_ERR_INVALID_MAPPING
         else
-            assert validAddrspace(d, a);
-            var l1 := d[addrspace.l1ptnr].entry;
-            var l1pte := l1.l1pt[l1index];
-            if(l1pte.Nothing?) then KOM_ERR_INVALID_MAPPING
-            else
-                var l2pt := d[fromJust(l1pte)].entry.l2pt;
-                if(!l2pt[l2index].NoMapping?) then KOM_ERR_INVALID_MAPPING
-                else KOM_ERR_SUCCESS
+            var l2pt := d[fromJust(l1pte)].entry.l2pt;
+            if !l2pt[l2index].NoMapping? then KOM_ERR_INVALID_MAPPING
+            else KOM_ERR_SUCCESS
 }
 
 function isValidMappingTarget(d: PageDb, a: PageNr, mapping: word)

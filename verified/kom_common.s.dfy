@@ -26,8 +26,8 @@ const KOM_SVC_VERIFY_STEP0:int      := 2;
 const KOM_SVC_VERIFY_STEP1:int      := 3;
 const KOM_SVC_VERIFY_STEP2:int      := 4;
 const KOM_SVC_MAP_DATA:int          := 10;
-const KOM_SVC_INIT_L2PTABLE:int     := 11;
-const KOM_SVC_UNMAP:int             := 12;
+const KOM_SVC_UNMAP_DATA:int        := 11;
+const KOM_SVC_INIT_L2PTABLE:int     := 12;
 
 //-----------------------------------------------------------------------------
 // Errors
