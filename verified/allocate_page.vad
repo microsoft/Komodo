@@ -1,4 +1,4 @@
-include {:verbatim} "Sets.dfy"
+include {:verbatim} "Sets.i.dfy"
 include {:verbatim} "kom_common.i.dfy"
 include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
@@ -15,7 +15,7 @@ lemma BoundedAddrspaceRefs(d:PageDb, n:PageNr)
     reveal validPageDb();
     assert addrspaceRefs(d,n) <= validPageNrs();
     assert d[n].entry.refcount == |addrspaceRefs(d,n)|;
-    SubsetCardinality(addrspaceRefs(d,n), validPageNrs());
+    lemma_SubsetCardinality(addrspaceRefs(d,n), validPageNrs());
 }
 
 function increfAddrspaceEntry(entry:PageDbEntry): PageDbEntry

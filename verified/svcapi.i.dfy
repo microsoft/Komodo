@@ -1,6 +1,7 @@
 include "svcapi.s.dfy"
 include "pagedb.i.dfy"
 include "mapping.i.dfy"
+include "Sets.i.dfy"
 
 lemma lemma_nonDataPageRefs(d:PageDb, p:PageNr)
     requires validPageDb(d) && d[p].PageDbEntryTyped? && !hasStoppedAddrspace(d, p)
@@ -35,11 +36,6 @@ lemma lemma_svcMapData_validPageDb(d:PageDb, asPg:PageNr, page:word, mapping:wor
     }
 }
 
-lemma lemma_singletonSet_obvious<T>(s:set<T>, e1:T, e2:T)
-    requires |s| <= 1 && e1 in s && e2 in s
-    ensures e1 == e2 && s == {e1}
-{}
-
 lemma lemma_svcUnmapData_validPageDb(d:PageDb, asPg:PageNr, page:word, mapVA:word)
     requires validPageDb(d) && validAddrspacePage(d, asPg) && d[asPg].entry.state.FinalState?
     ensures validPageDb(svcUnmapData(d, asPg, page, mapVA).0)
@@ -73,7 +69,7 @@ lemma lemma_svcUnmapData_validPageDb(d:PageDb, asPg:PageNr, page:word, mapVA:wor
         by {
             var x := (mapping.l1index, mapping.l2index);
             assert |oldRefs| <= 1 && x in oldRefs;
-            lemma_singletonSet_obvious(oldRefs, x, x);
+            lemma_ThingsIKnowAboutASingletonSet(oldRefs, x, x);
         }
 
         forall (i1, i2 | 0 <= i1 < NR_L1PTES && 0 <= i2 < NR_L2PTES
@@ -108,8 +104,8 @@ lemma lemma_svcUnmapData_validPageDb(d:PageDb, asPg:PageNr, page:word, mapVA:wor
                 assert isExistingVAForDataPage(d, asPg, mapVA, page);
                 if l2pt[i].page == page {
                     assert (mapping.l1index, mapping.l2index) in oldRefsI;
-                    lemma_singletonSet_obvious(oldRefsI, (mapping.l1index, i),
-                                               (mapping.l1index, mapping.l2index));
+                    lemma_ThingsIKnowAboutASingletonSet(oldRefsI,
+                        (mapping.l1index, i), (mapping.l1index, mapping.l2index));
                     assert i == mapping.l2index;
                     assert l2pt'[i] == NoMapping;
                     assert (mapping.l1index, i) !in newRefsI;

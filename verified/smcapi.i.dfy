@@ -1,5 +1,6 @@
 include "smcapi.s.dfy"
 include "entry.i.dfy"
+include "Sets.i.dfy"
 
 //=============================================================================
 // Hoare Specification of Monitor Calls
@@ -115,7 +116,7 @@ lemma BoundedAddrspaceRefs'(d:PageDb, n:PageNr)
     reveal validPageDb();
     assert addrspaceRefs(d,n) <= validPageNrs();
     assert d[n].entry.refcount == |addrspaceRefs(d,n)|;
-    SubsetCardinality(addrspaceRefs(d,n), validPageNrs());
+    lemma_SubsetCardinality(addrspaceRefs(d,n), validPageNrs());
 }
 
 lemma BoundedShaLength(d:PageDb, n:PageNr)
