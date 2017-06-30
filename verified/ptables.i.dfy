@@ -27,7 +27,7 @@ lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
     var l1pt := d[l1p].entry.l1pt;
     var l1base := page_monvaddr(l1p);
 
-    assert validL1PTable(d, l1p) by { reveal_validPageDb(); }
+    assert validL1PTable(d, d[l1p].addrspace, l1pt) by { reveal_validPageDb(); }
     lemma_memstatecontainspage(s, l1p);
 
     assert ARM_L1PTES == 4 * NR_L1PTES;
@@ -207,9 +207,10 @@ lemma lemma_WritablePages(d:PageDb, l1p:PageNr, pagebase:addr)
     requires pagebase in WritablePagesInTable(mkAbsPTable(d, l1p))
     ensures pageSWrInAddrspace(d, l1p, monvaddr_page(pagebase))
 {
-    assert validL1PTable(d, l1p) by { reveal_validPageDb(); }
-    var abspt := mkAbsPTable(d, l1p);
     var l1pt := d[l1p].entry.l1pt;
+    var asPg := d[l1p].addrspace;
+    assert validL1PTable(d, asPg, l1pt) by { reveal_validPageDb(); }
+    var abspt := mkAbsPTable(d, l1p);
     var i, j :| 0 <= i < ARM_L1PTES && 0 <= j < ARM_L2PTES
         && abspt[i].Just? && abspt[i].v[j].Just? && abspt[i].v[j].v.write
         && pagebase == abspt[i].v[j].v.phys + PhysBase();
@@ -220,7 +221,7 @@ lemma lemma_WritablePages(d:PageDb, l1p:PageNr, pagebase:addr)
     assert l1pt[n].Just?;
     var l2p := l1pt[n].v;
     assert d[l2p].PageDbEntryTyped? && d[l2p].entry.L2PTable?
-        && wellFormedPageDbEntry(d[l2p]) && validL2PTable(d, l2p)
+        && wellFormedPageDbEntry(d[l2p]) && validL2PTable(d, asPg, d[l2p].entry.l2pt)
         by { reveal_validPageDb(); }
     var l2pt := d[l2p].entry.l2pt;
     var pte := l2pt[(i%4)*ARM_L2PTES + j];

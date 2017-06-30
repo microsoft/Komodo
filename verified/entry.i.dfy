@@ -289,11 +289,14 @@ lemma lemma_exceptionHandled_validPageDb(s:state, d:PageDb, dispPg:PageNr)
         ensures validPageDbEntry(d', p');
     {
         var e  := d[p'].entry;
+        var asPg := d[p'].addrspace;
         var e' := d'[p'].entry;
-        if(e.Addrspace?){
+        if e.Addrspace? {
             assert e.refcount == e'.refcount;
             assert addrspaceRefs(d', p') == addrspaceRefs(d,p');
             assert validAddrspace(d',p');
+        } else if e.DataPage? {
+            assert dataPageRefs(d, asPg, p') == dataPageRefs(d', asPg, p');
         }
     }
 
