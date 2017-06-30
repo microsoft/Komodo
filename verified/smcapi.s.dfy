@@ -3,6 +3,40 @@ include "mapping.s.dfy"
 include "entry.s.dfy"
 include "addrseq.dfy"
 
+predicate allocatePageEntryValid(entry: PageDbEntryTyped)
+{
+    wellFormedPageDbEntryTyped(entry)
+    && ((entry.Dispatcher? && !entry.entered)
+        || (entry.L2PTable? && entry.l2pt == SeqRepeat(NR_L2PTES, NoMapping))
+        || entry.DataPage?
+        || entry.SparePage?)
+}
+
+function allocatePage(pageDbIn: PageDb, securePage: word,
+    addrspacePage:PageNr, entry:PageDbEntryTyped )
+    : (PageDb, word) // PageDbOut, KOM_ERR
+    requires validPageDb(pageDbIn)
+    requires validAddrspacePage(pageDbIn, addrspacePage)
+    requires allocatePageEntryValid(entry)
+    ensures  allocatePage(pageDbIn, securePage, addrspacePage, entry).1 == 
+        KOM_ERR_SUCCESS ==> validPageNr(securePage);
+{
+    reveal validPageDb();
+    var addrspace := pageDbIn[addrspacePage].entry;
+    if(!validPageNr(securePage)) then (pageDbIn, KOM_ERR_INVALID_PAGENO)
+    else if(!pageIsFree(pageDbIn, securePage)) then (pageDbIn, KOM_ERR_PAGEINUSE)
+    else if addrspace.state == StoppedState then
+        (pageDbIn, KOM_ERR_STOPPED)
+    else if addrspace.state == FinalState && !entry.SparePage? then
+        (pageDbIn,KOM_ERR_ALREADY_FINAL)
+    else
+        var updatedAddrspace := addrspace.(refcount := addrspace.refcount + 1);
+        var pageDbOut := (pageDbIn[
+            securePage := PageDbEntryTyped(addrspacePage, entry)])[
+            addrspacePage := pageDbIn[addrspacePage].(entry := updatedAddrspace)];
+        (pageDbOut, KOM_ERR_SUCCESS)
+}
+
 //============================================================================
 // Behavioral Specification of Monitor Calls
 //=============================================================================
@@ -140,56 +174,6 @@ function smc_initL2PTable(pageDbIn: PageDb, page: word, addrspacePage: word,
         else
             (pagedb, err)
 }
-
-predicate allocatePageEntryValid(entry: PageDbEntryTyped)
-{
-    wellFormedPageDbEntryTyped(entry)
-    && ((entry.Dispatcher? && !entry.entered)
-        || (entry.L2PTable? && entry.l2pt == SeqRepeat(NR_L2PTES, NoMapping))
-        || entry.DataPage?
-        || entry.SparePage?)
-}
-
-// This is not literally an SMC handler. Move elsewhere in file???
-function allocatePage_inner(pageDbIn: PageDb, securePage: word,
-    addrspacePage:PageNr, entry:PageDbEntryTyped)
-    : (PageDb, word) // PageDbOut, KOM_ERR
-    requires validPageDb(pageDbIn)
-    requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires allocatePageEntryValid(entry)
-{
-    reveal validPageDb();
-    var addrspace := pageDbIn[addrspacePage].entry;
-    if(!validPageNr(securePage)) then (pageDbIn, KOM_ERR_INVALID_PAGENO)
-    else if(!pageIsFree(pageDbIn, securePage)) then (pageDbIn, KOM_ERR_PAGEINUSE)
-    else if addrspace.state == StoppedState then
-        (pageDbIn, KOM_ERR_STOPPED)
-    else if addrspace.state == FinalState && !entry.SparePage? then
-        (pageDbIn,KOM_ERR_ALREADY_FINAL)
-    else
-        var updatedAddrspace := addrspace.(refcount := addrspace.refcount + 1);
-        var pageDbOut := (pageDbIn[
-            securePage := PageDbEntryTyped(addrspacePage, entry)])[
-            addrspacePage := pageDbIn[addrspacePage].(entry := updatedAddrspace)];
-        (pageDbOut, KOM_ERR_SUCCESS)
-}
-
-// TODO move this elsewhere since it is not a monitor call
-function allocatePage(pageDbIn: PageDb, securePage: word,
-    addrspacePage:PageNr, entry:PageDbEntryTyped )
-    : (PageDb, word) // PageDbOut, KOM_ERR
-    requires validPageDb(pageDbIn)
-    requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires allocatePageEntryValid(entry)
-    ensures  validPageDb(allocatePage(pageDbIn, securePage, addrspacePage, entry).0);
-    ensures  allocatePage(pageDbIn, securePage, addrspacePage, entry).1 == 
-        KOM_ERR_SUCCESS ==> validPageNr(securePage);
-{
-    reveal validPageDb();
-    allocatePagePreservesPageDBValidity(pageDbIn, securePage, addrspacePage, entry);
-    allocatePage_inner(pageDbIn, securePage, addrspacePage, entry)
-}
-
 
 function smc_remove(pageDbIn: PageDb, page: word)
     : (PageDb, word) // PageDbOut, KOM_ERR
@@ -416,48 +400,4 @@ predicate smchandler(s: state, pageDbIn: PageDb, s':state, pageDbOut: PageDb)
     var entry := s.regs[R0] == KOM_SMC_ENTER || s.regs[R0] == KOM_SMC_RESUME;
     smchandlerRelation(s, pageDbIn, s', pageDbOut) &&
         smchandlerInvariant(s, s', entry)
-}
-
-// lemma for allocatePage; FIXME: not trusted, should not be in a .s.dfy file
-lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
-    securePage: word, addrspacePage: PageNr, entry: PageDbEntryTyped)
-    requires validPageDb(pageDbIn)
-    requires validAddrspacePage(pageDbIn, addrspacePage)
-    requires allocatePageEntryValid(entry)
-    ensures  validPageDb(allocatePage_inner(
-        pageDbIn, securePage, addrspacePage, entry).0);
-{
-    reveal validPageDb();
-    assert validAddrspace(pageDbIn, addrspacePage);
-    var result := allocatePage_inner(pageDbIn, securePage, addrspacePage, entry);
-    var pageDbOut := result.0;
-    var errOut := result.1;
-
-    if ( errOut != KOM_ERR_SUCCESS ){
-        // The error case is trivial because PageDbOut == PageDbIn
-    } else {
-        forall () ensures validPageDbEntry(pageDbOut, addrspacePage);
-        {
-            var oldRefs := addrspaceRefs(pageDbIn, addrspacePage);
-            assert addrspaceRefs(pageDbOut, addrspacePage ) == oldRefs + {securePage};
-            
-            var addrspace_ := pageDbIn[addrspacePage].entry;
-            var addrspace := pageDbOut[addrspacePage].entry;
-            assert addrspace.refcount == |addrspaceRefs(pageDbOut, addrspacePage)|;
-            assert validAddrspacePage(pageDbOut, addrspacePage);
-
-            assert 1 + PAGESIZE / (WORDSIZE * SHA_BLOCKSIZE) == 65;
-            assert addrspace_.refcount * 65 <= addrspace.refcount * 65;
-        }
-
-        forall ( n | validPageNr(n) && n != addrspacePage && n != securePage )
-            ensures validPageDbEntry(pageDbOut, n)
-        {
-            assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
-            assert validPageDbEntry(pageDbIn, n) && validPageDbEntry(pageDbOut, n);
-        }
-
-        assert pageDbEntriesValid(pageDbOut);
-        assert validPageDb(pageDbOut);
-    }
 }

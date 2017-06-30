@@ -204,6 +204,49 @@ lemma AllButOnePageOrStackPreserving(n:PageNr,s:state,r:state)
 //-----------------------------------------------------------------------------
 // PageDb Validity Preservation
 //-----------------------------------------------------------------------------
+lemma allocatePagePreservesPageDBValidity(pageDbIn: PageDb,
+    securePage: word, addrspacePage: PageNr, entry: PageDbEntryTyped)
+    requires validPageDb(pageDbIn)
+    requires validAddrspacePage(pageDbIn, addrspacePage)
+    requires allocatePageEntryValid(entry)
+    ensures  validPageDb(allocatePage_inner(
+        pageDbIn, securePage, addrspacePage, entry).0);
+{
+    reveal validPageDb();
+    assert validAddrspace(pageDbIn, addrspacePage);
+    var result := allocatePage_inner(pageDbIn, securePage, addrspacePage, entry);
+    var pageDbOut := result.0;
+    var errOut := result.1;
+
+    if ( errOut != KOM_ERR_SUCCESS ){
+        // The error case is trivial because PageDbOut == PageDbIn
+    } else {
+        forall () ensures validPageDbEntry(pageDbOut, addrspacePage);
+        {
+            var oldRefs := addrspaceRefs(pageDbIn, addrspacePage);
+            assert addrspaceRefs(pageDbOut, addrspacePage ) == oldRefs + {securePage};
+            
+            var addrspace_ := pageDbIn[addrspacePage].entry;
+            var addrspace := pageDbOut[addrspacePage].entry;
+            assert addrspace.refcount == |addrspaceRefs(pageDbOut, addrspacePage)|;
+            assert validAddrspacePage(pageDbOut, addrspacePage);
+
+            assert 1 + PAGESIZE / (WORDSIZE * SHA_BLOCKSIZE) == 65;
+            assert addrspace_.refcount * 65 <= addrspace.refcount * 65;
+        }
+
+        forall ( n | validPageNr(n) && n != addrspacePage && n != securePage )
+            ensures validPageDbEntry(pageDbOut, n)
+        {
+            assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
+            assert validPageDbEntry(pageDbIn, n) && validPageDbEntry(pageDbOut, n);
+        }
+
+        assert pageDbEntriesValid(pageDbOut);
+        assert validPageDb(pageDbOut);
+    }
+}
+
 lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
     addrspacePage : word, l1PTPage : word)
     requires validPageDb(pageDbIn)

@@ -164,11 +164,11 @@ lemma lemma_installL1PTEPreservesPageDbValidity(pageDbIn: PageDb, asPg: PageNr,
 
 predicate validAndEmptyMapping(m:Mapping, d:PageDb, a:PageNr)
 {
-    reveal validPageDb();
-    validMapping(m, d, a) &&
-    var addrspace := d[a].entry;
+    validMapping(m, d, a)
+    && var addrspace := d[a].entry;
     var l1pt := d[addrspace.l1ptnr].entry.l1pt;
-    var l2pt := d[l1pt[m.l1index].v].entry.l2pt;
+    validL1PTable(d, a, l1pt)
+    && var l2pt := d[l1pt[m.l1index].v].entry.l2pt;
     l2pt[m.l2index].NoMapping?
 }
 
@@ -177,7 +177,7 @@ lemma {:fuel referencedL2PTable, 0} lemma_updateL2Pte_dataPageRefs(d1:PageDb, d2
     requires validMapping(mapping, d1, a) && validL2PTE(d1, a, l2e)
     requires l2e.SecureMapping? ==>
         validAndEmptyMapping(mapping, d1, a) && dataPageRefs(d1, a, l2e.page) == {}
-    requires d2 == updateL2Pte(d1, a, mapping, l2e)
+    requires d2 == (reveal validPageDb(); updateL2Pte(d1, a, mapping, l2e))
     requires d1[n].PageDbEntryTyped? && d1[n].entry.DataPage? && d1[n].addrspace == a
     ensures |dataPageRefs(d2, a, n)| <= 1
 {
@@ -282,7 +282,7 @@ lemma lemma_updateL2PtePreservesPageDb(d:PageDb,a:PageNr,mapping:Mapping,l2e:L2P
     requires validMapping(mapping, d, a) && validL2PTE(d, a, l2e)
     requires l2e.SecureMapping? ==>
         validAndEmptyMapping(mapping, d, a) && dataPageRefs(d, a, l2e.page) == {}
-    ensures validPageDb(updateL2Pte(d,a,mapping,l2e))
+    ensures validPageDb(reveal validPageDb(); updateL2Pte(d,a,mapping,l2e))
 {
     reveal validPageDb();
     var d' := updateL2Pte(d,a,mapping,l2e);

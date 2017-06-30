@@ -202,18 +202,23 @@ predicate validAddrspace(d: PageDb, n: PageNr)
     requires isAddrspace(d, n)
 {
     var addrspace := d[n].entry;
-    var l1pt := d[addrspace.l1ptnr];
     n == d[n].addrspace
         // && addrspaceL1Unique(d, n)
         && addrspace.refcount == |addrspaceRefs(d, n)|
-        && (addrspace.state.StoppedState? || (
-            l1pt.PageDbEntryTyped? && l1pt.entry.L1PTable? && l1pt.addrspace == n))
+        && (addrspace.state.StoppedState? ||
+            (isL1PTable(d, addrspace.l1ptnr) && d[addrspace.l1ptnr].addrspace == n))
         // XXX: sha trace invariants don't need to be trusted... move out of spec
         && IsCompleteSHA256Trace(addrspace.shatrace)
         && SHA256TraceIsCorrect(addrspace.shatrace)
         && (addrspace.state.StoppedState? ||
             |addrspace.shatrace.M| <= addrspace.refcount * (1 + PAGESIZE / (WORDSIZE * SHA_BLOCKSIZE)))
         && ConcatenateSeqs(addrspace.shatrace.M) == addrspace.measurement
+}
+
+predicate isL1PTable(d: PageDb, n: PageNr)
+    requires wellFormedPageDb(d)
+{
+    d[n].PageDbEntryTyped? && d[n].entry.L1PTable?
 }
 
 /*
@@ -365,16 +370,13 @@ function l1pOfDispatcher(d:PageDb, p:PageNr) : PageNr
 datatype Mapping = Mapping(l1index: word, l2index: word, perm: Perm)
 datatype Perm = Perm(r: bool, w: bool, x: bool)
 
-predicate validMapping(m:Mapping,d:PageDb,a:PageNr)
+predicate validMapping(m:Mapping, d:PageDb, a:PageNr)
 {
-    reveal validPageDb();
-    validPageDb(d) && isAddrspace(d,a)
     && 0 <= m.l1index < NR_L1PTES
     && 0 <= m.l2index < NR_L2PTES
-    && (var addrspace := d[a].entry;
-        addrspace.state != StoppedState &&
-        (var l1 := d[addrspace.l1ptnr].entry;
-        l1.l1pt[m.l1index].Just?))
+    && isAddrspace(d, a) && var asp := d[a].entry; asp.state != StoppedState
+    && isL1PTable(d, asp.l1ptnr)
+    && d[asp.l1ptnr].entry.l1pt[m.l1index].Just?
 }
 
 function l1indexFromMapping(arg:word) : word

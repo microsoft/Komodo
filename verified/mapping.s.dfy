@@ -15,16 +15,14 @@ predicate l1indexInUse(d: PageDb, a: PageNr, l1index: int)
 
 function updateL2Pte(d: PageDb, a: PageNr, mapping: Mapping, l2e : L2PTE)
     : PageDb 
-    requires validPageDb(d)
+    requires wellFormedPageDb(d)
     requires isAddrspace(d, a)
-    requires validMapping(mapping,d,a)
-    //requires isValidMappingTarget(d, a, mapping) == KOM_ERR_SUCCESS
-    //requires d[a].entry.state.InitState?
+    requires validMapping(mapping, d, a)
+    requires validL1PTable(d, a, d[d[a].entry.l1ptnr].entry.l1pt)
     requires validL2PTE(d, a, l2e)
     ensures wellFormedPageDb(updateL2Pte(d, a, mapping, l2e))
 {
     var addrspace := d[a].entry;
-    assert validAddrspace(d, a) by { reveal_validPageDb(); }
     var l1 := d[addrspace.l1ptnr].entry;
     var l1pte := fromJust(l1.l1pt[mapping.l1index]);
     var l2pt := d[l1pte].entry.l2pt;
