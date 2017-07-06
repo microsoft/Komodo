@@ -209,7 +209,7 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
 
         pagedb := svc_returning(old(this), EXCEPTION_STACK_BYTES, pagedb_in, dispPg);
         ghost var tuple;
-        tuple := svcHandled(old(this), pagedb, dispPg);
+        tuple := svcHandled(old(this), pagedb_in, dispPg);
         assert pagedb == secondOf2(tuple);
         assert preEntryReturn(old(this), this, firstOf2(tuple), pagedb, dispPg);
     }
