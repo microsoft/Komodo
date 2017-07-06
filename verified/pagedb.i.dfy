@@ -13,46 +13,46 @@ function method G_PAGEDB_ENTRY(pageno:PageNr): addr
 }
 
 // entry = start offset of pagedb entry
-const PAGEDB_ENTRY_TYPE:int     := 0;
-const PAGEDB_ENTRY_ADDRSPACE:int := WORDSIZE;
+const PAGEDB_ENTRY_TYPE:addr    := 0;
+const PAGEDB_ENTRY_ADDRSPACE:addr:= WORDSIZE;
 
 //-----------------------------------------------------------------------------
 // Addrspace Fields
 //-----------------------------------------------------------------------------
-const ADDRSPACE_L1PT:int               := 0;
-const ADDRSPACE_L1PT_PHYS:int          := 1*WORDSIZE;
-const ADDRSPACE_REF:int                := 2*WORDSIZE;
-const ADDRSPACE_STATE:int              := 3*WORDSIZE;
-const ADDRSPACE_HASH:int               := 4*WORDSIZE;   // Requires 8 words, hence the bump for block count
-const ADDRSPACE_HASHED_BLOCK_COUNT:int := 12*WORDSIZE;
-const ADDRSPACE_SIZE:int               := 13*WORDSIZE;
+const ADDRSPACE_L1PT:addr              := 0;
+const ADDRSPACE_L1PT_PHYS:addr         := 1*WORDSIZE;
+const ADDRSPACE_REF:addr               := 2*WORDSIZE;
+const ADDRSPACE_STATE:addr             := 3*WORDSIZE;
+const ADDRSPACE_HASH:addr              := 4*WORDSIZE;   // Requires 8 words, hence the bump for block count
+const ADDRSPACE_HASHED_BLOCK_COUNT:addr:= 12*WORDSIZE;
+const ADDRSPACE_SIZE:addr              := 13*WORDSIZE;
 
 //-----------------------------------------------------------------------------
 // Dispatcher Fields
 //-----------------------------------------------------------------------------
-const DISPATCHER_ENTERED:int    := 0;
-const DISPATCHER_ENTRYPOINT:int := 1*WORDSIZE;
+const DISPATCHER_ENTERED:addr   := 0;
+const DISPATCHER_ENTRYPOINT:addr:= 1*WORDSIZE;
 
-const DISP_CTXT_R0:int          := 2*WORDSIZE;
-const DISP_CTXT_R1:int          := 3*WORDSIZE;
-const DISP_CTXT_R2:int          := 4*WORDSIZE;
-const DISP_CTXT_R3:int          := 5*WORDSIZE;
-const DISP_CTXT_R4:int          := 6*WORDSIZE;
-const DISP_CTXT_R5:int          := 7*WORDSIZE;
-const DISP_CTXT_R6:int          := 8*WORDSIZE;
-const DISP_CTXT_R7:int          := 9*WORDSIZE;
-const DISP_CTXT_R8:int          := 10*WORDSIZE;
-const DISP_CTXT_R9:int          := 11*WORDSIZE;
-const DISP_CTXT_R10:int         := 12*WORDSIZE;
-const DISP_CTXT_R11:int         := 13*WORDSIZE;
-const DISP_CTXT_R12:int         := 14*WORDSIZE;
-const DISP_CTXT_LR:int          := 15*WORDSIZE;
-const DISP_CTXT_SP:int          := 16*WORDSIZE;
-const DISP_CTXT_PC:int          := 17*WORDSIZE;
-const DISP_CTXT_PSR:int         := 18*WORDSIZE;
-const DISP_CTXT_USER_WORDS:int  := 19*WORDSIZE;     // Requires 8 words, hence bump for next entry
-const DISP_CTXT_VERIFY_MEASUREMENT:int  := 27*WORDSIZE;     // Requires 8 words, hence bump for block count
-const DISP_SIZE:int             := 35*WORDSIZE;
+const DISP_CTXT_R0:addr         := 2*WORDSIZE;
+const DISP_CTXT_R1:addr         := 3*WORDSIZE;
+const DISP_CTXT_R2:addr         := 4*WORDSIZE;
+const DISP_CTXT_R3:addr         := 5*WORDSIZE;
+const DISP_CTXT_R4:addr         := 6*WORDSIZE;
+const DISP_CTXT_R5:addr         := 7*WORDSIZE;
+const DISP_CTXT_R6:addr         := 8*WORDSIZE;
+const DISP_CTXT_R7:addr         := 9*WORDSIZE;
+const DISP_CTXT_R8:addr         := 10*WORDSIZE;
+const DISP_CTXT_R9:addr         := 11*WORDSIZE;
+const DISP_CTXT_R10:addr        := 12*WORDSIZE;
+const DISP_CTXT_R11:addr        := 13*WORDSIZE;
+const DISP_CTXT_R12:addr        := 14*WORDSIZE;
+const DISP_CTXT_LR:addr         := 15*WORDSIZE;
+const DISP_CTXT_SP:addr         := 16*WORDSIZE;
+const DISP_CTXT_PC:addr         := 17*WORDSIZE;
+const DISP_CTXT_PSR:addr        := 18*WORDSIZE;
+const DISP_CTXT_USER_WORDS:addr := 19*WORDSIZE;     // Requires 8 words, hence bump for next entry
+const DISP_CTXT_VERIFY_MEASUREMENT:addr := 27*WORDSIZE;     // Requires 8 words, hence bump for block count
+const DISP_SIZE:addr            := 35*WORDSIZE;
 
 //-----------------------------------------------------------------------------
 // Page Types
@@ -163,20 +163,21 @@ predicate {:opaque} pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, pag
     requires wellFormedPageDbEntryTyped(e) && e.Addrspace?
 {
     var base := page_monvaddr(p);
-    var addr_space_hash := [page[base + ADDRSPACE_HASH + 0*WORDSIZE],
-                            page[base + ADDRSPACE_HASH + 1*WORDSIZE],
-                            page[base + ADDRSPACE_HASH + 2*WORDSIZE],
-                            page[base + ADDRSPACE_HASH + 3*WORDSIZE],
-                            page[base + ADDRSPACE_HASH + 4*WORDSIZE],
-                            page[base + ADDRSPACE_HASH + 5*WORDSIZE],
-                            page[base + ADDRSPACE_HASH + 6*WORDSIZE],
-                            page[base + ADDRSPACE_HASH + 7*WORDSIZE]];
     assert base in page;
-    page[base + ADDRSPACE_L1PT] == page_monvaddr(e.l1ptnr)
-    && page[base + ADDRSPACE_L1PT_PHYS] == page_paddr(e.l1ptnr)
-    && page[base + ADDRSPACE_REF] == e.refcount
-    && page[base + ADDRSPACE_STATE] == pageDbAddrspaceStateVal(e.state)
-    && page[base + ADDRSPACE_HASHED_BLOCK_COUNT] == |e.shatrace.M|
+    var hashbase := WordAlignedAdd(base, ADDRSPACE_HASH);
+    var addr_space_hash := [page[WordOffset(hashbase, 0)],
+                            page[WordOffset(hashbase, 1)],
+                            page[WordOffset(hashbase, 2)],
+                            page[WordOffset(hashbase, 3)],
+                            page[WordOffset(hashbase, 4)],
+                            page[WordOffset(hashbase, 5)],
+                            page[WordOffset(hashbase, 6)],
+                            page[WordOffset(hashbase, 7)]];
+    page[WordAlignedAdd(base, ADDRSPACE_L1PT)] == page_monvaddr(e.l1ptnr)
+    && page[WordAlignedAdd(base, ADDRSPACE_L1PT_PHYS)] == page_paddr(e.l1ptnr)
+    && page[WordAlignedAdd(base, ADDRSPACE_REF)] == e.refcount
+    && page[WordAlignedAdd(base, ADDRSPACE_STATE)] == pageDbAddrspaceStateVal(e.state)
+    && page[WordAlignedAdd(base, ADDRSPACE_HASHED_BLOCK_COUNT)] == |e.shatrace.M|
     && (e.state.InitState? ==> addr_space_hash == last(e.shatrace.H))
     && (e.state.FinalState? ==> addr_space_hash == SHA256(WordSeqToBytes(e.measurement)))
 }
@@ -190,23 +191,23 @@ predicate {:opaque} pageDbDispatcherContextCorresponds(p:PageNr,
 {
     var base := page_monvaddr(p);
     assert base in page;
-      page[base + DISP_CTXT_PC] == ctxt.pc
-    && page[base + DISP_CTXT_PSR] == ctxt.cpsr
-    && page[base + DISP_CTXT_LR]  == ctxt.regs[LR(User)]
-    && page[base + DISP_CTXT_SP]  == ctxt.regs[SP(User)]
-    && page[base + DISP_CTXT_R0]  == ctxt.regs[R0]
-    && page[base + DISP_CTXT_R1]  == ctxt.regs[R1]
-    && page[base + DISP_CTXT_R2]  == ctxt.regs[R2]
-    && page[base + DISP_CTXT_R3]  == ctxt.regs[R3]
-    && page[base + DISP_CTXT_R4]  == ctxt.regs[R4]
-    && page[base + DISP_CTXT_R5]  == ctxt.regs[R5]
-    && page[base + DISP_CTXT_R6]  == ctxt.regs[R6]
-    && page[base + DISP_CTXT_R7]  == ctxt.regs[R7]
-    && page[base + DISP_CTXT_R8]  == ctxt.regs[R8]
-    && page[base + DISP_CTXT_R9]  == ctxt.regs[R9]
-    && page[base + DISP_CTXT_R10] == ctxt.regs[R10]
-    && page[base + DISP_CTXT_R11] == ctxt.regs[R11]
-    && page[base + DISP_CTXT_R12] == ctxt.regs[R12]
+      page[WordAlignedAdd(base, DISP_CTXT_PC)] == ctxt.pc
+    && page[WordAlignedAdd(base, DISP_CTXT_PSR)] == ctxt.cpsr
+    && page[WordAlignedAdd(base, DISP_CTXT_LR)]  == ctxt.regs[LR(User)]
+    && page[WordAlignedAdd(base, DISP_CTXT_SP)]  == ctxt.regs[SP(User)]
+    && page[WordAlignedAdd(base, DISP_CTXT_R0)]  == ctxt.regs[R0]
+    && page[WordAlignedAdd(base, DISP_CTXT_R1)]  == ctxt.regs[R1]
+    && page[WordAlignedAdd(base, DISP_CTXT_R2)]  == ctxt.regs[R2]
+    && page[WordAlignedAdd(base, DISP_CTXT_R3)]  == ctxt.regs[R3]
+    && page[WordAlignedAdd(base, DISP_CTXT_R4)]  == ctxt.regs[R4]
+    && page[WordAlignedAdd(base, DISP_CTXT_R5)]  == ctxt.regs[R5]
+    && page[WordAlignedAdd(base, DISP_CTXT_R6)]  == ctxt.regs[R6]
+    && page[WordAlignedAdd(base, DISP_CTXT_R7)]  == ctxt.regs[R7]
+    && page[WordAlignedAdd(base, DISP_CTXT_R8)]  == ctxt.regs[R8]
+    && page[WordAlignedAdd(base, DISP_CTXT_R9)]  == ctxt.regs[R9]
+    && page[WordAlignedAdd(base, DISP_CTXT_R10)] == ctxt.regs[R10]
+    && page[WordAlignedAdd(base, DISP_CTXT_R11)] == ctxt.regs[R11]
+    && page[WordAlignedAdd(base, DISP_CTXT_R12)] == ctxt.regs[R12]
 }
 
 predicate {:opaque} pageDbDispatcherVerifyStateCorresponds(p:PageNr,
@@ -216,22 +217,24 @@ predicate {:opaque} pageDbDispatcherVerifyStateCorresponds(p:PageNr,
 {
     var base := page_monvaddr(p);
     assert base in page;
-      page[base + DISP_CTXT_USER_WORDS + 0*WORDSIZE] == e.verify_words[0]
-    && page[base + DISP_CTXT_USER_WORDS + 1*WORDSIZE] == e.verify_words[1]
-    && page[base + DISP_CTXT_USER_WORDS + 2*WORDSIZE] == e.verify_words[2]
-    && page[base + DISP_CTXT_USER_WORDS + 3*WORDSIZE] == e.verify_words[3]
-    && page[base + DISP_CTXT_USER_WORDS + 4*WORDSIZE] == e.verify_words[4]
-    && page[base + DISP_CTXT_USER_WORDS + 5*WORDSIZE] == e.verify_words[5]
-    && page[base + DISP_CTXT_USER_WORDS + 6*WORDSIZE] == e.verify_words[6]
-    && page[base + DISP_CTXT_USER_WORDS + 7*WORDSIZE] == e.verify_words[7]
-    && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 0*WORDSIZE] == e.verify_measurement[0]
-    && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 1*WORDSIZE] == e.verify_measurement[1]
-    && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 2*WORDSIZE] == e.verify_measurement[2]
-    && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 3*WORDSIZE] == e.verify_measurement[3]
-    && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 4*WORDSIZE] == e.verify_measurement[4]
-    && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 5*WORDSIZE] == e.verify_measurement[5]
-    && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 6*WORDSIZE] == e.verify_measurement[6]
-    && page[base + DISP_CTXT_VERIFY_MEASUREMENT + 7*WORDSIZE] == e.verify_measurement[7]
+    var user_words := WordAlignedAdd(base, DISP_CTXT_USER_WORDS);
+    var verify_measurement := WordAlignedAdd(base, DISP_CTXT_VERIFY_MEASUREMENT);
+      page[WordOffset(user_words, 0)] == e.verify_words[0]
+    && page[WordOffset(user_words, 1)] == e.verify_words[1]
+    && page[WordOffset(user_words, 2)] == e.verify_words[2]
+    && page[WordOffset(user_words, 3)] == e.verify_words[3]
+    && page[WordOffset(user_words, 4)] == e.verify_words[4]
+    && page[WordOffset(user_words, 5)] == e.verify_words[5]
+    && page[WordOffset(user_words, 6)] == e.verify_words[6]
+    && page[WordOffset(user_words, 7)] == e.verify_words[7]
+    && page[WordOffset(verify_measurement, 0)] == e.verify_measurement[0]
+    && page[WordOffset(verify_measurement, 1)] == e.verify_measurement[1]
+    && page[WordOffset(verify_measurement, 2)] == e.verify_measurement[2]
+    && page[WordOffset(verify_measurement, 3)] == e.verify_measurement[3]
+    && page[WordOffset(verify_measurement, 4)] == e.verify_measurement[4]
+    && page[WordOffset(verify_measurement, 5)] == e.verify_measurement[5]
+    && page[WordOffset(verify_measurement, 6)] == e.verify_measurement[6]
+    && page[WordOffset(verify_measurement, 7)] == e.verify_measurement[7]
 }
 
 predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)
@@ -240,8 +243,8 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
 {
     var base := page_monvaddr(p);
     assert base in page;
-    page[base + DISPATCHER_ENTERED] == to_i(e.entered)
-    && page[base + DISPATCHER_ENTRYPOINT] == e.entrypoint
+    page[WordAlignedAdd(base, DISPATCHER_ENTERED)] == to_i(e.entered)
+    && page[WordAlignedAdd(base, DISPATCHER_ENTRYPOINT)] == e.entrypoint
     && (e.entered ==> pageDbDispatcherContextCorresponds(p, e.ctxt, page))
     && pageDbDispatcherVerifyStateCorresponds(p, e, page)
 }
@@ -403,7 +406,7 @@ lemma AllButOnePagePreserving(n:PageNr,s:state,r:state)
 lemma extractPageDbToAbstract(s:memstate, p:PageNr)
     requires SaneMem(s)
     ensures forall o | WordAligned(o) && 0 <= o < PAGEDB_ENTRY_SIZE ::
-        GlobalWord(s, PageDb(), G_PAGEDB_ENTRY(p) + o)
+        GlobalWord(s, PageDb(), WordAlignedAdd(G_PAGEDB_ENTRY(p), o))
             == extractPageDbEntry(s,p)[BytesToWords(o)]
 {
 }
@@ -411,10 +414,9 @@ lemma extractPageDbToAbstract(s:memstate, p:PageNr)
 lemma extractPageDbToAbstractOne(s:memstate, p:PageNr, o:int)
     requires SaneMem(s)
     requires WordAligned(o) && 0 <= o < PAGEDB_ENTRY_SIZE
-    ensures GlobalWord(s, PageDb(), G_PAGEDB_ENTRY(p) + o)
+    ensures GlobalWord(s, PageDb(), WordAlignedAdd(G_PAGEDB_ENTRY(p), o))
         == extractPageDbEntry(s,p)[BytesToWords(o)]
-{
-}
+{}
 
 /*
 lemma lemma_validPageDbEntry_equivalence(d:PageDb, d':PageDb, n:PageNr)
