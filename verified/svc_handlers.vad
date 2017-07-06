@@ -1,0 +1,436 @@
+include {:verbatim} "kom_common.i.dfy"
+include "valedecls.vad"
+include "attest.vad"
+include "verify.vad"
+
+procedure svc_returning_default(
+    ghost exstate: state,
+    ghost stack_bytes: int,
+    ghost pagedb: PageDb,
+    ghost dispPg: PageNr)
+    modifies
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; spsr_mon;
+    requires/ensures
+        SaneState(this);
+    requires
+        ValidState(exstate) && mode_of_state(exstate) != User;
+        isReturningSvc(exstate);
+        CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+        finalDispatcher(pagedb, dispPg);
+        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+        !(set(KOM_SVC_ATTEST, KOM_SVC_VERIFY_STEP0, KOM_SVC_VERIFY_STEP1,
+              KOM_SVC_VERIFY_STEP2, KOM_SVC_MAP_DATA, KOM_SVC_UNMAP_DATA,
+              KOM_SVC_INIT_L2PTABLE) ?[r0]);
+    ensures
+        let tuple := svcHandled(exstate, pagedb, dispPg) in
+        let retRegs := firstOf2(tuple) in
+        preEntryReturnRegsMatch(this, retRegs);
+        spsr_mon == encode_mode(User);
+{
+    // Fall back position
+    assert firstOf2(svcHandled(exstate, pagedb, dispPg))
+            == tuple(KOM_ERR_INVALID,0,0,0,0,0,0,0,0);
+
+    MOV(r0, const(encode_mode(User)));
+    MSR(spsr_mon, r0);
+
+    MOV(r0, const(KOM_ERR_INVALID));
+    MOV(r1, 0);
+    MOV(r2, 0);
+    MOV(r3, 0);
+    MOV(r4, 0);
+    MOV(r5, 0);
+    MOV(r6, 0);
+    MOV(r7, 0);
+    MOV(r8, 0);
+}
+
+#verbatim
+lemma lemma_svc_returning_verify_step0_helper(s:state, pagedb:PageDb, dispPg:PageNr, m1:memstate,
+    m2:memstate, user_words:seq<word>, pagedb':PageDb, disp:PageDbEntryTyped, pg:memmap)
+    requires SaneState(s);
+    requires m1 == s.m;
+    requires validPageDb(pagedb)
+    requires pageDbCorresponds(m1, pagedb)
+    requires finalDispatcher(pagedb, dispPg)
+    requires |user_words| == 8
+    requires pagedb' == pagedb[dispPg := pagedb[dispPg].(entry := pagedb[dispPg].entry.(verify_words := user_words))]
+    requires disp == pagedb'[dispPg].entry
+    requires ValidMemState(m1) && ValidMemState(m2)
+    requires pg == extractPage(m2, dispPg)
+    requires
+        forall i :: ValidMem(i) && !(0 <= i - WordAlignedAdd(page_monvaddr(dispPg), DISP_CTXT_USER_WORDS) <= WordsToBytes(7)) ==> MemContents(m1, i) == MemContents(m2, i)
+    requires
+        forall i :: 0 <= i < 8 ==>
+            var a := WordOffset(WordAlignedAdd(page_monvaddr(dispPg), DISP_CTXT_USER_WORDS), i);
+            MemContents(m2, a) == user_words[i]
+    ensures pageDbDispatcherCorresponds(dispPg, disp, pg)
+    ensures finalDispatcher(pagedb', dispPg)
+{
+    assert pageDbDispatcherCorresponds(dispPg, disp, pg) by
+    {
+        reveal pageContentsCorresponds();
+        reveal pageDbDispatcherCorresponds();
+        reveal pageDbDispatcherContextCorresponds();
+        reveal pageDbDispatcherVerifyStateCorresponds();
+
+    }
+
+    reveal validPageDb();
+
+    forall n:PageNr | n != dispPg && pagedb'[n].PageDbEntryTyped?
+        ensures validPageDbEntry(pagedb', n)
+    {
+        assert pagedb[n] == pagedb'[n];
+        assert addrspaceRefs(pagedb, n) == addrspaceRefs(pagedb', n); // set equality
+        if pagedb[n].entry.DataPage? && !hasStoppedAddrspace(pagedb, n) {
+            assert forall i:PageNr | pagedb[i].PageDbEntryTyped?
+                && !pagedb[i].entry.Dispatcher? :: pagedb'[i] == pagedb[i];
+            assert dataPageRefs(pagedb, pagedb[n].addrspace, n)
+                == dataPageRefs(pagedb', pagedb'[n].addrspace, n);
+        }
+    }
+}
+#endverbatim
+
+procedure svc_returning_verify_step0(
+    ghost exstate: state,
+    ghost stack_bytes: int,
+    ghost pagedb: PageDb,
+    ghost dispPg: PageNr)
+    returns (
+    ghost pagedb': PageDb
+    )
+    reads
+        globals; lr;
+    modifies
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; 
+         spsr_mon; mem;
+    requires/ensures
+        SaneState(this);
+        StackBytesRemaining(this, stack_bytes);
+    requires
+        ValidState(exstate) && mode_of_state(exstate) != User;
+        isReturningSvc(exstate);
+        CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+        finalDispatcher(pagedb, dispPg);
+        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+        r0 == KOM_SVC_VERIFY_STEP0;
+    ensures
+        StackPreserving(old(this), this);
+        MemPreservingExcept(old(this), this, page_monvaddr(dispPg), page_monvaddr(dispPg) + DISP_CTXT_USER_WORDS + 8 * WORDSIZE);
+        let tuple := svcHandled(exstate, pagedb, dispPg) in
+        let retRegs := firstOf2(tuple) in
+        let handled_pagedb := secondOf2(tuple) in
+        pagedb' == handled_pagedb && preEntryReturnRegsMatch(this, retRegs);
+        spsr_mon == encode_mode(User);
+        pageDbCorresponds(this.m, pagedb');
+        validDispatcherPage(pagedb', dispPg);
+{
+    ghost var user_words := seq(r1, r2, r3, r4, r5, r6, r7, r8);
+    pagedb' := pagedb[dispPg := pagedb[dispPg].(entry := pagedb[dispPg].entry.(verify_words := user_words))];
+
+    LDRglobaladdr(r0, CurDispatcherOp());
+    LDRglobal(r0, CurDispatcherOp(), r0, 0);
+    assert r0 == page_monvaddr(dispPg);
+    // Use r0 to grab DISP_CTXT_USER_WORDS
+
+    STR(r1, r0, const(DISP_CTXT_USER_WORDS + 0 * WORDSIZE));
+    STR(r2, r0, const(DISP_CTXT_USER_WORDS + 1 * WORDSIZE));
+    STR(r3, r0, const(DISP_CTXT_USER_WORDS + 2 * WORDSIZE));
+    STR(r4, r0, const(DISP_CTXT_USER_WORDS + 3 * WORDSIZE));
+    STR(r5, r0, const(DISP_CTXT_USER_WORDS + 4 * WORDSIZE));
+    STR(r6, r0, const(DISP_CTXT_USER_WORDS + 5 * WORDSIZE));
+    STR(r7, r0, const(DISP_CTXT_USER_WORDS + 6 * WORDSIZE));
+    STR(r8, r0, const(DISP_CTXT_USER_WORDS + 7 * WORDSIZE));
+
+    MOV(r0, const(encode_mode(User)));
+    MSR(spsr_mon, r0);
+
+    assert firstOf2(svcHandled(exstate, pagedb, dispPg)) == tuple(KOM_ERR_SUCCESS,0,0,0,0,0,0,0,0);
+    MOV(r0, const(KOM_ERR_SUCCESS));
+    MOV(r1, 0);
+    MOV(r2, 0);
+    MOV(r3, 0);
+    MOV(r4, 0);
+    MOV(r5, 0);
+    MOV(r6, 0);
+    MOV(r7, 0);
+    MOV(r8, 0);
+
+    ghost var disp := pagedb'[dispPg].entry;
+    ghost var pg := extractPage(this.m, dispPg);
+    lemma_svc_returning_verify_step0_helper(old(this), pagedb, dispPg, old(this.m), this.m,
+        user_words, pagedb', disp, pg);
+
+    assert pageDbCorresponds(this.m, pagedb') by {
+        assert pageDbCorrespondsOnly(this.m, pagedb', dispPg) by {
+            assert pageDbEntryCorresponds(pagedb'[dispPg],
+                                          extractPageDbEntry(this.m, dispPg))
+                by { assert GlobalsInvariant(old(this), this);
+                     reveal pageDbEntryCorresponds; }
+            assert pageContentsCorresponds(dispPg, pagedb'[dispPg], pg)
+                by { reveal pageContentsCorresponds; }
+        }
+        AllButOnePagePreserving(dispPg, old(this), this);
+    }
+}
+
+#verbatim
+lemma lemma_svc_returning_verify_step1_helper(s:state, pagedb:PageDb, dispPg:PageNr, m1:memstate,
+    m2:memstate, user_words:seq<word>, pagedb':PageDb, disp:PageDbEntryTyped, pg:memmap)
+    requires SaneState(s);
+    requires m1 == s.m;
+    requires validPageDb(pagedb)
+    requires pageDbCorresponds(m1, pagedb)
+    requires finalDispatcher(pagedb, dispPg)
+    requires |user_words| == 8
+    requires pagedb' == pagedb[dispPg := pagedb[dispPg].(entry := pagedb[dispPg].entry.(verify_measurement := user_words))]
+    requires disp == pagedb'[dispPg].entry
+    requires ValidMemState(m2)
+    requires pg == extractPage(m2, dispPg)
+    requires
+        forall i :: i in m1.addresses <==> i in m2.addresses
+    requires
+        forall i :: !(0 <= i - WordAlignedAdd(page_monvaddr(dispPg), DISP_CTXT_VERIFY_MEASUREMENT) <= WordsToBytes(7)) ==>
+            i in m1.addresses ==> m1.addresses[i] == m2.addresses[i]
+    requires
+        forall i :: 0 <= i < 8 ==>
+            var a := WordOffset(WordAlignedAdd(page_monvaddr(dispPg), DISP_CTXT_VERIFY_MEASUREMENT), i);
+            a in m2.addresses && m2.addresses[a] == user_words[i]
+    ensures pageDbDispatcherCorresponds(dispPg, disp, pg)
+    ensures validDispatcherPage(pagedb', dispPg)
+{
+    assert pageDbDispatcherCorresponds(dispPg, disp, pg) by
+    {
+        reveal pageContentsCorresponds();
+        reveal pageDbDispatcherCorresponds();
+        reveal pageDbDispatcherContextCorresponds();
+        reveal pageDbDispatcherVerifyStateCorresponds();
+    }
+
+    reveal validPageDb();
+
+    forall n:PageNr | n != dispPg && pagedb'[n].PageDbEntryTyped?
+        ensures validPageDbEntry(pagedb', n)
+    {
+        assert pagedb'[n] == pagedb[n];
+        assert addrspaceRefs(pagedb, n) == addrspaceRefs(pagedb', n); // set equality
+        if pagedb[n].entry.DataPage? && !hasStoppedAddrspace(pagedb, n) {
+            assert forall i:PageNr | pagedb[i].PageDbEntryTyped?
+                && !pagedb[i].entry.Dispatcher? :: pagedb'[i] == pagedb[i];
+            assert dataPageRefs(pagedb, pagedb[n].addrspace, n)
+                == dataPageRefs(pagedb', pagedb'[n].addrspace, n);
+        }
+    }
+}
+#endverbatim
+
+procedure svc_returning_verify_step1(
+    ghost exstate: state,
+    ghost stack_bytes: int,
+    ghost pagedb: PageDb,
+    ghost dispPg: PageNr)
+    returns (
+    ghost pagedb': PageDb
+    )
+    reads
+        globals; lr; 
+    modifies
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; spsr_mon;
+    requires/ensures
+        SaneState(this);
+        StackBytesRemaining(this, stack_bytes);
+    requires
+        ValidState(exstate) && mode_of_state(exstate) != User;
+        isReturningSvc(exstate);
+        CoreRegPreservingExcept(exstate, this, set(OSP, OLR, OReg(R10)));
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+        finalDispatcher(pagedb, dispPg);
+        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+        r0 == KOM_SVC_VERIFY_STEP1;
+    ensures
+        StackPreserving(old(this), this);
+        MemPreservingExcept(old(this), this, page_monvaddr(dispPg), page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT + 8 * WORDSIZE);
+        let tuple := svcHandled(exstate, pagedb, dispPg) in
+        let retRegs := firstOf2(tuple) in
+        let handled_pagedb := secondOf2(tuple) in
+        pagedb' == handled_pagedb && preEntryReturnRegsMatch(this, retRegs);
+        pageDbCorresponds(this.m, pagedb');
+        validDispatcherPage(pagedb', dispPg);
+        spsr_mon == encode_mode(User);
+{
+    ghost var user_words := seq(r1, r2, r3, r4, r5, r6, r7, r8);
+    pagedb' := pagedb[dispPg := pagedb[dispPg].(entry := pagedb[dispPg].entry.(verify_measurement := user_words))];
+
+    LDRglobaladdr(r0, CurDispatcherOp());
+    LDRglobal(r0, CurDispatcherOp(), r0, 0);
+    assert r0 == page_monvaddr(dispPg);
+    // Use r10 to grab DISP_CTXT_USER_WORDS
+
+    STR(r1, r0, const(DISP_CTXT_VERIFY_MEASUREMENT + 0 * WORDSIZE));
+    STR(r2, r0, const(DISP_CTXT_VERIFY_MEASUREMENT + 1 * WORDSIZE));
+    STR(r3, r0, const(DISP_CTXT_VERIFY_MEASUREMENT + 2 * WORDSIZE));
+    STR(r4, r0, const(DISP_CTXT_VERIFY_MEASUREMENT + 3 * WORDSIZE));
+    STR(r5, r0, const(DISP_CTXT_VERIFY_MEASUREMENT + 4 * WORDSIZE));
+    STR(r6, r0, const(DISP_CTXT_VERIFY_MEASUREMENT + 5 * WORDSIZE));
+    STR(r7, r0, const(DISP_CTXT_VERIFY_MEASUREMENT + 6 * WORDSIZE));
+    STR(r8, r0, const(DISP_CTXT_VERIFY_MEASUREMENT + 7 * WORDSIZE));
+
+    MOV(r0, const(encode_mode(User)));
+    MSR(spsr_mon, r0);
+
+    assert firstOf2(svcHandled(exstate, pagedb, dispPg))
+            == tuple(KOM_ERR_SUCCESS,0,0,0,0,0,0,0,0);
+    MOV(r0, const(KOM_ERR_SUCCESS));
+    MOV(r1, 0);
+    MOV(r2, 0);
+    MOV(r3, 0);
+    MOV(r4, 0);
+    MOV(r5, 0);
+    MOV(r6, 0);
+    MOV(r7, 0);
+    MOV(r8, 0);
+
+    ghost var disp := pagedb'[dispPg].entry;
+    ghost var pg := extractPage(this.m, dispPg);
+    lemma_svc_returning_verify_step1_helper(old(this), pagedb, dispPg, old(this.m), this.m,
+        user_words, pagedb', disp, pg);
+
+    assert pageDbCorresponds(this.m, pagedb') by {
+        assert pageDbCorrespondsOnly(this.m, pagedb', dispPg) by {
+            assert pageDbEntryCorresponds(pagedb'[dispPg],
+                                          extractPageDbEntry(this.m, dispPg))
+                by { assert GlobalsInvariant(old(this), this);
+                     reveal pageDbEntryCorresponds; }
+            assert pageContentsCorresponds(dispPg, pagedb'[dispPg], pg)
+                by { reveal pageContentsCorresponds; }
+        }
+        AllButOnePagePreserving(dispPg, old(this), this);
+    }
+}
+
+#verbatim
+lemma lemma_svc_returning_WordAlignedStack(s:state, stack_bytes:int)
+    requires SaneState(s)
+    requires StackBytesRemaining(s, stack_bytes)
+    requires stack_bytes >= WordsToBytes(STACKSIZE_ATTEST + 14)
+    ensures ValidMemRange(va_get_osp(s) - WordsToBytes(STACKSIZE_ATTEST + 14), va_get_osp(s))
+    ensures ValidMemRange(va_get_osp(s) - WordsToBytes(STACKSIZE_ATTEST + 10), va_get_osp(s))
+{
+}
+#endverbatim
+
+procedure {:frame false}{:timeLimitMultiplier 2} svc_returning(
+    ghost exstate: state,
+    ghost stack_bytes: int,
+    ghost pagedb: PageDb,
+    ghost dispPg: PageNr)
+    returns (
+    ghost pagedb': PageDb
+    )
+    reads
+        globals;
+    modifies
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
+         spsr_mon; mem;
+    requires/ensures
+        SaneState(this);
+        StackBytesRemaining(this, stack_bytes);
+    requires
+        stack_bytes >= WordsToBytes(STACKSIZE_ATTEST + 14);
+        ValidState(exstate) && mode_of_state(exstate) != User;
+        isReturningSvc(exstate);
+        CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
+        OperandContents(this, OLR) == OperandContents(exstate, OLR);
+        preEntryCommon(this, pagedb, dispPg);
+        this.conf.nondet == nondet_int(exstate.conf.nondet, NONDET_GENERATOR());
+        this.conf.scr == exstate.conf.scr && this.conf.ttbr0 == exstate.conf.ttbr0;
+        pageDbCorresponds(this.m, pagedb);
+        preEntryReturnPreserved(exstate, this);
+        OperandContents(this, OLR) == OperandContents(exstate, OLR);
+        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+    ensures
+        lr == old(lr);
+        StackPreserving(old(this), this);
+        GlobalsInvariant(old(this), this);
+        BankedRegsInvariant(old(this), this);
+        //SRegsInvariant(old(this), this);
+        ttbr0 == old(ttbr0) && scr == old(scr);
+        wellFormedPageDb(pagedb');
+        pageDbCorresponds(this.m, pagedb');
+        if old(r0) == KOM_SVC_ATTEST || old(r0) > KOM_SVC_VERIFY_STEP2 then
+            NonStackMemPreserving(old(this), this)
+        else if old(r0) == KOM_SVC_VERIFY_STEP0 then 
+            MemPreservingExcept(old(this), this, 
+                                page_monvaddr(dispPg), 
+                                page_monvaddr(dispPg) + DISP_CTXT_USER_WORDS + WordsToBytes(8))
+        else if old(r0) == KOM_SVC_VERIFY_STEP1 then
+            MemPreservingExcept(old(this), this, 
+                                page_monvaddr(dispPg), 
+                                page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT + WordsToBytes(8))
+        else
+            NonStackMemPreserving(old(this), this);
+        let tuple := svcHandled(exstate, pagedb, dispPg);
+        let retRegs := firstOf2(tuple);
+        let handled_pagedb := secondOf2(tuple);
+        pagedb' == handled_pagedb;
+        validPageDb(pagedb');
+        preEntryReturn(exstate, this, retRegs, pagedb, dispPg);
+{
+    ghost var retRegs := firstOf2(svcHandled(exstate, pagedb, dispPg));
+
+    lemma_svc_returning_WordAlignedStack(this, stack_bytes);
+
+    if (r0 == const(KOM_SVC_ATTEST)) {
+        // Create an attestation
+        svc_returning_attest(exstate, stack_bytes, pagedb, dispPg);
+        pagedb' := pagedb;
+        assert pageDbCorresponds(this.m, pagedb');
+        assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
+        assert BankedRegsInvariant(old(this), this);
+    } else if (r0 == const(KOM_SVC_VERIFY_STEP0)) {
+        // Store the user provided words to verify
+        pagedb' := svc_returning_verify_step0(exstate, stack_bytes, pagedb, dispPg);
+        assert pageDbCorresponds(this.m, pagedb');
+        assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
+        assert BankedRegsInvariant(old(this), this);
+    } else if (r0 == const(KOM_SVC_VERIFY_STEP1)) {
+        // Store the user provided measurement to verify
+        pagedb' := svc_returning_verify_step1(exstate, stack_bytes, pagedb, dispPg);
+        assert pageDbCorresponds(this.m, pagedb');
+        assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
+        assert BankedRegsInvariant(old(this), this);
+    } else if (r0 == const(KOM_SVC_VERIFY_STEP2)) {
+        // Do some verification
+        svc_returning_verify(exstate, stack_bytes, pagedb, dispPg);
+        pagedb' := pagedb;
+        assert pageDbCorresponds(this.m, pagedb');
+        calc {
+            OperandContents(this, OLR);
+            lr;
+            old(lr);
+            OperandContents(old(this), OLR);
+            OperandContents(exstate, OLR);
+        }
+        assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
+        assert BankedRegsInvariant(old(this), this);
+    } else if (r0 == const(KOM_SVC_MAP_DATA)) {
+        assume false; // TODO
+    } else if (r0 == const(KOM_SVC_UNMAP_DATA)) {
+        assume false; // TODO
+    } else if (r0 == const(KOM_SVC_INIT_L2PTABLE)) {
+        assume false; // TODO
+    } else {
+        // Fall back position
+        svc_returning_default(exstate, stack_bytes, pagedb, dispPg);
+        pagedb' := pagedb;
+        assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
+        assert BankedRegsInvariant(old(this), this);
+    }
+}
