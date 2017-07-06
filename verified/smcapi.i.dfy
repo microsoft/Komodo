@@ -430,8 +430,8 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: word)
 
         assert validPageDbEntry(pageDbOut, page);
 
-        forall ( n:PageNr | pageDbOut[n].PageDbEntryTyped?
-                          && n != addrspacePage && n != page )
+        forall n:PageNr | pageDbOut[n].PageDbEntryTyped?
+                        && n != addrspacePage && n != page
             ensures validPageDbEntry(pageDbOut, n)
         {
             var e := pageDbOut[n].entry;
@@ -439,35 +439,38 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: word)
             var a := pageDbOut[n].addrspace;
             assert pageDbOut[n] == pageDbIn[n];
 
-            assert validPageDbEntryTyped(d, n) by {
-                // This is a proof that the addrspace of n is still an addrspace
-                //
-                // The only interesting case is when the page that was
-                // removed is the addrspace of n (i.e. a == page). This
-                // case causes an error because a must have been valid in
-                // pageDbIn and therefore n has a reference to it.
-                assert a in d && d[a].PageDbEntryTyped? && d[a].entry.Addrspace?
-                by {
-                    assert a == page ==> n in addrspaceRefs(pageDbIn, a);
-                    assert a == page ==> pageDbIn[a].entry.refcount > 0;
-                    assert a != page;
+            // This is a proof that the addrspace of n is still an addrspace
+            //
+            // The only interesting case is when the page that was
+            // removed is the addrspace of n (i.e. a == page). This
+            // case causes an error because a must have been valid in
+            // pageDbIn and therefore n has a reference to it.
+            assert d[a].PageDbEntryTyped? && d[a].entry.Addrspace?
+            by {
+                if a == page {
+                    assert n in addrspaceRefs(pageDbIn, a);
+                    assert pageDbIn[a].entry.refcount > 0;
+                    assert false;
                 }
+            }
 
-                if( a == addrspacePage ) {
-                    var oldRefs := addrspaceRefs(pageDbIn, addrspacePage);
-                    assert addrspaceRefs(pageDbOut, addrspacePage) == oldRefs - {page};
-                    assert pageDbOut[a].entry.refcount == |addrspaceRefs(pageDbOut, addrspacePage)|;
-                } else {
-                    assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
-                    assert addrspaceRefs(pageDbIn, a) == addrspaceRefs(pageDbOut, a);
-                }
+            if a == addrspacePage {
+                var oldRefs := addrspaceRefs(pageDbIn, addrspacePage);
+                assert addrspaceRefs(pageDbOut, addrspacePage) == oldRefs - {page};
+                assert pageDbOut[a].entry.refcount == |addrspaceRefs(pageDbOut, addrspacePage)|;
+            } else {
+                assert pageDbOut[a].entry.refcount == pageDbIn[a].entry.refcount;
+                assert addrspaceRefs(pageDbIn, a) == addrspaceRefs(pageDbOut, a);
+            }
 
-                if pageDbOut[n].entry.DataPage? && !hasStoppedAddrspace(pageDbOut, n) {
-                    assert dataPageRefs(pageDbOut, pageDbOut[n].addrspace, n)
-                        == dataPageRefs(pageDbIn, pageDbIn[n].addrspace, n);
+            if e.Addrspace? {
+                assert addrspaceRefs(pageDbIn, n) == addrspaceRefs(pageDbOut, n);
+            }
 
-                }
-
+            if pageDbOut[n].entry.DataPage? && !hasStoppedAddrspace(pageDbOut, n) {
+                assert dataPageRefs(pageDbOut, pageDbOut[n].addrspace, n)
+                    == dataPageRefs(pageDbIn, pageDbIn[n].addrspace, n);
+                assert validPageDbEntryTyped(d, n);
             }
         }
 

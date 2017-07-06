@@ -134,9 +134,16 @@ lemma lemma_svcUnmapData_validPageDb(d:PageDb, asPg:PageNr, page:word, mapVA:wor
                 assert validPageDbEntryTyped(rd, n);
             } else if n == l2ptnr {
                 assert rd[n] == d1[n];
-                assert validL2PTable(d1, asPg, d1[l2ptnr].entry.l2pt);
-                assert rd[l2ptnr].entry.l2pt == l2pt';
-                assert validL2PTable(rd, asPg, l2pt');
+                assert validL2PTable(rd, asPg, l2pt') by {
+                    assert validL2PTable(d1, asPg, d1[l2ptnr].entry.l2pt);
+                    assert rd[l2ptnr].entry.l2pt == l2pt';
+                }
+                assert referencedL2PTable(rd, asPg, n) by {
+                    assert referencedL2PTable(d1, asPg, n);
+                    var l1ptnr := d1[asPg].entry.l1ptnr;
+                    assert l1ptnr == rd[asPg].entry.l1ptnr;
+                    assert d1[l1ptnr] == rd[l1ptnr];
+                }
                 assert validPageDbEntryTyped(rd, n);
             } else {
                 assert rd[n] == d[n];
