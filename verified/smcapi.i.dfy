@@ -642,33 +642,6 @@ lemma finalisePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word)
     }
 }
 
-lemma lemma_userspaceExecutionAndException_spsr(s:state, r:state)
-    requires ValidState(s) && userspaceExecutionAndException(s, r)
-    requires mode_of_state(s) != User && !spsr_of_state(s).f && !spsr_of_state(s).i
-    ensures mode_of_state(r) != User && spsr_of_state(r).m == User
-    ensures !spsr_of_state(r).f && !spsr_of_state(r).i
-{
-    assert ValidOperand(OLR);
-    reveal userspaceExecutionAndException();
-    assert ExtractAbsPageTable(s).Just?;
-    var s', s2 :| equivStates(s, s')
-        && evalEnterUserspace(s', s2)
-        && (lemma_evalEnterUserspace_preservesAbsPageTable(s', s2);
-           var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
-            evalExceptionTaken(s3, ex, expc, r));
-    var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
-    assert mode_of_state(s3) == User by { reveal userspaceExecutionFn(); }
-    lemma_evalExceptionTaken_Mode(s3, ex, expc, r);
-    calc {
-        !spsr_of_state(s).f && !spsr_of_state(s).i;
-        !spsr_of_state(s').f && !spsr_of_state(s').i;
-        !s2.conf.cpsr.f && !s2.conf.cpsr.i;
-        { reveal userspaceExecutionFn(); }
-        !s3.conf.cpsr.f && !s3.conf.cpsr.i;
-        !spsr_of_state(r).f && !spsr_of_state(r).i;
-    }
-}
-
 lemma lemma_validEnclaveExecutionStep_validPageDb(s1:state, d1:PageDb,
     rs:state, rd:PageDb, dispPg:PageNr, retToEnclave:bool)
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
@@ -705,11 +678,11 @@ lemma lemma_validEnclaveExecution(s1:state, d1:PageDb,
     reveal validEnclaveExecution();
     var retToEnclave := (steps > 0);
     var s5, d5 :|
-        validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave)
-        && if retToEnclave then
+        validEnclaveExecutionStep(s1, d1, s5, d5, dispPg, retToEnclave) &&
         (lemma_validEnclaveExecutionStep_validPageDb(s1, d1, s5, d5, dispPg, retToEnclave);
-        validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1))
-        else rd == d5;
+        if retToEnclave then
+            validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1)
+        else rd == d5);
 
     if retToEnclave {
         lemma_validEnclaveExecution(s5, d5, rs, rd, dispPg, steps - 1);

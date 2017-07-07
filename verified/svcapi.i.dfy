@@ -265,3 +265,24 @@ lemma lemma_svcHandled_validPageDb(s:state, sd:PageDb, dispPg:PageNr, regs:SvcRe
         lemma_svcInitL2PTable_validPageDb(sd, addrspace, s.regs[R1], s.regs[R2]);
     }
 }
+
+lemma lemma_svcHandled_l1pOfDispatcher(s:state, d:PageDb, dispPg:PageNr)
+    requires validPageDb(d) && finalDispatcher(d, dispPg)
+    requires ValidState(s) && mode_of_state(s) != User
+    requires isReturningSvc(s)
+    ensures var rd := svcHandled(s, d, dispPg).1; finalDispatcher(rd, dispPg)
+        && l1pOfDispatcher(rd, dispPg) == l1pOfDispatcher(d, dispPg)
+{
+    reveal validPageDb();
+    var callno := s.regs[R0];
+    var (regs, rd) := svcHandled(s, d, dispPg);
+    lemma_svcHandled_validPageDb(s, d, dispPg, regs, rd);
+    if regs.0 != KOM_ERR_SUCCESS || callno == KOM_SVC_ATTEST || callno == KOM_SVC_VERIFY_STEP2 {
+        assert rd == d;
+    } else if callno == KOM_SVC_VERIFY_STEP0 || callno == KOM_SVC_VERIFY_STEP1 {
+        assert rd == d[dispPg := d[dispPg].(entry := rd[dispPg].entry)];
+    } else if callno == KOM_SVC_MAP_DATA {
+    } else if callno == KOM_SVC_UNMAP_DATA {
+    } else if callno == KOM_SVC_INIT_L2PTABLE {
+    }       
+}
