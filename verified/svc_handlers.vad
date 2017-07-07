@@ -34,6 +34,7 @@ procedure svc_returning_default(
             == tuple(KOM_ERR_INVALID,0,0,0,0,0,0,0,0);
 
     MOV(r0, const(encode_mode(User)));
+    lemma_user_psr();
     MSR(spsr_mon, r0);
 
     MOV(r0, const(KOM_ERR_INVALID));
@@ -149,6 +150,7 @@ procedure svc_returning_verify_step0(
     STR(r8, r0, const(DISP_CTXT_USER_WORDS + 7 * WORDSIZE));
 
     MOV(r0, const(encode_mode(User)));
+    lemma_user_psr();
     MSR(spsr_mon, r0);
 
     assert firstOf2(svcHandled(exstate, pagedb, dispPg)) == tuple(KOM_ERR_SUCCESS,0,0,0,0,0,0,0,0);
@@ -283,6 +285,7 @@ procedure svc_returning_verify_step1(
     STR(r8, r0, const(DISP_CTXT_VERIFY_MEASUREMENT + 7 * WORDSIZE));
 
     MOV(r0, const(encode_mode(User)));
+    lemma_user_psr();
     MSR(spsr_mon, r0);
 
     assert firstOf2(svcHandled(exstate, pagedb, dispPg))

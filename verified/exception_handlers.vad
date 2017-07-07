@@ -127,7 +127,7 @@ procedure {:timeLimitMultiplier 2} fault_exit(
         tuple(r0, r1, pagedb) == exceptionHandled(exstate, pagedb_in, dispPg);
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
-        validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg);
+        validExceptionTransition(old(this), this);
         MemPreservingExcept(old(this), this, page_monvaddr(dispPg),
                             page_monvaddr(dispPg) + PAGESIZE);
 {
@@ -162,8 +162,7 @@ procedure {:timeLimitMultiplier 2} fault_exit(
     lemma_exceptionHandled_validPageDb(exstate, pagedb_in, dispPg);
 
     assert GlobalsInvariant(old(this), this);
-    assert validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg)
-        by { reveal validExceptionTransition; }
+    assert validExceptionTransition(old(this), this);
     assert pageDbCorrespondsOnly(this.m, pagedb, dispPg)
         by { reveal pageContentsCorresponds; reveal pageDbEntryCorresponds; }
     AllButOnePagePreserving(dispPg, old(this), this);
@@ -213,9 +212,6 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
         assert pagedb == secondOf2(tuple);
         assert preEntryReturn(old(this), this, firstOf2(tuple), pagedb, dispPg);
     }
-
-    assert validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg)
-        by { reveal validExceptionTransition; }
 }
 
 procedure {:frame false} abort_handler(
@@ -245,9 +241,6 @@ procedure {:frame false} abort_handler(
 
     pagedb := fault_exit(ex, old(this), pagedb_in, dispPg);
     ORR(sp, sp, 1); // report that we're done
-
-    assert validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg)
-        by { reveal validExceptionTransition; }
 }
 
 procedure save_disp_context_helper(operand base:reg, ghost dispPg:PageNr)
@@ -572,8 +565,6 @@ procedure {:frame false} {:timeLimitMultiplier 2} interrupt_handler(
         assert StackPreserving(old(this), this);
         ORR(sp, sp, 1);
 
-        assert validExceptionTransition(old(this), pagedb_in, this, pagedb, dispPg)
-            by { reveal validExceptionTransition; }
         assert KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
     } else { // we came from another exception handler
         assert spsr_of_state(old(this)).m != User by { reveal ValidSRegState; }

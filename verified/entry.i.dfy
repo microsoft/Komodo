@@ -734,16 +734,14 @@ lemma lemma_ValidEntryPre(s0:state, s1:state, sd:PageDb, r:state, rd:PageDb, dp:
         && smc_enter_err(sd, dp, false) == KOM_ERR_SUCCESS {
         forall s | preEntryEnter(s1, s, sd, dp, a1, a2, a3)
             ensures preEntryEnter(s0, s, sd, dp, a1, a2, a3)
-        {
-        }
+        {}
     }
 
     if smc_resume(s1, sd, r, rd, dp)
         && smc_enter_err(sd, dp, true) == KOM_ERR_SUCCESS {
         forall s | preEntryResume(s1, s, sd, dp)
             ensures preEntryResume(s0, s, sd, dp)
-        {
-        }
+        {}
     }
 }
 
@@ -792,6 +790,8 @@ lemma lemma_validEnclaveExecutionStep_PageDb(s1:state, d1:PageDb, r1:state,
     requires mode_of_state(s1) != User && !spsr_of_state(s1).f && !spsr_of_state(s1).i
     ensures validPageDb(rd) && finalDispatcher(rd, dispPg)
     ensures l1pOfDispatcher(d1, dispPg) == l1pOfDispatcher(rd, dispPg)
+    ensures ValidState(r1) && mode_of_state(r1) != User
+    ensures retToEnclave ==> (!spsr_of_state(r1).f && !spsr_of_state(r1).i)
 {
     reveal validEnclaveExecutionStep();
     var s4, d4 :|
@@ -805,14 +805,18 @@ lemma lemma_validEnclaveExecutionStep_PageDb(s1:state, d1:PageDb, r1:state,
         && l1pOfDispatcher(d1, dispPg) == l1pOfDispatcher(d4, dispPg)
         by { reveal updateUserPagesFromState(); }
     if retToEnclave {
-        assert rd == svcHandled(s4, d4, dispPg).1;
+        var (retRegs, rd') := svcHandled(s4, d4, dispPg);
+        assert rd == rd';
         assert validPageDb(rd) && finalDispatcher(rd, dispPg);
         lemma_svcHandled_l1pOfDispatcher(s4, d4, dispPg);
+        lemma_preEntryReturn_spsr(s4, r1, retRegs, rd, dispPg);
     } else {
         assert rd == exceptionHandled(s4, d4, dispPg).2;
+        assert rd == d4[dispPg := d4[dispPg].(entry := rd[dispPg].entry)];
         lemma_userspaceExecutionAndException_spsr(s1, s4);
         lemma_exceptionHandled_validPageDb(s4, d4, dispPg);
-        assert validPageDb(rd) && finalDispatcher(rd, dispPg);
+        assert validPageDb(rd) && finalDispatcher(rd, dispPg)
+            && l1pOfDispatcher(d4, dispPg) == l1pOfDispatcher(rd, dispPg);
     }
 }
 
@@ -885,6 +889,26 @@ lemma lemma_validEnclaveExecutionPost(s1:state, d1:PageDb, r1:state, rd:PageDb,
     }
 }
 
+lemma lemma_preEntryEnter_spsr(s:state, s':state, d:PageDb, dispPg:PageNr,
+                               a1:word, a2:word, a3:word)
+    requires ValidState(s)
+    requires validPageDb(d)
+    requires smc_enter_err(d, dispPg, false) == KOM_ERR_SUCCESS
+    requires preEntryEnter(s, s', d, dispPg, a1, a2, a3)
+    ensures mode_of_state(s') != User && !spsr_of_state(s').f && !spsr_of_state(s').i
+{
+    lemma_user_psr();
+}
+
+lemma lemma_preEntryReturn_spsr(exs:state, s:state, retregs:SvcReturnRegs,
+                                d:PageDb, dispPg:PageNr)
+    requires ValidState(exs) && ValidState(s)
+    requires preEntryReturn(exs, s, retregs, d, dispPg)
+    ensures mode_of_state(s) != User && !spsr_of_state(s).f && !spsr_of_state(s).i
+{
+    lemma_user_psr();
+}
+
 lemma lemma_validEnterPost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp:word,
                            a1:word, a2:word, a3:word)
     requires ValidState(s) && ValidState(r1) && ValidState(r2) && validPageDb(sd)
@@ -900,6 +924,7 @@ lemma lemma_validEnterPost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp
         preEntryEnter(s, s1, sd, dp, a1, a2, a3)
         && validEnclaveExecution(s1, sd, r1, rd, dp, steps);
 
+    lemma_preEntryEnter_spsr(s, s1, sd, dp, a1, a2, a3);
     lemma_validEnclaveExecutionPost(s1, sd, r1, rd, r2, dp, steps);
 }
 

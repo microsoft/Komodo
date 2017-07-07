@@ -192,3 +192,34 @@ lemma lemma_psr_still_valid(oldpsr:word, newpsr:word, newbits:word)
         assert psr_mask_mode(newpsr) == encode_mode(IRQ) by { reveal BitAnd(); }
     }
 }
+
+lemma lemma_user_psr()
+    ensures ValidPsrWord(encode_mode(User))
+    ensures decode_psr(encode_mode(User)) == PSR(User, false, false)
+{
+    assert encode_mode(User) == 0x10;
+    assert BitsAsWord(0x1f) == 0x1f && BitsAsWord(0x10) == 0x10
+        && BitsAsWord(0x40) == 0x40 && BitsAsWord(0x80) == 0x80
+        by { reveal BitsAsWord(); }
+
+    calc {
+        psr_mask_mode(0x10);
+        BitwiseAnd(0x10, 0x1f);
+        { lemma_BitsAndWordConversions(); reveal_BitAnd(); }
+        0x10;
+    }
+
+    assert decode_mode(0x10) == User;
+
+    calc {
+        BitwiseAnd(0x10, ARM_PSR_FIQ);
+        { lemma_BitsAndWordConversions(); reveal_BitAnd(); }
+        0;
+    }
+
+    calc {
+        BitwiseAnd(0x10, ARM_PSR_IRQ);
+        { lemma_BitsAndWordConversions(); reveal_BitAnd(); }
+        0;
+    }
+}

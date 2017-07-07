@@ -428,6 +428,7 @@ procedure svc_returning_verify(
     //assert old(sp_usr) == sp_usr;
 
     MOV(r0, const(encode_mode(User)));
+    lemma_user_psr();
     MSR(spsr_mon, r0);
 
     MOV(r0, const(KOM_ERR_SUCCESS));
