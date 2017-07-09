@@ -101,7 +101,7 @@ predicate validEnclaveExecutionStep'(s1:state, d1:PageDb,
         && dataPagesCorrespond(s1.m, d1)
         && userspaceExecutionAndException(s1, s4)
         && d4 == updateUserPagesFromState(s4, d1, dispPg)
-        && validExceptionTransition(s4, d4, rs, rd, dispPg)
+        && validExceptionTransition(s4, rs)
         && isReturningSvc(s4) == retToEnclave
         && (if retToEnclave then
             var (retRegs, rd') := svcHandled(s4, d4, dispPg);
@@ -274,24 +274,17 @@ predicate equivStates(s1:state, s2:state)
         && s1.conf == s2.conf && s1.ok == s2.ok
 }
 
-
 predicate userspaceExecutionAndException'(s:state, s1:state, s2:state, r:state)
     requires ValidState(s)
 {
-    ExtractAbsPageTable(s).Just?
-    // we've entered userland, and didn't change anything before/after doing so
-    && equivStates(s, s1) && evalEnterUserspace(s1, s2)
-    && (var (s3, expc, ex) := userspaceExecutionFn(s2, OperandContents(s, OLR));
-    evalExceptionTaken(s3, ex, expc, r))
+    equivStates(s, s1) && evalUserExecution(s1, s2, r)
     && mode_of_state(r) != User // known, but we need a lemma to prove it
-    //&& !spsr_of_state(r).f && !spsr_of_state(r).i
 }
 
 predicate {:opaque} userspaceExecutionAndException(s:state, r:state)
     requires ValidState(s)
     ensures userspaceExecutionAndException(s, r)
         ==> ValidState(r) && mode_of_state(r) != User
-
 {
     exists s1, s2 :: userspaceExecutionAndException'(s, s1, s2, r)
 }
@@ -330,18 +323,11 @@ function exceptionHandled(s:state, d:PageDb, dispPg:PageNr): (word, word, PageDb
     )
 }
 
-predicate {:opaque} validExceptionTransition(s:state, d:PageDb, s':state,
-                                             d':PageDb, dispPg: word)
-    ensures validExceptionTransition(s,d,s',d',dispPg) ==>
-        ValidState(s) && ValidState(s') && validPageDb(d) && validPageDb(d')
+predicate validExceptionTransition(s:state, s':state)
 {
-    ValidState(s) && ValidState(s') && validPageDb(d) && validPageDb(d')
+    ValidState(s) && ValidState(s')
     && InsecureMemInvariant(s, s')
     && mode_of_state(s') == Monitor
-    && (d == d' || (
-        validPageNr(dispPg) && validDispatcherPage(d, dispPg)
-        && equivalentExceptPage(d, d', dispPg)
-        && finalDispatcher(d', dispPg)))
 }
 
 predicate WSMemInvariantExceptAddrspaceAtPage(hw:state, hw':state, 
@@ -373,11 +359,4 @@ predicate memSWrInAddrspace(d:PageDb, l1p:PageNr, m: addr)
 predicate pageSWrInL2PT(l2pt:seq<L2PTE>, p:PageNr)
 {
     exists pte :: pte in l2pt && pte.SecureMapping? && pte.page == p && pte.write
-}
-
-predicate equivalentExceptPage(d:PageDb, d':PageDb, p:PageNr)
-    requires validPageNr(p)
-    requires validPageDb(d) && validPageDb(d')
-{
-    forall p' :: validPageNr(p') && p' != p ==> d[p'] == d'[p']
 }

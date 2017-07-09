@@ -1,3 +1,6 @@
+include {:verbatim} "entry.s.dfy"
+include {:verbatim} "psrbits.i.dfy"
+
 include "attest_input.vad"
 
 #verbatim
@@ -383,6 +386,7 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest(
     load_memory_into_regs(mac);
 
     MOV(r0, const(encode_mode(User)));
+    lemma_user_psr();
     MSR(spsr_mon, r0);
 
     MOV(r0, const(KOM_ERR_SUCCESS));
