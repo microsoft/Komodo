@@ -60,6 +60,9 @@ lemma lemma_enc_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
             lemma_mapSecure_enc_ni(d1, c1, d1', e1', d2, c2, d2', e2', arg1, arg2, arg3, arg4, atkr);
         }
     }
+    else if(callno == KOM_SMC_ALLOC_SPARE) {
+        lemma_allocSpare_enc_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, atkr);
+    }
     else if(callno == KOM_SMC_MAP_INSECURE){
         lemma_mapInsecure_enc_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
     }
@@ -80,7 +83,7 @@ lemma lemma_enc_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     }
     else {
         reveal enc_eqpdb();
-        assert e1' == KOM_ERR_INVALID;
+        assert e1' == KOM_ERR_INVALID; //XXX
         assert e2' == KOM_ERR_INVALID;
         assert d1' == d1;
         assert d2' == d2;
@@ -119,6 +122,8 @@ lemma lemma_mapSecure_enc_ni_both_go(
         var data := DataPage(fromJust(c1)); 
         var ap1 := allocatePage(d1, page, addrspacePage, data);
         var ap2 := allocatePage(d2, page, addrspacePage, data);
+        allocatePagePreservesPageDBValidity(d1, page, addrspacePage, data);
+        allocatePagePreservesPageDBValidity(d2, page, addrspacePage, data);
         lemma_allocatePage_enc_ni(d1, ap1.0, ap1.1, d2, ap2.0, ap2.1,
             page, addrspacePage, data, atkr);
         assert ap1.1 == e1';
@@ -127,26 +132,51 @@ lemma lemma_mapSecure_enc_ni_both_go(
         var l2pte := SecureMapping(page, abs_mapping.perm.w, abs_mapping.perm.x);
         assert validL2PTE(ap1.0, addrspacePage, l2pte);
         assert validL2PTE(ap2.0, addrspacePage, l2pte);
+        assert validAndEmptyMapping(abs_mapping, ap1.0, addrspacePage) by
+            {reveal wordToMapping(); }
+        assert validAndEmptyMapping(abs_mapping, ap2.0, addrspacePage) by
+            {reveal wordToMapping(); }
         var db1 := updateL2Pte(ap1.0, addrspacePage, abs_mapping, l2pte); 
         var db2 := updateL2Pte(ap2.0, addrspacePage, abs_mapping, l2pte); 
-        lemma_updateL2PtePreservesPageDb(ap1.0,addrspacePage,abs_mapping,l2pte);
-        lemma_updateL2PtePreservesPageDb(ap2.0,addrspacePage,abs_mapping,l2pte);
-        lemma_updateL2Pte_enc_ni(ap1.0, db1, ap2.0, db2, 
-            addrspacePage, abs_mapping, l2pte, atkr);
-        contentsDivBlock(physPage, c1);
-        contentsDivBlock(physPage, c2);
-        assert d1' == updateMeasurement(db1, addrspacePage, 
-            [KOM_SMC_MAP_SECURE, mapping], fromJust(c1));
-        assert d2' == updateMeasurement(db2, addrspacePage, 
-            [KOM_SMC_MAP_SECURE, mapping], fromJust(c2));
-        lemma_updateMeasurement_ni(db1, db2, d1', d2', addrspacePage,
-            [KOM_SMC_MAP_SECURE, mapping], fromJust(c1), atkr);
-        reveal enc_eqpdb();
-        assert enc_eqpdb(d1', d2', atkr);
+        assert e1' == KOM_ERR_SUCCESS <==> e2' == KOM_ERR_SUCCESS;
+        assert !pageIsFree(d1, page) ==> e1' != KOM_ERR_SUCCESS;
+        assert !pageIsFree(d2, page) ==> e1' != KOM_ERR_SUCCESS;
+        if(e1' == KOM_ERR_SUCCESS) {
+            lemma_allocatePageRefs(d1, addrspacePage, page, data, ap1.0, e1');
+            lemma_allocatePageRefs(d2, addrspacePage, page, data, ap2.0, e1');
+            lemma_updateL2PtePreservesPageDb(ap1.0,addrspacePage,abs_mapping,l2pte);
+            lemma_updateL2PtePreservesPageDb(ap2.0,addrspacePage,abs_mapping,l2pte);
+            lemma_updateL2Pte_enc_ni(ap1.0, db1, ap2.0, db2, 
+                addrspacePage, abs_mapping, l2pte, atkr);
+            contentsDivBlock(physPage, c1);
+            contentsDivBlock(physPage, c2);
+            assert d1' == updateMeasurement(db1, addrspacePage, 
+                [KOM_SMC_MAP_SECURE, mapping], fromJust(c1));
+            assert d2' == updateMeasurement(db2, addrspacePage, 
+                [KOM_SMC_MAP_SECURE, mapping], fromJust(c2));
+            lemma_updateMeasurement_ni(db1, db2, d1', d2', addrspacePage,
+                [KOM_SMC_MAP_SECURE, mapping], fromJust(c1), atkr);
+            reveal enc_eqpdb();
+            assert enc_eqpdb(d1', d2', atkr);
+        } else {
+            reveal enc_eqpdb();
+        }
     } else {
         reveal enc_eqpdb();
         assert enc_eqpdb(d1', d2', atkr);
     }
+}
+
+lemma lemma_allocatePageRefs(d: PageDb, addrspacePage:word, page:word,
+    entry: PageDbEntryTyped, d': PageDb, e':word)
+    requires validPageDb(d) && validPageDb(d')
+    requires validAddrspacePage(d, addrspacePage)
+    requires allocatePageEntryValid(entry)
+    requires allocatePage(d, page, addrspacePage, entry) == (d', e')
+    requires e' == KOM_ERR_SUCCESS
+    ensures  dataPageRefs(d', addrspacePage, page) == {};
+{
+    lemma_freePageRefs(d, page);
 }
 
 lemma lemma_updateMeasurement_ni(d1: PageDb, d2: PageDb, d1': PageDb, d2': PageDb,
@@ -189,8 +219,9 @@ lemma lemma_updateL2Pte_not_atkr(d:PageDb, a:PageNr, m: Mapping, l2e: L2PTE, d':
     requires validPageDb(d) && validPageDb(d')
     requires isAddrspace(d, a)
     requires validMapping(m,d,a)
-    requires d[a].entry.state.InitState?
-    requires validL2PTE(d, a, l2e)
+    requires d[a].entry.state.InitState? // XXX line below
+    requires validL2PTE(d, a, l2e) 
+    requires validL1PTable(d, a, d[d[a].entry.l1ptnr].entry.l1pt)
     requires d' == updateL2Pte(d, a, m, l2e)
     requires valAddrPage(d, atkr)
     requires a != atkr
@@ -257,11 +288,17 @@ lemma lemma_mapSecure_enc_ni_one_go(d1: PageDb, c1: Maybe<seq<word>>, d1': PageD
     assert enc_eqpdb(d1, d1', atkr) by {
         var data := DataPage(fromJust(c1)); 
         var ap := allocatePage(d1, page, addrspacePage, data);
+        allocatePagePreservesPageDBValidity(d1, page, addrspacePage, data);
         lemma_allocatePage_not_atkr(d1, page, addrspacePage, data, ap.0, e1', atkr);
         var abs_mapping := wordToMapping(mapping);
         var l2pte := SecureMapping(page, abs_mapping.perm.w, abs_mapping.perm.x);
         assert validL2PTE(ap.0, addrspacePage, l2pte);
         var db := updateL2Pte(ap.0, addrspacePage, abs_mapping, l2pte); 
+
+        assert validAndEmptyMapping(abs_mapping, ap.0, addrspacePage) by
+            {reveal wordToMapping(); }
+
+        lemma_allocatePageRefs(d1, addrspacePage, page, data, ap.0, e1');
         lemma_updateL2PtePreservesPageDb(ap.0,addrspacePage,abs_mapping,l2pte);
         lemma_updateL2Pte_not_atkr(ap.0, addrspacePage, abs_mapping, l2pte, db, atkr);
         contentsDivBlock(physPage, c1);
@@ -288,9 +325,9 @@ lemma lemma_mapSecure_enc_ni_one_go(d1: PageDb, c1: Maybe<seq<word>>, d1': PageD
 }
 
 lemma lemma_mapSecure_enc_ni(d1: PageDb, c1: Maybe<seq<word>>, d1': PageDb, e1':word,
-                                  d2: PageDb, c2: Maybe<seq<word>>, d2': PageDb, e2':word,
-                                  page:word, addrspacePage:word, mapping:word, 
-                                  physPage: word, atkr: PageNr)
+                             d2: PageDb, c2: Maybe<seq<word>>, d2': PageDb, e2':word,
+                             page:word, addrspacePage:word, mapping:word, 
+                             physPage: word, atkr: PageNr)
     requires ni_reqs_(d1, d1', d2, d2', atkr)
     requires contentsOk(physPage, c1) && contentsOk(physPage, c2)
     requires c1 == c2;
@@ -326,6 +363,36 @@ lemma lemma_mapSecure_enc_ni(d1: PageDb, c1: Maybe<seq<word>>, d1': PageDb, e1':
         assert d2' == d2;
         reveal enc_eqpdb();
         assert enc_eqpdb(d1', d2', atkr);
+    }
+}
+
+lemma lemma_allocSpare_enc_ni(d1: PageDb, d1': PageDb, e1':word,
+                              d2: PageDb, d2': PageDb, e2':word,
+                              page:word, addrspacePage:word, 
+                              atkr: PageNr)
+    requires ni_reqs_(d1, d1', d2, d2', atkr)
+    requires smc_allocSpare(d1, page, addrspacePage) == (d1', e1')
+    requires smc_allocSpare(d2, page, addrspacePage) == (d2', e2')
+    requires enc_eqpdb(d1, d2, atkr)
+    ensures  enc_eqpdb(d1', d2', atkr) 
+{
+    reveal enc_eqpdb();
+    reveal validPageDb();
+    var go1, go2 := e1' == KOM_ERR_SUCCESS, e2' == KOM_ERR_SUCCESS;
+    if(atkr == addrspacePage) {
+        lemma_allocatePage_enc_ni(d1, d1', e1',
+                                  d2, d2', e2',
+                                  page, addrspacePage, SparePage,
+                                  atkr);
+    } else {
+        if(go1) {
+            lemma_allocatePage_not_atkr(d1, page, addrspacePage, SparePage, d1', 
+                e1', atkr);
+        }
+        if(go2) {
+            lemma_allocatePage_not_atkr(d2, page, addrspacePage, SparePage, d2', 
+                e2', atkr);
+        }
     }
 }
 
@@ -422,6 +489,7 @@ lemma lemma_initDispatcher_enc_ni_one_go(
                            [0, 0, 0, 0, 0, 0, 0, 0],
                            [0, 0, 0, 0, 0, 0, 0, 0]);
     var ad1 := allocatePage(d1, page, addrspacePage, disp).0;
+    allocatePagePreservesPageDBValidity(d1, page, addrspacePage, disp); 
     lemma_allocatePage_not_atkr(d1, page, addrspacePage, disp, ad1, e1', atkr);
     if(e1' == KOM_ERR_SUCCESS){
         lemma_updateMeasurement_not_atkr(ad1, addrspacePage, 
@@ -446,6 +514,8 @@ lemma lemma_initDispatcher_enc_ni(d1: PageDb, d1': PageDb, e1':word,
                                [0, 0, 0, 0, 0, 0, 0, 0]);
         var ad1 := allocatePage(d1, page, addrspacePage, disp).0;
         var ad2 := allocatePage(d2, page, addrspacePage, disp).0;
+        allocatePagePreservesPageDBValidity(d1, page, addrspacePage, disp); 
+        allocatePagePreservesPageDBValidity(d2, page, addrspacePage, disp); 
         lemma_allocatePage_enc_ni(d1, ad1, e1', d2, ad2, e2',
             page, addrspacePage, disp, atkr);
         if(e1' == KOM_ERR_SUCCESS && e2' == KOM_ERR_SUCCESS) {
@@ -486,6 +556,7 @@ lemma lemma_initL2PTable_enc_ni_one_go(d1: PageDb, d1': PageDb, e1':word,
         { reveal validPageDb(); }
     var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
     var (pagedb, err) := allocatePage(d1, page, addrspacePage, l2pt);
+    // allocatePagePreservesPageDBValidity(d1, page, addrspacePage, l2pt); 
     lemma_allocatePage_not_atkr(d1, page, addrspacePage, l2pt, pagedb, e1', atkr);
     assert enc_eqpdb(d1, pagedb, atkr);
     assert enc_eqpdb(pagedb, d1', atkr);
@@ -511,6 +582,7 @@ lemma_initL2PTable_enc_ni(d1: PageDb, d1': PageDb, e1':word,
         var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
         var ap1 := allocatePage(d1, page, addrspacePage, l2pt);
         var ap2 := allocatePage(d2, page, addrspacePage, l2pt);
+        // allocatePagePreservesPageDBValidity(d1, page, addrspacePage, l2pt); 
         lemma_allocatePage_enc_ni(d1, ap1.0, e1', d2, ap2.0, e2',
             page, addrspacePage, l2pt, atkr);
         assert ap1.1 != KOM_ERR_SUCCESS ==> ap1.0 == d1;
@@ -712,9 +784,9 @@ lemma lemma_stop_enc_ni(d1: PageDb, d1': PageDb, e1':word,
 }
 
 lemma lemma_allocatePage_enc_ni(d1: PageDb, d1': PageDb, e1':word,
-                                     d2: PageDb, d2': PageDb, e2':word,
-                                     page: word, addrspacePage: PageNr, entry: PageDbEntryTyped,
-                                     atkr: PageNr)
+                                d2: PageDb, d2': PageDb, e2':word,
+                                page: word, addrspacePage: PageNr,
+                                entry: PageDbEntryTyped, atkr: PageNr)
     requires ni_reqs_(d1, d1', d2, d2', atkr)
     requires validAddrspacePage(d1, addrspacePage) && 
         validAddrspacePage(d2, addrspacePage);
@@ -726,8 +798,8 @@ lemma lemma_allocatePage_enc_ni(d1: PageDb, d1': PageDb, e1':word,
     ensures  addrspacePage == atkr ==> e1' == e2'
 {
     reveal enc_eqpdb();
-    assert allocatePage_inner(d1, page, addrspacePage, entry) == (d1', e1');
-    assert allocatePage_inner(d2, page, addrspacePage, entry) == (d2', e2');
+    assert allocatePage(d1, page, addrspacePage, entry) == (d1', e1');
+    assert allocatePage(d2, page, addrspacePage, entry) == (d2', e2');
     if( atkr == addrspacePage ) {
         assert valAddrPage(d1', atkr);
         assert valAddrPage(d2', atkr);
@@ -790,22 +862,24 @@ lemma lemma_allocatePage_enc_ni(d1: PageDb, d1': PageDb, e1':word,
 }
 
 lemma lemma_updateL2Pte_enc_ni(d1: PageDb, d1': PageDb,
-                                    d2: PageDb, d2': PageDb,
-                                    a: PageNr, mapping: Mapping, l2e: L2PTE,
-                                    atkr: PageNr)
+                               d2: PageDb, d2': PageDb,
+                               a: PageNr, mapping: Mapping, l2e: L2PTE,
+                               atkr: PageNr)
     requires ni_reqs_weak_(d1, d1', d2, d2', atkr)
     requires isAddrspace(d1, a) && isAddrspace(d2, a)
     requires validMapping(mapping, d1, a) && validMapping(mapping, d2, a)
     requires d1[a].entry.state.InitState? && d2[a].entry.state.InitState?
     requires validL2PTE(d1, a, l2e) && validL2PTE(d2, a, l2e)
+    requires validL1PTable(d1, a, d1[d1[a].entry.l1ptnr].entry.l1pt)
+    requires validL1PTable(d2, a, d2[d2[a].entry.l1ptnr].entry.l1pt)
     requires d1' == updateL2Pte(d1, a, mapping, l2e) 
     requires d2' == updateL2Pte(d2, a, mapping, l2e) 
     requires enc_eqpdb(d1, d2, atkr)
     ensures  enc_eqpdb(d1', d2', atkr) 
 {
     reveal enc_eqpdb();
-    assert d1[a].addrspace == a;
-    assert d2[a].addrspace == a;
+    // assert d1[a].addrspace == a;
+    // assert d2[a].addrspace == a;
     var l11 := d1[d1[a].entry.l1ptnr].entry;
     var l12 := d2[d2[a].entry.l1ptnr].entry;
     var l1pte1 := fromJust(l11.l1pt[mapping.l1index]);
