@@ -556,8 +556,8 @@ lemma lemma_initL2PTable_enc_ni_one_go(d1: PageDb, d1': PageDb, e1':word,
         { reveal validPageDb(); }
     var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
     var (pagedb, err) := allocatePage(d1, page, addrspacePage, l2pt);
-    // allocatePagePreservesPageDBValidity(d1, page, addrspacePage, l2pt); 
-    lemma_allocatePage_not_atkr(d1, page, addrspacePage, l2pt, pagedb, e1', atkr);
+    assume validPageDb(pagedb);
+    lemma_allocatePage_not_atkr(d1, page, addrspacePage, l2pt, pagedb, err, atkr);
     assert enc_eqpdb(d1, pagedb, atkr);
     assert enc_eqpdb(pagedb, d1', atkr);
     assert d2 == d2';
@@ -582,8 +582,9 @@ lemma_initL2PTable_enc_ni(d1: PageDb, d1': PageDb, e1':word,
         var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
         var ap1 := allocatePage(d1, page, addrspacePage, l2pt);
         var ap2 := allocatePage(d2, page, addrspacePage, l2pt);
-        // allocatePagePreservesPageDBValidity(d1, page, addrspacePage, l2pt); 
-        lemma_allocatePage_enc_ni(d1, ap1.0, e1', d2, ap2.0, e2',
+        assume validPageDb(ap1.0);
+        assume validPageDb(ap2.0);
+        lemma_allocatePage_enc_ni(d1, ap1.0, ap1.1, d2, ap2.0, ap2.1,
             page, addrspacePage, l2pt, atkr);
         assert ap1.1 != KOM_ERR_SUCCESS ==> ap1.0 == d1;
         assert ap2.1 != KOM_ERR_SUCCESS ==> ap2.0 == d2;
@@ -878,8 +879,7 @@ lemma lemma_updateL2Pte_enc_ni(d1: PageDb, d1': PageDb,
     ensures  enc_eqpdb(d1', d2', atkr) 
 {
     reveal enc_eqpdb();
-    // assert d1[a].addrspace == a;
-    // assert d2[a].addrspace == a;
+    reveal validPageDb();
     var l11 := d1[d1[a].entry.l1ptnr].entry;
     var l12 := d2[d2[a].entry.l1ptnr].entry;
     var l1pte1 := fromJust(l11.l1pt[mapping.l1index]);
