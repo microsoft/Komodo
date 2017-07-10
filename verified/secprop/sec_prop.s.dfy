@@ -80,6 +80,7 @@ predicate os_eqentry(e1:PageDbEntryTyped, e2:PageDbEntryTyped)
         case Dispatcher(_,_,_,_,_) => e2.Dispatcher? &&
             e2.entered == e1.entered && e2.entrypoint == e1.entrypoint
         case DataPage(_) => e2.DataPage?
+        case SparePage => e2.SparePage?
 }
 
 predicate {:opaque} os_eqpdb(d1:PageDb, d2:PageDb)

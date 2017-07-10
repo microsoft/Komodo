@@ -68,6 +68,9 @@ lemma lemma_os_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
             arg1, arg2, arg3, arg4);
         lemma_integrate_reg_equiv(s1', s2');
     }
+    else if(callno == KOM_SMC_ALLOC_SPARE) {
+        lemma_allocSpare_os_ni(d1, d1', e1', d2, d2', e2', arg1, arg2);
+    }
     else if(callno == KOM_SMC_MAP_INSECURE){
         lemma_mapInsecure_os_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3);
         lemma_integrate_reg_equiv(s1', s2');
@@ -294,6 +297,22 @@ lemma lemma_mapInsecure_os_ni(
 {
     reveal os_eqpdb();
 }
+
+lemma lemma_allocSpare_os_ni(
+    d1: PageDb, d1': PageDb, e1': word,
+    d2: PageDb, d2': PageDb, e2': word,
+    page: word, addrspacePage: word)
+    requires validPageDb(d1) && validPageDb(d2)
+    requires validPageDb(d1') && validPageDb(d2')
+    requires smc_allocSpare(d1, page, addrspacePage) == (d1', e1')
+    requires smc_allocSpare(d2, page, addrspacePage) == (d2', e2')
+    requires os_eqpdb(d1, d2)
+    ensures  os_eqpdb(d1', d2')
+    ensures  e1' == e2'
+{
+    reveal os_eqpdb();
+}
+
 
 lemma lemma_remove_os_ni(
     d1: PageDb, d1': PageDb, e1': word,
