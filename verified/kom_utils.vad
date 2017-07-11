@@ -310,6 +310,8 @@ procedure update_pagedb_entry(
                       + PAGEDB_ENTRY_ADDRSPACE) == old(as_va);
 
     extractPageDbToAbstract(this.m, page);
+    assert WordAligned(PAGEDB_ENTRY_TYPE) && WordAligned(PAGEDB_ENTRY_ADDRSPACE)
+        by { reveal WordAligned; } // trigger extractPageDbToAbstract
     assert extractPageDbEntry(this.m, page) == seq(old(typeword), old(as_va));
     reveal pageDbEntryCorresponds;
 }
