@@ -133,8 +133,7 @@ procedure allocate_page_success(
         typeval == pageDbEntryTypeVal(entry);
         as_va == page_monvaddr(entry.addrspace);
         pageDbCorresponds(this.m, pagedb_in);
-        validPageNr(pagenr) && pageIsFree(pagedb_in, pagenr);
-        pagedb_in[entry.addrspace].entry.state == InitState;
+        specErr(allocatePage(pagedb_in, pagenr, entry.addrspace, entry.entry)) == KOM_ERR_SUCCESS;
     modifies
         globals; mem;
     ensures
@@ -197,7 +196,8 @@ procedure allocate_page(
     out operand tmp2:reg,
     out operand err:reg,
     ghost pagedb_in:PageDb,
-    ghost entry:PageDbEntry)
+    ghost entry:PageDbEntry,
+    inline permitWhenFinal:bool)
     returns (ghost pagedb: PageDb)
     requires/ensures
         SaneState(this);
@@ -216,6 +216,7 @@ procedure allocate_page(
         typeval == pageDbEntryTypeVal(entry);
         as_pagenr == entry.addrspace;
         pageDbCorresponds(this.m, pagedb_in);
+        permitWhenFinal == entry.entry is SparePage;
     modifies
         globals; mem;
     ensures
@@ -257,16 +258,26 @@ procedure allocate_page(
                 reveal pageDbAddrspaceCorresponds;
             }
 
-            if (tmp != const(KOM_ADDRSPACE_INIT)) {
-                assert addrsp.state != InitState;
-                MOV(err, const(KOM_ERR_ALREADY_FINAL));
+            if (tmp == const(KOM_ADDRSPACE_STOPPED)) {
+                MOV(err, const(KOM_ERR_STOPPED));
                 assert err == specErr(specRes);
             } else {
-                assert addrsp.state == InitState;
-                ghost var st := this;
-                pagedb := allocate_page_success(pagenr, tmp2, typeval,
-                                pagedb_base, tmp, err, pagedb_in, entry);
-                MOV(err, const(KOM_ERR_SUCCESS));
+                inline if (permitWhenFinal) {
+                    assert addrsp.state != StoppedState;
+                    pagedb := allocate_page_success(pagenr, tmp2, typeval,
+                                        pagedb_base, tmp, err, pagedb_in, entry);
+                    MOV(err, const(KOM_ERR_SUCCESS));
+                } else {
+                    if (tmp == const(KOM_ADDRSPACE_FINAL)) {
+                        MOV(err, const(KOM_ERR_ALREADY_FINAL));
+                        assert err == specErr(specRes);
+                    } else {
+                        assert addrsp.state == InitState;
+                        pagedb := allocate_page_success(pagenr, tmp2, typeval,
+                                            pagedb_base, tmp, err, pagedb_in, entry);
+                        MOV(err, const(KOM_ERR_SUCCESS));
+                    }
+                }
             }
         }
     }

@@ -128,7 +128,7 @@ procedure install_l1ptes(
     requires
         @l1pt_va == OReg(R7) && @l2_pg == OReg(R4) && @l1index == OReg(R5)
             && @tmp == OReg(R8);
-        validPageDb(pagedb_in);
+        wellFormedPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         validAddrspacePage(pagedb_in, as_pg) && !stoppedAddrspace(pagedb_in[as_pg]);
         l1pg == pagedb_in[as_pg].entry.l1ptnr;
@@ -150,10 +150,8 @@ procedure install_l1ptes(
     pagedb := pagedb_in;
 
     ghost var oldpg := extractPage(old(this).m, l1pg);
-    forall :: pageDbL1PTableCorresponds(l1pg, pagedb[l1pg].entry, oldpg)
-    {
-        reveal pageContentsCorresponds;
-    }
+    assert pageDbL1PTableCorresponds(l1pg, pagedb[l1pg].entry, oldpg)
+        by { reveal pageContentsCorresponds; }
 
     ghost var oldl1pt := pagedb[l1pg].entry;
     ghost var newl1pt := installL1PTE(oldl1pt, l2_pg, l1index);
@@ -166,8 +164,8 @@ procedure install_l1ptes(
     install_l1ptes'(l1pt_va, l2_pg, l1index, old(l2_pg));
 
     ghost var pg := extractPage(this.m, l1pg);
-    forall :: pageDbL1PTableCorresponds(l1pg, newl1pt, pg)
-    {
+    assert pageDbL1PTableCorresponds(l1pg, newl1pt, pg)
+    by {
         assert forall i :: 0 <= i < 4
             ==> pg[l1pteoffset(l1pt_va, old(l1index), i)]
                     == mkL1Pte(Just(old(l2_pg)), i);
@@ -178,8 +176,8 @@ procedure install_l1ptes(
 
     pagedb := installL1PTEInPageDb(pagedb, l1pg, old(l2_pg), old(l1index));
 
-    forall :: pageDbCorrespondsOnly(this.m, pagedb, l1pg)
-    {
+    assert pageDbCorrespondsOnly(this.m, pagedb, l1pg)
+    by {
         assert pageContentsCorresponds(l1pg, pagedb_in[l1pg], oldpg);
         assert pagedb[l1pg] == pagedb_in[l1pg].(entry := newl1pt);
         reveal pageContentsCorresponds;
@@ -211,7 +209,7 @@ procedure init_l2ptable_success(
         @tmp1 == OReg(R6) && @tmp2 == OReg(R7) && @tmp3 == OReg(R8);
         validPageNr(l2_pg);
         0 <= l1index < NR_L1PTES;
-        validPageDb(pagedb_in);
+        wellFormedPageDb(pagedb_in);
         validAddrspacePage(pagedb_in, as_pg) && !stoppedAddrspace(pagedb_in[as_pg]);
         l1pg == pagedb_in[as_pg].entry.l1ptnr;
         pagedb_in[l1pg] is PageDbEntryTyped && pagedb_in[l1pg].entry is L1PTable;
@@ -325,8 +323,8 @@ procedure kom_smc_init_l2ptable(
                 reveal pageContentsCorresponds;
                 reveal pageDbAddrspaceCorresponds;
             }
-            if (r5 != const(KOM_ADDRSPACE_INIT)) {
-                MOV(err, const(KOM_ERR_ALREADY_FINAL));
+            if (r5 == const(KOM_ADDRSPACE_STOPPED)) {
+                MOV(err, const(KOM_ERR_STOPPED));
                 assert err == specErr(specResult);
             } else {
                 // check for L1 index in use
@@ -362,7 +360,7 @@ procedure kom_smc_init_l2ptable(
 
                     pagedb := allocate_page(pagenr, as_page,
                                         const(KOM_PAGE_L2PTABLE),
-                                        pagedb_base, r4, r5, err, pagedb, entry);
+                                        pagedb_base, r4, r5, err, pagedb, entry, false);
 
                     assert err == specErr(specResult);
                     if (err == const(KOM_ERR_SUCCESS)) {

@@ -182,11 +182,12 @@ procedure {:frame false} kom_smc_init_dispatcher(
             ghost var entry := PageDbEntryTyped(as_page, e);
             pagedb := allocate_page(disp_page, as_page,
                                     const(KOM_PAGE_DISPATCHER),
-                                    pagedb_base, tmp, tmp2, err, pagedb, entry);
+                                    pagedb_base, tmp, tmp2, err, pagedb, entry, false);
 
             if (err == const(KOM_ERR_SUCCESS)) {
                 assert err == specErr(specResult);
                 assert pagedb == specPageDb(allocatePage(pagedb_in, disp_page, as_page, e));
+                allocatePagePreservesPageDBValidity(pagedb_in, disp_page, as_page, e);
 
                 assert pageDbCorrespondsExcluding(this.m, pagedb, disp_page);
                 assert pageDbEntryCorresponds(pagedb[disp_page],
