@@ -1048,6 +1048,10 @@ lemma lemma_aligned_sp(s:state)
     requires SaneState(s)
     ensures OpaqueEven(va_get_osp(s))
 { reveal OpaqueEven(); reveal WordAligned(); }
+
+lemma lemma_osp()
+    ensures forall s | ValidState(s) :: OperandContents(s, OSP) == va_get_osp(s)
+{}
 #endverbatim
 
 procedure {:frame false} enclaveexecution_loop(
@@ -1081,6 +1085,8 @@ procedure {:frame false} enclaveexecution_loop(
     steps := 0;
     pagedb := pagedb_in;
     ghost var states := seq(tuple(this, pagedb));
+    assert partialEnclaveExecution(states, dispPg, steps)
+        by { reveal partialEnclaveExecution; }
 
     lemma_aligned_sp(this);
     lemma_sp_alignment(old(sp));
@@ -1109,14 +1115,30 @@ procedure {:frame false} enclaveexecution_loop(
         ghost var loop_pagedb := pagedb;
         loop0 := this;
 
-        // XXX: trigger wonky vale loop condition lemmas
-        assert exists s :: ValidState(s) && evalGuard(s, loopcmp, this) && evalOBool(s, loopcmp);
-
         // SP & 1 == 0 => go to usermode
-        assert sp == old(sp) && retToEnclave by { lemma_sp_bit_helper1(old(sp), sp); }
+        assert sp == old(sp) && retToEnclave by {
+            // XXX: trigger wonky vale loop condition lemmas
+            exists s :: ValidState(s) && !interrupts_enabled(s) && evalGuard(s, loopcmp, this) && evalOBool(s, loopcmp);
+            calc {
+                true;
+                evalOBool(s, loopcmp);
+                evalCmp(OTstEq, OperandContents(s, OSP), 1);
+                BitwiseAnd(OperandContents(s, OSP), 1) == 0;
+                { calc {
+                    OperandContents(s, OSP);
+                    { lemma_osp(); }
+                    va_get_osp(s);
+                    { assert s.regs == this.regs; }
+                    sp;
+                } }
+                BitwiseAnd(sp, 1) == 0;
+            }
+            lemma_sp_bit_helper1(old(sp), sp);
+        }
 
         calc {
             OperandContents(loop0, OSP);
+            { lemma_osp(); }
             sp;
             old(sp);
         }
@@ -1131,6 +1153,7 @@ procedure {:frame false} enclaveexecution_loop(
 
         lemma_validEnclaveExecutionStepPre(loop1, loop0, loop_pagedb, this, pagedb, dispPg, retToEnclave);
 
+        lemma_osp();
         ghost if (retToEnclave) {
             assert sp == old(sp);
             ghost var states' := states;
@@ -1146,7 +1169,17 @@ procedure {:frame false} enclaveexecution_loop(
     }
 
     // XXX: trigger wonky vale loop condition lemmas
-    assert exists s :: ValidState(s) && evalGuard(s, loopcmp, this) && !evalOBool(s, loopcmp);
+    exists s :: ValidState(s) && !interrupts_enabled(s) && evalGuard(s, loopcmp, this) && !evalOBool(s, loopcmp);
+    calc {
+        false;
+        evalOBool(s, loopcmp);
+        evalCmp(OTstEq, OperandContents(s, OSP), 1);
+        BitwiseAnd(OperandContents(s, OSP), 1) == 0;
+        { lemma_osp(); }
+        BitwiseAnd(va_get_osp(s), 1) == 0;
+        { assert s.regs == this.regs; assert va_get_osp(s) == sp; }
+        BitwiseAnd(sp, 1) == 0;
+    }
 
     // clear lower bit of SP, which was set to exit the loop
     lemma_sp_bit_helper(old(sp), sp);
@@ -1154,8 +1187,6 @@ procedure {:frame false} enclaveexecution_loop(
     SUB(sp, sp, 1);
     assert sp == old(sp);
 
-    assert validExceptionTransition(loop1, pagedb, this, pagedb, dispPg)
-        by { reveal validExceptionTransition; }
     lemma_validEnclaveExecutionPost(old(this), pagedb_in, loop1, pagedb, this,
                                     dispPg, steps);
 }
@@ -1165,7 +1196,7 @@ lemma lemma_ValidEntryPost(s:state, sd:PageDb, r1:state, rd:PageDb, r2:state, dp
                            a1:word, a2:word, a3:word)
     requires ValidState(s) && ValidState(r1) && ValidState(r2) && validPageDb(sd)
     requires SaneConstants()
-    requires validExceptionTransition(r1, rd, r2, rd, dp)
+    requires validExceptionTransition(r1, r2)
     requires OperandContents(r1, OReg(R0)) == OperandContents(r2, OReg(R0))
     requires OperandContents(r1, OReg(R1)) == OperandContents(r2, OReg(R1))
     requires InsecureMemInvariant(r1, r2)
@@ -1275,8 +1306,6 @@ procedure {:frame false} {:timeLimitMultiplier 2} smc_enterresume_success(
     assert StackPreserving(old(this), this);
     lemma_stackunstack_banked_regs(old(this), s0.m, this, s6.m, s6_sp);
 
-    assert validExceptionTransition(s6, pagedb, this, pagedb, dispPg)
-        by { reveal validExceptionTransition; }
     lemma_ValidEntryPost(old(this), pagedb_in, s6, pagedb, this,
                          dispPg, old(arg1), old(arg2), old(arg3));
 }

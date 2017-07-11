@@ -972,8 +972,12 @@ lemma lemma_singlestep_execution(s1:state, d1:PageDb,
                 rs == s5 && rd == d5));
 }
 
-predicate partialEnclaveExecution(l:seq<(state, PageDb)>, dispPg:PageNr, steps:nat)
+predicate {:opaque} partialEnclaveExecution(l:seq<(state, PageDb)>, dispPg:PageNr, steps:nat)
     requires SaneConstants()
+    ensures partialEnclaveExecution(l, dispPg, steps) ==> (|l| == steps + 1
+    && ValidState(l[0].0) && validPageDb(l[0].1) && finalDispatcher(l[0].1, dispPg)
+    && ValidState(l[steps].0) && validPageDb(l[steps].1)
+    && finalDispatcher(l[steps].1, dispPg))
 {
     |l| == steps + 1
     && (forall i | 0 <= i <= steps :: ValidState(l[i].0) && validPageDb(l[i].1)
@@ -989,6 +993,7 @@ lemma lemma_partialEnclaveExecution_append(l:seq<(state, PageDb)>, s:state, d:Pa
     requires validEnclaveExecutionStep(l[steps].0, l[steps].1, s, d, dispPg, true)
     ensures partialEnclaveExecution(l + [(s, d)], dispPg, steps + 1)
 {
+    reveal partialEnclaveExecution();
     var l' := l + [(s, d)];
     var steps' := steps + 1;
     assert forall i | 0 <= i <= steps :: l[i] == l'[i]; // for triggers
@@ -1015,6 +1020,7 @@ lemma lemma_partialEnclaveExecution_done(l:seq<(state, PageDb)>, rs:state, rd:Pa
     ensures validEnclaveExecution(l[0].0, l[0].1, rs, rd, dispPg, steps)
     decreases steps
 {
+    reveal partialEnclaveExecution();
     if steps == 0 {
         lemma_singlestep_execution(l[0].0, l[0].1, rs, rd, dispPg);
     } else {
