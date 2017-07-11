@@ -170,7 +170,7 @@ lemma lemma_mapSecure_enc_ni_both_go(
 lemma lemma_allocatePageRefs(d: PageDb, addrspacePage:word, page:word,
     entry: PageDbEntryTyped, d': PageDb, e':word)
     requires validPageDb(d) && validPageDb(d')
-    requires validAddrspacePage(d, addrspacePage)
+    requires isAddrspace(d, addrspacePage)
     requires allocatePageEntryValid(entry)
     requires allocatePage(d, page, addrspacePage, entry) == (d', e')
     requires e' == KOM_ERR_SUCCESS
@@ -232,8 +232,8 @@ lemma lemma_updateL2Pte_not_atkr(d:PageDb, a:PageNr, m: Mapping, l2e: L2PTE, d':
 
 lemma lemma_updateMeasurement_not_atkr(d: PageDb, addrsp: PageNr, metadata:seq<word>,
     contents:seq<word>, d': PageDb, atkr: PageNr)
-    requires validPageDb(d) && validAddrspacePage(d, addrsp)
-    requires validPageDb(d') && validAddrspacePage(d', addrsp)
+    requires validPageDb(d) && isAddrspace(d, addrsp)
+    requires validPageDb(d') && isAddrspace(d', addrsp)
     requires |metadata| <= SHA_BLOCKSIZE
     requires |contents| % SHA_BLOCKSIZE == 0
     requires d' == updateMeasurement(d, addrsp, metadata, contents)
@@ -252,13 +252,13 @@ lemma lemma_updateMeasurement_not_atkr(d: PageDb, addrsp: PageNr, metadata:seq<w
 
 lemma lemma_allocatePage_not_atkr(d: PageDb, securePage: word,
     addrspacePage:PageNr, entry:PageDbEntryTyped, d': PageDb, e: word, atkr: PageNr )
-    requires validPageDb(d) && validPageDb(d')
-    requires validAddrspacePage(d, addrspacePage)
+    requires validPageDb(d) && wellFormedPageDb(d')
+    requires isAddrspace(d, addrspacePage)
     requires allocatePageEntryValid(entry)
     requires d' == allocatePage(d, securePage, addrspacePage, entry).0
     requires e  == allocatePage(d, securePage, addrspacePage, entry).1
-    requires valAddrPage(d, atkr)
-    requires valAddrPage(d', atkr)
+    requires isAddrspace(d, atkr)
+    requires isAddrspace(d', atkr)
     requires atkr != addrspacePage
     ensures enc_eqpdb(d, d', atkr)
 {
@@ -438,10 +438,10 @@ lemma lemma_initDispMeasure_enc_ni(d1: PageDb, d2: PageDb, addrspacePage: PageNr
     entrypoint: word, d1': PageDb, d2': PageDb, atkr: PageNr)
     requires validPageDb(d1) && validPageDb(d2) &&
         validPageDb(d1') && validPageDb(d2')
-    requires validAddrspacePage(d1, addrspacePage) &&
-        validAddrspacePage(d2, addrspacePage) &&
-        validAddrspacePage(d1', addrspacePage) &&
-        validAddrspacePage(d2', addrspacePage)
+    requires isAddrspace(d1, addrspacePage) &&
+        isAddrspace(d2, addrspacePage) &&
+        isAddrspace(d1', addrspacePage) &&
+        isAddrspace(d2', addrspacePage)
     requires valAddrPage(d1, atkr) && valAddrPage(d1', atkr)
     requires valAddrPage(d2, atkr) && valAddrPage(d2', atkr)
     requires d1' == updateMeasurement(d1, addrspacePage,
@@ -556,7 +556,7 @@ lemma lemma_initL2PTable_enc_ni_one_go(d1: PageDb, d1': PageDb, e1':word,
         { reveal validPageDb(); }
     var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
     var (pagedb, err) := allocatePage(d1, page, addrspacePage, l2pt);
-    assume validPageDb(pagedb);
+    assume wellFormedPageDb(pagedb);
     lemma_allocatePage_not_atkr(d1, page, addrspacePage, l2pt, pagedb, err, atkr);
     assert enc_eqpdb(d1, pagedb, atkr);
     assert enc_eqpdb(pagedb, d1', atkr);
@@ -582,8 +582,8 @@ lemma_initL2PTable_enc_ni(d1: PageDb, d1': PageDb, e1':word,
         var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
         var ap1 := allocatePage(d1, page, addrspacePage, l2pt);
         var ap2 := allocatePage(d2, page, addrspacePage, l2pt);
-        assume validPageDb(ap1.0);
-        assume validPageDb(ap2.0);
+        assume wellFormedPageDb(ap1.0);
+        assume wellFormedPageDb(ap2.0);
         lemma_allocatePage_enc_ni(d1, ap1.0, ap1.1, d2, ap2.0, ap2.1,
             page, addrspacePage, l2pt, atkr);
         assert ap1.1 != KOM_ERR_SUCCESS ==> ap1.0 == d1;
@@ -788,9 +788,12 @@ lemma lemma_allocatePage_enc_ni(d1: PageDb, d1': PageDb, e1':word,
                                 d2: PageDb, d2': PageDb, e2':word,
                                 page: word, addrspacePage: PageNr,
                                 entry: PageDbEntryTyped, atkr: PageNr)
-    requires ni_reqs_(d1, d1', d2, d2', atkr)
-    requires validAddrspacePage(d1, addrspacePage) && 
-        validAddrspacePage(d2, addrspacePage);
+    requires validPageDb(d1) && wellFormedPageDb(d1')
+    requires validPageDb(d2) && wellFormedPageDb(d2')
+    requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+    requires (forall n : PageNr :: d1[n].PageDbEntryFree? <==> d2[n].PageDbEntryFree?)
+    requires isAddrspace(d1, addrspacePage) && 
+        isAddrspace(d2, addrspacePage);
     requires allocatePageEntryValid(entry);
     requires allocatePage(d1, page, addrspacePage, entry) == (d1', e1')
     requires allocatePage(d2, page, addrspacePage, entry) == (d2', e2')
