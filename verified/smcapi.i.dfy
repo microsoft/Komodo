@@ -417,14 +417,15 @@ lemma removePreservesPageDBValidity(pageDbIn: PageDb, page: word)
         assert validAddrspace(pageDbIn, addrspacePage);
 
         assert validPageDbEntry(pageDbOut, addrspacePage) by {
-            if !entry.Addrspace? {
+            if page == addrspacePage {
+                assert pageDbOut[page].PageDbEntryFree?;
+            } else {
                 var addrspace := pageDbOut[addrspacePage].entry;
 
                 var oldRefs := addrspaceRefs(pageDbIn, addrspacePage);
                 assert addrspaceRefs(pageDbOut, addrspacePage) == oldRefs - {page};
                 assert addrspace.refcount == |addrspaceRefs(pageDbOut, addrspacePage)|;
-                //assert validAddrspace(pageDbOut, addrspace);
-                assert validAddrspacePage(pageDbOut, addrspacePage);
+                assert validAddrspace(pageDbOut, addrspacePage);
             }
         }
 
