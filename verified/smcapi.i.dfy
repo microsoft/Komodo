@@ -123,7 +123,7 @@ lemma BoundedShaLength(d:PageDb, n:PageNr)
     requires validPageDb(d)
     requires isAddrspace(d, n)
     requires IsCompleteSHA256Trace(d[n].entry.shatrace)
-    requires !stoppedAddrspace(d[n])
+    requires d[n].entry.state.InitState?
     ensures |d[n].entry.shatrace.M| < 0x1000_0000
     ensures |d[n].entry.measurement| < 0x1000_0000
 {
@@ -137,7 +137,7 @@ lemma GrowShaLength(d:PageDb, n:PageNr, metadata:seq<word>, contents:seq<word>)
     requires validPageDb(d)
     requires isAddrspace(d, n)
     requires IsCompleteSHA256Trace(d[n].entry.shatrace)
-    requires !stoppedAddrspace(d[n])
+    requires d[n].entry.state.InitState?
     requires |metadata| <= SHA_BLOCKSIZE
     requires |contents| % SHA_BLOCKSIZE == 0
     requires |contents| <= PAGESIZE / WORDSIZE
