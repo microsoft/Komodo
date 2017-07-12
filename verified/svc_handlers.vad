@@ -3,6 +3,30 @@ include "valedecls.vad"
 include "attest.vad"
 include "verify.vad"
 
+procedure svc_return_epilog()
+    requires/ensures
+        !interrupts_enabled(this);
+        mode_of_state(this) == Monitor;
+    modifies
+         r1; r2; r3; r4; r5; r6; r7; r8; spsr_mon;
+    ensures
+        r1 == r2 == r3 == r4 == r5 == r6 == r7 == r8 == 0;
+        spsr_mon == encode_mode(User);
+{
+    MOV(r1, const(encode_mode(User)));
+    lemma_user_psr();
+    MSR(spsr_mon, r1);
+
+    MOV(r1, 0);
+    MOV(r2, 0);
+    MOV(r3, 0);
+    MOV(r4, 0);
+    MOV(r5, 0);
+    MOV(r6, 0);
+    MOV(r7, 0);
+    MOV(r8, 0);
+}
+
 procedure svc_returning_default(
     ghost exstate: state,
     ghost stack_bytes: int,
@@ -33,19 +57,8 @@ procedure svc_returning_default(
     assert firstOf2(svcHandled(exstate, pagedb, dispPg))
             == tuple(KOM_ERR_INVALID,0,0,0,0,0,0,0,0);
 
-    MOV(r0, const(encode_mode(User)));
-    lemma_user_psr();
-    MSR(spsr_mon, r0);
-
+    svc_return_epilog();
     MOV(r0, const(KOM_ERR_INVALID));
-    MOV(r1, 0);
-    MOV(r2, 0);
-    MOV(r3, 0);
-    MOV(r4, 0);
-    MOV(r5, 0);
-    MOV(r6, 0);
-    MOV(r7, 0);
-    MOV(r8, 0);
 }
 
 #verbatim
@@ -149,20 +162,9 @@ procedure svc_returning_verify_step0(
     STR(r7, r0, const(DISP_CTXT_USER_WORDS + 6 * WORDSIZE));
     STR(r8, r0, const(DISP_CTXT_USER_WORDS + 7 * WORDSIZE));
 
-    MOV(r0, const(encode_mode(User)));
-    lemma_user_psr();
-    MSR(spsr_mon, r0);
-
     assert firstOf2(svcHandled(exstate, pagedb, dispPg)) == tuple(KOM_ERR_SUCCESS,0,0,0,0,0,0,0,0);
+    svc_return_epilog();
     MOV(r0, const(KOM_ERR_SUCCESS));
-    MOV(r1, 0);
-    MOV(r2, 0);
-    MOV(r3, 0);
-    MOV(r4, 0);
-    MOV(r5, 0);
-    MOV(r6, 0);
-    MOV(r7, 0);
-    MOV(r8, 0);
 
     ghost var disp := pagedb'[dispPg].entry;
     ghost var pg := extractPage(this.m, dispPg);
@@ -284,21 +286,10 @@ procedure svc_returning_verify_step1(
     STR(r7, r0, const(DISP_CTXT_VERIFY_MEASUREMENT + 6 * WORDSIZE));
     STR(r8, r0, const(DISP_CTXT_VERIFY_MEASUREMENT + 7 * WORDSIZE));
 
-    MOV(r0, const(encode_mode(User)));
-    lemma_user_psr();
-    MSR(spsr_mon, r0);
-
     assert firstOf2(svcHandled(exstate, pagedb, dispPg))
             == tuple(KOM_ERR_SUCCESS,0,0,0,0,0,0,0,0);
     MOV(r0, const(KOM_ERR_SUCCESS));
-    MOV(r1, 0);
-    MOV(r2, 0);
-    MOV(r3, 0);
-    MOV(r4, 0);
-    MOV(r5, 0);
-    MOV(r6, 0);
-    MOV(r7, 0);
-    MOV(r8, 0);
+    svc_return_epilog();
 
     ghost var disp := pagedb'[dispPg].entry;
     ghost var pg := extractPage(this.m, dispPg);
@@ -316,6 +307,34 @@ procedure svc_returning_verify_step1(
         }
         AllButOnePagePreserving(dispPg, old(this), this);
     }
+}
+
+procedure svc_map_data(
+    ghost pagedb: PageDb,
+    operand page:reg, // r1
+    operand mapping:reg, // r2
+    ghost dispPg: PageNr)
+    returns (ghost pagedb': PageDb)
+    reads
+        globals; lr; 
+    modifies
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; globals;
+    requires/ensures
+        SaneState(this);
+    requires
+        @page == OReg(R1) && @mapping == OReg(R2);
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+        finalDispatcher(pagedb, dispPg);
+        GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+    ensures
+        SmcProcedureInvariant(old(this), this);
+        GlobalsPreservingExcept(old(this), this, set(PageDb()));
+        tuple(pagedb', r0)
+            == svcMapData(pagedb, pagedb[dispPg].addrspace, old(page), old(mapping));
+        validPageDb(pagedb') && pageDbCorresponds(this.m, pagedb');
+{
+    assume false; // TODO
 }
 
 #verbatim
@@ -361,29 +380,16 @@ procedure {:frame false}{:timeLimitMultiplier 2} svc_returning(
     ensures
         lr == old(lr);
         StackPreserving(old(this), this);
-        GlobalsInvariant(old(this), this);
+        GlobalsPreservingExcept(old(this), this, set(PageDb()));
         BankedRegsInvariant(old(this), this);
         //SRegsInvariant(old(this), this);
         ttbr0 == old(ttbr0) && scr == old(scr);
-        wellFormedPageDb(pagedb');
-        pageDbCorresponds(this.m, pagedb');
-        if old(r0) == KOM_SVC_ATTEST || old(r0) > KOM_SVC_VERIFY_STEP2 then
-            NonStackMemPreserving(old(this), this)
-        else if old(r0) == KOM_SVC_VERIFY_STEP0 then 
-            MemPreservingExcept(old(this), this, 
-                                page_monvaddr(dispPg), 
-                                page_monvaddr(dispPg) + DISP_CTXT_USER_WORDS + WordsToBytes(8))
-        else if old(r0) == KOM_SVC_VERIFY_STEP1 then
-            MemPreservingExcept(old(this), this, 
-                                page_monvaddr(dispPg), 
-                                page_monvaddr(dispPg) + DISP_CTXT_VERIFY_MEASUREMENT + WordsToBytes(8))
-        else
-            NonStackMemPreserving(old(this), this);
+        InsecureMemInvariant(old(this), this);
         let tuple := svcHandled(exstate, pagedb, dispPg);
         let retRegs := firstOf2(tuple);
         let handled_pagedb := secondOf2(tuple);
         pagedb' == handled_pagedb;
-        validPageDb(pagedb');
+        validPageDb(pagedb') && pageDbCorresponds(this.m, pagedb');
         preEntryReturn(exstate, this, retRegs, pagedb, dispPg);
 {
     ghost var retRegs := firstOf2(svcHandled(exstate, pagedb, dispPg));
@@ -424,7 +430,10 @@ procedure {:frame false}{:timeLimitMultiplier 2} svc_returning(
         assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
         assert BankedRegsInvariant(old(this), this);
     } else if (r0 == const(KOM_SVC_MAP_DATA)) {
-        assume false; // TODO
+        pagedb' := svc_map_data(pagedb, r1, r2, dispPg);
+        svc_return_epilog();
+        assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
+        assert BankedRegsInvariant(old(this), this);
     } else if (r0 == const(KOM_SVC_UNMAP_DATA)) {
         assume false; // TODO
     } else if (r0 == const(KOM_SVC_INIT_L2PTABLE)) {
