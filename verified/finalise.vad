@@ -22,20 +22,6 @@ lemma lemma_SaneState_implies_SaneShaGlobal2(s:state)
     }
 }
 
-// XXX: cleanmeup: copy-and-paste from smcapi.dfy
-lemma BoundedShaLength2(d:PageDb, n:PageNr)
-    requires validPageDb(d)
-    requires isAddrspace(d, n)
-    requires IsCompleteSHA256Trace(d[n].entry.shatrace)
-    requires !stoppedAddrspace(d[n])
-    ensures |d[n].entry.shatrace.M| < 0x10_0000
-{
-    assert validAddrspace(d, n) by { reveal validPageDb(); }
-    BoundedAddrspaceRefs'(d, n);
-//    lemma_sha256_length(d[n].entry.shatrace);
-    assert |d[n].entry.shatrace.M| <= KOM_SECURE_NPAGES * (1 + 64);
-}
-
 lemma lemma_kom_smc_finalise_success_helper1(s:state, as_page:word,
     pagedb:PageDb, trace_in:SHA256Trace, base:word, ctx:word, mem:memmap)
     requires SaneState(s)
@@ -69,7 +55,7 @@ lemma lemma_kom_smc_finalise_success_helper1(s:state, as_page:word,
         reveal pageContentsCorresponds();
         reveal pageDbAddrspaceCorresponds();
     }
-    BoundedShaLength2(pagedb, as_page);
+    BoundedShaLength(pagedb, as_page);
 }
 
 lemma lemma_kom_smc_finalise_success_helper2(s1:state, s2:state, as_page:word,

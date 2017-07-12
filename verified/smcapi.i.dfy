@@ -124,8 +124,8 @@ lemma BoundedShaLength(d:PageDb, n:PageNr)
     requires isAddrspace(d, n)
     requires IsCompleteSHA256Trace(d[n].entry.shatrace)
     requires d[n].entry.state.InitState?
-    ensures |d[n].entry.shatrace.M| < 0x1000_0000
-    ensures |d[n].entry.measurement| < 0x1000_0000
+    ensures |d[n].entry.shatrace.M| < 0x10_0000
+    ensures |d[n].entry.measurement| < 0x10_0000
 {
     assert validAddrspace(d, n) by { reveal validPageDb(); }
     BoundedAddrspaceRefs'(d, n);
