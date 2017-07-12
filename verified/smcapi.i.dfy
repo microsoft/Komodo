@@ -3,89 +3,6 @@ include "entry.i.dfy"
 include "Sets.i.dfy"
 
 //=============================================================================
-// Hoare Specification of Monitor Calls
-//=============================================================================
-function {:opaque} smc_initAddrspace_premium(pageDbIn: PageDb, addrspacePage: word,
-    l1PTPage: word) : (PageDb, word) // PageDbOut, KOM_ERR
-    requires validPageDb(pageDbIn);
-    ensures  validPageDb(smc_initAddrspace_premium(pageDbIn, addrspacePage, l1PTPage).0);
-{
-    initAddrspacePreservesPageDBValidity(pageDbIn, addrspacePage, l1PTPage);
-    smc_initAddrspace(pageDbIn, addrspacePage, l1PTPage)
-}
-
-function {:opaque} smc_initDispatcher_premium(pageDbIn: PageDb, page:word,
-    addrspacePage:word, entrypoint:word) : (PageDb, word) // PageDbOut, KOM_ERR
-    requires validPageDb(pageDbIn);
-    ensures  validPageDb(smc_initDispatcher_premium(pageDbIn, page, addrspacePage, entrypoint).0);
-{
-    initDispatcherPreservesPageDBValidity(pageDbIn, page, addrspacePage, entrypoint);
-    smc_initDispatcher(pageDbIn, page, addrspacePage, entrypoint)
-}
-
-function {:opaque} smc_initL2PTable_premium(pageDbIn: PageDb, page: word,
-    addrspacePage: word, l1index: word) : (PageDb, word)
-    requires validPageDb(pageDbIn)
-    ensures validPageDb(smc_initL2PTable_premium(pageDbIn, page, addrspacePage, l1index).0)
-{
-    initL2PTablePreservesPageDBValidity(pageDbIn, page, addrspacePage, l1index);
-    smc_initL2PTable(pageDbIn, page, addrspacePage, l1index)
-}
-
-function {:opaque} smc_remove_premium(pageDbIn: PageDb, page: word)
-    : (PageDb, word) // PageDbOut, KOM_ERR
-    requires validPageDb(pageDbIn)
-    ensures  validPageDb(smc_remove_premium(pageDbIn, page).0)
-{
-    removePreservesPageDBValidity(pageDbIn, page);
-    smc_remove(pageDbIn, page)
-}
-
-function {:opaque} smc_mapSecure_premium(pageDbIn: PageDb, page: word,
-    addrspacePage: word, mapping: word, physPage: word, contents: Maybe<seq<word>>) : (PageDb, word) // PageDbOut, KOM_ERR
-    requires validPageDb(pageDbIn)
-    requires physPage == 0 || physPageIsInsecureRam(physPage) ==> contents.Just?
-    requires contents.Just? ==> |fromJust(contents)| == PAGESIZE / WORDSIZE
-    ensures  validPageDb(smc_mapSecure_premium(pageDbIn, page, addrspacePage, 
-        mapping, physPage, contents).0)
-    ensures  smc_mapSecure_premium(pageDbIn, page, addrspacePage, mapping, physPage, contents) ==
-        smc_mapSecure(pageDbIn, page, addrspacePage, mapping, physPage,  contents);
-{
-    mapSecurePreservesPageDBValidity(pageDbIn, page, addrspacePage, mapping, 
-        physPage, contents);
-    smc_mapSecure(pageDbIn, page, addrspacePage, mapping, physPage, contents)
-}
-
-function {:opaque} smc_mapInsecure_premium(pageDbIn: PageDb, addrspacePage: word,
-    physPage: word, mapping : word) : (PageDb, word)
-    requires validPageDb(pageDbIn)
-    ensures  validPageDb(smc_mapInsecure_premium(pageDbIn, addrspacePage, physPage, mapping).0)
-    ensures smc_mapInsecure_premium(pageDbIn, addrspacePage, physPage, mapping) ==
-        smc_mapInsecure(pageDbIn, addrspacePage, physPage, mapping) 
-{
-    mapInsecurePreservesPageDbValidity(pageDbIn, addrspacePage, physPage, mapping);
-    smc_mapInsecure(pageDbIn, addrspacePage, physPage, mapping)
-}
-
-function {:opaque} smc_finalise_premium(pageDbIn: PageDb, addrspacePage: word)
-    : (PageDb, word)
-    requires validPageDb(pageDbIn)
-    ensures  validPageDb(smc_finalise_premium(pageDbIn, addrspacePage).0)
-{
-    finalisePreservesPageDbValidity(pageDbIn, addrspacePage);
-    smc_finalise(pageDbIn, addrspacePage)
-}
-
-function {:opaque} smc_stop_premium(pageDbIn: PageDb, addrspacePage: word)
-    : (PageDb, word)
-    requires validPageDb(pageDbIn)
-    ensures  validPageDb(smc_stop_premium(pageDbIn, addrspacePage).0)
-{
-    stopPreservesPageDbValidity(pageDbIn, addrspacePage);
-    smc_stop(pageDbIn, addrspacePage)
-}
-
-//=============================================================================
 // Utilities
 //=============================================================================
 
@@ -773,44 +690,6 @@ lemma lemma_allocatePage_preservesMappingGoodness(
     allocatePagePreservesPageDBValidity(pageDbIn, securePage,
                                         addrspacePage, entry);
     reveal validPageDb();
-}
-
-
-lemma smchandlerPreservesPageDbValidity(s: state, pageDbIn: PageDb, s':state,
-    pageDbOut: PageDb)
-    requires ValidState(s) && validPageDb(pageDbIn) && SaneConstants()
-    requires smchandler(s, pageDbIn, s', pageDbOut)
-    ensures validPageDb(pageDbOut)
-{
-    reveal ValidRegState();
-    var callno, arg1, arg2, arg3, arg4
-        := s.regs[R0], s.regs[R1], s.regs[R2], s.regs[R3], s.regs[R4];
-    var err, val := s'.regs[R0], s'.regs[R1];
-
-    if (callno == KOM_SMC_INIT_ADDRSPACE) {
-        initAddrspacePreservesPageDBValidity(pageDbIn, arg1, arg2);
-    } else if(callno == KOM_SMC_INIT_DISPATCHER) {
-        initDispatcherPreservesPageDBValidity(pageDbIn, arg1, arg2, arg3);
-    } else if(callno == KOM_SMC_INIT_L2PTABLE) {
-        initL2PTablePreservesPageDBValidity(pageDbIn, arg1, arg2, arg3);
-    } else if(callno == KOM_SMC_MAP_SECURE) {
-        var pg := maybeContentsOfPhysPage(s, arg4);
-        mapSecurePreservesPageDBValidity(pageDbIn, arg1, arg2, arg3, arg4, pg);
-    } else if(callno == KOM_SMC_ALLOC_SPARE) {
-        allocSparePreservesPageDBValidity(pageDbIn, arg1, arg2);
-    } else if(callno == KOM_SMC_MAP_INSECURE) {
-        mapInsecurePreservesPageDbValidity(pageDbIn, arg1, arg2, arg3);
-    } else if(callno == KOM_SMC_REMOVE) {
-        removePreservesPageDBValidity(pageDbIn, arg1);
-    } else if(callno == KOM_SMC_FINALISE) {
-        finalisePreservesPageDbValidity(pageDbIn, arg1);
-    } else if(callno == KOM_SMC_ENTER) {
-        enterPreservesPageDbValidity(s, pageDbIn, s', pageDbOut, arg1, arg2, arg3, arg4);
-    } else if(callno == KOM_SMC_RESUME) {
-        resumePreservesPageDbValidity(s, pageDbIn, s', pageDbOut, arg1);
-    } else if(callno == KOM_SMC_STOP) {
-        stopPreservesPageDbValidity(pageDbIn, arg1);
-    }
 }
 
 lemma kom_smc_map_measure_helper1(s:state, as_page:PageNr, metadata:seq<word>, contents:seq<word>, pagedb_in:PageDb)

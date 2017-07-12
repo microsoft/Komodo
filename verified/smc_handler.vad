@@ -95,20 +95,17 @@ procedure {:frame false} smc_handler_inner(
     } else if (callno == const(KOM_SMC_INIT_ADDRSPACE)) {
         pagedb := kom_smc_init_addrspace(arg1, arg2, r12, err, pagedb_in);
         MOV(retval, 0);
-        assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
-            by { reveal smc_initAddrspace_premium; }
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb);
         assert InsecureMemInvariant(old(this), this);
     } else if (callno == const(KOM_SMC_INIT_DISPATCHER)) {
         pagedb := kom_smc_init_dispatcher(arg1, arg2, arg3, r12, err, r4, r5, pagedb_in);
         MOV(retval, 0);
-        assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
-            by { reveal smc_initDispatcher_premium; }
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb);
         assert InsecureMemInvariant(old(this), this);
     } else if (callno == const(KOM_SMC_INIT_L2PTABLE)) {
         pagedb := kom_smc_init_l2ptable(arg1, arg2, arg3, r12, err, pagedb_in);
         MOV(retval, 0);
-        assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
-            by { reveal smc_initL2PTable_premium; }
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb);
         assert InsecureMemInvariant(old(this), this);
     } else if (callno == const(KOM_SMC_MAP_SECURE)) {
         ghost if (!(arg4 == 0 || !physPageIsInsecureRam(arg4))) {
@@ -117,8 +114,7 @@ procedure {:frame false} smc_handler_inner(
         }
         pagedb := kom_smc_map_secure(arg1, arg2, arg3, arg4, r12, err, pagedb_in);
         MOV(retval, 0);
-        assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
-            by { reveal smc_mapSecure_premium; }
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb);
         assert InsecureMemInvariant(old(this), this);
     } else if (callno == const(KOM_SMC_ALLOC_SPARE)) {
         pagedb := kom_smc_alloc_spare(arg1, arg2, r12, err, pagedb_in);
@@ -128,26 +124,22 @@ procedure {:frame false} smc_handler_inner(
     } else if (callno == const(KOM_SMC_MAP_INSECURE)) {
         pagedb := kom_smc_map_insecure(arg1, arg2, arg3, r12, err, pagedb_in);
         MOV(retval, 0);
-        assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
-            by { reveal smc_mapInsecure_premium; }
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb);
         assert InsecureMemInvariant(old(this), this);
     } else if (callno == const(KOM_SMC_REMOVE)) {
         pagedb := kom_smc_remove(arg1, r12, err, pagedb_in);
         MOV(retval, 0);
-        assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
-            by { reveal smc_remove_premium; }
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb);
         assert InsecureMemInvariant(old(this), this);
     } else if (callno == const(KOM_SMC_FINALISE)) {
         pagedb := kom_smc_finalise(arg1, r12, err, pagedb_in);
         MOV(retval, 0);
-        assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
-            by { reveal smc_finalise_premium; }
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb);
         assert InsecureMemInvariant(old(this), this);
     } else if (callno == const(KOM_SMC_STOP)) {
         pagedb := kom_smc_stop(arg1, r12, err, pagedb_in);
         MOV(retval, 0);
-        assert smchandlerRelation(old(this), pagedb_in, this, pagedb)
-            by { reveal smc_stop_premium; }
+        assert smchandlerRelation(old(this), pagedb_in, this, pagedb);
         assert InsecureMemInvariant(old(this), this);
     } else {
         pagedb := pagedb_in;

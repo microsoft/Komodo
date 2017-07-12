@@ -290,10 +290,11 @@ procedure kom_smc_init_l2ptable(
     ensures
         SmcProcedureInvariant(old(this),this);
         tuple(pagedb, err)
-            == old(smc_initL2PTable_premium(pagedb_in, pagenr, as_page, l1index));
-        pageDbCorresponds(this.m, pagedb);
+            == old(smc_initL2PTable(pagedb_in, pagenr, as_page, l1index));
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
 {
     ghost var specResult := smc_initL2PTable(pagedb_in, pagenr, as_page, l1index);
+    initL2PTablePreservesPageDBValidity(pagedb_in, pagenr, as_page, l1index);
     pagedb := pagedb_in;
 
     if (l1index >= const(NR_L1PTES)) {
@@ -377,5 +378,4 @@ procedure kom_smc_init_l2ptable(
 
     assert err == specErr(specResult);
     assert err != KOM_ERR_SUCCESS ==> pagedb == pagedb_in;
-    reveal smc_initL2PTable_premium;
 }

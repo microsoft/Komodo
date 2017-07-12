@@ -721,13 +721,14 @@ procedure map_secure_update(
     ensures
         SmcProcedureInvariant(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
-        tuple(pagedb, err) == old(smc_mapSecure_premium(pagedb_in, page, as_page,
+        tuple(pagedb, err) == old(smc_mapSecure(pagedb_in, page, as_page,
             mapping, phys_page, Just(contents)));
-        pageDbCorresponds(this.m, pagedb);
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
 {
-    reveal smc_mapSecure_premium;
-    ghost var specResult := smc_mapSecure_premium(pagedb_in, page, as_page,
-            mapping, phys_page, Just(contents));
+    ghost var specResult := smc_mapSecure(pagedb_in, page, as_page,
+                                          mapping, phys_page, Just(contents));
+    mapSecurePreservesPageDBValidity(pagedb_in, page, as_page, mapping, phys_page, Just(contents));
+
     pagedb := pagedb_in2;
     MOV(r5, page);
 
@@ -791,13 +792,14 @@ procedure map_secure_success(
     ensures
         SmcProcedureInvariant(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
-        tuple(pagedb, err) == old(smc_mapSecure_premium(pagedb_in, page, as_page,
+        tuple(pagedb, err) == old(smc_mapSecure(pagedb_in, page, as_page,
             mapping, phys_page, maybeContentsOfPhysPage(this, phys_page)));
-        pageDbCorresponds(this.m, pagedb);
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
 {
-    reveal smc_mapSecure_premium;
     ghost var contents := maybeContentsOfPhysPage(this, phys_page);
-    ghost var specResult := smc_mapSecure_premium(pagedb_in, page, as_page,
+    ghost var specResult := smc_mapSecure(pagedb_in, page, as_page,
+            mapping, phys_page, contents);
+    mapSecurePreservesPageDBValidity(pagedb_in, page, as_page,
             mapping, phys_page, contents);
     ghost var entry := PageDbEntryTyped(as_page, DataPage(fromJust(contents)));
 
@@ -866,13 +868,14 @@ procedure kom_smc_map_secure(
     ensures
         SmcProcedureInvariant(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
-        tuple(pagedb, err) == old(smc_mapSecure_premium(pagedb_in, page, as_page,
+        tuple(pagedb, err) == old(smc_mapSecure(pagedb_in, page, as_page,
             mapping, phys_page, maybeContentsOfPhysPage(this, phys_page)));
-        pageDbCorresponds(this.m, pagedb);
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
 {
     pagedb := pagedb_in;
-    reveal smc_mapSecure_premium;
-    ghost var specResult := smc_mapSecure_premium(pagedb, page, as_page,
+    ghost var specResult := smc_mapSecure(pagedb, page, as_page,
+            mapping, phys_page, maybeContentsOfPhysPage(this, phys_page));
+    mapSecurePreservesPageDBValidity(pagedb, page, as_page,
             mapping, phys_page, maybeContentsOfPhysPage(this, phys_page));
 
     if (as_page >= const(KOM_SECURE_NPAGES)) {

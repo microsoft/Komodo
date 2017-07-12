@@ -28,11 +28,11 @@ procedure kom_smc_remove_non_addr_success(
         globals; mem; r7;
     ensures
         SmcProcedureInvariant(old(this), this);
-        pagedb == specPageDb(smc_remove_premium(pagedb_in, old(page)));
-        pageDbCorresponds(this.m, pagedb);
+        pagedb == specPageDb(smc_remove(pagedb_in, old(page)));
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
 {
-    reveal smc_remove_premium;
-    ghost var specResult := smc_remove_premium(pagedb_in, page);
+    ghost var specResult := smc_remove(pagedb_in, page);
+    removePreservesPageDBValidity(pagedb_in, page);
     ghost var specE := specErr(specResult);
     ghost var specD := specPageDb(specResult);
     ghost var as_page := pagedb_in[page].addrspace;
@@ -127,11 +127,11 @@ procedure kom_smc_remove(
         globals; mem; r5; r6; r7; r8; r9;
     ensures
         SmcProcedureInvariant(old(this), this);
-        tuple(pagedb,err) == smc_remove_premium(pagedb_in, old(page));
-        pageDbCorresponds(this.m, pagedb);
+        tuple(pagedb,err) == smc_remove(pagedb_in, old(page));
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
 {
-    reveal smc_remove_premium;
-    ghost var specResult := smc_remove_premium(pagedb_in, page);
+    ghost var specResult := smc_remove(pagedb_in, page);
+    removePreservesPageDBValidity(pagedb_in, page);
     ghost var specE := specErr(specResult);
     ghost var specD := specPageDb(specResult);
     pagedb := pagedb_in;

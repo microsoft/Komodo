@@ -160,12 +160,12 @@ procedure {:frame false} kom_smc_init_dispatcher(
     ensures
         SmcProcedureInvariant(old(this),this);
         tuple(pagedb, err)
-            == old(smc_initDispatcher_premium(pagedb_in, disp_page, as_page, entrypoint));
-        pageDbCorresponds(this.m, pagedb);
+            == old(smc_initDispatcher(pagedb_in, disp_page, as_page, entrypoint));
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
 {
     ghost var specResult := smc_initDispatcher(pagedb_in, disp_page, as_page, entrypoint);
+    initDispatcherPreservesPageDBValidity(pagedb_in, disp_page, as_page, entrypoint);
     pagedb := pagedb_in;
-    reveal smc_initDispatcher_premium;
 
     if (as_page >= const(KOM_SECURE_NPAGES)) {
         MOV(err, const(KOM_ERR_INVALID_ADDRSPACE));
