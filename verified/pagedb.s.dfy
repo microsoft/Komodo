@@ -438,6 +438,6 @@ predicate {:opaque} pageDbDataCorresponds(p: PageNr, e: PageDbEntryTyped, page:m
 {
     var base := page_monvaddr(p);
     forall i | 0 <= i < PAGESIZE / WORDSIZE ::
-        (assert base + i*WORDSIZE in page;
-        e.contents[i] == page[base + i*WORDSIZE])
+        (assert WordOffset(base, i) in page;
+        e.contents[i] == page[WordOffset(base, i)])
 }
