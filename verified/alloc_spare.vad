@@ -1,0 +1,56 @@
+include {:verbatim} "kom_common.i.dfy"
+include {:verbatim} "pagedb.i.dfy"
+include {:verbatim} "smcapi.i.dfy"
+
+include "valedecls.vad"
+include "kom_utils.vad"
+include "allocate_page.vad"
+
+procedure kom_smc_alloc_spare(
+    inout operand page:reg, // r1
+    operand as_page:reg, // r2
+    operand pagedb_base:addr,
+    out operand err:reg,
+    ghost pagedb_in: PageDb) returns (ghost pagedb: PageDb)
+    requires/ensures
+        SaneState(this);
+    requires
+        @page == OReg(R1) && @as_page == OReg(R2) && @err == OReg(R0);
+        @pagedb_base == OReg(R12) && pagedb_base == AddressOfGlobal(PageDb());
+        validPageDb(pagedb_in);
+        pageDbCorresponds(this.m, pagedb_in);
+    modifies
+        globals; mem; r3; r4;
+    ensures
+        SmcProcedureInvariant(old(this),this);
+        tuple(pagedb, err) == old(smc_allocSpare(pagedb_in, page, as_page));
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
+{
+    ghost var specResult := smc_allocSpare(pagedb_in, page, as_page);
+    pagedb := pagedb_in;
+
+    if (as_page >= const(KOM_SECURE_NPAGES)) {
+        MOV(err, const(KOM_ERR_INVALID_ADDRSPACE));
+    } else {
+        assert validPageNr(as_page);
+        load_page_type(as_page, pagedb_base, err, err, pagedb);
+
+        if (err != const(KOM_PAGE_ADDRSPACE)) {
+            MOV(err, const(KOM_ERR_INVALID_ADDRSPACE));
+        } else {
+            assert isAddrspace(pagedb, as_page);
+            ghost var entry := PageDbEntryTyped(as_page, SparePage);
+            pagedb := allocate_page(page, as_page, const(KOM_PAGE_SPARE),
+                                    pagedb_base, r3, r4, err, pagedb, entry, true);
+            assert err == specErr(specResult);
+            assert pagedb == specPageDb(specResult);
+            if (err == const(KOM_ERR_SUCCESS)) {
+                allocatePagePreservesPageDBValidity(pagedb_in, page, as_page,
+                                                    SparePage);
+                assert pageDbCorrespondsOnly(this.m, pagedb, old(page))
+                    by { reveal pageContentsCorresponds; }
+                assert pageDbCorresponds(this.m, pagedb);
+            }
+        }
+    }
+}
