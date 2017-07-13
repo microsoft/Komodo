@@ -2,6 +2,7 @@ include {:verbatim} "kom_common.i.dfy"
 include "valedecls.vad"
 include "attest.vad"
 include "verify.vad"
+include "map_common.vad"
 
 procedure svc_return_epilog()
     requires/ensures
@@ -309,8 +310,39 @@ procedure svc_returning_verify_step1(
     }
 }
 
+procedure monvaddr_page_impl(out operand pagenr:reg, operand mva:reg, out operand tmp:reg)
+    reads
+        globals;
+    requires/ensures
+        SaneState(this);
+    requires
+        // NB: @mva == @pagenr is supported
+        @mva != @tmp;
+        @pagenr != @tmp;
+        @tmp != OSP;
+        @pagenr != OSP;
+        PageAligned(mva);
+        address_is_secure(mva);
+    ensures
+        //SmcProcedureInvariant(old(this), this);
+        pagenr == monvaddr_page(old(mva));
+        validPageNr(pagenr);
+{
+    SUB(pagenr,mva,const(KOM_DIRECTMAP_VBASE));
+    LDRglobaladdr(tmp, SecurePhysBaseOp());
+    LDRglobal(tmp, SecurePhysBaseOp(), tmp, 0);
+    assert WordAligned(tmp);
+    SUB(pagenr,pagenr,tmp);
+
+    ghost var oldpagenr := pagenr;
+    LSR(pagenr, pagenr, 12);
+    lemma_RightShift12(oldpagenr);
+    assert pagenr == oldpagenr / PAGESIZE;
+}
+
 procedure svc_map_data(
     ghost pagedb: PageDb,
+    out operand err:reg, // r0
     operand page:reg, // r1
     operand mapping:reg, // r2
     ghost dispPg: PageNr)
@@ -322,7 +354,7 @@ procedure svc_map_data(
     requires/ensures
         SaneState(this);
     requires
-        @page == OReg(R1) && @mapping == OReg(R2);
+        @err == OReg(R0) && @page == OReg(R1) && @mapping == OReg(R2);
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         finalDispatcher(pagedb, dispPg);
@@ -330,11 +362,30 @@ procedure svc_map_data(
     ensures
         SmcProcedureInvariant(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
-        tuple(pagedb', r0)
+        tuple(pagedb', err)
             == svcMapData(pagedb, pagedb[dispPg].addrspace, old(page), old(mapping));
         validPageDb(pagedb') && pageDbCorresponds(this.m, pagedb');
 {
-    assume false; // TODO
+    LDRglobaladdr(r0, CurDispatcherOp());
+    LDRglobal(r0, CurDispatcherOp(), r0, 0);
+    assert r0 == page_monvaddr(dispPg);
+    monvaddr_page_impl(r0, r0, r3);
+    assert r0 == dispPg;
+
+    lemma_LeftShift3(r0);
+    LSL(r0, r0, const(PAGEDB_ENTRY_SHIFT));
+    ADD(r0, r0, const(PAGEDB_ENTRY_ADDRSPACE));
+    assert r0 == G_PAGEDB_ENTRY(dispPg) + PAGEDB_ENTRY_ADDRSPACE;
+    LDRglobaladdr(r3, PageDb());
+    LDRglobal(r5, PageDb(), r3, r0);
+    assert r5 == page_monvaddr(pagedb[dispPg].addrspace)
+        by { reveal pageDbEntryCorresponds; }
+
+    MOV(r3, mapping); // kludge to match callee convention
+    is_valid_mapping_target'(r5, r3, r4, r0,
+                             pagedb[dispPg].addrspace, pagedb);
+
+    assume false;
 }
 
 #verbatim
@@ -430,7 +481,7 @@ procedure {:frame false}{:timeLimitMultiplier 2} svc_returning(
         assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
         assert BankedRegsInvariant(old(this), this);
     } else if (r0 == const(KOM_SVC_MAP_DATA)) {
-        pagedb' := svc_map_data(pagedb, r1, r2, dispPg);
+        pagedb' := svc_map_data(pagedb, r0, r1, r2, dispPg);
         svc_return_epilog();
         assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
         assert BankedRegsInvariant(old(this), this);
