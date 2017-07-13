@@ -1,10 +1,9 @@
 include {:verbatim} "kom_common.i.dfy"
 include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
-include {:verbatim} "ptebits.i.dfy"
 
 include "valedecls.vad"
-include "map_secure.vad"
+include "map_common.vad"
 
 procedure mkl2pte_insecure(
     inout operand mapping:reg,
@@ -158,4 +157,3 @@ procedure kom_smc_map_insecure(
         }
     }
 }
-
