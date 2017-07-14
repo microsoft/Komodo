@@ -28,7 +28,7 @@ lemma lemma_update_l2pte_helper1(s:state, s':state, as_page:word, mapping:word, 
     requires isAddrspace(d, as_page)
     requires validMapping(abs_mapping,d,as_page)
     requires validL1PTable(d, as_page, d[d[as_page].entry.l1ptnr].entry.l1pt)
-    requires d[as_page].entry.state.InitState?
+    requires !d[as_page].entry.state.StoppedState?
     requires validL2PTE(d, as_page, l2pte_abs)
     requires l1pte_abs == fromJust(d[d[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index])
     requires l2pte == mkL2Pte(l2pte_abs)
@@ -69,7 +69,7 @@ lemma lemma_update_l2pte_helper1(s:state, s':state, as_page:word, mapping:word, 
 #endverbatim
 
 procedure update_l2pte(
-    operand as_page:reg,
+    ghost as_page:PageNr,
     operand mapping:reg,
     operand l2pte:reg,
     operand l1pte:reg,
@@ -82,10 +82,12 @@ procedure update_l2pte(
     requires/ensures
         SaneState(this);
     requires
-        (@as_page == OReg(R1) && @l2pte == OReg(R2))
-            || (@l2pte == OReg(R1) && @as_page == OReg(R2));
-        @mapping == OReg(R3) && @tmp1 == OReg(R8) && @tmp2 == OReg(R12);
+        @l2pte == OReg(R1) || @l2pte == OReg(R2);
+        @mapping == OReg(R3);
         @l1pte == OReg(R4) || @l1pte == OReg(R10);
+        //@tmp1 == OReg(R8) && @tmp2 == OReg(R12);
+        @tmp1 != @mapping && @tmp1 != @l2pte && @tmp1 != @l1pte && @tmp1 != @tmp2 && @tmp1 != OSP;
+        @tmp2 != @mapping && @tmp2 != @l2pte && @tmp2 != @l1pte && @tmp2 != OSP;
         validPageDb(d) && wellFormedPageDb(d);
         abs_mapping.l1index == wordToMapping(mapping).l1index;
         abs_mapping.l2index == wordToMapping(mapping).l2index;
@@ -93,7 +95,7 @@ procedure update_l2pte(
         isAddrspace(d, as_page);
         validMapping(abs_mapping,d,as_page);
         validL1PTable(d, as_page, d[d[as_page].entry.l1ptnr].entry.l1pt);
-        d[as_page].entry.state is InitState;
+        !(d[as_page].entry.state is StoppedState);
         validL2PTE(d, as_page, l2pte_abs);
         l2pte == mkL2Pte(l2pte_abs);
         l1pte == mkL1Pte(d[d[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
@@ -566,23 +568,24 @@ lemma lemma_ARM_L2PTE_impl(pa: word, w: bool, x:bool, ptew: word)
 }
 #endverbatim
 
-procedure ARM_L2PTE_impl(
+procedure {:bridge}{:refined} ARM_L2PTE_impl(
     operand mapping:reg,
     inout operand pte:reg, // paddr at input time; pte at return
     out operand tmp:reg,
     ghost abs_mapping:Mapping
 )
-    requires/ensures
+    requires {:refined false}
         SaneState(this);
+        @mapping != @pte && @mapping != @tmp;
+        @pte != @tmp && @pte != OSP && @tmp != OSP;
+        //@mapping == OReg(R3) && (@pte == OReg(R1) || @pte == OReg(R2)) && @tmp == OReg(R0);
     requires
-        //@mapping != @pte && @mapping != @tmp && @mapping != OSP;
-        //@pte != @tmp && @pte != OSP && @tmp != OSP;
-        @mapping == OReg(R3) && (@pte == OReg(R1) || @pte == OReg(R2)) && @tmp == OReg(R0);
         PageAligned(pte);
         abs_mapping == wordToMapping(mapping);
     ensures
         pte == ARM_L2PTE(old(pte), abs_mapping.perm.w, abs_mapping.perm.x);
-        SmcProcedureInvariant(old(this), this);
+    ensures {:refined false}
+        this.ok ==> SaneState(this) && SmcProcedureInvariant(old(this), this);
 {
     ghost var pa := pte;
 
@@ -627,5 +630,34 @@ procedure ARM_L2PTE_impl(
     lemma_ARM_L2PTE_impl(pa, abs_mapping.perm.w, abs_mapping.perm.x, pte);
 
     // help prove framing
-    assert mapping == old(mapping) && this.m == old(this).m;
+    //assert mapping == old(mapping) && this.m == old(this).m;
+    assert {:split_here}{:refined} true;
+}
+
+procedure mkL2Pte_secure(
+    operand mapping:reg,
+    inout operand pagepte:reg,
+    out operand tmp:reg,
+    ghost abs_mapping:Mapping,
+    ghost l2pte:L2PTE
+)
+    requires/ensures
+        SaneState(this);
+    requires
+        // @mapping == OReg(R3) && @pagepte == OReg(R1);
+        @mapping != @pagepte && @mapping != @tmp && @pagepte != @tmp;
+        @pagepte != OSP && @tmp != OSP;
+        abs_mapping == wordToMapping(mapping);
+        l2pte is SecureMapping;
+        (l2pte.page == pagepte
+            && abs_mapping.perm.x == l2pte.exec
+            && abs_mapping.perm.w == l2pte.write);
+    reads
+        globals;
+    ensures
+        pagepte == mkL2Pte(l2pte);
+        SmcProcedureInvariant(old(this), this);
+{
+    page_paddr_impl(pagepte, pagepte, tmp);
+    ARM_L2PTE_impl(mapping, pagepte, tmp, abs_mapping);
 }

@@ -55,6 +55,23 @@ function updatePageEntry(d:PageDb, p:PageNr, e:PageDbEntryTyped): PageDb
     d[p := d[p].(entry := e)]
 }
 
+lemma lemma_sparePageRefs(d:PageDb, n:PageNr)
+    requires validPageDb(d)
+    requires d[n].PageDbEntryTyped? && d[n].entry.SparePage?
+    requires !hasStoppedAddrspace(d, n)
+    ensures isAddrspace(d, d[n].addrspace) && dataPageRefs(d, d[n].addrspace, n) == {}
+{
+    reveal validPageDb();
+    var a := d[n].addrspace;
+    assert isAddrspace(d, a);
+    var l1ptnr := d[a].entry.l1ptnr;
+    var l1pt := d[l1ptnr].entry.l1pt;
+    assert forall i, j | 0 <= i < NR_L1PTES && l1pt[i].Just?
+                       && 0 <= j < NR_L2PTES
+                       :: validL2PTable(d, a, d[l1pt[i].v].entry.l2pt)
+                       && validL2PTE(d, a, d[l1pt[i].v].entry.l2pt[j]);
+}
+
 lemma lemma_allocateSpareDataPage(d:PageDb, p:PageNr, e:PageDbEntryTyped)
     requires validPageDb(d)
     requires d[p].PageDbEntryTyped? && d[p].entry.SparePage?
@@ -73,19 +90,10 @@ lemma lemma_allocateSpareDataPage(d:PageDb, p:PageNr, e:PageDbEntryTyped)
         assert validPageDbEntryTyped(d, n);
         var a := dOut[n].addrspace;
         if !d[a].entry.state.StoppedState? {
-            var l1ptnr := d[a].entry.l1ptnr;
-            var l1pt := d[l1ptnr].entry.l1pt;
             if n == p {
                 if e.DataPage? {
-                    assert forall i, j | 0 <= i < NR_L1PTES && l1pt[i].Just?
-                                             && 0 <= j < NR_L2PTES
-                            :: validL2PTable(d, a, d[l1pt[i].v].entry.l2pt)
-                            && validL2PTE(d, a, d[l1pt[i].v].entry.l2pt[j]);
-                    calc {
-                        dataPageRefs(dOut, a, p);
-                        dataPageRefs(d, a, p);
-                        ({});
-                    }
+                    lemma_sparePageRefs(d, p);
+                    assert dataPageRefs(dOut, a, p) == dataPageRefs(d, a, p);
                 }
                 assert validPageDbEntryTyped(dOut, n);
             } else if d[n].entry.DataPage? {

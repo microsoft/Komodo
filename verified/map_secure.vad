@@ -7,33 +7,6 @@ include "kom_utils.vad"
 include "allocate_page.vad"
 include "map_common.vad"
 
-procedure mkL2Pte_secure(
-    operand mapping:reg,
-    inout operand pagepte:reg,
-    ghost abs_mapping:Mapping,
-    ghost l2pte:L2PTE
-)
-    requires/ensures
-        SaneState(this);
-    requires
-        @mapping == OReg(R3) && @pagepte == OReg(R1);
-        abs_mapping == wordToMapping(mapping);
-        l2pte is SecureMapping;
-        (l2pte.page == pagepte
-            && abs_mapping.perm.x == l2pte.exec
-            && abs_mapping.perm.w == l2pte.write);
-    reads
-        globals;
-    modifies
-        r0;
-    ensures
-        pagepte == mkL2Pte(l2pte);
-        SmcProcedureInvariant(old(this), this);
-{
-    page_paddr_impl(pagepte, pagepte, r0);
-    ARM_L2PTE_impl(mapping, pagepte, r0, abs_mapping);
-}
-
 #verbatim
 lemma lemma_preserve_contentsOfPhysPage(s1:state, s2:state, p:word)
     requires SaneConstants()
@@ -65,23 +38,6 @@ lemma lemma_preserve_contentsOfPhysPage(s1:state, s2:state, p:word)
              contentsOfPhysPage(s2, p)[i];
          }
     }
-}
-
-lemma lemma_isValidMappingTarget_validAndEmptyMapping(d:PageDb, a:PageNr, m:word)
-    requires validPageDb(d) && isAddrspace(d, a)
-    requires isValidMappingTarget(d, a, m) == KOM_ERR_SUCCESS
-    ensures validAndEmptyMapping(wordToMapping(m), d, a)
-{
-    reveal validPageDb();
-    reveal wordToMapping();
-    var addrspace := d[a].entry;
-    var l1index := l1indexFromMapping(m);
-    var l2index := l2indexFromMapping(m);
-    var l1 := d[addrspace.l1ptnr].entry;
-    var l1pte := l1.l1pt[l1index];
-    assert l1pte.Just?;
-    var l2pt := d[fromJust(l1pte)].entry.l2pt;
-    assert l2pt[l2index].NoMapping?;
 }
 #endverbatim
 
@@ -143,7 +99,7 @@ procedure map_secure_update(
     lemma_isValidMappingTarget_validAndEmptyMapping(pagedb_in, as_page, mapping);
 
     reveal wordToMapping;
-    mkL2Pte_secure(mapping, page, abs_mapping, l2pte);
+    mkL2Pte_secure(mapping, page, r0, abs_mapping, l2pte);
 
     ghost var l1 := old(pagedb[pagedb[as_page].entry.l1ptnr].entry);
     ghost var l1pte_abs := fromJust(l1.l1pt[abs_mapping.l1index]);

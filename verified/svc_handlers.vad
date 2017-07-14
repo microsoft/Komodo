@@ -340,15 +340,120 @@ procedure monvaddr_page_impl(out operand pagenr:reg, operand mva:reg, out operan
     assert pagenr == oldpagenr / PAGESIZE;
 }
 
+procedure svc_map_data_zeropage(
+    ghost pagedb: PageDb,
+    operand page:reg, // r1
+    inout operand entryptr:reg) // r2
+    returns (ghost pagedb': PageDb)
+    modifies
+         r0; r2; r5; mem; globals;
+    requires/ensures
+        SaneState(this);
+    requires
+        @page == OReg(R1) && @entryptr == OReg(R2);
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
+        validPageNr(page);
+        pagedb[page] is PageDbEntryTyped && pagedb[page].entry is SparePage;
+        !hasStoppedAddrspace(pagedb, page);
+        entryptr == AddressOfGlobal(PageDb()) + G_PAGEDB_ENTRY(page);
+    ensures
+        SmcProcedureInvariant(old(this), this);
+        GlobalsPreservingExcept(old(this), this, set(PageDb()));
+        MemPreservingExcept(old(this), this, old(page_monvaddr(page)),
+                            old(page_monvaddr(page)) + PAGESIZE);
+        pagedb' == updatePageEntry(pagedb, old(page),
+                                   DataPage(SeqRepeat(PAGESIZE/WORDSIZE, 0)));
+        validPageDb(pagedb') && pageDbCorresponds(this.m, pagedb');
+{
+    ghost var zeroEntry := DataPage(SeqRepeat(PAGESIZE/WORDSIZE, 0));
+    pagedb' := updatePageEntry(pagedb, old(page), zeroEntry);
+    lemma_allocateSpareDataPage(pagedb, old(page), zeroEntry);
+
+    // update pagedb entry type
+    MOV(r0, const(KOM_PAGE_DATA));
+    STRglobal(r0, PageDb(), entryptr, 0);
+
+    ghost var entry := pagedb[page].(entry := zeroEntry);
+    assert pageDbEntryCorresponds(entry, extractPageDbEntry(this.m, old(page)))
+        by { reveal pageDbEntryCorresponds; }
+
+    // zero-fill page
+    page_monvaddr_impl(r2, page, r0);
+    MOV(r0, 0);
+    MOV(r5, const(PAGESIZE));
+    memset(r2, r0, r5);
+
+    ghost var pg := extractPage(this.m, old(page));
+    assert pageContentsCorresponds(old(page), entry, pg)
+    by {
+        assert pageDbDataCorresponds(old(page), zeroEntry, pg)
+            by { reveal pageDbDataCorresponds; }
+        reveal pageContentsCorresponds;
+    }
+
+    assert pageDbCorresponds(this.m, pagedb')
+    by {
+        AllButOnePagePreserving(old(page), old(this), this);
+    }
+}
+
+procedure svc_map_data_success(
+    ghost pagedb: PageDb,
+    inout operand page:reg, // r1
+    operand entryptr:reg, // r2
+    operand mapping:reg, // r3
+    operand l1pte:reg, // r4
+    ghost asPg: PageNr)
+    returns (ghost pagedb': PageDb)
+    modifies
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; globals;
+    requires/ensures
+        SaneState(this);
+    requires
+        @page == OReg(R1) && @entryptr == OReg(R2) && @mapping == OReg(R3)
+            && @l1pte == OReg(R4);
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+        isAddrspace(pagedb, asPg);
+        validSparePageForAS(pagedb, asPg, page);
+        isValidMappingTarget'(pagedb, asPg, mapping) == KOM_ERR_SUCCESS;
+        entryptr == AddressOfGlobal(PageDb()) + G_PAGEDB_ENTRY(page);
+        l1pte == mkL1Pte(pagedb[pagedb[asPg].entry.l1ptnr].entry.l1pt[
+                    wordToMapping(mapping).l1index], 0);
+    ensures
+        SmcProcedureInvariant(old(this), this);
+        GlobalsPreservingExcept(old(this), this, set(PageDb()));
+        tuple(pagedb', KOM_ERR_SUCCESS)
+            == svcMapData(pagedb, asPg, old(page), old(mapping));
+        validPageDb(pagedb') && pageDbCorresponds(this.m, pagedb');
+{
+    pagedb' := svc_map_data_zeropage(pagedb, page, r2);
+
+    ghost var abs_mapping := wordToMapping(mapping);
+    ghost var l2pte := SecureMapping(old(page), abs_mapping.perm.w, abs_mapping.perm.x);
+    lemma_sparePageRefs(pagedb, old(page));
+    lemma_isValidMappingTarget_validAndEmptyMapping(pagedb, asPg, mapping);
+
+    reveal wordToMapping;
+    mkL2Pte_secure(mapping, page, r0, abs_mapping, l2pte); // page := l2pte
+
+    ghost var l1 := old(pagedb[pagedb[asPg].entry.l1ptnr].entry);
+    ghost var l1pte_abs := fromJust(l1.l1pt[abs_mapping.l1index]);
+    ghost var tmpst := this;
+    assert l1pte_abs != old(page);
+    pagedb' := update_l2pte(asPg, mapping, page, l1pte, r7, r8,
+                            pagedb', abs_mapping, l2pte);
+    AllButOnePagePreserving(l1pte_abs, tmpst, this);
+    assert pageDbCorresponds(this.m, pagedb');
+}
+
 procedure svc_map_data(
     ghost pagedb: PageDb,
     out operand err:reg, // r0
-    operand page:reg, // r1
-    operand mapping:reg, // r2
+    inout operand page:reg, // r1
+    inout operand mapping:reg, // r2
     ghost dispPg: PageNr)
     returns (ghost pagedb': PageDb)
-    reads
-        globals; lr; 
     modifies
          r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; globals;
     requires/ensures
@@ -366,6 +471,11 @@ procedure svc_map_data(
             == svcMapData(pagedb, pagedb[dispPg].addrspace, old(page), old(mapping));
         validPageDb(pagedb') && pageDbCorresponds(this.m, pagedb');
 {
+    ghost var asPg := pagedb[dispPg].addrspace;
+    ghost var specDb := firstOf2(svcMapData(pagedb, asPg, page, mapping));
+    ghost var specErr := secondOf2(svcMapData(pagedb, asPg, page, mapping));
+    pagedb' := pagedb;
+
     LDRglobaladdr(r0, CurDispatcherOp());
     LDRglobal(r0, CurDispatcherOp(), r0, 0);
     assert r0 == page_monvaddr(dispPg);
@@ -376,16 +486,58 @@ procedure svc_map_data(
     LSL(r0, r0, const(PAGEDB_ENTRY_SHIFT));
     ADD(r0, r0, const(PAGEDB_ENTRY_ADDRSPACE));
     assert r0 == G_PAGEDB_ENTRY(dispPg) + PAGEDB_ENTRY_ADDRSPACE;
-    LDRglobaladdr(r3, PageDb());
-    LDRglobal(r5, PageDb(), r3, r0);
-    assert r5 == page_monvaddr(pagedb[dispPg].addrspace)
-        by { reveal pageDbEntryCorresponds; }
+    LDRglobaladdr(r8, PageDb());
+    LDRglobal(r5, PageDb(), r8, r0);
+    assert r5 == page_monvaddr(asPg) by { reveal pageDbEntryCorresponds; }
 
-    MOV(r3, mapping); // kludge to match callee convention
-    is_valid_mapping_target'(r5, r3, r4, r0,
-                             pagedb[dispPg].addrspace, pagedb);
+    // r8 = pagedb base, r5 = asva
 
-    assume false;
+    if (page >= const(KOM_SECURE_NPAGES)) {
+        MOV(err, const(KOM_ERR_INVALID_PAGENO));
+        assert err == specErr && pagedb' == specDb;
+    } else {
+        assert validPageNr(page);
+        load_page_type(page, r8, r4, r0, pagedb);
+        assert r4 == G_PAGEDB_ENTRY(old(page));
+        assert r0 == pageDbEntryTypeVal(pagedb[page]);
+        if (r0 != const(KOM_PAGE_SPARE)) {
+            assert set(KOM_PAGE_FREE, KOM_PAGE_ADDRSPACE, KOM_PAGE_DISPATCHER,
+                       KOM_PAGE_L1PTABLE, KOM_PAGE_L2PTABLE, KOM_PAGE_DATA) ?[r0];
+            assert !(pagedb[page] is PageDbEntryTyped
+                    && pagedb[page].entry is SparePage);
+            MOV(err, const(KOM_ERR_INVALID_PAGENO));
+            assert err == specErr && pagedb' == specDb;
+        } else {
+            ADD(r6, r4, const(PAGEDB_ENTRY_ADDRSPACE));
+            LDRglobal(r0, PageDb(), r8, r6);
+            assert r0 == page_monvaddr(pagedb[page].addrspace)
+                by { reveal pageDbEntryCorresponds; }
+            if (r0 != r5) { // spare page in wrong addrspace
+                MOV(err, const(KOM_ERR_INVALID_PAGENO));
+                assert err == specErr && pagedb' == specDb;
+            } else {
+                assert old(page) == page && old(mapping) == mapping;
+                assert validSparePageForAS(pagedb, asPg, page);
+
+                // kludge register fiddling to meet conventions:
+                // move mapping (r2) into r3 for is_valid_mapping_target'
+                MOV(r3, mapping);
+
+                // prep r2 with addr of page type so we can update it later
+                ADD(r2, r8, r4);
+                assert r2 == AddressOfGlobal(PageDb()) + G_PAGEDB_ENTRY(old(page));
+
+                is_valid_mapping_target'(r5, r3, r4, err, asPg, pagedb);
+                assert err == specErr;
+
+                if (err == const(KOM_ERR_SUCCESS)) {
+                    pagedb' := svc_map_data_success(pagedb, page, r2, r3, r4, asPg);
+                    MOV(err, const(KOM_ERR_SUCCESS)); // TODO: remove me if possible
+                    assert err == specErr && pagedb' == specDb;
+                }
+            }
+        }
+    }
 }
 
 #verbatim
