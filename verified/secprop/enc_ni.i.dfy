@@ -540,6 +540,16 @@ predicate l2initgo(e1':word) {
             e1' == KOM_ERR_INVALID_ADDRSPACE)
 }
 
+lemma lemma_allocatePagePreservesWellFormedness(pageDbIn: PageDb,
+    securePage: word, addrspacePage: PageNr, entry: PageDbEntryTyped)
+    requires validPageDb(pageDbIn)
+    requires validAddrspacePage(pageDbIn, addrspacePage)
+    requires allocatePageEntryValid(entry)
+    requires entry.L2PTable?
+    ensures  wellFormedPageDb(allocatePage(pageDbIn, securePage, addrspacePage, entry).0)
+{
+}
+
 lemma lemma_initL2PTable_enc_ni_one_go(d1: PageDb, d1': PageDb, e1':word,
                                      d2: PageDb, d2': PageDb, e2':word,
                                      page:word, addrspacePage:word, l1index:word,
@@ -556,7 +566,7 @@ lemma lemma_initL2PTable_enc_ni_one_go(d1: PageDb, d1': PageDb, e1':word,
         { reveal validPageDb(); }
     var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
     var (pagedb, err) := allocatePage(d1, page, addrspacePage, l2pt);
-    assume wellFormedPageDb(pagedb);
+    lemma_allocatePagePreservesWellFormedness(d1, page, addrspacePage, l2pt);
     lemma_allocatePage_not_atkr(d1, page, addrspacePage, l2pt, pagedb, err, atkr);
     assert enc_eqpdb(d1, pagedb, atkr);
     assert enc_eqpdb(pagedb, d1', atkr);
@@ -582,8 +592,8 @@ lemma_initL2PTable_enc_ni(d1: PageDb, d1': PageDb, e1':word,
         var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
         var ap1 := allocatePage(d1, page, addrspacePage, l2pt);
         var ap2 := allocatePage(d2, page, addrspacePage, l2pt);
-        assume wellFormedPageDb(ap1.0);
-        assume wellFormedPageDb(ap2.0);
+        lemma_allocatePagePreservesWellFormedness(d1, page, addrspacePage, l2pt);
+        lemma_allocatePagePreservesWellFormedness(d2, page, addrspacePage, l2pt);
         lemma_allocatePage_enc_ni(d1, ap1.0, ap1.1, d2, ap2.0, ap2.1,
             page, addrspacePage, l2pt, atkr);
         assert ap1.1 != KOM_ERR_SUCCESS ==> ap1.0 == d1;
