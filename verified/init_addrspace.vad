@@ -211,9 +211,10 @@ procedure init_addrspace(
     ensures
         SmcProcedureInvariant(old(this),this);
         GlobalsPreservingExcept(old(this),this, set(PageDb()));
-        old(specPageDb(smc_initAddrspace_premium(pagedb_in, addrspace_page, l1pt_page))) == pagedb;
-        pageDbCorresponds(this.m, pagedb);
+        old(specPageDb(smc_initAddrspace(pagedb_in, addrspace_page, l1pt_page))) == pagedb;
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
 {
+    initAddrspacePreservesPageDBValidity(pagedb_in, addrspace_page, l1pt_page);
     ghost var gaddrspace_entry := initAddrspaceEntry(addrspace_page, l1pt_page);
     ghost var gl1pt_entry := initL1PTEntry(addrspace_page);
     pagedb := pagedb_in[addrspace_page := gaddrspace_entry][l1pt_page := gl1pt_entry];
@@ -239,11 +240,6 @@ procedure init_addrspace(
             && extractPage(old(this).m, p) == extractPage(this.m, p);
     assert forall p :: validPageNr(p) && p != old(addrspace_page) && p != old(l1pt_page)
         ==> pageDbCorrespondsOnly(old(this).m, pagedb, p);
-
-    assert old(specPageDb(smc_initAddrspace_premium(pagedb_in, addrspace_page,
-                                                    l1pt_page))) == pagedb
-        && pageDbCorresponds(this.m, pagedb)
-        by { reveal smc_initAddrspace_premium; }
 }
 
 #verbatim
@@ -291,13 +287,12 @@ procedure kom_smc_init_addrspace(
         SmcProcedureInvariant(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
         tuple(pagedb, err)
-            == old(smc_initAddrspace_premium(pagedb_in, addrspace_page, l1pt_page));
+            == old(smc_initAddrspace(pagedb_in, addrspace_page, l1pt_page));
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
     reveal pageDbEntryCorresponds;
     pagedb := pagedb_in;
-    reveal smc_initAddrspace_premium;
 
     // check alignment of l1pt page
     AND(err, l1pt_page, 3);

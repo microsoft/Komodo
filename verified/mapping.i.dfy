@@ -172,6 +172,23 @@ predicate validAndEmptyMapping(m:Mapping, d:PageDb, a:PageNr)
     l2pt[m.l2index].NoMapping?
 }
 
+lemma lemma_isValidMappingTarget_validAndEmptyMapping(d:PageDb, a:PageNr, m:word)
+    requires validPageDb(d) && isAddrspace(d, a)
+    requires isValidMappingTarget'(d, a, m) == KOM_ERR_SUCCESS
+    ensures validAndEmptyMapping(wordToMapping(m), d, a)
+{
+    reveal validPageDb();
+    reveal wordToMapping();
+    var addrspace := d[a].entry;
+    var l1index := l1indexFromMapping(m);
+    var l2index := l2indexFromMapping(m);
+    var l1 := d[addrspace.l1ptnr].entry;
+    var l1pte := l1.l1pt[l1index];
+    assert l1pte.Just?;
+    var l2pt := d[fromJust(l1pte)].entry.l2pt;
+    assert l2pt[l2index].NoMapping?;
+}
+
 lemma {:fuel referencedL2PTable, 0} lemma_updateL2Pte_dataPageRefs(d1:PageDb, d2:PageDb, a:PageNr, mapping:Mapping, l2e:L2PTE, n:PageNr)
     requires validPageDb(d1) && wellFormedPageDb(d2)
     requires validMapping(mapping, d1, a) && validL2PTE(d1, a, l2e)

@@ -213,9 +213,8 @@ predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr)
     && SaneStackPointer(ssp)
     && ParentStackPreserving(s, r)
     && s.conf.ttbr0 == r.conf.ttbr0 && s.conf.scr == r.conf.scr
-    && (forall a:addr | ValidMem(a) && !(StackLimit() <= a < StackBase()) &&
-        !addrInPage(a, dp) :: MemContents(s.m, a) == MemContents(r.m, a))
-    && GlobalsPreservingExcept(s, r, {PendingInterruptOp()})
+    && InsecureMemInvariant(s, r)
+    && GlobalsPreservingExcept(s, r, {PendingInterruptOp(), PageDb()})
     && pageDbCorresponds(r.m, rd)
     && (if retToEnclave
        then rsp == ssp
@@ -547,7 +546,7 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
         || OperandContents(r, OSP) == BitwiseOr(OperandContents(s, OSP), 1)
     ensures OperandContents(s, OSP) != BitwiseOr(OperandContents(s, OSP), 1)
     ensures ParentStackPreserving(s, r)
-    ensures GlobalsPreservingExcept(s, r, {PendingInterruptOp()})
+    ensures GlobalsPreservingExcept(s, r, {PendingInterruptOp(),PageDb()})
     ensures userspaceExecutionAndException(s, s4)
     ensures mode_of_state(s4) != User && spsr_of_state(s4).m == User
     ensures SaneMem(s4.m)
@@ -579,7 +578,7 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
     lemma_userExecutionUpdatesPageDb(d, s, s4, dp);
     assert pageDbCorresponds(s4.m, d4);
     lemma_UsermodeContinuationInvariantDef(s4, r, d4, dp);
-    assert GlobalsInvariant(s, s4) && GlobalsPreservingExcept(s4, r, {PendingInterruptOp()});
+    assert GlobalsInvariant(s, s4) && GlobalsPreservingExcept(s4, r, {PendingInterruptOp(),PageDb()});
 
     lemma_executionPreservesMasks(s, s4);
     assert s4.regs[SP(Monitor)] == OperandContents(r, OSP)
@@ -649,7 +648,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     requires !spsr_of_state(s).f && !spsr_of_state(s).i
     ensures SaneStateAfterException(r)
     ensures ParentStackPreserving(s, r)
-    ensures GlobalsPreservingExcept(s, r, {PendingInterruptOp()})
+    ensures GlobalsPreservingExcept(s, r, {PendingInterruptOp(),PageDb()})
     ensures OperandContents(s, OSP) != BitwiseOr(OperandContents(s, OSP), 1)
             && if retToEnclave
             then OperandContents(r, OSP) == OperandContents(s, OSP)

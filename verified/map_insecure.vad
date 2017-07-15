@@ -1,10 +1,9 @@
 include {:verbatim} "kom_common.i.dfy"
 include {:verbatim} "pagedb.i.dfy"
 include {:verbatim} "smcapi.i.dfy"
-include {:verbatim} "ptebits.i.dfy"
 
 include "valedecls.vad"
-include "map_secure.vad"
+include "map_common.vad"
 
 procedure mkl2pte_insecure(
     inout operand mapping:reg,
@@ -103,13 +102,13 @@ procedure kom_smc_map_insecure(
         mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
     ensures
         SmcProcedureInvariant(old(this), this);
-        tuple(pagedb,err) == smc_mapInsecure_premium(pagedb_in, old(as_page),
-                                                old(phys_page), old(mapping));
-        pageDbCorresponds(this.m, pagedb);
+        tuple(pagedb,err) == smc_mapInsecure(pagedb_in, old(as_page),
+                                             old(phys_page), old(mapping));
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
 {
     pagedb := pagedb_in;
-    ghost var specResult := smc_mapInsecure_premium(pagedb, as_page,
-            phys_page, mapping);
+    ghost var specResult := smc_mapInsecure(pagedb, as_page, phys_page, mapping);
+    mapInsecurePreservesPageDbValidity(pagedb, as_page, phys_page, mapping);
 
     if (as_page >= const(KOM_SECURE_NPAGES)) {
         MOV(err, const(KOM_ERR_INVALID_ADDRSPACE));
@@ -158,4 +157,3 @@ procedure kom_smc_map_insecure(
         }
     }
 }
-

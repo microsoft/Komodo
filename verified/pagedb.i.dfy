@@ -155,7 +155,7 @@ predicate {:opaque} pageContentsCorresponds(p:PageNr, e:PageDbEntry, page:memmap
         || (et.L1PTable? && pageDbL1PTableCorresponds(p, et, page))
         || (et.L2PTable? && pageDbL2PTableCorresponds(p, et, page))
         || (et.DataPage? && pageDbDataCorresponds(p, et, page))
-        ))
+        || et.SparePage?))
 }
 
 predicate {:opaque} pageDbAddrspaceCorresponds(p:PageNr, e:PageDbEntryTyped, page:memmap)

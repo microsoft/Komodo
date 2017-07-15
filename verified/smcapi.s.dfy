@@ -192,9 +192,8 @@ function smc_remove(pageDbIn: PageDb, page: word)
             if(e.refcount !=0) then (pageDbIn, KOM_ERR_PAGEINUSE)
             else (pageDbIn[page := PageDbEntryFree], KOM_ERR_SUCCESS)
         else
-            if !addrspace.state.StoppedState?
-                || (e.SparePage? && !addrspace.state.FinalState?) then
-                // TODO: misleading error message for remove of a spare page
+            if addrspace.state.InitState?
+                || (addrspace.state.FinalState? && !e.SparePage?) then
                 (pageDbIn, KOM_ERR_NOT_STOPPED)
             else 
                 var d := pageDbIn; var p := page; var a := addrspacePage;

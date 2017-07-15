@@ -22,20 +22,6 @@ lemma lemma_SaneState_implies_SaneShaGlobal2(s:state)
     }
 }
 
-// XXX: cleanmeup: copy-and-paste from smcapi.dfy
-lemma BoundedShaLength2(d:PageDb, n:PageNr)
-    requires validPageDb(d)
-    requires isAddrspace(d, n)
-    requires IsCompleteSHA256Trace(d[n].entry.shatrace)
-    requires !stoppedAddrspace(d[n])
-    ensures |d[n].entry.shatrace.M| < 0x10_0000
-{
-    assert validAddrspace(d, n) by { reveal validPageDb(); }
-    BoundedAddrspaceRefs'(d, n);
-//    lemma_sha256_length(d[n].entry.shatrace);
-    assert |d[n].entry.shatrace.M| <= KOM_SECURE_NPAGES * (1 + 64);
-}
-
 lemma lemma_kom_smc_finalise_success_helper1(s:state, as_page:word,
     pagedb:PageDb, trace_in:SHA256Trace, base:word, ctx:word, mem:memmap)
     requires SaneState(s)
@@ -69,7 +55,7 @@ lemma lemma_kom_smc_finalise_success_helper1(s:state, as_page:word,
         reveal pageContentsCorresponds();
         reveal pageDbAddrspaceCorresponds();
     }
-    BoundedShaLength2(pagedb, as_page);
+    BoundedShaLength(pagedb, as_page);
 }
 
 lemma lemma_kom_smc_finalise_success_helper2(s1:state, s2:state, as_page:word,
@@ -133,11 +119,12 @@ procedure kom_smc_finalise_success(
         mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
     ensures
         SmcProcedureInvariant(old(this), this);
-        tuple(pagedb, err) == smc_finalise_premium(pagedb_in, old(as_page));
-        pageDbCorresponds(this.m, pagedb);
+        tuple(pagedb, err) == smc_finalise(pagedb_in, old(as_page));
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
 {
     pagedb := pagedb_in;
-    ghost var specResult := smc_finalise_premium(pagedb, as_page);
+    ghost var specResult := smc_finalise(pagedb, as_page);
+    finalisePreservesPageDbValidity(pagedb, as_page);
     ghost var trace_in := pagedb[as_page].entry.shatrace;
     ghost var base := r2;
     ghost var ctx := base + ADDRSPACE_HASH;
@@ -156,8 +143,6 @@ procedure kom_smc_finalise_success(
     MOV(r3, const(16 * 32));
     MUL(r2, r2, r3);
     sha256_finalize(trace_in);
-
-    reveal smc_finalise_premium;
 
     assert pageDbCorrespondsExcluding(this.m, specPageDb(specResult), p) by
     {
@@ -200,12 +185,11 @@ procedure kom_smc_finalise(
         mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
     ensures
         SmcProcedureInvariant(old(this), this);
-        tuple(pagedb, err) == smc_finalise_premium(pagedb_in, old(as_page));
-        pageDbCorresponds(this.m, pagedb);
+        tuple(pagedb, err) == smc_finalise(pagedb_in, old(as_page));
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
 {
-    reveal smc_finalise_premium;
     pagedb := pagedb_in;
-    ghost var specResult := smc_finalise_premium(pagedb, as_page);
+    ghost var specResult := smc_finalise(pagedb, as_page);
 
     if (as_page >= const(KOM_SECURE_NPAGES)) {
         MOV(err, const(KOM_ERR_INVALID_ADDRSPACE));

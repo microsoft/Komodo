@@ -16,7 +16,7 @@ procedure kom_smc_remove_non_addr_success(
         SaneState(this);
     requires
         @page == OReg(R1) && @pagedb_base == OReg(R12) && @page_type == OReg(R5);
-        @as_page_va == OReg(R6);
+        @as_page_va == OReg(R9);
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         specErr(smc_remove(pagedb_in,page)) == KOM_ERR_SUCCESS;
@@ -28,11 +28,11 @@ procedure kom_smc_remove_non_addr_success(
         globals; mem; r7;
     ensures
         SmcProcedureInvariant(old(this), this);
-        pagedb == specPageDb(smc_remove_premium(pagedb_in, old(page)));
-        pageDbCorresponds(this.m, pagedb);
+        pagedb == specPageDb(smc_remove(pagedb_in, old(page)));
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
 {
-    reveal smc_remove_premium;
-    ghost var specResult := smc_remove_premium(pagedb_in, page);
+    ghost var specResult := smc_remove(pagedb_in, page);
+    removePreservesPageDBValidity(pagedb_in, page);
     ghost var specE := specErr(specResult);
     ghost var specD := specPageDb(specResult);
     ghost var as_page := pagedb_in[page].addrspace;
@@ -124,14 +124,14 @@ procedure kom_smc_remove(
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
     modifies
-        globals; mem; r5; r6; r7; r8;
+        globals; mem; r5; r6; r7; r8; r9;
     ensures
         SmcProcedureInvariant(old(this), this);
-        tuple(pagedb,err) == smc_remove_premium(pagedb_in, old(page));
-        pageDbCorresponds(this.m, pagedb);
+        tuple(pagedb,err) == smc_remove(pagedb_in, old(page));
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
 {
-    reveal smc_remove_premium;
-    ghost var specResult := smc_remove_premium(pagedb_in, page);
+    ghost var specResult := smc_remove(pagedb_in, page);
+    removePreservesPageDBValidity(pagedb_in, page);
     ghost var specE := specErr(specResult);
     ghost var specD := specPageDb(specResult);
     pagedb := pagedb_in;
@@ -198,36 +198,50 @@ procedure kom_smc_remove(
                 }
             } else {
                 assert pagedb[page] is PageDbEntryTyped;
-                ADD(r6, r5, const(PAGEDB_ENTRY_ADDRSPACE));
-                assert r6 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_ADDRSPACE;
-                LDRglobal(r6, PageDb(), pagedb_base, r6);
+
+                ADD(r9, r5, const(PAGEDB_ENTRY_ADDRSPACE));
+                assert r9 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_ADDRSPACE;
+                LDRglobal(r9, PageDb(), pagedb_base, r9);
                 ghost var as_page := pagedb[page].addrspace;
-                forall :: r6 == page_monvaddr(as_page) {
+                assert r9 == page_monvaddr(as_page) by {
                     reveal pageDbEntryCorresponds;
                     extractPageDbToAbstract(this.m, page);
                 }
 
-                forall :: pagedb[as_page] is PageDbEntryTyped &&
-                    pagedb[as_page].entry is Addrspace {
-                    reveal validPageDb;
-                }
+                assert pagedb[as_page] is PageDbEntryTyped &&
+                    pagedb[as_page].entry is Addrspace
+                    by { reveal validPageDb; }
                 //page_monvaddr_impl(r7,r6,r8);
-                LDR(r8,r6,const(ADDRSPACE_STATE));
-                forall :: r8 == pageDbAddrspaceStateVal(pagedb[as_page].entry.state)
-                {
+                LDR(r8,r9,const(ADDRSPACE_STATE));
+                assert r8 == pageDbAddrspaceStateVal(pagedb[as_page].entry.state)
+                by {
                     reveal pageContentsCorresponds;
                     reveal pageDbAddrspaceCorresponds;
                 }
-    
-                if ( r8 != const(KOM_ADDRSPACE_STOPPED) ) {
+
+                MOV(err, const(KOM_ERR_SUCCESS));
+                if ( r8 == const(KOM_ADDRSPACE_INIT) ) {
+                    assert pagedb[as_page].entry.state is InitState;
                     MOV(err, const(KOM_ERR_NOT_STOPPED));
-                    assert err == specE;
+                    assert specE == err;
+                } else if (r8 == const(KOM_ADDRSPACE_FINAL)) {
+                    assert pagedb[as_page].entry.state is FinalState;
+                    if( r6 != const(KOM_PAGE_SPARE) ){
+                        MOV(err, const(KOM_ERR_NOT_STOPPED));
+                        assert specE == err;
+                    } else {
+                        assert pagedb[page].entry is SparePage;
+                        assert specE == err;
+                    }
                 } else {
-                    assert specE == KOM_ERR_SUCCESS;
+                    assert pagedb[as_page].entry.state is StoppedState;
+                }
+
+                assert specE == err;
+                if (err == const(KOM_ERR_SUCCESS)) {
                     assert r5 == G_PAGEDB_ENTRY(page) + PAGEDB_ENTRY_TYPE;
-                    assert r6 == page_monvaddr(as_page);
-                    pagedb := kom_smc_remove_non_addr_success(page,pagedb_base,r5,r6,pagedb);
-                    MOV(err, const(KOM_ERR_SUCCESS));
+                    assert r9 == page_monvaddr(as_page);
+                    pagedb := kom_smc_remove_non_addr_success(page,pagedb_base,r5,r9,pagedb);
                 }
             }
         }

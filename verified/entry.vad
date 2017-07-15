@@ -1073,7 +1073,7 @@ procedure {:frame false} enclaveexecution_loop(
     modifies
         sp; globals;
     ensures
-        GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp()));
+        GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp(), PageDb()));
         StackPreserving(old(this), this);
         validEnclaveExecution(old(this), pagedb_in, this, pagedb, dispPg, steps);
         validPageDb(pagedb);
@@ -1097,7 +1097,7 @@ procedure {:frame false} enclaveexecution_loop(
             SaneState(loop0);
             SaneStateAfterException(this) && this.ok;
             ParentStackPreserving(old(this), this);
-            GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp()));
+            GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp(), PageDb()));
             validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
             finalDispatcher(pagedb, dispPg);
             this.conf.scr == old(this).conf.scr;

@@ -210,7 +210,7 @@ predicate validAddrspace(d: PageDb, n: PageNr)
         // XXX: sha trace invariants don't need to be trusted... move out of spec
         && IsCompleteSHA256Trace(addrspace.shatrace)
         && SHA256TraceIsCorrect(addrspace.shatrace)
-        && (addrspace.state.StoppedState? ||
+        && (addrspace.state.InitState? ==>
             |addrspace.shatrace.M| <= addrspace.refcount * (1 + PAGESIZE / (WORDSIZE * SHA_BLOCKSIZE)))
         && ConcatenateSeqs(addrspace.shatrace.M) == addrspace.measurement
 }
@@ -438,6 +438,6 @@ predicate {:opaque} pageDbDataCorresponds(p: PageNr, e: PageDbEntryTyped, page:m
 {
     var base := page_monvaddr(p);
     forall i | 0 <= i < PAGESIZE / WORDSIZE ::
-        (assert base + i*WORDSIZE in page;
-        e.contents[i] == page[base + i*WORDSIZE])
+        (assert WordOffset(base, i) in page;
+        e.contents[i] == page[WordOffset(base, i)])
 }

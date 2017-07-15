@@ -160,12 +160,12 @@ procedure {:frame false} kom_smc_init_dispatcher(
     ensures
         SmcProcedureInvariant(old(this),this);
         tuple(pagedb, err)
-            == old(smc_initDispatcher_premium(pagedb_in, disp_page, as_page, entrypoint));
-        pageDbCorresponds(this.m, pagedb);
+            == old(smc_initDispatcher(pagedb_in, disp_page, as_page, entrypoint));
+        validPageDb(pagedb) && pageDbCorresponds(this.m, pagedb);
 {
     ghost var specResult := smc_initDispatcher(pagedb_in, disp_page, as_page, entrypoint);
+    initDispatcherPreservesPageDBValidity(pagedb_in, disp_page, as_page, entrypoint);
     pagedb := pagedb_in;
-    reveal smc_initDispatcher_premium;
 
     if (as_page >= const(KOM_SECURE_NPAGES)) {
         MOV(err, const(KOM_ERR_INVALID_ADDRSPACE));
@@ -182,11 +182,12 @@ procedure {:frame false} kom_smc_init_dispatcher(
             ghost var entry := PageDbEntryTyped(as_page, e);
             pagedb := allocate_page(disp_page, as_page,
                                     const(KOM_PAGE_DISPATCHER),
-                                    pagedb_base, tmp, tmp2, err, pagedb, entry);
+                                    pagedb_base, tmp, tmp2, err, pagedb, entry, false);
 
             if (err == const(KOM_ERR_SUCCESS)) {
                 assert err == specErr(specResult);
                 assert pagedb == specPageDb(allocatePage(pagedb_in, disp_page, as_page, e));
+                allocatePagePreservesPageDBValidity(pagedb_in, disp_page, as_page, e);
 
                 assert pageDbCorrespondsExcluding(this.m, pagedb, disp_page);
                 assert pageDbEntryCorresponds(pagedb[disp_page],
