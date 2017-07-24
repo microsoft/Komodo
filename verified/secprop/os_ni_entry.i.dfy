@@ -197,8 +197,8 @@ lemma lemma_validEnclaveStep_os(s1: state, d1: PageDb, s1':state, d1': PageDb,
 lemma lemma_svcHandled_os_eqpdb(s: state, d: PageDb, dispPg: PageNr, d': PageDb)
     requires validPageDbs({d, d'}) && validDispatcherPage(d, dispPg)
     requires ValidState(s) && mode_of_state(s) != User
-    requires isReturningSvc(s)
-    requires d' == svcHandled(s, d, dispPg).1
+    requires isReturningSvc(s) && finalDispatcher(d, dispPg)
+    requires d' == svcHandled(s, d, dispPg).1 // XXX
     ensures os_eqpdb(d, d')
 {
 
@@ -211,6 +211,10 @@ lemma lemma_svcHandled_os_eqpdb(s: state, d: PageDb, dispPg: PageNr, d': PageDb)
         assert os_eqentry(d[dispPg].entry, d'[dispPg].entry);
     } else if( OperandContents(s, OReg(R0)) == KOM_SVC_VERIFY_STEP2) {
         assert d' == d;
+    } else if( OperandContents(s, OReg(R0)) == KOM_SVC_MAP_DATA) {
+    } else if( OperandContents(s, OReg(R0)) == KOM_SVC_UNMAP_DATA) {
+    } else if( OperandContents(s, OReg(R0)) == KOM_SVC_INIT_L2PTABLE) {
+        // XXX
     } else {
         assert d' == d;
     }
@@ -358,8 +362,7 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
 
     assert InsecureMemInvariant(s14, s24);
 
-    assert InsecureMemInvariant(r1, r2) by
-        { reveal validExceptionTransition(); }
+    assert InsecureMemInvariant(r1, r2);
     //-------------------------------------------------------------------------
 
     assert s13.conf.nondet == s23.conf.nondet by

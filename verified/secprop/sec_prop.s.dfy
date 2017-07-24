@@ -2,19 +2,19 @@ include "../smcapi.s.dfy"
 include "../pagedb.s.dfy"
 
 predicate valDispPage(d: PageDb, n: PageNr)
-    requires validPageDb(d)
+    requires wellFormedPageDb(d)
 {
     d[n].PageDbEntryTyped? && d[n].entry.Dispatcher?
 }
 
 predicate valAddrPage(d: PageDb, n: PageNr)
-    requires validPageDb(d)
+    requires wellFormedPageDb(d)
 {
     d[n].PageDbEntryTyped? && d[n].entry.Addrspace?
 }
 
 predicate pgInAddrSpc(d: PageDb, n: PageNr, a: PageNr)
-    requires validPageDb(d) && valAddrPage(d, a)
+    requires wellFormedPageDb(d) && valAddrPage(d, a)
 {
     d[n].PageDbEntryTyped? && d[n].addrspace == a
 }
@@ -42,7 +42,7 @@ predicate usr_regs_equiv(s1:state, s2:state)
 }
 
 //-----------------------------------------------------------------------------
-// Enclaves are NI with other Enclaves 
+// Enclave low-equivalence (or observational equivalence)
 //-----------------------------------------------------------------------------
 
 // Our equivalent of an enclave number is a dispatcher page.
@@ -50,7 +50,7 @@ predicate usr_regs_equiv(s1:state, s2:state)
 // Low-equivalence relation that relates two PageDbs that appear equivalent to 
 // an attacker that controls an enclave "atkr". 
 predicate {:opaque} enc_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
-    requires validPageDb(d1) && validPageDb(d2)
+    requires wellFormedPageDb(d1) && wellFormedPageDb(d2)
 {
     d1[atkr].PageDbEntryTyped? <==> d2[atkr].PageDbEntryTyped? &&
     (d1[atkr].PageDbEntryTyped? ==>
@@ -67,7 +67,7 @@ predicate {:opaque} enc_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
 }
 
 //-----------------------------------------------------------------------------
-// Confidentiality, Malicious OS
+// OS low-equivalence (or observational equivalence)
 //-----------------------------------------------------------------------------
 
 predicate os_eqentry(e1:PageDbEntryTyped, e2:PageDbEntryTyped)
