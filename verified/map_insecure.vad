@@ -142,10 +142,8 @@ procedure kom_smc_map_insecure(
                     MOV(r6, mapping);
                     mkl2pte_insecure(mapping, phys_page, abs_mapping, l2pte);
                     MOV(mapping, r6);
-                    assert r10 == mkL1Pte(d'[d'[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
-                    assert r10 == mkL1Pte(pagedb[pagedb[as_page].entry.l1ptnr].entry.l1pt[abs_mapping.l1index], 0);
                     pagedb := update_l2pte(as_page, mapping, phys_page, r10, r8,
-                                          r12, d', abs_mapping, l2pte);
+                                          d', abs_mapping, l2pte);
                     assert pagedb == updateL2Pte(d', old(as_page), abs_mapping, l2pte);
                     // FUTURE WORK: pagedb := kom_smc_map_measure(as_page, r2, mapping, pagedb);
                     assert pagedb == specPageDb(specResult);

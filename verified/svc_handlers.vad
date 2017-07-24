@@ -448,8 +448,8 @@ procedure svc_map_data_success(
         validSparePageForAS(pagedb, asPg, page);
         isValidMappingTarget'(pagedb, asPg, mapping) == KOM_ERR_SUCCESS;
         entryptr == AddressOfGlobal(PageDb()) + G_PAGEDB_ENTRY(page);
-        l1pte == mkL1Pte(pagedb[pagedb[asPg].entry.l1ptnr].entry.l1pt[
-                    wordToMapping(mapping).l1index], 0);
+        l1pte == page_monvaddr(pagedb[pagedb[asPg].entry.l1ptnr].entry.l1pt[
+                    wordToMapping(mapping).l1index].v);
     ensures
         SmcProcedureInvariant(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
@@ -471,7 +471,7 @@ procedure svc_map_data_success(
     ghost var l1pte_abs := fromJust(l1.l1pt[abs_mapping.l1index]);
     ghost var tmpst := this;
     assert l1pte_abs != old(page);
-    pagedb' := update_l2pte(asPg, mapping, page, l1pte, r7, r8,
+    pagedb' := update_l2pte(asPg, mapping, page, l1pte, r7,
                             pagedb', abs_mapping, l2pte);
     AllButOnePagePreserving(l1pte_abs, tmpst, this);
     assert pageDbCorresponds(this.m, pagedb');
@@ -557,6 +557,78 @@ procedure svc_map_data(
     }
 }
 
+procedure existing_va_ok(
+    ghost asPg: PageNr,
+    ghost pagedb: PageDb,
+    out operand err:reg, // r0
+    inout operand page:reg, // r1, trashed
+    inout operand mapva:reg, // r2, trashed
+    operand asva:reg, // r5
+    out operand l1:reg, // r6
+    out operand l2:reg // r7
+    )
+    reads
+        mem; globals;
+    modifies
+        r0; r1; r2; r3; r4; r5; r6; r7; r8;
+    requires/ensures
+        SaneState(this);
+    requires
+        @err == OReg(R0) && @page == OReg(R1) && @mapva == OReg(R2);
+        @asva == OReg(R5) && @l1 == OReg(R6) && @l2 == OReg(R7);
+        validPageDb(pagedb);
+        pageDbCorresponds(this.m, pagedb);
+        isAddrspace(pagedb, asPg) && pagedb[asPg].entry.state is FinalState;
+        asva == page_monvaddr(asPg);
+        validPageNr(page);
+    ensures
+        SmcProcedureInvariant(old(this), this);
+        if isExistingVAForDataPage(pagedb, asPg, old(mapva), old(page))
+        then err == KOM_ERR_SUCCESS
+            && l1 == page_monvaddr(pagedb[pagedb[asPg].entry.l1ptnr].entry.l1pt[l1indexFromMapping(mapva)].v)
+            && l2 == l2indexFromMapping(mapva)
+        else err == KOM_ERR_INVALID_MAPPING;
+{
+    MOV(err, const(KOM_ERR_INVALID_MAPPING));
+    ghost var abs_mapping := wordToMapping(mapva);
+    LSR(l1, mapva, 20); 
+    assert l1 == abs_mapping.l1index by { reveal wordToMapping; }
+    if (l1 < const(NR_L1PTES)) {
+        LSR(l2, mapva, 12);
+        AND(l2, l2, 0xff);
+        assert l2 == abs_mapping.l2index
+            by { reveal wordToMapping; assert l2 == l2indexFromMapping(mapva); }
+        if (l2 < const(NR_L2PTES)) {
+            LDR(r8, asva, const(ADDRSPACE_L1PT));
+
+            ghost var l1p := pagedb[asPg].entry.l1ptnr;
+            assert validL1PTPage(pagedb, l1p) by { reveal validPageDb; }
+            assert r8 == page_monvaddr(l1p)
+            by {
+                assert validAddrspacePage(pagedb, asPg);
+                reveal pageContentsCorresponds;
+                reveal pageDbAddrspaceCorresponds;
+            }
+
+            ghost var l1index := l1;
+            fetch_l1pte(r8, l1, r4, l1, pagedb, l1p);
+            assert l1 == 0 <==> pagedb[l1p].entry.l1pt[l1index] == Nothing;
+            if (l1 != 0) {
+                fetch_l2pte(asPg, mapva, l1, r4, pagedb);
+                // r4 := l2pte
+                page_paddr_impl(page, page, mapva);
+                if (r4 != 0) {
+                    LSR(r4, r4, const(PAGEBITS));
+                    LSR(page, page, const(PAGEBITS));
+                    if (r4 == page) {
+                        MOV(err, const(KOM_ERR_SUCCESS));
+                    }
+                }
+            }
+        }
+    }
+}
+
 procedure svc_unmap_data(
     ghost pagedb: PageDb,
     out operand err:reg, // r0
@@ -617,13 +689,28 @@ procedure svc_unmap_data(
                 assert pagedb[page]is PageDbEntryTyped
                     && pagedb[page].addrspace == asPg && pagedb[page].entry is DataPage;
 
-                // prep r2 with addr of page type so we can update it later
-                ADD(r2, r8, r4);
-                assert r2 == AddressOfGlobal(PageDb()) + G_PAGEDB_ENTRY(old(page));
+                // prep r3 with addr of page type so we can update it later
+                ADD(r3, r8, r4);
+                assert r3 == AddressOfGlobal(PageDb()) + G_PAGEDB_ENTRY(old(page));
+                // r4, r6, r7, r8 are free for use
 
-                assume false;
-                // TODO: check isExistingVAForDataPage, update PTE, update pagedb
-                // flush TLB
+                existing_va_ok(asPg, pagedb, err, page, mapva, r5, r6, r7);
+                if (err == const(KOM_ERR_SUCCESS)) {
+                    assert isExistingVAForDataPage(pagedb, asPg, old(mapva), old(page));
+                    // update page table
+                    pagedb' := update_l2pte(asPg, mapva, r6, r7, r4, pagedb,
+                                            wordToMapping(mapva), NoMapping);
+
+                    // update pagedb type
+                    MOV(r4, const(KOM_PAGE_SPARE));
+                    STRglobal(r4, PageDb(), r3, 0);
+                    pagedb' := updatePageEntry(pagedb', old(page), SparePage);
+
+                    // TODO: flush TLB
+                } else {
+                    assert !isExistingVAForDataPage(pagedb, asPg, old(mapva), old(page));
+                    assert err == KOM_ERR_INVALID_MAPPING;
+                }
             }
         }
     }

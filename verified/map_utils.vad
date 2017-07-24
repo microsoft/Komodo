@@ -16,7 +16,7 @@ procedure fetch_l1pte(
     requires/ensures
         SaneState(this);
     requires
-        DistinctRegOperands(set(@l1pt_va, @l1index, @tmp, @res), 4);
+        @tmp != @l1pt_va && @tmp != OSP && @res != OSP;
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
         validPageNr(l1pg) && pagedb[l1pg] is PageDbEntryTyped
@@ -35,8 +35,8 @@ procedure fetch_l1pte(
     lemma_LeftShift4(l1index);
     LSL(tmp, l1index, 4);
     LDR(res, l1pt_va, tmp);
-    assert res == MemContents(this.m, l1pteoffset(l1pt_va, l1index, 0));
-    assert res == mkL1Pte(pagedb[l1pg].entry.l1pt[l1index], 0);
+    assert res == MemContents(this.m, old(l1pteoffset(l1pt_va, l1index, 0)));
+    assert res == mkL1Pte(pagedb[l1pg].entry.l1pt[old(l1index)], 0);
     reveal BitOr;
 }
 

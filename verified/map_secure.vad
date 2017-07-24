@@ -67,8 +67,8 @@ procedure map_secure_update(
         isAddrspace(pagedb_in, as_page);
         isValidMappingTarget(pagedb_in, as_page, mapping) == KOM_ERR_SUCCESS;
         phys_page == 0 || physPageIsInsecureRam(phys_page);
-        l1pte == mkL1Pte(pagedb_in[pagedb_in[as_page].entry.l1ptnr].entry
-                            .l1pt[wordToMapping(mapping).l1index], 0);
+        l1pte == page_monvaddr(pagedb_in[pagedb_in[as_page].entry.l1ptnr].entry
+                            .l1pt[wordToMapping(mapping).l1index].v);
         abs_mapping == wordToMapping(mapping);
         allocatePageEntryValid(DataPage(contents));
         ap_ret == allocatePage(pagedb_in, page, as_page, DataPage(contents));
@@ -105,7 +105,7 @@ procedure map_secure_update(
     ghost var l1pte_abs := fromJust(l1.l1pt[abs_mapping.l1index]);
     ghost var tmpst := this;
     assert l1pte_abs != old(page);
-    pagedb := update_l2pte(as_page, mapping, page, l1pte, r8, r12,
+    pagedb := update_l2pte(as_page, mapping, page, l1pte, r8,
                           pagedb, abs_mapping, l2pte);
     AllButOnePagePreserving(l1pte_abs, tmpst, this);
     assert pageDbCorresponds(this.m, pagedb);
@@ -149,8 +149,8 @@ procedure map_secure_success(
             && (phys_page == 0 || physPageIsInsecureRam(phys_page));
         insecure_vaddr == (if phys_page == 0 then 0
                 else phys_page * PAGESIZE + KOM_DIRECTMAP_VBASE);
-        l1pte == mkL1Pte(pagedb_in[pagedb_in[as_page].entry.l1ptnr].entry
-                            .l1pt[wordToMapping(mapping).l1index], 0);
+        l1pte == page_monvaddr(pagedb_in[pagedb_in[as_page].entry.l1ptnr].entry
+                            .l1pt[wordToMapping(mapping).l1index].v);
     modifies
         globals; mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
     ensures
