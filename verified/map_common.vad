@@ -72,8 +72,7 @@ procedure update_l2pte(
     operand mapping:reg,
     operand l2pte:reg,
     operand l1pte:reg,
-    //out operand tmp1:reg,
-    out operand tmp2:reg,
+    out operand tmp:reg,
     ghost d:PageDb,
     ghost abs_mapping:Mapping,
     ghost l2pte_abs:L2PTE
@@ -81,12 +80,8 @@ procedure update_l2pte(
     requires/ensures
         SaneState(this);
     requires
-        @l2pte == OReg(R1) || @l2pte == OReg(R2);
-        @mapping == OReg(R3);
-        @l1pte == OReg(R4) || @l1pte == OReg(R10);
-        //@tmp1 == OReg(R8) && @tmp2 == OReg(R12);
-        //@tmp1 != @mapping && @tmp1 != @l2pte && @tmp1 != @l1pte && @tmp1 != @tmp2 && @tmp1 != OSP;
-        @tmp2 != @mapping && @tmp2 != @l2pte && @tmp2 != @l1pte && @tmp2 != OSP;
+        @mapping != @l2pte && @mapping != @l1pte && @l2pte != @l1pte;
+        @tmp != @mapping && @tmp != @l2pte && @tmp != @l1pte && @tmp != OSP;
         validPageDb(d) && wellFormedPageDb(d);
         abs_mapping.l1index == wordToMapping(mapping).l1index;
         abs_mapping.l2index == wordToMapping(mapping).l2index;
@@ -121,24 +116,24 @@ procedure update_l2pte(
     d' := updateL2Pte(d, as_page, abs_mapping, l2pte_abs);
     assert l1pte == page_monvaddr(l1pte_abs);
 
-    LSR(tmp2, mapping, 12);
-    AND(tmp2, tmp2, 0xff);
-    assert tmp2 == abs_mapping.l2index
+    LSR(tmp, mapping, 12);
+    AND(tmp, tmp, 0xff);
+    assert tmp == abs_mapping.l2index
     by {
         reveal wordToMapping;
-        assert tmp2 == l2indexFromMapping(mapping);
+        assert tmp == l2indexFromMapping(mapping);
     }
-    lemma_LeftShift2(tmp2);
-    LSL(tmp2, tmp2, 2);
-    assert tmp2 == WordsToBytes(abs_mapping.l2index);
-    assert addrInPage(l1pte + tmp2, l1pte_abs);
+    lemma_LeftShift2(tmp);
+    LSL(tmp, tmp, 2);
+    assert tmp == WordsToBytes(abs_mapping.l2index);
+    assert addrInPage(l1pte + tmp, l1pte_abs);
 
     assert l2pte == mkL2Pte(l2pte_abs);
-    STR(l2pte, l1pte, tmp2);
+    STR(l2pte, l1pte, tmp);
 
     assert pageDbCorrespondsOnly(this.m, d', l1pte_abs)
     by {
-        lemma_update_l2pte_helper1(old(this), this, as_page, mapping, l1pte + tmp2,
+        lemma_update_l2pte_helper1(old(this), this, as_page, mapping, l1pte + tmp,
             l2pte, d, d', abs_mapping, l1pte_abs, l2pte_abs);
         ghost var p := l1pte_abs;
         assert pageDbEntryCorresponds(d'[p], extractPageDbEntry(this.m, p))
