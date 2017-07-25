@@ -561,12 +561,39 @@ procedure svc_map_data(
 lemma lemma_PageBase_Shift(x:word, y:word)
     ensures RightShift(x, PAGEBITS) == RightShift(y, PAGEBITS)
         <==> PageBase(x) == PageBase(y)
-{/*TODO*/}
+{
+    calc {
+        PageBase(x);
+        { reveal PageBase(); }
+        BitwiseMaskHigh(x, PAGEBITS);
+        x / PAGESIZE * PAGESIZE;
+        { lemma_RightShift12(x); }
+        RightShift(x, PAGEBITS) * PAGESIZE;
+    }
+
+    calc {
+        PageBase(y);
+        { reveal PageBase(); }
+        BitwiseMaskHigh(y, PAGEBITS);
+        y / PAGESIZE * PAGESIZE;
+        { lemma_RightShift12(y); }
+        RightShift(y, PAGEBITS) * PAGESIZE;
+    }
+}
 
 lemma lemma_PageAligned_PageBase(x:word)
     requires PageAligned(x)
     ensures PageBase(x) == x
-{/*TODO*/}
+{
+    calc {
+        PageBase(x);
+        { reveal PageBase(); }
+        BitwiseMaskHigh(x, PAGEBITS);
+        x / PAGESIZE * PAGESIZE;
+        { reveal PageAligned(); }
+        x;
+    }
+}
 
 lemma lemma_read_l2pte_secure(d: PageDb, asPg: PageNr, pte:L2PTE, ptew:word,
                               page:PageNr)

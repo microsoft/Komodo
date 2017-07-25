@@ -599,7 +599,7 @@ procedure smc_enter_err(
 }
 
 #verbatim
-lemma lemma_PageAligned_PageBase(x:word, y:word)
+lemma lemma_PageAligned_PageBase_invariant(x:word, y:word)
     requires PageAligned(x)
     requires y == BitwiseOr(x, 0x6a)
     ensures PageBase(y) == x
@@ -715,7 +715,7 @@ procedure switch_addrspace(
     assert this.conf.ttbr0.ptbase == page_paddr(l1p) by {
         assert this.conf.ttbr0.ptbase == PageBase(r10);
         assert r10 == BitwiseOr(page_paddr(l1p), 0x6a);
-        lemma_PageAligned_PageBase(page_paddr(l1p), r10);
+        lemma_PageAligned_PageBase_invariant(page_paddr(l1p), r10);
     }
 
     // flush non-global TLB entries with ASID 0 (the only one we use)
