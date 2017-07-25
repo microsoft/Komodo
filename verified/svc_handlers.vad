@@ -557,6 +557,46 @@ procedure svc_map_data(
     }
 }
 
+#verbatim
+lemma lemma_PageBase_Shift(x:word, y:word)
+    ensures RightShift(x, PAGEBITS) == RightShift(y, PAGEBITS)
+        <==> PageBase(x) == PageBase(y)
+{/*TODO*/}
+
+lemma lemma_PageAligned_PageBase(x:word)
+    requires PageAligned(x)
+    ensures PageBase(x) == x
+{/*TODO*/}
+
+lemma lemma_read_l2pte_secure(d: PageDb, asPg: PageNr, pte:L2PTE, ptew:word,
+                              page:PageNr)
+    requires PhysBase() == KOM_DIRECTMAP_VBASE
+    requires !mkAbsPTE(pte).Nothing?
+    requires ptew == mkL2Pte(pte)
+    requires wellFormedPageDb(d) && validL2PTE(d, asPg, pte)
+    ensures (RightShift(ptew, PAGEBITS) == RightShift(page_paddr(page), PAGEBITS))
+        <==> (pte.SecureMapping? && pte.page == page)
+{
+    assert WordAsBits(PAGEBITS) == 12 by { reveal WordAsBits(); }
+    lemma_l2ptesmatch(pte);
+    assert ExtractAbsL2PTE(ptew) == mkAbsPTE(pte);
+    assert mkAbsPTE(pte).v.phys == PageBase(ptew);
+    lemma_PageBase_Shift(ptew, page_paddr(page));
+    lemma_PageAligned_PageBase(page_paddr(page));
+    if RightShift(ptew, PAGEBITS) == RightShift(page_paddr(page), PAGEBITS) {
+        if pte.InsecureMapping? {
+            assert PageBase(ptew) == pte.insecurePage * PAGESIZE;
+            assert PageBase(ptew) == page_paddr(page);
+            assert physPageIsInsecureRam(pte.insecurePage);
+            assert validPageNr(page);
+            assert false;
+        } else {
+            assert pte.SecureMapping? && pte.page == page;
+        }
+    }
+}
+#endverbatim
+
 procedure existing_va_ok(
     ghost asPg: PageNr,
     ghost pagedb: PageDb,
@@ -584,25 +624,33 @@ procedure existing_va_ok(
     ensures
         SmcProcedureInvariant(old(this), this);
         if isExistingVAForDataPage(pagedb, asPg, old(mapva), old(page))
-        then err == KOM_ERR_SUCCESS
-            && l1 == page_monvaddr(pagedb[pagedb[asPg].entry.l1ptnr].entry.l1pt[l1indexFromMapping(mapva)].v)
-            && l2 == l2indexFromMapping(mapva)
+        then
+            let l1pt := pagedb[pagedb[asPg].entry.l1ptnr].entry.l1pt in
+            err == KOM_ERR_SUCCESS
+            && l1 == page_monvaddr(l1pt[l1indexFromMapping(old(mapva))].v)
+            && l2 == l2indexFromMapping(old(mapva))
         else err == KOM_ERR_INVALID_MAPPING;
 {
-    MOV(err, const(KOM_ERR_INVALID_MAPPING));
     ghost var abs_mapping := wordToMapping(mapva);
+    ghost var l1index := abs_mapping.l1index;
+    ghost var l2index := abs_mapping.l2index;
+    ghost var l1p := pagedb[asPg].entry.l1ptnr;
+    assert validL1PTPage(pagedb, l1p) by { reveal validPageDb; }
+    ghost var l1pt := pagedb[l1p].entry.l1pt;
+
+    MOV(err, const(KOM_ERR_INVALID_MAPPING));
+
     LSR(l1, mapva, 20); 
-    assert l1 == abs_mapping.l1index by { reveal wordToMapping; }
+    assert l1 == l1index by { reveal wordToMapping; }
+
     if (l1 < const(NR_L1PTES)) {
         LSR(l2, mapva, 12);
         AND(l2, l2, 0xff);
-        assert l2 == abs_mapping.l2index
+        assert l2 == l2index
             by { reveal wordToMapping; assert l2 == l2indexFromMapping(mapva); }
         if (l2 < const(NR_L2PTES)) {
             LDR(r8, asva, const(ADDRSPACE_L1PT));
 
-            ghost var l1p := pagedb[asPg].entry.l1ptnr;
-            assert validL1PTPage(pagedb, l1p) by { reveal validPageDb; }
             assert r8 == page_monvaddr(l1p)
             by {
                 assert validAddrspacePage(pagedb, asPg);
@@ -610,17 +658,28 @@ procedure existing_va_ok(
                 reveal pageDbAddrspaceCorresponds;
             }
 
-            ghost var l1index := l1;
             fetch_l1pte(r8, l1, r4, l1, pagedb, l1p);
-            assert l1 == 0 <==> pagedb[l1p].entry.l1pt[l1index] == Nothing;
+            assert l1 == 0 <==> l1pt[l1index] == Nothing;
             if (l1 != 0) {
-                fetch_l2pte(asPg, mapva, l1, r4, pagedb);
-                // r4 := l2pte
-                page_paddr_impl(page, page, mapva);
-                if (r4 != 0) {
+                ghost var l1pte_abs := fromJust(l1pt[l1index]);
+                fetch_l2pte(asPg, mapva, l1, r4, pagedb); // r4 := l2pte
+                ghost var ptew := r4;
+                ghost var l2pt := pagedb[l1pte_abs].entry.l2pt;
+                assert validL2PTable(pagedb, asPg, l2pt)
+                    by { reveal validPageDb; }
+                ghost var l2pte_abs := l2pt[l2index];
+                AND(r5, r4, 3);
+                lemma_read_l2pte_zero(l2pte_abs);
+                if (r5 != 0) {
+                    assert !(mkAbsPTE(l2pte_abs) is Nothing);
+                    assert l2pte_abs is SecureMapping || l2pte_abs is InsecureMapping;
+                    page_paddr_impl(page, page, mapva);
                     LSR(r4, r4, const(PAGEBITS));
                     LSR(page, page, const(PAGEBITS));
+                    lemma_read_l2pte_secure(pagedb, asPg, l2pte_abs, ptew, old(page));
                     if (r4 == page) {
+                        assert isExistingVAForDataPage(pagedb, asPg, old(mapva),
+                                                       old(page));
                         MOV(err, const(KOM_ERR_SUCCESS));
                     }
                 }
