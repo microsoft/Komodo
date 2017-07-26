@@ -165,6 +165,7 @@ function svcUnmapData(d:PageDb, asPg:PageNr, page:word, mapVA:word) : (PageDb, w
         // revert back to a spare page, and remove the PTE
         var d1 := updateL2Pte(d, asPg, wordToMapping(mapVA), NoMapping);
         var d2 := updatePageEntry(d1, page, SparePage);
+        // TODO: TLB flush!
         (d2, KOM_ERR_SUCCESS)
 }
 

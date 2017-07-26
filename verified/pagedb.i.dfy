@@ -250,7 +250,7 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
 }
 
 function ARM_L1PTE(paddr: word): word
-    requires paddr % ARM_L2PTABLE_BYTES == 0
+    //requires paddr % ARM_L2PTABLE_BYTES == 0
     //ensures ValidAbsL1PTEWord(ARM_L1PTE(paddr))
 {
     BitwiseOr(paddr, 1) // type = 1, pxn = 0, ns = 0, domain = 0

@@ -11,14 +11,6 @@ include "memset.vad"
 include "map_utils.vad"
 
 #verbatim
-lemma pa_implies_modl2p(p:word)
-    requires PageAligned(p)
-    ensures  p % ARM_L2PTABLE_BYTES == 0
-{
-    assert p % PAGESIZE == 0 by { reveal PageAligned(); }
-    lemma_PageAlignedImplies1KAligned(p);
-}
-
 lemma SameEntriesImpliesPageDbCorresponds(s:memstate, p: PageNr,
                                           db1: PageDb, db2: PageDb)
     requires SaneMem(s)
@@ -44,6 +36,18 @@ lemma lemma_SecurePage(pagebase:word)
     assert lower <= pagebase < upper;
     assert pagebase + PAGESIZE <= upper;
 }
+
+lemma lemma_ARM_L1PTE_Dual_n(paddr: word, n: nat)
+    requires PageAligned(paddr)
+    requires 0 <= n < 4
+    ensures isUInt32(paddr + n * ARM_L2PTABLE_BYTES)
+    ensures ARM_L1PTE(paddr + n * ARM_L2PTABLE_BYTES)
+        == paddr + n * ARM_L2PTABLE_BYTES + 1
+{
+    assert paddr % PAGESIZE == 0 by { reveal PageAligned(); }
+    lemma_PageAlignedImplies1KAligned(paddr);
+    lemma_ARM_L1PTE_Dual(paddr + n * ARM_L2PTABLE_BYTES);
+}
 #endverbatim
 
 // updates portion of install_l1ptes
@@ -55,64 +59,67 @@ procedure install_l1ptes'(
     requires/ensures
         SaneState(this);
     requires
-        @l1base == OReg(R7) && @l2base == OReg(R4) && @l1index == OReg(R5);
+        @l1base != @l2base && @l2base != @l1index && @l1base != @l1index;
+        @l2base != OSP && @l1index != OSP;
         PageAligned(l1base) && address_is_secure(l1base);
         validPageNr(l2pg) && l2base == page_paddr(l2pg);
         0 <= l1index < NR_L1PTES;
     modifies
         mem;
     ensures
-        SmcProcedureInvariant(old(this),this);
+        SmcProcedureInvariant(old(this), this);
         ValidMemWords(WordOffset'(old(l1base), old(l1index) * 4), 4);
-        MemPreservingExcept(old(this), this, WordOffset(old(l1base), 4 * old(l1index)),
+        MemPreservingExcept(old(this), this,
+                            WordOffset(old(l1base), 4 * old(l1index)),
                             WordOffset(old(l1base), 4 * (old(l1index) + 1)));
         forall i :: 0 <= i < 4 ==>
             MemContents(this.m, WordOffset(old(l1base), old(l1index) * 4 + i))
                 == mkL1Pte(Just(l2pg), i);
 {
     lemma_SecurePage(l1base);
+    ghost var baseoffset := WordsToBytes(old(l1index) * 4);
 
     lemma_LeftShift4(l1index);
     LSL(l1index, l1index, 4);
-    assert l1index == old(l1index) * 16;
-    assert WordAligned(l1index) by { reveal WordAligned; }
+    assert l1index == baseoffset;
 
-    pa_implies_modl2p(old(l2base));
-    lemma_ARM_L1PTE_Dual(old(l2base));
+    lemma_ARM_L1PTE_Dual_n(old(l2base), 0);
     ORR(l2base, l2base, 1);
     assert l2base == mkL1Pte(Just(l2pg), 0);
     lemma_WordAlignedAdd(l1base, l1index);
     STR(l2base, l1base, l1index);
 
-    assert RegPreservingExcept(old(this),this,set(@l1index, @l2base));
+    assert l1base == old(l1base);
 
     ADD(l1index, l1index, const(WORDSIZE));
-    assert l1index == WordAlignedAdd(old(l1index) * 16, WordsToBytes(1));
-    lemma_ARM_L1PTE_Dual(old(l2base) + 1 * ARM_L2PTABLE_BYTES);
+    assert l1index == WordOffset(baseoffset, 1);
+    lemma_ARM_L1PTE_Dual_n(old(l2base), 1);
     ADD(l2base, l2base, const(ARM_L2PTABLE_BYTES));
     assert l2base == mkL1Pte(Just(l2pg), 1);
     lemma_WordAlignedAdd(l1base, l1index);
     STR(l2base, l1base, l1index);
 
-    assert RegPreservingExcept(old(this),this,set(@l1index, @l2base));
+    assert l1base == old(l1base);
 
     ADD(l1index, l1index, const(WORDSIZE));
-    assert l1index == WordAlignedAdd(old(l1index) * 16, WordsToBytes(2));
-    lemma_ARM_L1PTE_Dual(old(l2base) + 2 * ARM_L2PTABLE_BYTES);
+    assert l1index == WordOffset(baseoffset, 2);
+    lemma_ARM_L1PTE_Dual_n(old(l2base), 2);
     ADD(l2base, l2base, const(ARM_L2PTABLE_BYTES));
     assert l2base == mkL1Pte(Just(l2pg), 2);
     lemma_WordAlignedAdd(l1base, l1index);
     STR(l2base, l1base, l1index);
 
-    assert RegPreservingExcept(old(this),this,set(@l1index, @l2base));
+    assert l1base == old(l1base);
 
     ADD(l1index, l1index, const(WORDSIZE));
-    assert l1index == WordAlignedAdd(old(l1index) * 16, WordsToBytes(3));
-    lemma_ARM_L1PTE_Dual(old(l2base) + 3 * ARM_L2PTABLE_BYTES);
+    assert l1index == WordOffset(baseoffset, 3);
+    lemma_ARM_L1PTE_Dual_n(old(l2base), 3);
     ADD(l2base, l2base, const(ARM_L2PTABLE_BYTES));
     assert l2base == mkL1Pte(Just(l2pg), 3);
     lemma_WordAlignedAdd(l1base, l1index);
     STR(l2base, l1base, l1index);
+
+    assert l1base == old(l1base);
 }
 
 procedure install_l1ptes(
@@ -126,8 +133,9 @@ procedure install_l1ptes(
     requires/ensures
         SaneState(this);
     requires
-        @l1pt_va == OReg(R7) && @l2_pg == OReg(R4) && @l1index == OReg(R5)
-            && @tmp == OReg(R8);
+        @l1pt_va != @l2_pg && @l1index != @l2_pg && @tmp != @l2_pg
+            && @l1pt_va != @l1index && @tmp != @l1index && @tmp != @l1pt_va;
+        @l2_pg != OSP && @l1index != OSP && @tmp != OSP;
         wellFormedPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         validAddrspacePage(pagedb_in, as_pg) && !stoppedAddrspace(pagedb_in[as_pg]);
@@ -195,25 +203,33 @@ procedure install_l1ptes(
 
 procedure init_l2ptable_success(
     inout operand l2_pg:reg, // trashed
-    operand as_pg:reg,
+    operand l1ptva:reg,
     inout operand l1index:reg, // trashed
     out operand tmp1:reg,
     out operand tmp2:reg,
     out operand tmp3:reg,
     ghost pagedb_in: PageDb,
+    ghost asPg:PageNr,
     ghost l1pg: PageNr) returns (ghost pagedb: PageDb)
     requires/ensures
         SaneState(this);
     requires
-        @l2_pg == OReg(R4) && @as_pg == OReg(R2) && @l1index == OReg(R5);
-        @tmp1 == OReg(R6) && @tmp2 == OReg(R7) && @tmp3 == OReg(R8);
+        //@l2_pg == OReg(R4) && @l1ptva == OReg(R2) && @l1index == OReg(R5);
+        //@tmp1 == OReg(R6) && @tmp2 == OReg(R7) && @tmp3 == OReg(R8);
+        l2_pg != l1ptva && @l2_pg != @l1index && @l2_pg != @tmp1 && @l2_pg != @tmp2
+            && @l2_pg != @tmp3 && @l1index != @l1ptva && @l1index != @tmp1
+             && @l1index != @tmp2 && @l1index != @tmp3 && @tmp1 != @l1ptva
+             && @tmp1 != @tmp2 && @tmp1 != @tmp3 && @tmp2 != @l1ptva
+             && @tmp2 != @tmp3 && @tmp3 != @l1ptva;
+        @l2_pg != OSP && @l1index != OSP && @tmp1 != OSP && @tmp2 != OSP && @tmp3 != OSP;
         validPageNr(l2_pg);
         0 <= l1index < NR_L1PTES;
         wellFormedPageDb(pagedb_in);
-        validAddrspacePage(pagedb_in, as_pg) && !stoppedAddrspace(pagedb_in[as_pg]);
-        l1pg == pagedb_in[as_pg].entry.l1ptnr;
+        validAddrspacePage(pagedb_in, asPg) && !stoppedAddrspace(pagedb_in[asPg]);
+        l1pg == pagedb_in[asPg].entry.l1ptnr;
+        l1ptva == page_monvaddr(l1pg);
         pagedb_in[l1pg] is PageDbEntryTyped && pagedb_in[l1pg].entry is L1PTable;
-        pagedb_in[l2_pg] == PageDbEntryTyped(as_pg, L2PTable(SeqRepeat(NR_L2PTES, NoMapping)));
+        pagedb_in[l2_pg] == PageDbEntryTyped(asPg, L2PTable(SeqRepeat(NR_L2PTES, NoMapping)));
         pageDbCorrespondsExcluding(this.m, pagedb_in, l2_pg);
         pageDbEntryCorresponds(pagedb_in[l2_pg], extractPageDbEntry(this.m, l2_pg));
     reads
@@ -249,30 +265,15 @@ procedure init_l2ptable_success(
     assert pageDbCorresponds(this.m, pagedb);
     ghost var tmpstate := this;
 
-    // update L1 PTE
-    page_monvaddr_impl(tmp1, as_pg, tmp2);
-    LDR(tmp2, tmp1, const(ADDRSPACE_L1PT));
-
-    assert as_pg == old(as_pg);
-    assert tmp2 == page_monvaddr(pagedb[as_pg].entry.l1ptnr)
-    by {
-        assert AllMemInvariant(tmpstate, this);
-        assert pageDbCorrespondsOnly(this.m, pagedb, as_pg);
-        assert validAddrspacePage(pagedb, as_pg);
-        reveal pageContentsCorresponds;
-        assert pageContentsCorresponds(as_pg, pagedb[as_pg],
-                                       extractPage(this.m, as_pg));
-        reveal pageDbAddrspaceCorresponds;
-    }
-
-    pagedb := install_l1ptes(tmp2, l2_pg, l1index, tmp3, pagedb, old(as_pg), l1pg);
+    // update L1 PTEs
+    pagedb := install_l1ptes(l1ptva, l2_pg, l1index, tmp1, pagedb, asPg, l1pg);
     AllButOnePagePreserving(l1pg, tmpstate, this);
 }
 
 procedure kom_smc_init_l2ptable(
-    operand pagenr:reg,
+    inout operand pagenr:reg,
     operand as_page:reg,
-    operand l1index:reg,
+    inout operand l1index:reg,
     operand pagedb_base:reg,
     out operand err:reg,
     ghost pagedb_in: PageDb) returns (ghost pagedb: PageDb)
@@ -361,14 +362,12 @@ procedure kom_smc_init_l2ptable(
 
                     pagedb := allocate_page(pagenr, as_page,
                                         const(KOM_PAGE_L2PTABLE),
-                                        pagedb_base, r4, r5, err, pagedb, entry, false);
+                                        pagedb_base, r5, r6, err, pagedb, entry, false);
 
                     assert err == specErr(specResult);
                     if (err == const(KOM_ERR_SUCCESS)) {
-                        MOV(r4, pagenr);
-                        MOV(r5, l1index);
-                        pagedb := init_l2ptable_success(r4, as_page, r5, r6, r7, r8,
-                                                        pagedb, l1pg);
+                        pagedb := init_l2ptable_success(pagenr, r4, l1index, r6, r7, r8,
+                                                        pagedb, old(as_page), l1pg);
                         assert pagedb == specPageDb(specResult);
                     }
                 }
