@@ -966,19 +966,36 @@ procedure svc_init_l2ptable(
                 if (r7 != 0) {
                     assert l1indexInUse(pagedb, asPg, old(l1index));
                     MOV(err, const(KOM_ERR_ADDRINUSE));
-                    assert err == specErr(specResult);
+                    assert err == specErr;
                 } else {
                     assert !l1indexInUse(pagedb, asPg, old(l1index));
 
-                    var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
-                    var pagedb1 := updatePageEntry(pagedb, page, l2pt);
-
                     // update pagedb entry type
+                    ghost var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
+                    ghost var pagedb1 := updatePageEntry(pagedb, page, l2pt);
                     MOV(r6, const(KOM_PAGE_L2PTABLE));
                     STRglobal(r6, PageDb(), r3, 0);
+                    assert pageDbEntryCorresponds(pagedb1[page],
+                                                  extractPageDbEntry(this.m, page))
+                    by {
+                        reveal pageDbEntryCorresponds;
+                        extractPageDbToAbstract(this.m, page);
+                    }
+                    forall p :| validPageNr(p) && p != page
+                        :: pageDbCorrespondsOnly(this.m, pagedb1, p)
+                    {
+                        assert pagedb[p] == pagedb1[p];
+                        assert old(this).m.addresses == this.m.addresses;
+                        assert extractPage(old(this).m, p) == extractPage(this.m, p);
+                        assert extractPageDbEntry(old(this).m, p)
+                            == extractPageDbEntry(this.m, p);
+                    }
 
                     // zero page and install l1 pte
-                    pagedb' := init_l2ptable_success(page, asPg, l1index, r6, r7, r8, pagedb1, l1pg);
+                    pagedb' := init_l2ptable_success(page, r4, l1index, r6,
+                                                     pagedb1, asPg, l1pg);
+                    MOV(err, const(KOM_ERR_SUCCESS));
+                    assert pagedb' == specDb && err == specErr;
                 }
             }
         }

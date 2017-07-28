@@ -124,8 +124,8 @@ procedure install_l1ptes'(
 
 procedure install_l1ptes(
     operand l1pt_va:addr,
-    inout operand l2_pg:reg,
-    inout operand l1index:reg,
+    inout operand l2_pg:reg, // updated: page_paddr(l2_pg)
+    inout operand l1index:reg, // trashed
     out operand tmp:reg,
     ghost pagedb_in:PageDb,
     ghost as_pg:PageNr,
@@ -135,15 +135,15 @@ procedure install_l1ptes(
     requires
         @l1pt_va != @l2_pg && @l1index != @l2_pg && @tmp != @l2_pg
             && @l1pt_va != @l1index && @tmp != @l1index && @tmp != @l1pt_va;
-        @l2_pg != OSP && @l1index != OSP && @tmp != OSP;
+        @l1index != OSP && @tmp != OSP;
         wellFormedPageDb(pagedb_in);
-        pageDbCorresponds(this.m, pagedb_in);
         validAddrspacePage(pagedb_in, as_pg) && !stoppedAddrspace(pagedb_in[as_pg]);
         l1pg == pagedb_in[as_pg].entry.l1ptnr;
         pagedb_in[l1pg] is PageDbEntryTyped && pagedb_in[l1pg].entry is L1PTable;
         l1pt_va == page_monvaddr(l1pg);
-        validPageNr(l2_pg);
+        validPageNr(l2_pg) && l2_pg != l1pg;
         0 <= l1index < NR_L1PTES;
+        pageDbCorrespondsExcluding(this.m, pagedb_in, l2_pg);
     reads
         globals;
     modifies
@@ -153,7 +153,8 @@ procedure install_l1ptes(
         MemPreservingExcept(old(this),this, l1pt_va + old(l1index) * 16,
                             l1pt_va + (old(l1index) + 1) * 16);
         pagedb == installL1PTEInPageDb(pagedb_in, l1pg, old(l2_pg), old(l1index));
-        pageDbCorresponds(this.m, pagedb);
+        pageDbCorrespondsExcluding(this.m, pagedb, old(l2_pg));
+        l2_pg == page_paddr(old(l2_pg));
 {
     pagedb := pagedb_in;
 
@@ -168,8 +169,9 @@ procedure install_l1ptes(
 
     ghost var l2base := page_paddr(l2_pg);
     page_paddr_impl(l2_pg, l2_pg, tmp);
-    assert l2_pg == l2base;
-    install_l1ptes'(l1pt_va, l2_pg, l1index, old(l2_pg));
+    MOV(tmp, l2_pg);
+    assert l2_pg == tmp == l2base;
+    install_l1ptes'(l1pt_va, tmp, l1index, old(l2_pg));
 
     ghost var pg := extractPage(this.m, l1pg);
     assert pageDbL1PTableCorresponds(l1pg, newl1pt, pg)
@@ -193,7 +195,8 @@ procedure install_l1ptes(
         reveal pageDbEntryCorresponds;
     }
 
-    forall p :| validPageNr(p) && p != l1pg :: pageDbCorrespondsOnly(this.m, pagedb, p)
+    forall p :| validPageNr(p) && p != l1pg && p != old(l2_pg)
+        :: pageDbCorrespondsOnly(this.m, pagedb, p)
     {
         AllButOnePagePreserving(l1pg, old(this), this);
         assert pageDbCorrespondsOnly(this.m, pagedb_in, p);
@@ -203,25 +206,18 @@ procedure install_l1ptes(
 
 procedure init_l2ptable_success(
     inout operand l2_pg:reg, // trashed
-    operand l1ptva:reg,
+    inout operand l1ptva:reg, // trashed
     inout operand l1index:reg, // trashed
-    out operand tmp1:reg,
-    out operand tmp2:reg,
-    out operand tmp3:reg,
+    out operand tmp:reg,
     ghost pagedb_in: PageDb,
     ghost asPg:PageNr,
     ghost l1pg: PageNr) returns (ghost pagedb: PageDb)
     requires/ensures
         SaneState(this);
     requires
-        //@l2_pg == OReg(R4) && @l1ptva == OReg(R2) && @l1index == OReg(R5);
-        //@tmp1 == OReg(R6) && @tmp2 == OReg(R7) && @tmp3 == OReg(R8);
-        l2_pg != l1ptva && @l2_pg != @l1index && @l2_pg != @tmp1 && @l2_pg != @tmp2
-            && @l2_pg != @tmp3 && @l1index != @l1ptva && @l1index != @tmp1
-             && @l1index != @tmp2 && @l1index != @tmp3 && @tmp1 != @l1ptva
-             && @tmp1 != @tmp2 && @tmp1 != @tmp3 && @tmp2 != @l1ptva
-             && @tmp2 != @tmp3 && @tmp3 != @l1ptva;
-        @l2_pg != OSP && @l1index != OSP && @tmp1 != OSP && @tmp2 != OSP && @tmp3 != OSP;
+        @l2_pg != @l1ptva && @l2_pg != @l1index && @l2_pg != @tmp
+            && @l1ptva != @l1index && @l1ptva != @tmp && @l1index != @tmp;
+        @l2_pg != OSP && @l1ptva != OSP && @l1index != OSP && @tmp != OSP;
         validPageNr(l2_pg);
         0 <= l1index < NR_L1PTES;
         wellFormedPageDb(pagedb_in);
@@ -244,30 +240,33 @@ procedure init_l2ptable_success(
 {
     pagedb := pagedb_in;
 
-    // update L2 page contents
-    page_monvaddr_impl(tmp1, l2_pg, tmp2);
-    MOV(tmp2, 0);
-    MOV(tmp3, const(PAGESIZE));
-    memset(tmp1, tmp2, tmp3);
+    // update L1 PTEs
+    pagedb := install_l1ptes(l1ptva, l2_pg, l1index, tmp, pagedb, asPg, l1pg);
 
-    ghost var pg := extractPage(this.m, l2_pg);
+    AllButOnePagePreserving(l1pg, old(this), this);
+    ghost var tmpstate := this;
+
+    // update L2 page contents
+    assert l2_pg == page_paddr(old(l2_pg));
+    ADD(l2_pg, l2_pg, const(KOM_DIRECTMAP_VBASE));
+    assert l2_pg == page_monvaddr(old(l2_pg));
+    MOV(tmp, 0);
+    MOV(l1ptva, const(PAGESIZE));
+    memset(l2_pg, tmp, l1ptva);
+
+    ghost var pg := extractPage(this.m, old(l2_pg));
     ghost var newl2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
-    assert pageDbCorrespondsOnly(this.m, pagedb, l2_pg)
+    assert pageDbCorrespondsOnly(this.m, pagedb, old(l2_pg))
     by {
-        assert pageDbL2PTableCorresponds(l2_pg, newl2pt, pg)
+        assert pageDbL2PTableCorresponds(old(l2_pg), newl2pt, pg)
         by {
-            assert forall m:addr :: addrInPage(m, l2_pg) ==> pg[m] == 0;
+            assert forall m:addr :: addrInPage(m, old(l2_pg)) ==> pg[m] == 0;
             reveal pageDbL2PTableCorresponds;
         }
         reveal pageContentsCorresponds;
     }
-    AllButOnePagePreserving(l2_pg, old(this), this);
+    AllButOnePagePreserving(old(l2_pg), tmpstate, this);
     assert pageDbCorresponds(this.m, pagedb);
-    ghost var tmpstate := this;
-
-    // update L1 PTEs
-    pagedb := install_l1ptes(l1ptva, l2_pg, l1index, tmp1, pagedb, asPg, l1pg);
-    AllButOnePagePreserving(l1pg, tmpstate, this);
 }
 
 procedure kom_smc_init_l2ptable(
@@ -287,7 +286,7 @@ procedure kom_smc_init_l2ptable(
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
     modifies
-        globals; mem; r4; r5; r6; r7; r8;
+        globals; mem; r4; r5; r6;
     ensures
         SmcProcedureInvariant(old(this),this);
         tuple(pagedb, err)
@@ -366,7 +365,7 @@ procedure kom_smc_init_l2ptable(
 
                     assert err == specErr(specResult);
                     if (err == const(KOM_ERR_SUCCESS)) {
-                        pagedb := init_l2ptable_success(pagenr, r4, l1index, r6, r7, r8,
+                        pagedb := init_l2ptable_success(pagenr, r4, l1index, r6,
                                                         pagedb, old(as_page), l1pg);
                         assert pagedb == specPageDb(specResult);
                     }
