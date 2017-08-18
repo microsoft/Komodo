@@ -52,7 +52,7 @@ predicate usr_regs_equiv(s1:state, s2:state)
 predicate {:opaque} enc_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
     requires wellFormedPageDb(d1) && wellFormedPageDb(d2)
 {
-    d1[atkr].PageDbEntryTyped? <==> d2[atkr].PageDbEntryTyped? &&
+    (d1[atkr].PageDbEntryTyped? <==> d2[atkr].PageDbEntryTyped?) &&
     (d1[atkr].PageDbEntryTyped? ==>
     (valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
     // The set of pages that belong to the enclave is the same in both 

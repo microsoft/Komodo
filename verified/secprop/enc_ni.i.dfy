@@ -83,7 +83,7 @@ lemma lemma_enc_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     }
     else {
         reveal enc_eqpdb();
-        assert e1' == KOM_ERR_INVALID; //XXX
+        assert e1' == KOM_ERR_INVALID;
         assert e2' == KOM_ERR_INVALID;
         assert d1' == d1;
         assert d2' == d2;
@@ -150,10 +150,6 @@ lemma lemma_mapSecure_enc_ni_both_go(
                 addrspacePage, abs_mapping, l2pte, atkr);
             contentsDivBlock(physPage, c1);
             contentsDivBlock(physPage, c2);
-            assert d1' == updateMeasurement(db1, addrspacePage, 
-                [KOM_SMC_MAP_SECURE, mapping], fromJust(c1));
-            assert d2' == updateMeasurement(db2, addrspacePage, 
-                [KOM_SMC_MAP_SECURE, mapping], fromJust(c2));
             lemma_updateMeasurement_ni(db1, db2, d1', d2', addrspacePage,
                 [KOM_SMC_MAP_SECURE, mapping], fromJust(c1), atkr);
             reveal enc_eqpdb();
@@ -219,7 +215,7 @@ lemma lemma_updateL2Pte_not_atkr(d:PageDb, a:PageNr, m: Mapping, l2e: L2PTE, d':
     requires validPageDb(d) && validPageDb(d')
     requires isAddrspace(d, a)
     requires validMapping(m,d,a)
-    requires d[a].entry.state.InitState? // XXX line below
+    requires d[a].entry.state.InitState?
     requires validL2PTE(d, a, l2e) 
     requires validL1PTable(d, a, d[d[a].entry.l1ptnr].entry.l1pt)
     requires d' == updateL2Pte(d, a, m, l2e)
