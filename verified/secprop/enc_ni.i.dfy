@@ -875,7 +875,7 @@ lemma lemma_updateL2Pte_enc_ni(d1: PageDb, d1': PageDb,
                                d2: PageDb, d2': PageDb,
                                a: PageNr, mapping: Mapping, l2e: L2PTE,
                                atkr: PageNr)
-    requires ni_reqs_weak_(d1, d1', d2, d2', atkr)
+    requires ni_reqs_(d1, d1', d2, d2', atkr)
     requires isAddrspace(d1, a) && isAddrspace(d2, a)
     requires validMapping(mapping, d1, a) && validMapping(mapping, d2, a)
     requires d1[a].entry.state.InitState? && d2[a].entry.state.InitState?

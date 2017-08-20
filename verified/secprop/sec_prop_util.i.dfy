@@ -86,21 +86,13 @@ predicate ni_reqs(s1: state, d1: PageDb, s1': state, d1': PageDb,
                   s2: state, d2: PageDb, s2': state, d2': PageDb,
                   atkr: PageNr)
 {
+    SaneConstants() &&
     ValidState(s1) && ValidState(s1') && 
     ValidState(s2) && ValidState(s2') &&
-    SaneConstants() &&
     validPageDb(d1) && validPageDb(d1') &&
     validPageDb(d2) && validPageDb(d2') &&
     valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
-    (forall n : PageNr :: d1[n].PageDbEntryFree? <==> d2[n].PageDbEntryFree?)
-    /*
-    SaneState(s1) && validPageDb(d1) && SaneState(s1') && validPageDb(d1') &&
-    SaneState(s2) && validPageDb(d2) && SaneState(s2') && validPageDb(d2') &&
-    pageDbCorresponds(s1.m, d1) && pageDbCorresponds(s1'.m, d1') &&
-    pageDbCorresponds(s2.m, d2) && pageDbCorresponds(s2'.m, d2') &&
-    valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
-    (forall n : PageNr :: d1[n].PageDbEntryFree? <==> d2[n].PageDbEntryFree?)
-    */
+    valAddrPage(d1', atkr) && valAddrPage(d2', atkr)
 }
 
 predicate ni_reqs_(d1: PageDb, d1': PageDb, d2: PageDb, d2': PageDb, atkr: PageNr)
@@ -108,17 +100,7 @@ predicate ni_reqs_(d1: PageDb, d1': PageDb, d2: PageDb, d2': PageDb, atkr: PageN
     validPageDb(d1) && validPageDb(d1') &&
     validPageDb(d2) && validPageDb(d2') &&
     valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
-    // This is a slight weakening of the security property...
-    (forall n : PageNr :: d1[n].PageDbEntryFree? <==> d2[n].PageDbEntryFree?)
-}
-
-// Note, the proofs seem to go faster if I don't just reference ni_reqs_weak_ 
-// in ni_reqs_
-predicate ni_reqs_weak_(d1: PageDb, d1': PageDb, d2: PageDb, d2': PageDb, atkr: PageNr)
-{
-    validPageDb(d1) && validPageDb(d1') &&
-    validPageDb(d2) && validPageDb(d2') &&
-    valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+    valAddrPage(d1', atkr) && valAddrPage(d2', atkr)
 }
 
 predicate same_call_args(s1:state, s2: state)

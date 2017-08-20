@@ -45,26 +45,40 @@ predicate usr_regs_equiv(s1:state, s2:state)
 // Enclave low-equivalence (or observational equivalence)
 //-----------------------------------------------------------------------------
 
-// Our equivalent of an enclave number is a dispatcher page.
+// Our equivalent of an enclave number is an address space page.
 
 // Low-equivalence relation that relates two PageDbs that appear equivalent to 
 // an attacker that controls an enclave "atkr". 
-predicate {:opaque} enc_eqpdb(d1:PageDb, d2: PageDb, atkr:PageNr)
+predicate {:opaque} enc_eqpdb(d1: PageDb, d2: PageDb, atkr: PageNr)
     requires wellFormedPageDb(d1) && wellFormedPageDb(d2)
 {
-    (d1[atkr].PageDbEntryTyped? <==> d2[atkr].PageDbEntryTyped?) &&
-    (d1[atkr].PageDbEntryTyped? ==>
-    (valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
-    // The set of pages that belong to the enclave is the same in both 
-    // states.
-    (forall n : PageNr :: pgInAddrSpc(d1, n, atkr) <==>
+    // An attacker (or victim in integrity case) enclave is some valid addrspace
+    valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
+    (forall n: PageNr ::
+        d1[n].PageDbEntryTyped? <==> d2[n].PageDbEntryTyped?) &&
+    (forall n: PageNr :: pgInAddrSpc(d1, n, atkr) <==>
         pgInAddrSpc(d2, n, atkr)) &&
-    // This together with two concrete states that refine d1, d2 ensure that 
-    // the contents of the pages that belong to the enclave are the same in 
-    // both states.
-    (forall n : PageNr | pgInAddrSpc(d1, n, atkr) ::
-        d1[n].entry == d2[n].entry)))
+    (forall n : PageNr | d1[n].PageDbEntryTyped? ::
+        (if(pgInAddrSpc(d1, n, atkr)) 
+            then d1[n].entry == d2[n].entry
+            else enc_eqentry(d1[n].entry, d2[n].entry)) &&
+        d1[n].addrspace == d2[n].addrspace)
 }
+
+predicate enc_eqentry(e1:PageDbEntryTyped, e2:PageDbEntryTyped)
+{
+    match e1
+        case Addrspace(_,_,_,_,_)
+            => e2.Addrspace? && e1.(shatrace := e2.shatrace) == e2 // shatrace is irrelevant
+        case L1PTable(_) => e1 == e2
+        case L2PTable(_) => e1 == e2
+        case Dispatcher(_,_,_,_,_) => 
+            e2.Dispatcher? && e2.entered == e1.entered &&
+                e2.entrypoint == e1.entrypoint
+        case DataPage(_) => e2.DataPage?
+        case SparePage => e2.SparePage?
+}
+
 
 //-----------------------------------------------------------------------------
 // OS low-equivalence (or observational equivalence)
