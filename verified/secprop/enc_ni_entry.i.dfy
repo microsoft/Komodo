@@ -227,7 +227,7 @@ lemma lemma_validEnclaveEx_oae( // XXX
     requires ValidState(s) && validPageDb(d) && ValidState(s') && 
         validPageDb(d') && SaneConstants()
     requires validPageNr(disp) && valDispPage(d, disp)
-    requires validPageNr(asp) && valAddrPage(d, asp)
+    requires validPageNr(asp) && valAddrPage(d, asp) // XXX need to loop this
     requires validPageNr(atkr) && valAddrPage(d, atkr)
     requires d[disp].addrspace == asp
     requires asp != atkr
@@ -250,7 +250,7 @@ lemma lemma_validEnclaveEx_oae( // XXX
     lemma_validEnclaveStep_oae(s, d, s5, d5, disp, asp, atkr, retToEnclave);
     if(retToEnclave) {
         lemma_validEnclaveExecution(s5, d5, s', d', disp, steps - 1);
-        lemma_validEnclaveEx_oae(s5, d5, s', d', disp, steps - 1, asp, atkr);
+        lemma_validEnclaveEx_oae(s5, d5, s', d', disp, steps - 1, asp, atkr); //XXX (loop above precond)
     } else {
         assert s' == s5 && d' == d5;
     }
@@ -292,15 +292,69 @@ lemma lemma_validEnclaveStepPrime_oae(
     ensures enc_eqpdb(d1, rd, atkr)
 {
     assert d4 == updateUserPagesFromState(s4, d1, disp);
-    assert enc_eqpdb(d1, d4, atkr) by 
+    assert enc_eqpdb(d1, d4, atkr) &&
+        valAddrPage(d4, atkr) && 
+        valAddrPage(d4, asp) && 
+        d4[disp].addrspace == asp by 
         { reveal updateUserPagesFromState(); reveal enc_eqpdb(); }
-    if (ret) {
+    if (ret) { 
         assert rd == svcHandled(s4, d4, disp).1;
+        var retRegs := svcHandled(s4, d4, disp).0;
+        lemma_svcHandled_oae(s4, d4, rd, disp, asp, atkr);
         reveal enc_eqpdb();
-        assert enc_eqpdb(d1, rd, atkr); // XXX probably needs lemma
-        // XXX
+        assert enc_eqpdb(d1, rd, atkr); 
     } else { // XXX
-        // This is the slow case if that matters.
+        reveal enc_eqpdb(); 
+    }
+}
+
+lemma lemma_svcHandled_oae(
+    s: state, d: PageDb, d': PageDb,
+    dispPg: PageNr, asp: PageNr, atkr: PageNr)
+    requires
+        ValidState(s) &&
+        validPageDb(d) && validPageDb(d') &&
+        validDispatcherPage(d, dispPg) &&
+        validPageNr(asp) && valAddrPage(d, asp) &&
+        validPageNr(atkr) && valAddrPage(d, atkr)
+    requires mode_of_state(s) != User
+    requires isReturningSvc(s) && finalDispatcher(d, dispPg)
+    requires d[dispPg].addrspace == asp
+    requires asp != atkr
+    requires d' == svcHandled(s, d, dispPg).1
+    ensures  enc_eqpdb(d, d', atkr)
+{
+    reveal enc_eqpdb();
+    var call := OperandContents(s, OReg(R0));
+    if(call == KOM_SVC_ATTEST) {
+    } else if (call == KOM_SVC_VERIFY_STEP0) {
+    } else if (call == KOM_SVC_VERIFY_STEP1) {
+    } else if (call == KOM_SVC_VERIFY_STEP2) {
+    } else if (call == KOM_SVC_MAP_DATA) {
+        var page, mapping := s.regs[R1], s.regs[R2];
+        var (retDb, retErr) := svcMapData(d, asp, page, mapping);
+        if(retErr == KOM_ERR_SUCCESS) {
+            assert !pgInAddrSpc(d, page, atkr);
+            assert enc_eqentry(d[page].entry, d'[page].entry);
+
+            var abs_mapping := wordToMapping(mapping);
+            var l1 := d[d[asp].entry.l1ptnr].entry;
+            var l1pte := fromJust(l1.l1pt[abs_mapping.l1index]);
+            assert !pgInAddrSpc(d, l1pte, atkr);
+            assert enc_eqentry(d[l1pte].entry, d'[l1pte].entry);
+        }
+    } else if (call == KOM_SVC_UNMAP_DATA) {
+    } else if (call == KOM_SVC_INIT_L2PTABLE) {
+        var page, l1index := s.regs[R1], s.regs[R2];
+        var (retDb, retErr) := svcInitL2PTable(d, asp, page, l1index);
+        if ( retErr == KOM_ERR_SUCCESS ) {
+            assert !pgInAddrSpc(d, page, atkr);
+            assert enc_eqentry(d[page].entry, d'[page].entry);
+            var l1ptnr := d[asp].entry.l1ptnr;
+            assert !pgInAddrSpc(d, l1ptnr, atkr);
+            assert enc_eqentry(d[l1ptnr].entry, d'[l1ptnr].entry);
+        }
+    } else {
     }
 }
 
