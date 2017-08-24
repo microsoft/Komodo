@@ -1219,7 +1219,19 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
         assert{:fuel ExtractAbsPageTable, 1}{:fuel userspaceExecutionAndException', 1}
             pt1.Just? && pt2.Just?;
         assert{:fuel userspaceExecutionAndException', 1}
-            ExtractAbsPageTable(s11).Just? && ExtractAbsPageTable(s21).Just?; // XXX
+            ExtractAbsPageTable(s11).Just? && ExtractAbsPageTable(s21).Just? by 
+            {
+                assert evalUserExecution(s1', s12, s14) &&
+                    evalUserExecution(s2', s22, s24);
+                assert ExtractAbsPageTable(s12).Just? &&
+                    ExtractAbsPageTable(s22).Just?;
+                assert {:fuel ExtractAbsPageTable, 1}
+                    ExtractAbsPageTable(s1').Just? && 
+                        ExtractAbsPageTable(s2').Just?;
+                assert {:fuel ExtractAbsPageTable, 1}
+                    ExtractAbsPageTable(s11).Just? &&
+                        ExtractAbsPageTable(s21).Just?;
+            }
     }
 
     lemma_eqpdb_pt_coresp(d1, d2, s12, s22, l1p, atkr);

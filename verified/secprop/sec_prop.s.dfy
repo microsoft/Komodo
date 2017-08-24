@@ -74,7 +74,7 @@ predicate enc_eqentry(e1:PageDbEntryTyped, e2:PageDbEntryTyped)
             e2.Dispatcher? && e2.entered == e1.entered &&
                 e2.entrypoint == e1.entrypoint
         case L1PTable(_) => e2.L1PTable?
-        case L2PTable(_) => e2.DataPage? || e2.SparePage? || e2.LtPTable? 
+        case L2PTable(_) => e2.DataPage? || e2.SparePage? || e2.L2PTable? 
         case DataPage(_) => e2.DataPage? || e2.SparePage? || e2.L2PTable?
         case SparePage   => e2.DataPage? || e2.SparePage? || e2.L2PTable?
 }
