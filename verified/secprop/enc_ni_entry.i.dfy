@@ -221,13 +221,13 @@ lemma lemma_enter_only_affects_entered(s: state, d: PageDb, s': state, d': PageD
     }
 }
 
-lemma lemma_validEnclaveEx_oae( // XXX
+lemma lemma_validEnclaveEx_oae(
     s:state, d: PageDb, s':state, d': PageDb,
     disp: PageNr, steps:nat, asp: PageNr, atkr: PageNr)
     requires ValidState(s) && validPageDb(d) && ValidState(s') && 
         validPageDb(d') && SaneConstants()
     requires validPageNr(disp) && valDispPage(d, disp)
-    requires validPageNr(asp) && valAddrPage(d, asp) // XXX need to loop this
+    requires validPageNr(asp) && valAddrPage(d, asp)
     requires validPageNr(atkr) && valAddrPage(d, atkr)
     requires d[disp].addrspace == asp
     requires asp != atkr
@@ -250,7 +250,8 @@ lemma lemma_validEnclaveEx_oae( // XXX
     lemma_validEnclaveStep_oae(s, d, s5, d5, disp, asp, atkr, retToEnclave);
     if(retToEnclave) {
         lemma_validEnclaveExecution(s5, d5, s', d', disp, steps - 1);
-        lemma_validEnclaveEx_oae(s5, d5, s', d', disp, steps - 1, asp, atkr); //XXX (loop above precond)
+        lemma_validEnclaveEx_oae(s5, d5, s', d', disp, steps - 1, asp, atkr);
+        lemma_enc_eqpdb_transitive(d, d5, d', atkr);
     } else {
         assert s' == s5 && d' == d5;
     }
@@ -269,6 +270,8 @@ lemma lemma_validEnclaveStep_oae(
     requires finalDispatcher(d, disp)
     requires validEnclaveExecutionStep(s, d, s', d', disp, ret);
     ensures enc_eqpdb(d, d', atkr)
+    ensures valAddrPage(d', atkr) && valAddrPage(d', asp)
+    ensures valDispPage(d', disp) && d'[disp].addrspace == asp
 {
     reveal validEnclaveExecutionStep();
     var s4, d4 :|
@@ -290,6 +293,8 @@ lemma lemma_validEnclaveStepPrime_oae(
     requires finalDispatcher(d1, disp)
     requires validEnclaveExecutionStep'(s1,d1,s4,d4,r,rd,disp,ret)
     ensures enc_eqpdb(d1, rd, atkr)
+    ensures valAddrPage(rd, atkr) && valAddrPage(rd, asp)
+    ensures valDispPage(rd, disp) && rd[disp].addrspace == asp
 {
     assert d4 == updateUserPagesFromState(s4, d1, disp);
     assert enc_eqpdb(d1, d4, atkr) &&
@@ -323,6 +328,8 @@ lemma lemma_svcHandled_oae(
     requires asp != atkr
     requires d' == svcHandled(s, d, dispPg).1
     ensures  enc_eqpdb(d, d', atkr)
+    ensures valDispPage(d', dispPg) && d'[dispPg].addrspace == asp
+    ensures valAddrPage(d', atkr) && valAddrPage(d', asp)
 {
     reveal enc_eqpdb();
     var call := OperandContents(s, OReg(R0));
