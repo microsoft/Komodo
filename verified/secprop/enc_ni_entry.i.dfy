@@ -308,10 +308,32 @@ lemma lemma_validEnclaveStepPrime_oae(
         lemma_svcHandled_oae(s4, d4, rd, disp, asp, atkr);
         reveal enc_eqpdb();
         assert enc_eqpdb(d1, rd, atkr); 
-    } else { // XXX
+    } else {
+        lemma_excpHandled_oae(s4, d4, rd, disp, asp, atkr);
         reveal enc_eqpdb(); 
     }
 }
+
+lemma lemma_excpHandled_oae(s: state, d: PageDb, d': PageDb,
+    dispPage:PageNr, asp: PageNr, atkr: PageNr)
+    requires ValidState(s)  
+    requires validPageDb(d) && validPageDb(d')
+    requires SaneConstants()
+    requires validPageNr(dispPage) && valDispPage(d, dispPage)
+    requires validPageNr(asp) && valAddrPage(d, asp)
+    requires validPageNr(atkr) && valAddrPage(d, atkr)
+    requires d[dispPage].addrspace == asp
+    requires asp != atkr
+    requires finalDispatcher(d, dispPage)
+    requires validPageDb(d) && validDispatcherPage(d, dispPage)
+    requires ValidState(s) && mode_of_state(s) != User
+    requires d' == exceptionHandled(s, d, dispPage).2
+    ensures enc_eqpdb(d, d', atkr)
+{
+    reveal enc_eqpdb();
+    // XXX
+}
+    
 
 lemma lemma_svcHandled_oae(
     s: state, d: PageDb, d': PageDb,
