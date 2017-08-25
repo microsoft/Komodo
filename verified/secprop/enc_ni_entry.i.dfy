@@ -123,9 +123,8 @@ lemma lemma_enter_enc_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
 {
     reveal enc_eqpdb();
     var e1, e2 := smc_enter_err(d1, dispPage, false), smc_enter_err(d2, dispPage, false);
-    assert e1 == e2;
 
-    if(e1 == KOM_ERR_SUCCESS) {
+    if(e1 == KOM_ERR_SUCCESS && e2 == KOM_ERR_SUCCESS) {
         var asp1, asp2 := d1[dispPage].addrspace, d2[dispPage].addrspace;
         assert asp1 == asp2;
         if(asp1 == atkr) {
@@ -139,7 +138,20 @@ lemma lemma_enter_enc_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                            dispPage, arg1, arg2, arg3,
                                            asp1, atkr, false);
         }
-    } 
+    }
+    if(e1 == KOM_ERR_SUCCESS && e2 != KOM_ERR_SUCCESS) {
+        lemma_enter_only_affects_entered(s1, d1, s1', d1',
+            dispPage, d1[dispPage].addrspace, atkr,
+            arg1, arg2, arg3, false);
+    }
+    if(e2 == KOM_ERR_SUCCESS && e1 != KOM_ERR_SUCCESS) {
+        lemma_enter_only_affects_entered(s2, d2, s2', d2',
+            dispPage, d1[dispPage].addrspace, atkr,
+            arg1, arg2, arg3, false);
+    }
+    if(e1 != KOM_ERR_SUCCESS && e2 != KOM_ERR_SUCCESS) {
+        assert enc_eqpdb(d1', d2', atkr);
+    }
 
 }
 
