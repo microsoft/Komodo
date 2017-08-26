@@ -194,29 +194,73 @@ lemma lemma_validEnclaveStep_os(s1: state, d1: PageDb, s1':state, d1': PageDb,
         dispPage, ret1, ret2);
 }
 
-lemma lemma_svcHandled_os_eqpdb(s: state, d: PageDb, dispPg: PageNr, d': PageDb)
-    requires validPageDbs({d, d'}) && validDispatcherPage(d, dispPg)
-    requires ValidState(s) && mode_of_state(s) != User
-    requires isReturningSvc(s) && finalDispatcher(d, dispPg)
-    requires d' == svcHandled(s, d, dispPg).1 // XXX
-    ensures os_eqpdb(d, d')
+lemma lemma_svcHandled_os_eqpdb(s1: state, d1: PageDb, d1': PageDb,
+                                 s2: state, d2: PageDb, d2': PageDb, dispPg: PageNr)
+    requires validPageDbs({d1, d1'}) && validDispatcherPage(d1, dispPg)
+    requires validPageDbs({d2, d2'}) && validDispatcherPage(d2, dispPg)
+    requires ValidState(s1) && mode_of_state(s1) != User
+    requires ValidState(s2) && mode_of_state(s2) != User
+    requires OperandContents(s1, OReg(R0)) == OperandContents(s2, OReg(R0));
+    requires OperandContents(s1, OReg(R1)) == OperandContents(s2, OReg(R1));
+    requires OperandContents(s1, OReg(R2)) == OperandContents(s2, OReg(R2));
+    requires isReturningSvc(s1) && finalDispatcher(d1, dispPg)
+    requires isReturningSvc(s2) && finalDispatcher(d2, dispPg)
+    requires d1' == svcHandled(s1, d1, dispPg).1
+    requires d2' == svcHandled(s2, d2, dispPg).1
+    requires os_eqpdb(d1, d2)
+    ensures os_eqpdb(d1', d2')
 {
 
     reveal os_eqpdb();
-    if( OperandContents(s, OReg(R0)) == KOM_SVC_ATTEST ) {
-        assert d' == d;
-    } else if( OperandContents(s, OReg(R0)) == KOM_SVC_VERIFY_STEP0) {
-        assert os_eqentry(d[dispPg].entry, d'[dispPg].entry);
-    } else if( OperandContents(s, OReg(R0)) == KOM_SVC_VERIFY_STEP1) {
-        assert os_eqentry(d[dispPg].entry, d'[dispPg].entry);
-    } else if( OperandContents(s, OReg(R0)) == KOM_SVC_VERIFY_STEP2) {
-        assert d' == d;
-    } else if( OperandContents(s, OReg(R0)) == KOM_SVC_MAP_DATA) {
-    } else if( OperandContents(s, OReg(R0)) == KOM_SVC_UNMAP_DATA) {
-    } else if( OperandContents(s, OReg(R0)) == KOM_SVC_INIT_L2PTABLE) {
-        // XXX
+    var addrspace := d1[dispPg].addrspace;
+    var call := OperandContents(s1, OReg(R0));
+    if( call  == KOM_SVC_ATTEST ) {
+        assert d1' == d1;
+        assert d2' == d2;
+    } else if( call  == KOM_SVC_VERIFY_STEP0) {
+        assert os_eqentry(d1'[dispPg].entry, d2'[dispPg].entry);
+    } else if( call  == KOM_SVC_VERIFY_STEP1) {
+        assert os_eqentry(d1'[dispPg].entry, d2'[dispPg].entry);
+    } else if( call  == KOM_SVC_VERIFY_STEP2) {
+        assert d1' == d1;
+        assert d2' == d2;
+    } else if( call == KOM_SVC_MAP_DATA) {
+        var page, mapping := s1.regs[R1], s1.regs[R2];
+        var (retDb1, retErr1) := svcMapData(d1, addrspace, page, mapping);
+        var (retDb2, retErr2) := svcMapData(d2, addrspace, page, mapping);
+        assert retErr1 == KOM_ERR_INVALID_PAGENO <==>
+            retErr2 == KOM_ERR_INVALID_PAGENO;
+        assert retErr1 == KOM_ERR_INVALID_MAPPING <==>
+            retErr2 == KOM_ERR_INVALID_MAPPING;
+        if(retErr1 == KOM_ERR_SUCCESS) {
+            assert enc_eqentry(d1'[page].entry, d2'[page].entry);
+
+            var abs_mapping := wordToMapping(mapping);
+            var l11 := d1[d1[addrspace].entry.l1ptnr].entry;
+            var l12 := d2[d2[addrspace].entry.l1ptnr].entry;
+            var l1pte1 := fromJust(l11.l1pt[abs_mapping.l1index]);
+            var l1pte2 := fromJust(l12.l1pt[abs_mapping.l1index]);
+            assert enc_eqentry(d1'[l1pte1].entry, d2'[l1pte2].entry);
+        }
+    } else if( call == KOM_SVC_UNMAP_DATA) {
+    } else if( call == KOM_SVC_INIT_L2PTABLE) {
+        var e1 := svcHandled(s1, d1, dispPg).0.0;
+        var e2 := svcHandled(s2, d2, dispPg).0.0;
+        reveal validPageDb();
+        assert e1 == KOM_ERR_INVALID_MAPPING <==> e2 == KOM_ERR_INVALID_MAPPING;
+        assert e1 == KOM_ERR_INVALID_PAGENO <==> e2 == KOM_ERR_INVALID_PAGENO;
+        assert e1 == KOM_ERR_ADDRINUSE <==> e2 == KOM_ERR_ADDRINUSE;
+        var page := OperandContents(s1, OReg(R1));
+        var l1index := OperandContents(s1, OReg(R2));
+        if(e1 == KOM_ERR_SUCCESS) {
+            // var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
+            // var d1 := updatePageEntry(d, page, l2pt);
+            var l1ptnr := d1[addrspace].entry.l1ptnr;
+            assert os_eqentry(d1'[page].entry, d2'[page].entry);
+            assert os_eqentry(d1'[l1ptnr].entry, d2'[l1ptnr].entry);
+            // var d2 := installL1PTEInPageDb(d1, l1ptnr, page, l1index);
+        }
     } else {
-        assert d' == d;
     }
 }
 
@@ -258,8 +302,13 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
         var (retRegs1, rd1') := svcHandled(s14, d14, dispPg);
         var (retRegs2, rd2') := svcHandled(s24, d24, dispPg);
 
-        lemma_svcHandled_os_eqpdb(s14, d14, dispPg, rd1');
-        lemma_svcHandled_os_eqpdb(s24, d24, dispPg, rd2');
+        // these regs also need to be declassified so that 
+        // we know the svc arguments are the same in both executions.
+        assume (s14.regs[R0] == s24.regs[R0] &&
+                s14.regs[R1] == s24.regs[R1] &&
+                s14.regs[R2] == s24.regs[R2]);
+        lemma_svcHandled_os_eqpdb(s14, d14, rd1',
+                                 s24, d24, rd2', dispPg);
 
         reveal os_eqpdb();
         
