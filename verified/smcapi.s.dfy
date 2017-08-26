@@ -159,6 +159,10 @@ function smc_initL2PTable(pageDbIn: PageDb, page: word, addrspacePage: word,
     // l1indexInUse check. The l1indexInUse check assumes that the l1ptnr
     // is actually an l1pt table, which is true as long as the addrspace
     // is not stopped.
+    //
+    // Proposed change (the enc_ni proofs go through with the following and 
+    // without a pair of assumes in initL2PTable):
+    // else if(!(pageDbIn[addrspacePage].entry.state == InitState)) then
     else if(pageDbIn[addrspacePage].entry.state == StoppedState) then
         (pageDbIn, KOM_ERR_STOPPED)
     else if(l1indexInUse(pageDbIn, addrspacePage, l1index)) then

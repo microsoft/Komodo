@@ -59,17 +59,18 @@ predicate {:opaque} enc_eqpdb(d1: PageDb, d2: PageDb, atkr: PageNr)
     (forall n: PageNr :: pgInAddrSpc(d1, n, atkr) <==>
         pgInAddrSpc(d2, n, atkr)) &&
     (forall n : PageNr | d1[n].PageDbEntryTyped? ::
-        (if(pgInAddrSpc(d1, n, atkr)) 
+        d1[n].addrspace == d2[n].addrspace &&
+        (if(pgInAddrSpc(d1, n, atkr) || d1[d1[n].addrspace].entry.state.InitState?) 
             then d1[n].entry == d2[n].entry
-            else enc_eqentry(d1[n].entry, d2[n].entry)) &&
-        d1[n].addrspace == d2[n].addrspace)
+            else enc_eqentry(d1[n].entry, d2[n].entry)))
 }
 
 predicate enc_eqentry(e1:PageDbEntryTyped, e2:PageDbEntryTyped)
 {
     match e1
         case Addrspace(_,_,_,_,_)
-            => e2.Addrspace? && e1.(shatrace := e2.shatrace) == e2 // shatrace is irrelevant
+            => e2.Addrspace? && e1.(shatrace := e2.shatrace,
+                measurement := e2.measurement, refcount := e2.refcount) == e2
         case Dispatcher(_,_,_,_,_) =>  e2.Dispatcher?
         case L1PTable(_) => e2.L1PTable?
         case L2PTable(_) => e2.DataPage? || e2.SparePage? || e2.L2PTable? 
