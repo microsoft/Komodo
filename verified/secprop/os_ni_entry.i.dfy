@@ -195,14 +195,21 @@ lemma lemma_validEnclaveStep_os(s1: state, d1: PageDb, s1':state, d1': PageDb,
 }
 
 lemma lemma_svcHandled_os_eqpdb(s1: state, d1: PageDb, d1': PageDb,
-                                 s2: state, d2: PageDb, d2': PageDb, dispPg: PageNr)
+                                s2: state, d2: PageDb, d2': PageDb, dispPg: PageNr)
     requires validPageDbs({d1, d1'}) && validDispatcherPage(d1, dispPg)
     requires validPageDbs({d2, d2'}) && validDispatcherPage(d2, dispPg)
     requires ValidState(s1) && mode_of_state(s1) != User
     requires ValidState(s2) && mode_of_state(s2) != User
     requires OperandContents(s1, OReg(R0)) == OperandContents(s2, OReg(R0));
-    requires OperandContents(s1, OReg(R1)) == OperandContents(s2, OReg(R1));
-    requires OperandContents(s1, OReg(R2)) == OperandContents(s2, OReg(R2));
+    requires (s1.regs[R0] == KOM_SVC_EXIT ||
+              s1.regs[R0] == KOM_SVC_MAP_DATA ||
+              s1.regs[R0] == KOM_SVC_UNMAP_DATA ||
+              s1.regs[R0] == KOM_SVC_INIT_L2PTABLE) ==>
+        s1.regs[R1] == s2.regs[R1]
+    requires (s1.regs[R0] == KOM_SVC_MAP_DATA ||
+              s1.regs[R0] == KOM_SVC_UNMAP_DATA ||
+              s1.regs[R0] == KOM_SVC_INIT_L2PTABLE) ==>
+        s1.regs[R2] == s2.regs[R2]
     requires isReturningSvc(s1) && finalDispatcher(d1, dispPg)
     requires isReturningSvc(s2) && finalDispatcher(d2, dispPg)
     requires d1' == svcHandled(s1, d1, dispPg).1
@@ -288,11 +295,17 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
     requires os_eqpdb(d14, d24)
     requires retToEnclave1 == retToEnclave2
     requires s14.conf.ex == s24.conf.ex;
-    requires (!retToEnclave1 && s14.conf.ex == ExSVC) ==>
+    requires (s14.conf.ex == ExSVC) ==>
             s14.regs[R0] == s24.regs[R0];
-    requires (!retToEnclave1 && s14.conf.ex == ExSVC &&
-        s14.regs[R0] == KOM_SVC_EXIT) ==> 
+    requires (s14.conf.ex == ExSVC && (s14.regs[R0] == KOM_SVC_EXIT ||
+            s14.regs[R0] == KOM_SVC_MAP_DATA ||
+            s14.regs[R0] == KOM_SVC_UNMAP_DATA ||
+            s14.regs[R0] == KOM_SVC_INIT_L2PTABLE)) ==>
         s14.regs[R1] == s24.regs[R1]
+    requires (s14.conf.ex == ExSVC && (s14.regs[R0] == KOM_SVC_MAP_DATA ||
+              s14.regs[R0] == KOM_SVC_UNMAP_DATA ||
+              s14.regs[R0] == KOM_SVC_INIT_L2PTABLE)) ==>
+        s14.regs[R2] == s24.regs[R2]
     ensures  os_eqpdb(rd1, rd2)
     ensures  !retToEnclave1 ==> same_ret(r1, r2)
     ensures  retToEnclave1 ==> r1.conf.nondet == r2.conf.nondet
@@ -302,13 +315,9 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
         var (retRegs1, rd1') := svcHandled(s14, d14, dispPg);
         var (retRegs2, rd2') := svcHandled(s24, d24, dispPg);
 
-        // these regs also need to be declassified so that 
-        // we know the svc arguments are the same in both executions.
-        assume (s14.regs[R0] == s24.regs[R0] &&
-                s14.regs[R1] == s24.regs[R1] &&
-                s14.regs[R2] == s24.regs[R2]);
-        lemma_svcHandled_os_eqpdb(s14, d14, rd1',
-                                 s24, d24, rd2', dispPg);
+        if(s14.conf.ex == ExSVC) { 
+            lemma_svcHandled_os_eqpdb(s14, d14, rd1', s24, d24, rd2', dispPg);
+        }
 
         reveal os_eqpdb();
         
@@ -435,17 +444,32 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
     }
 
     assert retToEnclave1 == retToEnclave2 &&
-        (!retToEnclave1 && ex1 == ExSVC ==>
-            (s14.regs[R0] == s24.regs[R0] == KOM_SVC_EXIT ==>
-            s14.regs[R1] == s24.regs[R1])) by
+        (ex1 == ExSVC ==> s14.regs[R0] == s24.regs[R0]) &&
+        (ex1 == ExSVC && (s14.regs[R0] == KOM_SVC_EXIT ||
+            s14.regs[R0] == KOM_SVC_MAP_DATA ||
+            s14.regs[R0] == KOM_SVC_UNMAP_DATA ||
+            s14.regs[R0] == KOM_SVC_INIT_L2PTABLE) ==>
+            s14.regs[R1] == s24.regs[R1]) &&
+        (ex1 == ExSVC && (s14.regs[R0] == KOM_SVC_MAP_DATA ||
+            s14.regs[R0] == KOM_SVC_UNMAP_DATA ||
+            s14.regs[R0] == KOM_SVC_INIT_L2PTABLE) ==>
+            s14.regs[R2] == s24.regs[R2]) by
     {
         assert s14.regs[R0] == s13.regs[R0];
         assert s24.regs[R0] == s23.regs[R0];
         reveal userspaceExecutionFn();
         if(ex1 == ExSVC) {
             lemma_decl_svc_r0(s13, s14, s23, s24);
-            if(s14.regs[R0] == KOM_SVC_EXIT) {
-                lemma_decl_svc_exit_r1(s13, s14, s23, s24);
+            if(s14.regs[R0] == KOM_SVC_EXIT ||
+               s14.regs[R0] == KOM_SVC_MAP_DATA ||
+               s14.regs[R0] == KOM_SVC_UNMAP_DATA ||
+               s14.regs[R0] == KOM_SVC_INIT_L2PTABLE){
+                lemma_decl_svc_r1(s13, s14, s23, s24);
+            }
+            if(s14.regs[R0] == KOM_SVC_MAP_DATA ||
+               s14.regs[R0] == KOM_SVC_UNMAP_DATA ||
+               s14.regs[R0] == KOM_SVC_INIT_L2PTABLE){
+                lemma_decl_svc_r2(s13, s14, s23, s24);
             }
         }
     }
@@ -454,22 +478,6 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
         s11, d11, s14, d14, r1, rd1,
         s21, d21, s24, d24, r2, rd2,
         dispPg, retToEnclave1, retToEnclave2);
-
-    /*
-    if(retToEnclave1) {
-        assert os_eqpdb(rd1, rd2);
-        assert same_ret(r1, r2);
-        assert r1.conf.nondet == r2.conf.nondet by {
-            assert s14.conf.nondet == s24.conf.nondet; 
-        }
-    } else {
-        reveal ValidRegState();
-        lemma_exceptionHandled_os(
-            s14, d14, rd1, r1.regs[R0], r1.regs[R1],
-            s24, d24, rd2, r2.regs[R0], r2.regs[R1],
-            dispPg);
-    }
-    */
 
 }
 
