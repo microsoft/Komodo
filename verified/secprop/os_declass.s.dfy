@@ -8,7 +8,7 @@ lemma {:axiom} lemma_decl_ex(s11:state, s12:state, s14:state, s21:state, s22:sta
     requires ValidState(s11) && ValidState(s21)
     requires s11.conf.nondet == s21.conf.nondet
     requires evalUserExecution(s11, s12, s14) && evalUserExecution(s21, s22, s24)
-    requires s12.conf.cpsr.f == s22.conf.cpsr.f && s12.conf.cpsr.i == s22.conf.cpsr.i
+    // requires s12.conf.cpsr.f == s22.conf.cpsr.f && s12.conf.cpsr.i == s22.conf.cpsr.i
     ensures s14.conf.ex == s24.conf.ex
 
 lemma {:axiom} lemma_decl_svc_r0(s13:state, s14:state, s23:state, s24:state)

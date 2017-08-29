@@ -287,11 +287,11 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
     requires s14.conf.nondet == s24.conf.nondet 
     requires os_eqpdb(d14, d24)
     requires retToEnclave1 == retToEnclave2
-    requires s14.conf.ex == s24.conf.ex == declassified_ex();
-    requires (!retToEnclave1 && declassified_ex() == ExSVC ==>
-            s14.regs[R0] == s24.regs[R0] == declassified_reg(R0));
-    requires (!retToEnclave1 && declassified_ex() == ExSVC &&
-        declassified_reg(R0) == KOM_SVC_EXIT) ==> 
+    requires s14.conf.ex == s24.conf.ex;
+    requires (!retToEnclave1 && s14.conf.ex == ExSVC) ==>
+            s14.regs[R0] == s24.regs[R0];
+    requires (!retToEnclave1 && s14.conf.ex == ExSVC &&
+        s14.regs[R0] == KOM_SVC_EXIT) ==> 
         s14.regs[R1] == s24.regs[R1]
     ensures  os_eqpdb(rd1, rd2)
     ensures  !retToEnclave1 ==> same_ret(r1, r2)
@@ -423,12 +423,9 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
     
     assert s14.conf.nondet == s24.conf.nondet;
 
-    assert ex1 == ex2 == declassified_ex() by {
-        reveal userspaceExecutionFn();
-        lemma_decl_ex();
+    assert ex1 == ex2 && s14.conf.ex == s24.conf.ex by {
+        lemma_decl_ex(s1', s12, s14, s2', s22, s24);
     }
-
-    assert s14.conf.ex == s24.conf.ex == declassified_ex();
 
     assert os_eqpdb(d14, d24) by
     {
@@ -438,20 +435,17 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool
     }
 
     assert retToEnclave1 == retToEnclave2 &&
-        (!retToEnclave1 && declassified_ex() == ExSVC ==>
-            s14.regs[R0] == s24.regs[R0] == declassified_reg(R0) && 
-            (declassified_reg(R0) == KOM_SVC_EXIT ==>
+        (!retToEnclave1 && ex1 == ExSVC ==>
+            (s14.regs[R0] == s24.regs[R0] == KOM_SVC_EXIT ==>
             s14.regs[R1] == s24.regs[R1])) by
     {
         assert s14.regs[R0] == s13.regs[R0];
         assert s24.regs[R0] == s23.regs[R0];
         reveal userspaceExecutionFn();
-        if(declassified_ex() == ExSVC()) {
-            lemma_decl_r0(s14);
-            lemma_decl_r0(s24);
-            if(declassified_reg(R0) == KOM_SVC_EXIT) {
-                lemma_decl_r1(s14);
-                lemma_decl_r1(s24);
+        if(ex1 == ExSVC) {
+            lemma_decl_svc_r0(s13, s14, s23, s24);
+            if(s14.regs[R0] == KOM_SVC_EXIT) {
+                lemma_decl_svc_exit_r1(s13, s14, s23, s24);
             }
         }
     }
