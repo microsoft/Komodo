@@ -117,12 +117,13 @@ lemma lemma_enter_enc_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
     requires smc_enter(s1, d1, s1', d1', dispPage, arg1, arg2, arg3)
     requires smc_enter(s2, d2, s2', d2', dispPage, arg1, arg2, arg3)
     requires enc_eqpdb(d1, d2, atkr)
-    requires entering_atkr(d1, d2, dispPage, atkr, false) ==>
-        s1.conf.nondet == s2.conf.nondet
+    requires s1.conf.nondet == s2.conf.nondet
     ensures enc_eqpdb(d1', d2', atkr)
 {
     reveal enc_eqpdb();
     var e1, e2 := smc_enter_err(d1, dispPage, false), smc_enter_err(d2, dispPage, false);
+
+    assert e1 == KOM_ERR_SUCCESS <==> e2 == KOM_ERR_SUCCESS;
 
     if(e1 == KOM_ERR_SUCCESS && e2 == KOM_ERR_SUCCESS) {
         var asp1, asp2 := d1[dispPage].addrspace, d2[dispPage].addrspace;
@@ -139,16 +140,6 @@ lemma lemma_enter_enc_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                            asp1, atkr, false);
         }
     }
-    if(e1 == KOM_ERR_SUCCESS && e2 != KOM_ERR_SUCCESS) {
-        lemma_enter_only_affects_entered(s1, d1, s1', d1',
-            dispPage, d1[dispPage].addrspace, atkr,
-            arg1, arg2, arg3, false);
-    }
-    if(e2 == KOM_ERR_SUCCESS && e1 != KOM_ERR_SUCCESS) {
-        lemma_enter_only_affects_entered(s2, d2, s2', d2',
-            dispPage, d1[dispPage].addrspace, atkr,
-            arg1, arg2, arg3, false);
-    }
     if(e1 != KOM_ERR_SUCCESS && e2 != KOM_ERR_SUCCESS) {
         assert enc_eqpdb(d1', d2', atkr);
     }
@@ -158,247 +149,558 @@ lemma lemma_enter_enc_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
 lemma
 lemma_enter_enc_eqpdb_not_atkr(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                s2: state, d2: PageDb, s2':state, d2': PageDb,
-                               disp: word, arg1: word, arg2: word, arg3: word,
+                               dispPage: word, arg1: word, arg2: word, arg3: word,
                                asp: PageNr,atkr: PageNr, isresume:bool)
     requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
     requires valAddrPage(d1, asp) && valAddrPage(d2, asp)
-    requires !isresume ==> smc_enter(s1, d1, s1', d1', disp, arg1, arg2, arg3)
-    requires !isresume ==> smc_enter(s2, d2, s2', d2', disp, arg1, arg2, arg3)
-    requires isresume ==> smc_resume(s1, d1, s1', d1', disp)
-    requires isresume ==> smc_resume(s2, d2, s2', d2', disp)
-    requires validPageNr(disp) && d1[disp].PageDbEntryTyped? && 
-        d2[disp].PageDbEntryTyped?
-    requires d1[disp].addrspace == asp && d2[disp].addrspace == asp
-    requires enc_eqpdb(d1, d2, atkr)
+    requires !isresume ==> smc_enter(s1, d1, s1', d1', dispPage, arg1, arg2, arg3)
+    requires !isresume ==> smc_enter(s2, d2, s2', d2', dispPage, arg1, arg2, arg3)
+    requires isresume ==> smc_resume(s1, d1, s1', d1', dispPage)
+    requires isresume ==> smc_resume(s2, d2, s2', d2', dispPage)
+    requires validPageNr(dispPage) && d1[dispPage].PageDbEntryTyped? && 
+        d2[dispPage].PageDbEntryTyped?
+    requires d1[dispPage].addrspace == asp && d2[dispPage].addrspace == asp
     requires asp != atkr
-    requires smc_enter_err(d1, disp, isresume) == KOM_ERR_SUCCESS
-            && (smc_enter_err(d2, disp, isresume) == KOM_ERR_SUCCESS);
+    requires enc_eqpdb(d1, d2, atkr)
+    requires smc_enter_err(d1, dispPage, isresume) == KOM_ERR_SUCCESS
+            && (smc_enter_err(d2, dispPage, isresume) == KOM_ERR_SUCCESS);
+    requires s1.conf.nondet == s2.conf.nondet
     ensures  enc_eqpdb(d1', d2', atkr)
 {
-    lemma_enter_only_affects_entered(s1, d1, s1', d1', disp, asp, atkr,
-        arg1, arg2, arg3, isresume);
-    lemma_enter_only_affects_entered(s2, d2, s2', d2', disp, asp, atkr,
-        arg1, arg2, arg3, isresume);
-    reveal enc_eqpdb();
-}
-
-lemma lemma_enter_only_affects_entered(s: state, d: PageDb, s': state, d': PageDb,
-                                       disp:PageNr, asp:PageNr, atkr: PageNr,
-                                       arg1: word, arg2: word, arg3: word,
-                                       isresume:bool)
-    requires SaneConstants() &&
-        ValidState(s) && ValidState(s') && 
-        validPageDb(d) && validPageDb(d') &&
-        valAddrPage(d, atkr) && valAddrPage(d', atkr) &&
-        valAddrPage(d, asp ) &&
-        validPageNr(disp) && valDispPage(d, disp)
-    requires d[disp].addrspace == asp
-    requires asp != atkr
-    requires !isresume ==> smc_enter(s, d, s', d', disp, arg1, arg2, arg3)
-    requires isresume ==> smc_resume(s, d, s', d', disp)
-    requires smc_enter_err(d, disp, isresume) == KOM_ERR_SUCCESS
-    ensures enc_eqpdb(d, d', atkr)
-{
     if(!isresume) {
-        forall(s1: state, steps:nat |
-            preEntryEnter(s, s1, d, disp, arg1, arg2, arg3) &&
-            validEnclaveExecution(s1, d, s', d', disp, steps))
-            ensures enc_eqpdb(d, d', atkr)
-        {
-            assert mode_of_state(s1) != User;
-            assert !spsr_of_state(s1).f && !spsr_of_state(s1).i by {
-                assert psr_mask_fiq(encode_mode(User)) == 0 by {
-                    assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
-                        by { reveal WordAsBits(); }
-                    lemma_BitsAndWordConversions();
-                    reveal BitAnd();
-                }
-                assert psr_mask_irq(encode_mode(User)) == 0 by {
-                    assert WordAsBits(0x10) == 0x10 && WordAsBits(0x80) == 0x80
-                        by { reveal WordAsBits(); }
-                    lemma_BitsAndWordConversions();
-                    reveal BitAnd();
-                }
+        var s11:state, steps1: nat :|
+            preEntryEnter(s1, s11, d1, dispPage, arg1, arg2, arg3) &&
+            validEnclaveExecution(s11, d1, s1', d1', dispPage, steps1);
+        
+        var s21:state, steps2: nat :|
+            preEntryEnter(s2, s21, d2, dispPage, arg1, arg2, arg3) &&
+            validEnclaveExecution(s21, d2, s2', d2', dispPage, steps2);
+
+        assert s11.conf.nondet == s21.conf.nondet;
+        assert user_regs(s11.regs) == user_regs(s21.regs);
+
+        assert !spsr_of_state(s11).f && !spsr_of_state(s11).i &&
+            !spsr_of_state(s21).f && !spsr_of_state(s21).i by {
+            assert psr_mask_fiq(encode_mode(User)) == 0 by {
+                assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
+                    by { reveal WordAsBits(); }
+                lemma_BitsAndWordConversions();
+                reveal BitAnd();
             }
-            lemma_validEnclaveEx_oae(s1, d, s', d', disp, steps, asp, atkr);
+            assert psr_mask_irq(encode_mode(User)) == 0 by {
+                assert WordAsBits(0x10) == 0x10 && WordAsBits(0x80) == 0x80
+                    by { reveal WordAsBits(); }
+                lemma_BitsAndWordConversions();
+                reveal BitAnd();
+            }
         }
+        lemma_validEnclaveEx_enc_not_atkr(s11, d1, s1', d1', s21, d2, s2', d2',
+                                         dispPage, steps1, steps2, asp, atkr);
     } else {
-        forall(s1: state, steps:nat |
-            preEntryResume(s, s1, d, disp) &&
-            validEnclaveExecution(s1, d, s', d', disp, steps))
-            ensures enc_eqpdb(d, d', atkr)
-        {
-            lemma_validEnclaveEx_oae(s1, d, s', d', disp, steps, asp, atkr);
-        }
+        var s11:state, steps1: nat :|
+            preEntryResume(s1, s11, d1, dispPage) &&
+            validEnclaveExecution(s11, d1, s1', d1', dispPage, steps1);
+        
+        var s21:state, steps2: nat :|
+            preEntryResume(s2, s21, d2, dispPage) &&
+            validEnclaveExecution(s21, d2, s2', d2', dispPage, steps2);
+
+        assert s11.conf.nondet == s21.conf.nondet;
+
+        lemma_validEnclaveEx_enc_not_atkr(s11, d1, s1', d1', s21, d2, s2', d2',
+                                     dispPage, steps1, steps2, asp, atkr);
     }
 }
 
-lemma lemma_validEnclaveEx_oae(
-    s:state, d: PageDb, s':state, d': PageDb,
-    disp: PageNr, steps:nat, asp: PageNr, atkr: PageNr)
-    requires ValidState(s) && validPageDb(d) && ValidState(s') && 
-        validPageDb(d') && SaneConstants()
-    requires validPageNr(disp) && valDispPage(d, disp)
-    requires validPageNr(asp) && valAddrPage(d, asp)
-    requires validPageNr(atkr) && valAddrPage(d, atkr)
-    requires d[disp].addrspace == asp
+lemma lemma_validEnclaveEx_enc_not_atkr(s1: state, d1: PageDb, s1':state, d1': PageDb,
+                                        s2: state, d2: PageDb, s2':state, d2': PageDb,
+                                        dispPg: PageNr, steps1:nat, steps2:nat,
+                                        asp: PageNr, atkr: PageNr)
+    
+    requires ValidState(s1) && ValidState(s2) &&
+             ValidState(s1') && ValidState(s2') &&
+             validPageDb(d1) && validPageDb(d2) && 
+             validPageDb(d1') && validPageDb(d2') && SaneConstants()
+    requires do_declassify()
+    requires valAddrPage(d1, asp) && valAddrPage(d2, asp)
+    requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+    requires finalDispatcher(d1, dispPg) && finalDispatcher(d2, dispPg)
+    requires d1[dispPg].addrspace == asp && d2[dispPg].addrspace == asp
     requires asp != atkr
-    requires finalDispatcher(d, disp)
-    requires mode_of_state(s) != User
-    requires !spsr_of_state(s).f && !spsr_of_state(s).i
-    requires validEnclaveExecution(s, d, s', d', disp, steps);
-    ensures enc_eqpdb(d, d', atkr)
-    decreases steps;
+    requires validEnclaveExecution(s1, d1, s1', d1', dispPg, steps1)
+    requires validEnclaveExecution(s2, d2, s2', d2', dispPg, steps2);
+    requires enc_eqpdb(d1, d2, atkr)
+    requires s1.conf.nondet == s2.conf.nondet
+    requires mode_of_state(s1) != User && mode_of_state(s2) != User
+    requires !spsr_of_state(s1).f && !spsr_of_state(s1).i
+    requires !spsr_of_state(s2).f && !spsr_of_state(s2).i
+    requires s1.conf.scr == s2.conf.scr;
+    // requires InsecureMemInvariant(s1, s2)
+    ensures  enc_eqpdb(d1', d2', atkr)
+    ensures  same_ret(s1', s2')
+    ensures  valAddrPage(d1', asp) && valAddrPage(d2', asp)
+    ensures  valAddrPage(d1', atkr) && valAddrPage(d2', atkr)
+    ensures finalDispatcher(d1', dispPg) && finalDispatcher(d2', dispPg)
+    ensures  d1'[dispPg].addrspace == asp && d2'[dispPg].addrspace == asp
+    // ensures InsecureMemInvariant(s1', s2')
+    decreases steps1, steps2
 {
     reveal validEnclaveExecution();
-    var retToEnclave := (steps > 0);
-    var  s5, d5 :|
-        validEnclaveExecutionStep(s, d, s5, d5, disp, retToEnclave) &&
-        (if retToEnclave then
-            validEnclaveExecution(s5, d5, s', d', disp, steps -1)
-        else
-            s' == s5 && d' == d5);
-    lemma_validEnclaveExecutionStep_validPageDb(s, d, s5, d5, disp, retToEnclave);
-    lemma_validEnclaveStep_oae(s, d, s5, d5, disp, asp, atkr, retToEnclave);
-    if(retToEnclave) {
-        lemma_validEnclaveExecution(s5, d5, s', d', disp, steps - 1);
-        lemma_validEnclaveEx_oae(s5, d5, s', d', disp, steps - 1, asp, atkr);
-        lemma_enc_eqpdb_transitive(d, d5, d', atkr);
+
+    var retToEnclave1, s15, d15 := lemma_unpack_validEnclaveExecution(
+        s1, d1, s1', d1', dispPg, steps1);
+    var retToEnclave2, s25, d25 := lemma_unpack_validEnclaveExecution(
+        s2, d2, s2', d2', dispPg, steps2);
+
+    lemma_validEnclaveExecutionStep_validPageDb(s1, d1, s15, d15, dispPg, retToEnclave1);
+    lemma_validEnclaveExecutionStep_validPageDb(s2, d2, s25, d25, dispPg, retToEnclave2);
+    lemma_validEnclaveStep_enc_not_atkr(s1, d1, s15, d15, s2, d2, s25, d25,
+        dispPg, retToEnclave1, retToEnclave2, asp, atkr);
+
+    assert retToEnclave1 == retToEnclave2;
+
+    if(retToEnclave1) {
+        lemma_validEnclaveExecution(s15, d15, s1', d1', dispPg, steps1 - 1);
+        lemma_validEnclaveExecution(s25, d25, s2', d2', dispPg, steps2 - 1);
+        lemma_validEnclaveEx_enc_not_atkr(s15, d15, s1', d1', s25, d25, s2', d2',
+                                         dispPg, steps1 - 1, steps2 - 1, asp, 
+                                         atkr);
     } else {
-        assert s' == s5 && d' == d5;
+        reveal enc_eqpdb();
     }
 }
 
-lemma lemma_validEnclaveStep_oae(
-    s:state, d: PageDb, s':state, d': PageDb,
-    disp: PageNr, asp: PageNr, atkr: PageNr, ret:bool)
-    requires ValidState(s) && validPageDb(d) && ValidState(s') && 
-        validPageDb(d') && SaneConstants()
-    requires validPageNr(disp) && valDispPage(d, disp)
-    requires validPageNr(asp) && valAddrPage(d, asp)
-    requires validPageNr(atkr) && valAddrPage(d, atkr)
-    requires d[disp].addrspace == asp
+lemma lemma_validEnclaveStep_enc_not_atkr(s1: state, d1: PageDb, s1':state, d1': PageDb,
+                                          s2: state, d2: PageDb, s2':state, d2': PageDb,
+                                          dispPg: PageNr, ret1:bool, ret2:bool,
+                                          asp: PageNr, atkr: PageNr)
+    requires ValidState(s1) && ValidState(s2) &&
+             ValidState(s1') && ValidState(s2') &&
+             validPageDb(d1) && validPageDb(d2) && 
+             validPageDb(d1') && validPageDb(d2') && SaneConstants()
+    requires do_declassify()
+    requires valAddrPage(d1, asp) && valAddrPage(d2, asp)
+    requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+    requires finalDispatcher(d1, dispPg)
+    requires finalDispatcher(d2, dispPg)
+    requires d1[dispPg].addrspace == asp && d2[dispPg].addrspace == asp
     requires asp != atkr
-    requires finalDispatcher(d, disp)
-    requires validEnclaveExecutionStep(s, d, s', d', disp, ret);
-    ensures enc_eqpdb(d, d', atkr)
-    ensures valAddrPage(d', atkr) && valAddrPage(d', asp)
-    ensures valDispPage(d', disp) && d'[disp].addrspace == asp
+    // requires InsecureMemInvariant(s1, s2)
+    requires validEnclaveExecutionStep(s1, d1, s1', d1', dispPg, ret1);
+    requires validEnclaveExecutionStep(s2, d2, s2', d2', dispPg, ret2);
+    requires enc_eqpdb(d1, d2, atkr)
+    requires s1.conf.nondet == s2.conf.nondet
+    requires mode_of_state(s1) != User && mode_of_state(s2) != User
+    requires !spsr_of_state(s1).f && !spsr_of_state(s1).i
+    requires !spsr_of_state(s2).f && !spsr_of_state(s2).i
+    requires s1.conf.scr == s2.conf.scr;
+    ensures  enc_eqpdb(d1', d2', atkr)
+    ensures  ret1 == ret2
+    ensures  ret1 ==> s1'.conf.nondet == s2'.conf.nondet;
+    ensures  !ret1 ==> same_ret(s1', s2')
+    ensures  valAddrPage(d1', asp)  && valAddrPage(d2', asp)
+    ensures  valAddrPage(d1', atkr) && valAddrPage(d2', atkr)
+    ensures finalDispatcher(d1', dispPg) && finalDispatcher(d2', dispPg)
+    ensures  d1'[dispPg].addrspace == asp && d2'[dispPg].addrspace == asp
+    // ensures  InsecureMemInvariant(s1', s2')
 {
     reveal validEnclaveExecutionStep();
-    var s4, d4 :|
-        validEnclaveExecutionStep'(s, d, s4, d4, s', d', disp, ret);
-    lemma_validEnclaveStepPrime_oae(s, d, s4, d4, s', d', disp, ret, asp, atkr);
+    var s14, d14 :|
+        validEnclaveExecutionStep'(s1, d1, s14, d14, s1', d1',
+            dispPg, ret1);
+
+    var s24, d24 :|
+        validEnclaveExecutionStep'(s2, d2, s24, d24, s2', d2',
+            dispPg, ret2);
+
+    lemma_validEnclaveStepPrime_enc_not_atkr(
+        s1, d1, s14, d14, s1', d1',
+        s2, d2, s24, d24, s2', d2',
+        dispPg, ret1, ret2, asp, atkr);
 }
 
-lemma lemma_validEnclaveStepPrime_oae(
-    s1:state, d1: PageDb, s4:state, d4: PageDb, r:state, rd: PageDb,
-    disp: PageNr, ret:bool, asp: PageNr, atkr: PageNr)
-    requires ValidState(s1) && ValidState(s4) && ValidState(r)
-    requires validPageDb(d1) && validPageDb(d4) && validPageDb(rd)
-    requires SaneConstants()
-    requires validPageNr(disp) && valDispPage(d1, disp)
-    requires validPageNr(asp) && valAddrPage(d1, asp)
-    requires validPageNr(atkr) && valAddrPage(d1, atkr)
-    requires d1[disp].addrspace == asp
+lemma {:timeLimitMultiplier 3}
+lemma_validEnclaveStepPrime_enc_not_atkr(
+s11: state, d11: PageDb, s14:state, d14:PageDb, r1:state, rd1:PageDb,
+s21: state, d21: PageDb, s24:state, d24:PageDb, r2:state, rd2:PageDb,
+dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool,
+asp: PageNr, atkr: PageNr)
+    requires ValidState(s11) && ValidState(s21) &&
+             ValidState(r1)  && ValidState(r2)  &&
+             validPageDb(d11) &&
+             validPageDb(d21) && 
+             validPageDb(d14) && 
+             validPageDb(d24) && 
+             validPageDb(rd1) && 
+             validPageDb(rd2) && 
+             SaneConstants()
+    requires do_declassify()
+    requires valAddrPage(d11, asp) && valAddrPage(d21, asp)
+    requires valAddrPage(d11, atkr) && valAddrPage(d21, atkr)
+    requires finalDispatcher(d11, dispPg)
+    requires finalDispatcher(d21, dispPg)
+    requires validEnclaveExecutionStep'(s11,d11,s14,d14,r1,rd1,dispPg,retToEnclave1)
+    requires validEnclaveExecutionStep'(s21,d21,s24,d24,r2,rd2,dispPg,retToEnclave2)
+    // requires InsecureMemInvariant(s11, s21)
+    requires d11[dispPg].addrspace == asp && d21[dispPg].addrspace == asp
     requires asp != atkr
-    requires finalDispatcher(d1, disp)
-    requires validEnclaveExecutionStep'(s1,d1,s4,d4,r,rd,disp,ret)
-    ensures enc_eqpdb(d1, rd, atkr)
-    ensures valAddrPage(rd, atkr) && valAddrPage(rd, asp)
-    ensures valDispPage(rd, disp) && rd[disp].addrspace == asp
+    requires enc_eqpdb(d11, d21, atkr)
+    requires s11.conf.nondet == s21.conf.nondet
+    requires mode_of_state(s11) != User && mode_of_state(s21) != User
+    // requires spsr_same(s11, s21)
+    requires s11.conf.scr == s21.conf.scr;
+    ensures  enc_eqpdb(rd1, rd2, atkr)
+    // ensures  InsecureMemInvariant(r1, r2)
+    ensures  retToEnclave1 == retToEnclave2
+    ensures  retToEnclave1 ==> r1.conf.scr == r2.conf.scr
+    ensures  retToEnclave1 ==> r1.conf.nondet == r2.conf.nondet
+    ensures  !retToEnclave1 ==> same_ret(r1, r2)
+    ensures  valAddrPage(rd1, asp)  && valAddrPage(rd2, asp)
+    ensures  valAddrPage(rd1, atkr) && valAddrPage(rd2, atkr)
+    ensures finalDispatcher(rd1, dispPg) && finalDispatcher(rd2, dispPg)
+    ensures  rd1[dispPg].addrspace == asp && rd2[dispPg].addrspace == asp
+    // ensures  retToEnclave1 ==> OperandContents(r1, OLR) == OperandContents(r2, OLR)
+    // ensures  retToEnclave1 ==> user_regs(r1.regs) == user_regs(r2.regs)
+{    
+    assert l1pOfDispatcher(d11, dispPg) == l1pOfDispatcher(d21, dispPg) by
+        { reveal enc_eqpdb(); }
+    var l1p := l1pOfDispatcher(d11, dispPg);
+
+    assert dataPagesCorrespond(s11.m, d11);
+    assert dataPagesCorrespond(s21.m, d21);
+    
+    assert userspaceExecutionAndException(s11, s14);
+    assert userspaceExecutionAndException(s21, s24);
+    
+    reveal userspaceExecutionAndException();
+
+    var s1', s12 :| userspaceExecutionAndException'(s11, s1', s12, s14);
+    var s2', s22 :| userspaceExecutionAndException'(s21, s2', s22, s24);
+
+    var pc1 := OperandContents(s11, OLR);
+    var pc2 := OperandContents(s21, OLR);
+    
+    assert ExtractAbsPageTable(s12).Just? by {
+        assert ExtractAbsPageTable(s11).Just?;
+        assert ExtractAbsPageTable(s11) == ExtractAbsPageTable(s1');
+        assert ExtractAbsPageTable(s12) == ExtractAbsPageTable(s1');
+    }
+    var (s13, expc1, ex1) := userspaceExecutionFn(s12, pc1);
+    var (s23, expc2, ex2) := userspaceExecutionFn(s22, pc2);
+  
+    /*
+    assert InsecureMemInvariant(s12, s22) by {
+        assert InsecureMemInvariant(s11, s12);
+        assert InsecureMemInvariant(s21, s22);
+    }
+    */
+
+    var pt1 := ExtractAbsPageTable(s12);
+    var pt2 := ExtractAbsPageTable(s22);
+
+    assert pageTableCorresponds(s12, d11, l1p)
+        && pageTableCorresponds(s22, d21, l1p) by
+    { 
+        assert pageTableCorresponds(s11, d11, l1p);
+        assert pageTableCorresponds(s21, d21, l1p);
+        reveal pageTableCorresponds();
+    }
+
+    assert pt1 == pt2 by {
+        lemma_eqpdb_pt_coresp_not_atkr(d11, d21, s12, s22, l1p, asp, atkr);
+    }
+
+    assert s12.conf.nondet == s22.conf.nondet;
+
+    /*
+    assert InsecureMemInvariant(s13, s23) by {
+        lemma_insecure_mem_userspace(
+            s12, pc1, s13, expc1, ex1,
+            s22, pc2, s23, expc2, ex2);
+    }
+
+    assert InsecureMemInvariant(s14, s24);
+
+    assert InsecureMemInvariant(r1, r2);
+    */
+
+    assert s13.conf.nondet == s23.conf.nondet by
+    {
+        reveal userspaceExecutionFn();
+        assert s13.conf.nondet == nondet_int(s12.conf.nondet, NONDET_GENERATOR());
+        assert s23.conf.nondet == nondet_int(s22.conf.nondet, NONDET_GENERATOR());
+    }
+    
+    assert s14.conf.nondet == s24.conf.nondet;
+
+    assert ex1 == ex2 && s14.conf.ex == s24.conf.ex by {
+        lemma_decl_ex(s1', s12, s14, s2', s22, s24);
+    }
+
+    assert enc_eqpdb(d14, d24, atkr) by
+    {
+        assert validPageDbs({d11,d21,d14,d24});
+        lemma_updateUserPages_enc_not_atkr(s14, d11, d14,
+            s24, d21, d24, dispPg, asp, atkr);
+    }
+
+    assert valAddrPage(d14, atkr) && valAddrPage(d24, atkr) &&
+        d14[dispPg].addrspace == asp && d24[dispPg].addrspace == asp by
+        { reveal updateUserPagesFromState(); }
+
+    assert retToEnclave1 == retToEnclave2 &&
+        (ex1 == ExSVC ==> s14.regs[R0] == s24.regs[R0]) &&
+        (ex1 == ExSVC && (s14.regs[R0] == KOM_SVC_EXIT ||
+            s14.regs[R0] == KOM_SVC_MAP_DATA ||
+            s14.regs[R0] == KOM_SVC_UNMAP_DATA ||
+            s14.regs[R0] == KOM_SVC_INIT_L2PTABLE) ==>
+            s14.regs[R1] == s24.regs[R1]) &&
+        (ex1 == ExSVC && (s14.regs[R0] == KOM_SVC_MAP_DATA ||
+            s14.regs[R0] == KOM_SVC_UNMAP_DATA ||
+            s14.regs[R0] == KOM_SVC_INIT_L2PTABLE) ==>
+            s14.regs[R2] == s24.regs[R2]) by
+    {
+        assert s14.regs[R0] == s13.regs[R0];
+        assert s24.regs[R0] == s23.regs[R0];
+        reveal userspaceExecutionFn();
+        if(ex1 == ExSVC) {
+            lemma_decl_svc_r0(s13, s14, s23, s24);
+            if(s14.regs[R0] == KOM_SVC_EXIT ||
+               s14.regs[R0] == KOM_SVC_MAP_DATA ||
+               s14.regs[R0] == KOM_SVC_UNMAP_DATA ||
+               s14.regs[R0] == KOM_SVC_INIT_L2PTABLE){
+                lemma_decl_svc_r1(s13, s14, s23, s24);
+            }
+            if(s14.regs[R0] == KOM_SVC_MAP_DATA ||
+               s14.regs[R0] == KOM_SVC_UNMAP_DATA ||
+               s14.regs[R0] == KOM_SVC_INIT_L2PTABLE){
+                lemma_decl_svc_r2(s13, s14, s23, s24);
+            }
+        }
+    }
+   
+    lemma_validEnclaveStepPrime_enc_not_atkr_retnondet(
+        s11, d11, s14, d14, r1, rd1,
+        s21, d21, s24, d24, r2, rd2,
+        dispPg, retToEnclave1, retToEnclave2, asp, atkr);
+
+}
+
+lemma lemma_updateUserPages_enc_not_atkr(
+    s14: state, d11: PageDb, d14: PageDb,
+    s24: state, d21: PageDb, d24: PageDb,
+    dispPg: PageNr, asp: PageNr, atkr: PageNr)
+requires validStates({s14, s24}) && SaneConstants()
+requires validPageDbs({d11,d21,d14,d24})
+requires finalDispatcher(d11, dispPg)
+requires finalDispatcher(d21, dispPg)
+requires valAddrPage(d11, asp) && valAddrPage(d21, asp)
+requires valAddrPage(d11, atkr) && valAddrPage(d21, atkr)
+requires d11[dispPg].addrspace == asp && d21[dispPg].addrspace == asp
+requires asp != atkr
+requires d14 == updateUserPagesFromState(s14, d11, dispPg)
+requires d24 == updateUserPagesFromState(s24, d21, dispPg)
+requires enc_eqpdb(d11, d21, atkr)
+ensures  enc_eqpdb(d14, d24, atkr)
 {
-    assert d4 == updateUserPagesFromState(s4, d1, disp);
-    assert enc_eqpdb(d1, d4, atkr) &&
-        valAddrPage(d4, atkr) && 
-        valAddrPage(d4, asp) && 
-        d4[disp].addrspace == asp by 
-        { reveal updateUserPagesFromState(); reveal enc_eqpdb(); }
-    if (ret) { 
-        assert rd == svcHandled(s4, d4, disp).1;
-        var retRegs := svcHandled(s4, d4, disp).0;
-        lemma_svcHandled_oae(s4, d4, rd, disp, asp, atkr);
+    reveal updateUserPagesFromState();
+    reveal enc_eqpdb();
+}
+
+lemma
+lemma_validEnclaveStepPrime_enc_not_atkr_retnondet(
+s11: state, d11: PageDb, s14:state, d14:PageDb, r1:state, rd1:PageDb,
+s21: state, d21: PageDb, s24:state, d24:PageDb, r2:state, rd2:PageDb,
+dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool,
+asp: PageNr, atkr: PageNr
+)
+    requires ValidState(s11) && ValidState(s21) &&
+             ValidState(r1)  && ValidState(r2)  &&
+             validPageDb(d11) && validPageDb(d21) &&
+             validPageDb(rd1) && validPageDb(rd2) && SaneConstants()
+    requires valAddrPage(d11, asp) && valAddrPage(d21, asp)
+    requires valAddrPage(d11, atkr) && valAddrPage(d21, atkr)
+    requires finalDispatcher(d11, dispPg)
+    requires finalDispatcher(d21, dispPg)
+    requires d11[dispPg].addrspace == asp && d21[dispPg].addrspace == asp
+    requires asp != atkr
+    requires finalDispatcher(d14, dispPg)
+    requires finalDispatcher(d24, dispPg)
+    requires valAddrPage(d14, atkr) && valAddrPage(d24, atkr);
+    requires d14[dispPg].addrspace == asp && d24[dispPg].addrspace == asp;
+    requires validEnclaveExecutionStep'(s11,d11,s14,d14,r1,rd1,dispPg,retToEnclave1)
+    requires validEnclaveExecutionStep'(s21,d21,s24,d24,r2,rd2,dispPg,retToEnclave2)
+    // requires InsecureMemInvariant(s11, s21)
+    requires s14.conf.nondet == s24.conf.nondet 
+    requires enc_eqpdb(d14, d24, atkr)
+    requires retToEnclave1 == retToEnclave2
+    requires s14.conf.ex == s24.conf.ex;
+    requires (s14.conf.ex == ExSVC) ==>
+            s14.regs[R0] == s24.regs[R0];
+    requires (s14.conf.ex == ExSVC && (s14.regs[R0] == KOM_SVC_EXIT ||
+            s14.regs[R0] == KOM_SVC_MAP_DATA ||
+            s14.regs[R0] == KOM_SVC_UNMAP_DATA ||
+            s14.regs[R0] == KOM_SVC_INIT_L2PTABLE)) ==>
+        s14.regs[R1] == s24.regs[R1]
+    requires (s14.conf.ex == ExSVC && (s14.regs[R0] == KOM_SVC_MAP_DATA ||
+              s14.regs[R0] == KOM_SVC_UNMAP_DATA ||
+              s14.regs[R0] == KOM_SVC_INIT_L2PTABLE)) ==>
+        s14.regs[R2] == s24.regs[R2]
+    ensures  enc_eqpdb(rd1, rd2, atkr)
+    ensures  !retToEnclave1 ==> same_ret(r1, r2)
+    ensures  retToEnclave1 ==> r1.conf.nondet == r2.conf.nondet
+    ensures  valAddrPage(rd1, asp)  && valAddrPage(rd2, asp)
+    ensures  valAddrPage(rd1, atkr) && valAddrPage(rd2, atkr)
+    ensures finalDispatcher(rd1, dispPg) && finalDispatcher(rd2, dispPg)
+    ensures  rd1[dispPg].addrspace == asp && rd2[dispPg].addrspace == asp
+{
+    if(retToEnclave1) {
+        
+        var (retRegs1, rd1') := svcHandled(s14, d14, dispPg);
+        var (retRegs2, rd2') := svcHandled(s24, d24, dispPg);
+
+        if(s14.conf.ex == ExSVC) { 
+            lemma_svcHandled_enc_not_atkr(s14, d14, rd1',
+                s24, d24, rd2', dispPg, asp, atkr);
+        }
+
         reveal enc_eqpdb();
-        assert enc_eqpdb(d1, rd, atkr); 
+        
+        assert enc_eqpdb(rd1', rd2', atkr);
+        assert enc_eqpdb(rd1, rd2, atkr);
+
+        assert r1.conf.nondet == r2.conf.nondet by {
+            assert s14.conf.nondet == s24.conf.nondet; 
+        }
     } else {
-        lemma_excpHandled_oae(s4, d4, rd, disp, asp, atkr);
-        reveal enc_eqpdb(); 
+        reveal ValidRegState();
+        lemma_exceptionHandled_enc_not_atkr(
+            s14, d14, rd1, r1.regs[R0], r1.regs[R1],
+            s24, d24, rd2, r2.regs[R0], r2.regs[R1],
+            dispPg, asp, atkr);
     }
 }
 
-lemma lemma_excpHandled_oae(s: state, d: PageDb, d': PageDb,
-    dispPage:PageNr, asp: PageNr, atkr: PageNr)
-    requires ValidState(s)  
-    requires validPageDb(d) && validPageDb(d')
-    requires SaneConstants()
-    requires validPageNr(dispPage) && valDispPage(d, dispPage)
-    requires validPageNr(asp) && valAddrPage(d, asp)
-    requires validPageNr(atkr) && valAddrPage(d, atkr)
-    requires d[dispPage].addrspace == asp
+lemma lemma_svcHandled_enc_not_atkr(s1: state, d1: PageDb, d1': PageDb,
+                                    s2: state, d2: PageDb, d2': PageDb,
+                                    dispPg: PageNr, asp: PageNr, atkr: PageNr)
+    requires validPageDbs({d1, d1'}) && validDispatcherPage(d1, dispPg)
+    requires validPageDbs({d2, d2'}) && validDispatcherPage(d2, dispPg)
+    requires ValidState(s1) && mode_of_state(s1) != User
+    requires ValidState(s2) && mode_of_state(s2) != User
+    requires valAddrPage(d1, asp) && valAddrPage(d2, asp)
+    requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+    requires finalDispatcher(d1, dispPg)
+    requires finalDispatcher(d2, dispPg)
+    requires d1[dispPg].addrspace == asp && d2[dispPg].addrspace == asp
     requires asp != atkr
-    requires finalDispatcher(d, dispPage)
-    requires validPageDb(d) && validDispatcherPage(d, dispPage)
-    requires ValidState(s) && mode_of_state(s) != User
-    requires d' == exceptionHandled(s, d, dispPage).2
-    ensures enc_eqpdb(d, d', atkr)
+    requires OperandContents(s1, OReg(R0)) == OperandContents(s2, OReg(R0));
+    requires (s1.regs[R0] == KOM_SVC_EXIT ||
+              s1.regs[R0] == KOM_SVC_MAP_DATA ||
+              s1.regs[R0] == KOM_SVC_UNMAP_DATA ||
+              s1.regs[R0] == KOM_SVC_INIT_L2PTABLE) ==>
+        s1.regs[R1] == s2.regs[R1]
+    requires (s1.regs[R0] == KOM_SVC_MAP_DATA ||
+              s1.regs[R0] == KOM_SVC_UNMAP_DATA ||
+              s1.regs[R0] == KOM_SVC_INIT_L2PTABLE) ==>
+        s1.regs[R2] == s2.regs[R2]
+    requires isReturningSvc(s1) && finalDispatcher(d1, dispPg)
+    requires isReturningSvc(s2) && finalDispatcher(d2, dispPg)
+    requires d1' == svcHandled(s1, d1, dispPg).1
+    requires d2' == svcHandled(s2, d2, dispPg).1
+    requires enc_eqpdb(d1, d2, atkr)
+    ensures enc_eqpdb(d1', d2', atkr)
+    ensures valAddrPage(d1', asp)  && valAddrPage(d2', asp)
+    ensures valAddrPage(d1', atkr) && valAddrPage(d2', atkr)
+    ensures finalDispatcher(d1', dispPg) && finalDispatcher(d2', dispPg)
+    ensures  d1'[dispPg].addrspace == asp && d2'[dispPg].addrspace == asp
 {
-    reveal enc_eqpdb();
-    // XXX
-}
-    
 
-lemma lemma_svcHandled_oae(
-    s: state, d: PageDb, d': PageDb,
-    dispPg: PageNr, asp: PageNr, atkr: PageNr)
-    requires
-        ValidState(s) &&
-        validPageDb(d) && validPageDb(d') &&
-        validDispatcherPage(d, dispPg) &&
-        validPageNr(asp) && valAddrPage(d, asp) &&
-        validPageNr(atkr) && valAddrPage(d, atkr)
-    requires mode_of_state(s) != User
-    requires isReturningSvc(s) && finalDispatcher(d, dispPg)
-    requires d[dispPg].addrspace == asp
-    requires asp != atkr
-    requires d' == svcHandled(s, d, dispPg).1
-    ensures  enc_eqpdb(d, d', atkr)
-    ensures valDispPage(d', dispPg) && d'[dispPg].addrspace == asp
-    ensures valAddrPage(d', atkr) && valAddrPage(d', asp)
-{
     reveal enc_eqpdb();
-    var call := OperandContents(s, OReg(R0));
-    if(call == KOM_SVC_ATTEST) {
-    } else if (call == KOM_SVC_VERIFY_STEP0) {
-    } else if (call == KOM_SVC_VERIFY_STEP1) {
-    } else if (call == KOM_SVC_VERIFY_STEP2) {
-    } else if (call == KOM_SVC_MAP_DATA) {
-        var page, mapping := s.regs[R1], s.regs[R2];
-        var (retDb, retErr) := svcMapData(d, asp, page, mapping);
-        if(retErr == KOM_ERR_SUCCESS) {
-            assert !pgInAddrSpc(d, page, atkr);
-            assert enc_eqentry(d[page].entry, d'[page].entry);
+    var addrspace := d1[dispPg].addrspace;
+    var call := OperandContents(s1, OReg(R0));
+    if( call  == KOM_SVC_ATTEST ) {
+        assert d1' == d1;
+        assert d2' == d2;
+    } else if( call  == KOM_SVC_VERIFY_STEP0) {
+        assert enc_eqentry(d1'[dispPg].entry, d2'[dispPg].entry);
+    } else if( call  == KOM_SVC_VERIFY_STEP1) {
+        assert enc_eqentry(d1'[dispPg].entry, d2'[dispPg].entry);
+    } else if( call  == KOM_SVC_VERIFY_STEP2) {
+        assert d1' == d1;
+        assert d2' == d2;
+    } else if( call == KOM_SVC_MAP_DATA) {
+        var page, mapping := s1.regs[R1], s1.regs[R2];
+        var (retDb1, retErr1) := svcMapData(d1, addrspace, page, mapping);
+        var (retDb2, retErr2) := svcMapData(d2, addrspace, page, mapping);
+        assert retErr1 == KOM_ERR_INVALID_PAGENO <==>
+            retErr2 == KOM_ERR_INVALID_PAGENO;
+        assert retErr1 == KOM_ERR_INVALID_MAPPING <==>
+            retErr2 == KOM_ERR_INVALID_MAPPING;
+        if(retErr1 == KOM_ERR_SUCCESS) {
+            assert enc_eqentry(d1'[page].entry, d2'[page].entry);
 
             var abs_mapping := wordToMapping(mapping);
-            var l1 := d[d[asp].entry.l1ptnr].entry;
-            var l1pte := fromJust(l1.l1pt[abs_mapping.l1index]);
-            assert !pgInAddrSpc(d, l1pte, atkr);
-            assert enc_eqentry(d[l1pte].entry, d'[l1pte].entry);
+            var l11 := d1[d1[addrspace].entry.l1ptnr].entry;
+            var l12 := d2[d2[addrspace].entry.l1ptnr].entry;
+            var l1pte1 := fromJust(l11.l1pt[abs_mapping.l1index]);
+            var l1pte2 := fromJust(l12.l1pt[abs_mapping.l1index]);
+            assert enc_eqentry(d1'[l1pte1].entry, d2'[l1pte2].entry);
         }
-    } else if (call == KOM_SVC_UNMAP_DATA) {
-    } else if (call == KOM_SVC_INIT_L2PTABLE) {
-        var page, l1index := s.regs[R1], s.regs[R2];
-        var (retDb, retErr) := svcInitL2PTable(d, asp, page, l1index);
-        if ( retErr == KOM_ERR_SUCCESS ) {
-            assert !pgInAddrSpc(d, page, atkr);
-            assert enc_eqentry(d[page].entry, d'[page].entry);
-            var l1ptnr := d[asp].entry.l1ptnr;
-            assert !pgInAddrSpc(d, l1ptnr, atkr);
-            assert enc_eqentry(d[l1ptnr].entry, d'[l1ptnr].entry);
+    } else if( call == KOM_SVC_UNMAP_DATA) {
+    } else if( call == KOM_SVC_INIT_L2PTABLE) {
+        var e1 := svcHandled(s1, d1, dispPg).0.0;
+        var e2 := svcHandled(s2, d2, dispPg).0.0;
+        reveal validPageDb();
+        assert e1 == KOM_ERR_INVALID_MAPPING <==> e2 == KOM_ERR_INVALID_MAPPING;
+        assert e1 == KOM_ERR_INVALID_PAGENO <==> e2 == KOM_ERR_INVALID_PAGENO;
+        assert e1 == KOM_ERR_ADDRINUSE <==> e2 == KOM_ERR_ADDRINUSE;
+        var page := OperandContents(s1, OReg(R1));
+        var l1index := OperandContents(s1, OReg(R2));
+        if(e1 == KOM_ERR_SUCCESS) {
+            // var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
+            // var d1 := updatePageEntry(d, page, l2pt);
+            var l1ptnr := d1[addrspace].entry.l1ptnr;
+            assert enc_eqentry(d1'[page].entry, d2'[page].entry);
+            assert enc_eqentry(d1'[l1ptnr].entry, d2'[l1ptnr].entry);
+            // var d2 := installL1PTEInPageDb(d1, l1ptnr, page, l1index);
         }
     } else {
     }
 }
 
+lemma lemma_exceptionHandled_enc_not_atkr(
+    s14:state, d14:PageDb, rd1:PageDb, r01:word, r11:word,
+    s24:state, d24:PageDb, rd2:PageDb, r02:word, r12:word,
+    dispPg:PageNr, asp: PageNr, atkr: PageNr)
+    requires validStates({s14, s24})
+    requires validPageDbs({d14,d24,rd1,rd2})
+    requires validDispatcherPage(d14, dispPg)
+    requires validDispatcherPage(d24, dispPg)
+    requires mode_of_state(s14) != User
+    requires mode_of_state(s24) != User
+    requires valAddrPage(d14, asp) && valAddrPage(d24, asp)
+    requires valAddrPage(d14, atkr) && valAddrPage(d24, atkr)
+    requires finalDispatcher(d14, dispPg)
+    requires finalDispatcher(d24, dispPg)
+    requires d14[dispPg].addrspace == asp && d24[dispPg].addrspace == asp
+    requires asp != atkr
+    requires (r01, r11, rd1) == exceptionHandled(s14, d14, dispPg)
+    requires (r02, r12, rd2) == exceptionHandled(s24, d24, dispPg)
+    requires s14.conf.ex == s24.conf.ex
+    requires enc_eqpdb(d14, d24, atkr)
+    requires R1 in s14.regs && R1 in s24.regs
+    requires s14.conf.ex.ExSVC? ==> 
+        s14.regs[R1] == s24.regs[R1]
+    ensures  enc_eqpdb(rd1, rd2, atkr)
+    ensures  r01 == r02 && r11 == r12
+    ensures  valAddrPage(rd1, asp)  && valAddrPage(rd2, asp)
+    ensures  valAddrPage(rd1, atkr) && valAddrPage(rd2, atkr)
+    ensures  finalDispatcher(rd1, dispPg) && finalDispatcher(rd2, dispPg)
+    ensures  rd1[dispPg].addrspace == asp && rd2[dispPg].addrspace == asp
+{
+    reveal enc_eqpdb();
+}
 
 //-----------------------------------------------------------------------------
 // Executions of attacker enclaves beginning from low-equiv states produce 
@@ -420,41 +722,41 @@ predicate atkr_entry(d1: PageDb, d2: PageDb, disp: word, atkr: PageNr)
 
 lemma lemma_enter_enc_atkr_enter(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                  s2: state, d2: PageDb, s2':state, d2': PageDb,
-                                 dispPage: word, arg1: word, arg2: word, arg3: word,
+                                 dispPg: word, arg1: word, arg2: word, arg3: word,
                                  atkr: PageNr, isresume:bool)
     requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
-    requires !isresume ==> smc_enter(s1, d1, s1', d1', dispPage, arg1, arg2, arg3)
-    requires !isresume ==> smc_enter(s2, d2, s2', d2', dispPage, arg1, arg2, arg3)
-    requires isresume ==> smc_resume(s1, d1, s1', d1', dispPage)
-    requires isresume ==> smc_resume(s2, d2, s2', d2', dispPage)
+    requires !isresume ==> smc_enter(s1, d1, s1', d1', dispPg, arg1, arg2, arg3)
+    requires !isresume ==> smc_enter(s2, d2, s2', d2', dispPg, arg1, arg2, arg3)
+    requires isresume ==> smc_resume(s1, d1, s1', d1', dispPg)
+    requires isresume ==> smc_resume(s2, d2, s2', d2', dispPg)
     requires enc_eqpdb(d1, d2, atkr)
-    requires entering_atkr(d1, d2, dispPage, atkr, isresume);
+    requires entering_atkr(d1, d2, dispPg, atkr, isresume);
     requires s1.conf.nondet == s2.conf.nondet
     ensures  enc_eqpdb(d1', d2', atkr)
 {
 
     if(!isresume) {
         var s11:state, steps1: nat :|
-            preEntryEnter(s1, s11, d1, dispPage, arg1, arg2, arg3) &&
-            validEnclaveExecution(s11, d1, s1', d1', dispPage, steps1);
+            preEntryEnter(s1, s11, d1, dispPg, arg1, arg2, arg3) &&
+            validEnclaveExecution(s11, d1, s1', d1', dispPg, steps1);
         
         var s21:state, steps2: nat :|
-            preEntryEnter(s2, s21, d2, dispPage, arg1, arg2, arg3) &&
-            validEnclaveExecution(s21, d2, s2', d2', dispPage, steps2);
+            preEntryEnter(s2, s21, d2, dispPg, arg1, arg2, arg3) &&
+            validEnclaveExecution(s21, d2, s2', d2', dispPg, steps2);
 
         assert s11.conf.nondet == s21.conf.nondet;
         assert user_regs(s11.regs) == user_regs(s21.regs);
 
         assert OperandContents(s11, OLR) == OperandContents(s21, OLR) by 
         {
-            assert OperandContents(s11, OLR) == d1[dispPage].entry.entrypoint;
-            assert OperandContents(s21, OLR) == d2[dispPage].entry.entrypoint;
+            assert OperandContents(s11, OLR) == d1[dispPg].entry.entrypoint;
+            assert OperandContents(s21, OLR) == d2[dispPg].entry.entrypoint;
             reveal enc_eqpdb();
         }
         
         assert spsr_same(s11, s21) by {
-            assert preEntryEnter(s1, s11, d1, dispPage, arg1, arg2, arg3);
-            assert preEntryEnter(s2, s21, d2, dispPage, arg1, arg2, arg3);
+            assert preEntryEnter(s1, s11, d1, dispPg, arg1, arg2, arg3);
+            assert preEntryEnter(s2, s21, d2, dispPg, arg1, arg2, arg3);
             var mode1 := mode_of_state(s11);
             var mode2 := mode_of_state(s21);
             assert mode1 != User && mode2 != User;
@@ -479,23 +781,23 @@ lemma lemma_enter_enc_atkr_enter(s1: state, d1: PageDb, s1':state, d1': PageDb,
             }
         }
         lemma_validEnclaveEx_enc(s11, d1, s1', d1', s21, d2, s2', d2',
-                                             dispPage, steps1, steps2, atkr);
+                                             dispPg, steps1, steps2, atkr);
     } else {
         var s11:state, steps1: nat :|
-            preEntryResume(s1, s11, d1, dispPage) &&
-            validEnclaveExecution(s11, d1, s1', d1', dispPage, steps1);
+            preEntryResume(s1, s11, d1, dispPg) &&
+            validEnclaveExecution(s11, d1, s1', d1', dispPg, steps1);
         
         var s21:state, steps2: nat :|
-            preEntryResume(s2, s21, d2, dispPage) &&
-            validEnclaveExecution(s21, d2, s2', d2', dispPage, steps2);
+            preEntryResume(s2, s21, d2, dispPg) &&
+            validEnclaveExecution(s21, d2, s2', d2', dispPg, steps2);
 
         assert s11.conf.nondet == s21.conf.nondet;
 
-        assert d1[dispPage].entry == d2[dispPage].entry by
+        assert d1[dispPg].entry == d2[dispPg].entry by
             { reveal enc_eqpdb(); }
 
         assert user_regs(s11.regs) == user_regs(s21.regs) by {
-            var disp := d1[dispPage].entry;
+            var disp := d1[dispPg].entry;
             assert (forall r | r in USER_REGS() :: 
                 (s11.regs[r] == disp.ctxt.regs[r] &&
                  s21.regs[r] == disp.ctxt.regs[r]));
@@ -504,15 +806,15 @@ lemma lemma_enter_enc_atkr_enter(s1: state, d1: PageDb, s1':state, d1': PageDb,
 
         assert OperandContents(s11, OLR) == OperandContents(s21, OLR) by 
         {   
-            assert OperandContents(s11, OLR) == d1[dispPage].entry.ctxt.pc;
-            assert OperandContents(s21, OLR) == d2[dispPage].entry.ctxt.pc;
+            assert OperandContents(s11, OLR) == d1[dispPg].entry.ctxt.pc;
+            assert OperandContents(s21, OLR) == d2[dispPg].entry.ctxt.pc;
             reveal enc_eqpdb();
         }
         
         assert spsr_same(s11, s21) by {
-            var disp := d1[dispPage].entry;
-            assert preEntryResume(s1, s11, d1, dispPage);
-            assert preEntryResume(s2, s21, d2, dispPage);
+            var disp := d1[dispPg].entry;
+            assert preEntryResume(s1, s11, d1, dispPg);
+            assert preEntryResume(s2, s21, d2, dispPg);
             reveal ValidSRegState();
             var mode1 := mode_of_state(s11);
             var mode2 := mode_of_state(s21);
@@ -521,7 +823,7 @@ lemma lemma_enter_enc_atkr_enter(s1: state, d1: PageDb, s1':state, d1': PageDb,
             assert s21.sregs[spsr(mode2)] == disp.ctxt.cpsr;
         }
         lemma_validEnclaveEx_enc(s11, d1, s1', d1', s21, d2, s2', d2',
-                                             dispPage, steps1, steps2, atkr);
+                                             dispPg, steps1, steps2, atkr);
     }
 }
 
@@ -1449,6 +1751,29 @@ l1p:PageNr, atkr: PageNr)
     }
 }
 
+lemma lemma_eqpdb_pt_coresp_not_atkr(d1: PageDb, d2: PageDb, s1: state, s2: state,
+    l1p:PageNr, asp: PageNr, atkr: PageNr)
+    requires validPageDb(d1) && validPageDb(d2)
+    requires ValidState(s1) && ValidState(s2)
+    requires ValidState(s1) && ValidState(s2) && SaneConstants()
+    requires valAddrPage(d1, asp ) && valAddrPage(d2, asp)
+    requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
+    requires atkr != asp
+    requires enc_eqpdb(d1, d2, atkr)
+    requires nonStoppedL1(d1, l1p) && nonStoppedL1(d2, l1p)
+    requires pageTableCorresponds(s1, d1, l1p)
+    requires pageTableCorresponds(s2, d2, l1p)
+    requires d1[asp].entry.l1ptnr == d2[asp].entry.l1ptnr == l1p
+    ensures  ExtractAbsPageTable(s1) == ExtractAbsPageTable(s2)
+{
+    reveal pageTableCorresponds();
+    assert mkAbsPTable(d1, l1p) == mkAbsPTable(d2, l1p) by {
+        reveal enc_eqpdb();
+        reveal validPageDb();
+        reveal mkAbsPTable();
+    }
+}
+
 //-----------------------------------------------------------------------------
 // Resume
 //-----------------------------------------------------------------------------
@@ -1460,8 +1785,7 @@ lemma lemma_resume_enc_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
     requires smc_resume(s1, d1, s1', d1', dispPage)
     requires smc_resume(s2, d2, s2', d2', dispPage)
     requires enc_eqpdb(d1, d2, atkr)
-    requires entering_atkr(d1, d2, dispPage, atkr, true) ==>
-        s1.conf.nondet == s2.conf.nondet
+    requires s1.conf.nondet == s2.conf.nondet
     ensures enc_eqpdb(d1', d2', atkr)
 {
     reveal enc_eqpdb();

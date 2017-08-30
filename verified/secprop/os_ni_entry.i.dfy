@@ -4,14 +4,6 @@ include "../entry.s.dfy"
 include "sec_prop_util.i.dfy"
 include "../smcapi.i.dfy"
 
-predicate same_ret(s1:state, s2:state)
-    requires ValidState(s1) && ValidState(s2)
-{
-    reveal ValidRegState();
-    s1.regs[R0] == s2.regs[R0] &&
-    s1.regs[R1] == s2.regs[R1]
-}
-
 lemma lemma_enter_os_ni(
     s1: state, d1: PageDb, s1':state, d1': PageDb,
     s2: state, d2: PageDb, s2':state, d2': PageDb,
@@ -551,50 +543,6 @@ lemma lemma_userspace_insecure_addr(s:state, pc: word, s3: state, a:addr)
     var hv := havocPages(pages, s, user_state);
     assert s3.m.addresses == hv by
         { reveal userspaceExecutionFn(); }
-}
-
-lemma lemma_insecure_mem_userspace(
-    s12: state, pc1: word, s13: state, expc1: word, ex1: exception,
-    s22: state, pc2: word, s23: state, expc2: word, ex2: exception)
-    requires validStates({s12, s13, s22, s23})
-    requires SaneConstants()
-    requires InsecureMemInvariant(s12, s22)
-    requires s12.conf.nondet == s22.conf.nondet
-    requires mode_of_state(s12) == mode_of_state(s22) == User;
-    requires 
-        var pt1 := ExtractAbsPageTable(s12);
-        var pt2 := ExtractAbsPageTable(s22);
-        pt1.Just? && pt2.Just? && pt1 == pt2
-    requires userspaceExecutionFn(s12, pc1) == (s13, expc1, ex1)
-    requires userspaceExecutionFn(s22, pc2) == (s23, expc2, ex2)
-    ensures InsecureMemInvariant(s13, s23)
-{
-    reveal ValidMemState();
-    var pt := ExtractAbsPageTable(s12).v;
-    var pages := WritablePagesInTable(pt);
-
-    forall( a | ValidMem(a) && address_is_insecure(a) )
-        ensures s13.m.addresses[a] == s23.m.addresses[a]
-    {
-        var m1 := insecureUserspaceMem(s12, pc1, a);
-        var m2 := insecureUserspaceMem(s22, pc2, a);
-        lemma_userspace_insecure_addr(s12, pc1, s13, a);
-        lemma_userspace_insecure_addr(s22, pc2, s23, a);
-        assert s13.m.addresses[a] == m1;
-        assert s23.m.addresses[a] == m2;
-        if(PageBase(a) in pages) {
-            assert m1 == nondet_word(s12.conf.nondet, a);
-            assert m2 == nondet_word(s22.conf.nondet, a);
-            assert s12.conf.nondet == s22.conf.nondet;
-        } else {
-        }
-    }
-}
-
-// Range used by InsecureMemInvariant
-predicate address_is_insecure(m:addr) 
-{
-    KOM_DIRECTMAP_VBASE <= m < KOM_DIRECTMAP_VBASE + MonitorPhysBase()
 }
 
 lemma lemma_eqpdb_pt_coresp(d1: PageDb, d2: PageDb, s1: state, s2: state, l1p:PageNr)

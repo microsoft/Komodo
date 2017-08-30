@@ -60,13 +60,17 @@ predicate {:opaque} enc_eqpdb(d1: PageDb, d2: PageDb, atkr: PageNr)
         pgInAddrSpc(d2, n, atkr)) &&
     (forall n : PageNr | d1[n].PageDbEntryTyped? ::
         d1[n].addrspace == d2[n].addrspace &&
-        (if(pgInAddrSpc(d1, n, atkr) || d1[d1[n].addrspace].entry.state.InitState?) 
+        // (if(pgInAddrSpc(d1, n, atkr) || d1[d1[n].addrspace].entry.state.InitState?) 
+        (if(pgInAddrSpc(d1, n, atkr))
             then d1[n].entry == d2[n].entry
             else enc_eqentry(d1[n].entry, d2[n].entry)))
 }
 
 predicate enc_eqentry(e1:PageDbEntryTyped, e2:PageDbEntryTyped)
 {
+    // TODO FIXME H4X
+    os_eqentry(e1, e2)
+    /*
     match e1
         case Addrspace(_,_,_,_,_)
             => e2.Addrspace? && e1.(shatrace := e2.shatrace,
@@ -76,6 +80,7 @@ predicate enc_eqentry(e1:PageDbEntryTyped, e2:PageDbEntryTyped)
         case L2PTable(_) => e2.DataPage? || e2.SparePage? || e2.L2PTable? 
         case DataPage(_) => e2.DataPage? || e2.SparePage? || e2.L2PTable?
         case SparePage   => e2.DataPage? || e2.SparePage? || e2.L2PTable?
+    */
 }
 
 

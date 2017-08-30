@@ -19,12 +19,7 @@ lemma lemma_enc_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     requires same_call_args(s1, s2)
     requires InsecureMemInvariant(s1, s2) // public input to mapSecure.
     requires enc_eqpdb(d1, d2, atkr)
-    requires (var callno := s1.regs[R0]; var dispPage := s1.regs[R1];
-        (callno == KOM_SMC_ENTER  && entering_atkr(d1, d2, dispPage, atkr, false))
-                ==> s1.conf.nondet == s2.conf.nondet)
-    requires (var callno := s1.regs[R0]; var dispPage := s1.regs[R1];
-        (callno == KOM_SMC_RESUME  && entering_atkr(d1, d2, dispPage, atkr, true))
-                ==> s1.conf.nondet == s2.conf.nondet)
+    requires s1.conf.nondet == s2.conf.nondet
     // then (s1', d1') =_{atkr} (s2', d2')
     ensures !(var callno := s1.regs[R0]; var asp := s1.regs[R1];
         callno == KOM_SMC_STOP && asp == atkr) ==>
@@ -391,16 +386,6 @@ lemma_initL2PTable_enc_ni(d1: PageDb, d1': PageDb, e1':word,
     var ex1_alloc := l2initgo(e1');
     var ex2_alloc := l2initgo(e2');
     
-    // There is a proposed change to smcapi that makes these assumes go away.
-    assume e1' == KOM_ERR_STOPPED <==> 
-        e1' != KOM_ERR_INVALID_ADDRSPACE &&
-        e1' != KOM_ERR_INVALID_MAPPING &&
-        d1[addrspacePage].entry.state != InitState;
-    assume e2' == KOM_ERR_STOPPED <==> 
-        e2' != KOM_ERR_INVALID_ADDRSPACE &&
-        e2' != KOM_ERR_INVALID_MAPPING &&
-        d2[addrspacePage].entry.state != InitState;
-
     assert ex1_alloc == ex2_alloc;
     if( ex1_alloc && ex2_alloc) {
         var l2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));
@@ -481,8 +466,6 @@ lemma lemma_remove_enc_ni(d1: PageDb, d1': PageDb, e1':word,
     assert e1' == KOM_ERR_PAGEINUSE <==> e2' == KOM_ERR_PAGEINUSE;
     if(validPageNr(page) && d1[page].PageDbEntryTyped? &&
         e1' != KOM_ERR_PAGEINUSE) {
-        // This is a side-channel leak we are aware of and presently permit.
-        assume d1[page].entry.SparePage? <==> d2[page].entry.SparePage?;
         assert e1' == e2';
     }
 }
