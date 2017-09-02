@@ -723,6 +723,7 @@ predicate atkr_entry(d1: PageDb, d2: PageDb, disp: word, atkr: PageNr)
 }
 
 
+// AF: This one seems a bit unstable, but at minimum it works with DAFNYPROC
 lemma lemma_enter_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                  s2: state, d2: PageDb, s2':state, d2': PageDb,
                                  dispPg: word, arg1: word, arg2: word, arg3: word,
@@ -750,7 +751,7 @@ lemma lemma_enter_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': PageDb,
             validEnclaveExecution(s21, d2, s2', d2', dispPg, steps2);
 
         assert s11.conf.nondet == s21.conf.nondet;
-        assert user_regs(s11.regs) == user_regs(s21.regs); // XXX WHYYYYY??
+        assert user_regs(s11.regs) == user_regs(s21.regs);
 
         assert OperandContents(s11, OLR) == OperandContents(s21, OLR) by 
         {
@@ -1172,7 +1173,69 @@ lemma lemma_svcHandled_loweq_pdb(
     }
 }
 
-lemma {:timeLimitMultiplier 4}
+lemma lemma_userspaceExecutionFn_loweq(
+s12: state, pc1:word, expc1:word, ex1:exception, s13:state,
+s22: state, pc2:word, expc2:word, ex2:exception, s23:state)
+    requires ValidState(s12) && ValidState(s13) && ValidState(s22) && 
+        ValidState(s23)
+    requires mode_of_state(s12) == User && mode_of_state(s22) == User
+    requires ExtractAbsPageTable(s12).Just? && ExtractAbsPageTable(s22).Just?
+    requires (s13, expc1, ex1) == userspaceExecutionFn(s12, pc1)
+    requires (s23, expc2, ex2) == userspaceExecutionFn(s22, pc2)
+    requires InsecureMemInvariant(s12, s22)
+    requires ExtractAbsPageTable(s12) == ExtractAbsPageTable(s22)
+    requires user_visible_state(s12, pc1, ExtractAbsPageTable(s12).v) ==
+        user_visible_state(s22, pc2, ExtractAbsPageTable(s22).v)
+    requires s12.conf.nondet == s22.conf.nondet
+    requires s12.conf.scr == s22.conf.scr
+    requires s12.conf.cpsr.f == s22.conf.cpsr.f;
+    requires s12.conf.cpsr.i == s22.conf.cpsr.i;
+    ensures  ex1 == ex2
+    ensures  user_regs(s13.regs) == user_regs(s23.regs)
+    ensures  expc1 == expc2
+    ensures  s13.conf.scr == s23.conf.scr
+    ensures  InsecureMemInvariant(s13, s23)
+    ensures s13.conf.nondet == s23.conf.nondet
+    ensures mode_of_exception(s13.conf, ex1) == mode_of_exception(s23.conf, ex2)
+    ensures cpsr in s13.sregs && cpsr in s23.sregs &&
+        s13.sregs[cpsr] == s23.sregs[cpsr]
+{
+    reveal userspaceExecutionFn();
+    assert user_regs(s13.regs) == user_regs(s23.regs) by {
+        var user_state1 := user_visible_state(s12, pc1, 
+            ExtractAbsPageTable(s12).v);
+        var user_state2 := user_visible_state(s22, pc2, 
+            ExtractAbsPageTable(s22).v);
+        var hr1 := havocUserRegs(s12.conf.nondet, user_state1, s12.regs);
+        var hr2 := havocUserRegs(s22.conf.nondet, user_state2, s22.regs);
+        assert s13.regs == hr1 by
+            { reveal userspaceExecutionFn(); }
+        assert s23.regs == hr2 by
+            { reveal userspaceExecutionFn(); }
+        assert user_state1 == user_state2;
+        assert s12.conf.nondet == s22.conf.nondet;
+        forall (r | r in USER_REGS() )
+            ensures hr1[r] ==
+                nondet_private_word(s12.conf.nondet, user_state1, NONDET_REG(r))
+            ensures hr2[r] ==
+                nondet_private_word(s22.conf.nondet, user_state2, NONDET_REG(r))
+            ensures hr1[r] == hr2[r]
+            ensures user_regs(hr1)[r] == user_regs(hr2)[r]
+        {
+        }
+        lemma_user_regs_domain(hr1, user_regs(hr1));
+        lemma_user_regs_domain(hr2, user_regs(hr2));
+        assert forall r :: r in user_regs(hr1) <==> r in user_regs(hr2);
+        assert forall r | r in user_regs(hr1) :: user_regs(hr1)[r] == user_regs(hr2)[r];
+    
+        eqregs(user_regs(hr1), user_regs(hr2));
+        assert user_regs(hr1) == user_regs(hr2);
+    }
+
+}
+
+
+lemma
 lemma_validEnclaveStepPrime_conf(
 s11: state, d11: PageDb, s14:state, d14:PageDb, r1:state, rd1:PageDb,
 s21: state, d21: PageDb, s24:state, d24:PageDb, r2:state, rd2:PageDb,
@@ -1230,15 +1293,8 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
     var (s13, expc1, ex1) := userspaceExecutionFn(s12, pc1);
     var (s23, expc2, ex2) := userspaceExecutionFn(s22, pc2);
 
-    assert s13.conf.nondet == s23.conf.nondet by
-    {
-        reveal userspaceExecutionFn();
-        assert s13.conf.nondet == nondet_int(s12.conf.nondet, NONDET_GENERATOR());
-        assert s23.conf.nondet == nondet_int(s22.conf.nondet, NONDET_GENERATOR());
-    }
-
-    assert s12.m == s11.m;
-    assert s22.m == s21.m;
+    // assert s12.m == s11.m;
+    // assert s22.m == s21.m;
     assert cpsr_same(s12, s22) by {
         lemma_eval_cpsrs(s11, s1', s12, s21, s2', s22);
     }
@@ -1253,52 +1309,21 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
 
     var pt1 := ExtractAbsPageTable(s12);
     var pt2 := ExtractAbsPageTable(s22);
+    assert pt1 == pt2 by {
+        lemma_eqpdb_pt_coresp(d11, d21, s12, s22, l1p, atkr);
+    }
     lemma_userStatesEquiv_atkr(
         s11, s1', s12, s14, pc1, pt1, d11,
         s21, s2', s22, s24, pc2, pt2, d21,
         dispPg, atkr, l1p);
 
+    lemma_userspaceExecutionFn_loweq(
+        s12, pc1, expc1, ex1, s13,
+        s22, pc2, expc2, ex2, s23
+    );
+
     var user_state1 := user_visible_state(s12, pc1, pt1.v);
     var user_state2 := user_visible_state(s22, pc2, pt2.v);
-
-    assert ex1 == ex2 by {
-        reveal userspaceExecutionFn();
-
-        assert s12.conf.cpsr.f == s22.conf.cpsr.f;
-        assert s12.conf.cpsr.i == s22.conf.cpsr.i;
-        
-        assert ex1 == nondet_exception(s12.conf.nondet, user_state1, s12.conf.cpsr.f, s12.conf.cpsr.i);
-        assert ex2 == nondet_exception(s22.conf.nondet, user_state2, s22.conf.cpsr.f, s22.conf.cpsr.i);
-    }
-
-    assert user_regs(s13.regs) == user_regs(s23.regs) by {
-        var hr1 := havocUserRegs(s12.conf.nondet, user_state1, s12.regs);
-        var hr2 := havocUserRegs(s22.conf.nondet, user_state2, s22.regs);
-        assert s13.regs == hr1 by
-            { reveal userspaceExecutionFn(); }
-        assert s23.regs == hr2 by
-            { reveal userspaceExecutionFn(); }
-        assert user_state1 == user_state2;
-        assert s12.conf.nondet == s22.conf.nondet;
-        forall (r | r in USER_REGS() )
-            ensures hr1[r] ==
-                nondet_private_word(s12.conf.nondet, user_state1, NONDET_REG(r))
-            ensures hr2[r] ==
-                nondet_private_word(s22.conf.nondet, user_state2, NONDET_REG(r))
-            ensures hr1[r] == hr2[r]
-            ensures user_regs(hr1)[r] == user_regs(hr2)[r]
-        {
-        }
-        lemma_user_regs_domain(hr1, user_regs(hr1));
-        lemma_user_regs_domain(hr2, user_regs(hr2));
-        assert forall r :: r in user_regs(hr1) <==> r in user_regs(hr2);
-		assert forall r | r in user_regs(hr1) :: user_regs(hr1)[r] == user_regs(hr2)[r];
-
-		eqregs(user_regs(hr1), user_regs(hr2));
-        assert user_regs(hr1) == user_regs(hr2);
-    }
-
-    assert expc1 == expc2 by { reveal userspaceExecutionFn(); }
 
     assert s14.conf.ex == ex1 && s24.conf.ex == ex2;
 
@@ -1335,29 +1360,9 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
 
     }
 
-    assert s13.conf.scr == s12.conf.scr &&
-        s23.conf.scr == s22.conf.scr by
-    {
-        reveal userspaceExecutionFn();
-    }
-
     assert s14.conf.scr == s24.conf.scr;
 
     var retToEnclave := retToEnclave1;
-
-    assert InsecureMemInvariant(s13, s23) by {
-
-        var pt1 := ExtractAbsPageTable(s12);
-        var pt2 := ExtractAbsPageTable(s22);
-
-        assert pt1 == pt2 by {
-            lemma_eqpdb_pt_coresp(d11, d21, s12, s22, l1p, atkr);
-        }
-
-        lemma_insecure_mem_userspace(
-            s12, pc1, s13, expc1, ex1,
-            s22, pc2, s23, expc2, ex2);
-    }
 
     assert validDispatcherPage(d14, dispPg) && validDispatcherPage(d24, dispPg);
 
@@ -1385,37 +1390,14 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
             );
         }
         assert OperandContents(r1, OLR) == OperandContents(r2, OLR);
-    } else { // XXX same_ret
-        assert cpsr in s13.sregs && cpsr in s23.sregs &&
-            s13.sregs[cpsr] == s23.sregs[cpsr] by
-            { 
-                assert user_state1 == user_state2;
-                assert s12.conf.cpsr == s22.conf.cpsr;
-                var newpsr := nondet_psr(s12.conf.nondet, user_state1, s12.conf.cpsr);
-                reveal userspaceExecutionFn();
-                assert s13.sregs[cpsr] == newpsr;
-                assert s23.sregs[cpsr] == newpsr;
-            }
-        assert mode_of_exception(s13.conf, ex1) ==
-            mode_of_exception(s23.conf, ex2) by
-            { 
-                assert s13.conf.scr.irq == s23.conf.scr.irq;
-                assert s13.conf.scr.fiq == s23.conf.scr.fiq;
-                reveal userspaceExecutionFn();
-            }
-
-        assert s14 == exceptionTakenFn(s13, ex1, expc1) by {
-            assert evalExceptionTaken(s13, ex1, expc1, s14);
-        }
-        assert s24 == exceptionTakenFn(s23, ex2, expc2) by {
-            assert evalExceptionTaken(s13, ex1, expc1, s14);
-        }
+    } else {
+        assert validDispatcherPage(d14, dispPg) && validDispatcherPage(d24, dispPg);
         lemma_exceptionTaken_atkr(
             s13, s14, ex1, expc1, 
             s23, s24, ex2, expc2);
         lemma_exceptionHandled_atkr(s14, d14, rd1, s24, d24, rd2,
              r1.regs[R0], r1.regs[R1], r2.regs[R0], r2.regs[R1],
-             dispPg, atkr); // XXX validDispPg(dispPg)
+             dispPg, atkr);
 
         assert loweq_pdb(rd1, rd2, atkr);
     }
@@ -1477,8 +1459,8 @@ predicate lr_spsr_same(s1:state, s2:state)
 
 lemma lemma_exceptionHandled_atkr(
 s1: state, d1: PageDb, d1': PageDb, s2: state, d2: PageDb, d2': PageDb,
-dispPg: PageNr, atkr: PageNr, 
-r01: word, r11: word, r02: word, r12: word)
+r01: word, r11: word, r02: word, r12: word,
+dispPg: PageNr, atkr: PageNr)
     requires ValidState(s1) && ValidState(s2) &&
              validPageDb(d1') && validPageDb(d2') &&
              validPageDb(d1) && validPageDb(d2) && SaneConstants()
