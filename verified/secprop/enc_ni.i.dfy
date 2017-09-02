@@ -85,12 +85,6 @@ lemma lemma_enc_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     }
 }
 
-lemma contentsDivBlock(physPage: word, contents: Maybe<seq<word>>)
-    requires contentsOk(physPage, contents)
-    requires contents.Just?
-    ensures |fromJust(contents)| % SHA_BLOCKSIZE == 0
-{
-}
 
 lemma lemma_mapSecure_enc_ni_both_go(
         d1: PageDb, c1: Maybe<seq<word>>, d1': PageDb, e1':word,
@@ -156,18 +150,6 @@ lemma lemma_mapSecure_enc_ni_both_go(
         reveal enc_eqpdb();
         assert enc_eqpdb(d1', d2', atkr);
     }
-}
-
-lemma lemma_allocatePageRefs(d: PageDb, addrspacePage:word, page:word,
-    entry: PageDbEntryTyped, d': PageDb, e':word)
-    requires validPageDb(d) && validPageDb(d')
-    requires isAddrspace(d, addrspacePage)
-    requires allocatePageEntryValid(entry)
-    requires allocatePage(d, page, addrspacePage, entry) == (d', e')
-    requires e' == KOM_ERR_SUCCESS
-    ensures  dataPageRefs(d', addrspacePage, page) == {};
-{
-    lemma_freePageRefs(d, page);
 }
 
 lemma lemma_updateMeasurement_ni(d1: PageDb, d2: PageDb, d1': PageDb, d2': PageDb,

@@ -123,6 +123,25 @@ lemma lemma_insecure_mem_userspace(
     }
 }
 
+lemma lemma_allocatePageRefs(d: PageDb, addrspacePage:word, page:word,
+    entry: PageDbEntryTyped, d': PageDb, e':word)
+    requires validPageDb(d) && validPageDb(d')
+    requires isAddrspace(d, addrspacePage)
+    requires allocatePageEntryValid(entry)
+    requires allocatePage(d, page, addrspacePage, entry) == (d', e')
+    requires e' == KOM_ERR_SUCCESS
+    ensures  dataPageRefs(d', addrspacePage, page) == {};
+{
+    lemma_freePageRefs(d, page);
+}
+
+lemma contentsDivBlock(physPage: word, contents: Maybe<seq<word>>)
+    requires contentsOk(physPage, contents)
+    requires contents.Just?
+    ensures |fromJust(contents)| % SHA_BLOCKSIZE == 0
+{
+}
+
 // Range used by InsecureMemInvariant
 predicate address_is_insecure(m:addr) 
 {
