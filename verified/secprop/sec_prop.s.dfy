@@ -40,6 +40,64 @@ predicate usr_regs_equiv(s1:state, s2:state)
     s1.regs[SP(User)] == s2.regs[SP(User)] &&
     s1.regs[LR(User)] == s2.regs[LR(User)]
 }
+//-----------------------------------------------------------------------------
+// Low Equivalence for Confidentiality
+//-----------------------------------------------------------------------------
+// These relations specify the observational power of an adversary comprising a 
+// malicious or compromised operating system colluding with an enclave. This 
+// low-equivalence relation is used to prove that the confidentiality of 
+// enclaves is protected against this attacker
+
+// Relates concrete (state) and abstract (PageDb) pairs that appear the same 
+// to the attacker
+predicate conf_loweq(s1: state, d1: PageDb, s2: state, d2: PageDb, atkr: PageNr)
+    requires ValidState(s1) && ValidState(s2)
+    requires validPageDb(d1) && validPageDb(d2)
+{
+    reveal ValidMemState();
+    os_regs_equiv(s1, s2) &&
+    os_ctrl_eq(s1, s2) &&
+    InsecureMemInvariant(s1, s2) &&
+    loweq_pdb(d1, d2, atkr)
+}
+
+// Relates two PageDbs that appear the same to an observer enclave
+// For the proof of confidentiality, the observer is an attacker.
+// For the proof of integrity, the observer is a would-be victim.
+predicate {:opaque} loweq_pdb(d1: PageDb, d2: PageDb, obs: PageNr)
+    requires wellFormedPageDb(d1) && wellFormedPageDb(d2)
+{
+    valAddrPage(d1, obs) && valAddrPage(d2, obs) &&
+    !stoppedAddrspace(d1[obs]) && !stoppedAddrspace(d2[obs]) &&
+    (forall n: PageNr ::
+        d1[n].PageDbEntryTyped? <==> d2[n].PageDbEntryTyped?) &&
+    (forall n: PageNr :: pgInAddrSpc(d1, n, obs) <==>
+        pgInAddrSpc(d2, n, obs)) &&
+    (forall n : PageNr | d1[n].PageDbEntryTyped? ::
+        d1[n].addrspace == d2[n].addrspace &&
+        (if(pgInAddrSpc(d1, n, obs))
+            then d1[n].entry == d2[n].entry
+            else loweq_entry(d1[n].entry, d2[n].entry)))
+}
+
+
+// This relates two PageDbEntryTypeds that are in the same enclave address
+// space and appear the same to an observer that controls a different enclave
+// address space.
+predicate loweq_entry(e1:PageDbEntryTyped, e2:PageDbEntryTyped)
+{
+    match e1
+        case Addrspace(_,_,_,_,_)
+            => e2.Addrspace? && e1.(shatrace := e2.shatrace,
+                measurement := e2.measurement, refcount := e2.refcount ) == e2 
+        case Dispatcher(_,_,_,_,_) => e2.Dispatcher? &&
+            e2.entered == e1.entered && e2.entrypoint == e1.entrypoint
+        case L1PTable(_) => e1 == e2
+        case L2PTable(_) => e1 == e2
+        case DataPage(_) => e2.DataPage?
+        case SparePage   => e2.SparePage?
+}
+
 
 //-----------------------------------------------------------------------------
 // Enclave low-equivalence (or observational equivalence)
@@ -49,22 +107,26 @@ predicate usr_regs_equiv(s1:state, s2:state)
 
 // Low-equivalence relation that relates two PageDbs that appear equivalent to 
 // an attacker that controls an enclave "atkr". 
+
+// I think this is useful as a proof of integrity if you view "atkr" as a 
+// would-be victim.
 predicate {:opaque} enc_eqpdb(d1: PageDb, d2: PageDb, atkr: PageNr)
     requires wellFormedPageDb(d1) && wellFormedPageDb(d2)
 {
     // An attacker (or victim in integrity case) enclave is some valid addrspace
     valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
+    !stoppedAddrspace(d1[atkr]) && !stoppedAddrspace(d2[atkr]) &&
     (forall n: PageNr ::
         d1[n].PageDbEntryTyped? <==> d2[n].PageDbEntryTyped?) &&
     (forall n: PageNr :: pgInAddrSpc(d1, n, atkr) <==>
         pgInAddrSpc(d2, n, atkr)) &&
     (forall n : PageNr | d1[n].PageDbEntryTyped? ::
         d1[n].addrspace == d2[n].addrspace &&
-        // (if(pgInAddrSpc(d1, n, atkr) || d1[d1[n].addrspace].entry.state.InitState?) 
         (if(pgInAddrSpc(d1, n, atkr))
             then d1[n].entry == d2[n].entry
             else enc_eqentry(d1[n].entry, d2[n].entry)))
 }
+
 
 predicate enc_eqentry(e1:PageDbEntryTyped, e2:PageDbEntryTyped)
 {
