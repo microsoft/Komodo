@@ -20,7 +20,7 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
     requires userspaceExecutionAndException'(s21, s2', s22, s24)
     requires s13 == userspaceExecutionFn(s12, OperandContents(s11, OLR)).0;
     requires s23 == userspaceExecutionFn(s22, OperandContents(s21, OLR)).0;
-    requires atkr_entry(d1, d2, dispPg, atkr)
+    requires obs_entry(d1, d2, dispPg, atkr)
     requires loweq_pdb(d1, d2, atkr)
     requires l1pOfDispatcher(d1, dispPg) == l1pOfDispatcher(d2, dispPg) == l1p
     requires OperandContents(s11, OLR) == OperandContents(s21, OLR)
@@ -33,7 +33,7 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
     requires d14 == updateUserPagesFromState(s14, d1, dispPg);
     requires d24 == updateUserPagesFromState(s24, d2, dispPg);
     ensures loweq_pdb(d14, d24, atkr)
-    ensures atkr_entry(d14, d24, dispPg, atkr)
+    ensures obs_entry(d14, d24, dispPg, atkr)
 {
     var pc1 := OperandContents(s11, OLR);
     var pc2 := OperandContents(s21, OLR);
@@ -711,20 +711,9 @@ lemma lemma_exceptionHandled_conf_not_atkr(
 //-----------------------------------------------------------------------------
 
 
-predicate atkr_entry(d1: PageDb, d2: PageDb, disp: word, atkr: PageNr)
-{
-    validPageNr(disp) &&
-    validPageDb(d1) && validPageDb(d2) &&
-    valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
-    d1[disp].PageDbEntryTyped? && d1[disp].entry.Dispatcher? &&
-    d2[disp].PageDbEntryTyped? && d2[disp].entry.Dispatcher? &&
-    finalDispatcher(d1, disp) && finalDispatcher(d2, disp) &&
-    d1[disp].addrspace == d2[disp].addrspace == atkr
-}
-
-
 // AF: This one seems a bit unstable, but at minimum it works with DAFNYPROC
-lemma lemma_enter_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': PageDb,
+lemma {:timeLimitMultiplier 2}
+lemma_enter_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': PageDb,
                                  s2: state, d2: PageDb, s2':state, d2': PageDb,
                                  dispPg: word, arg1: word, arg2: word, arg3: word,
                                  atkr: PageNr, isresume:bool)
@@ -734,7 +723,7 @@ lemma lemma_enter_conf_atkr_enter(s1: state, d1: PageDb, s1':state, d1': PageDb,
     requires isresume ==> smc_resume(s1, d1, s1', d1', dispPg)
     requires isresume ==> smc_resume(s2, d2, s2', d2', dispPg)
     requires conf_loweq(s1, d1, s2, d2, atkr)
-    requires entering_atkr(d1, d2, dispPg, atkr, isresume);
+    requires entering_obs(d1, d2, dispPg, atkr, isresume);
     requires s1.conf.nondet == s2.conf.nondet
     ensures  loweq_pdb(d1', d2', atkr)
     ensures  same_ret(s1', s2')
@@ -841,7 +830,7 @@ lemma lemma_validEnclaveEx_conf(s1: state, d1: PageDb, s1':state, d1': PageDb,
              ValidState(s1') && ValidState(s2') &&
              validPageDb(d1) && validPageDb(d2) && 
              validPageDb(d1') && validPageDb(d2') && SaneConstants()
-    requires atkr_entry(d1, d2, dispPg, atkr)
+    requires obs_entry(d1, d2, dispPg, atkr)
     requires validEnclaveExecution(s1, d1, s1', d1', dispPg, steps1)
     requires validEnclaveExecution(s2, d2, s2', d2', dispPg, steps2);
     requires loweq_pdb(d1, d2, atkr)
@@ -854,7 +843,7 @@ lemma lemma_validEnclaveEx_conf(s1: state, d1: PageDb, s1':state, d1': PageDb,
     requires !spsr_of_state(s2).f && !spsr_of_state(s2).i
     requires spsr_same(s1, s2)
     requires s1.conf.scr == s2.conf.scr;
-    ensures  atkr_entry(d1', d2', dispPg, atkr)
+    ensures  obs_entry(d1', d2', dispPg, atkr)
     ensures  loweq_pdb(d1', d2', atkr)
     ensures InsecureMemInvariant(s1', s2')
     ensures same_ret(s1', s2')
@@ -897,7 +886,7 @@ lemma lemma_validEnclaveStep_conf(s1: state, d1: PageDb, s1':state, d1': PageDb,
              ValidState(s1') && ValidState(s2') &&
              validPageDb(d1) && validPageDb(d2) && 
              validPageDb(d1') && validPageDb(d2') && SaneConstants()
-    requires atkr_entry(d1, d2, dispPage, atkr)
+    requires obs_entry(d1, d2, dispPage, atkr)
     requires validEnclaveExecutionStep(s1, d1, s1', d1', dispPage, ret1);
     requires validEnclaveExecutionStep(s2, d2, s2', d2', dispPage, ret2);
     requires loweq_pdb(d1, d2, atkr)
@@ -909,7 +898,7 @@ lemma lemma_validEnclaveStep_conf(s1: state, d1: PageDb, s1':state, d1': PageDb,
     requires spsr_same(s1, s2)
     requires s1.conf.scr == s2.conf.scr;
     ensures  InsecureMemInvariant(s1', s2')
-    ensures  atkr_entry(d1', d2', dispPage, atkr)
+    ensures  obs_entry(d1', d2', dispPage, atkr)
     ensures  loweq_pdb(d1', d2', atkr)
     ensures  ret1 == ret2
     ensures  ret1 ==> s1'.conf.scr == s2'.conf.scr;
@@ -940,33 +929,6 @@ lemma lemma_validEnclaveStep_conf(s1: state, d1: PageDb, s1':state, d1': PageDb,
         s1, d1, s14, d14, s1', d1',
         s2, d2, s24, d24, s2', d2',
         dispPage, ret1, ret2, atkr);
-}
-
-lemma lemma_user_regs_domain(regs:map<ARMReg, word>, hr:map<ARMReg, word>)
-    requires ValidRegState(regs)
-    requires hr == user_regs(regs)
-    ensures  forall r :: r in hr <==> r in USER_REGS()
-{
-}
-
-lemma eqregs(x: map<ARMReg,word>, y: map<ARMReg,word>)
-	requires forall r :: r in x <==> r in y
-	requires forall r | r in x :: x[r] == y[r]
-	ensures x == y
-	{}
-
-lemma only_user_in_user_regs(r:ARMReg, m:mode)
-    requires r == LR(m) && m != User
-    ensures r !in USER_REGS() {}
-
-lemma lemma_exceptionTakenRegs(s3:state, ex:exception, expc:word, s4:state)
-    requires ValidState(s3) && ValidPsrWord(psr_of_exception(s3, ex))
-    requires ValidState(s4)
-    requires evalExceptionTaken(s3, ex, expc, s4)
-    ensures user_regs(s4.regs) == user_regs(s3.regs)
-    ensures OperandContents(s4, OLR) == expc
-{
-    lemma_evalExceptionTaken_Mode(s3, ex, expc, s4);
 }
 
 
@@ -1005,25 +967,6 @@ lemma lemma_preEntryUserRegs(
     assert s1'.regs[R12] == s2'.regs[R12];
     assert s1'.regs[LR(User)] == s2'.regs[LR(User)];
     assert s1'.regs[SP(User)] == s2'.regs[SP(User)];
-}
-
-predicate spsr_same(s1:state, s2:state)
-    requires ValidState(s1) && ValidState(s2)
-    requires mode_of_state(s1) != User
-    requires mode_of_state(s2) != User
-{
-    reveal ValidSRegState();
-    var spsr1 := spsr(mode_of_state(s1));
-    var spsr2 := spsr(mode_of_state(s2));
-    s1.sregs[spsr1] == s2.sregs[spsr2]
-}
-
-predicate cpsr_same(s1:state, s2:state)
-    requires ValidState(s1) && ValidState(s2)
-{
-    reveal ValidSRegState();
-    s1.sregs[cpsr] == s2.sregs[cpsr] &&
-    s1.conf.cpsr == s2.conf.cpsr
 }
 
 lemma lemma_eval_cpsrs(
@@ -1065,9 +1008,9 @@ lemma lemma_svcHandled_loweq_pdb(
     requires d1' == svcHandled(s1, d1, dispPg).1 
     requires d2' == svcHandled(s2, d2, dispPg).1
     requires user_regs(s1.regs) == user_regs(s2.regs)
-    requires atkr_entry(d1, d2, dispPg, atkr)
+    requires obs_entry(d1, d2, dispPg, atkr)
     requires loweq_pdb(d1, d2, atkr)
-    ensures  atkr_entry(d1', d2', dispPg, atkr)
+    ensures  obs_entry(d1', d2', dispPg, atkr)
     ensures  loweq_pdb(d1', d2', atkr)
     ensures  svcHandled(s1, d1, dispPg).0 == svcHandled(s2, d2, dispPg).0
 {
@@ -1250,7 +1193,7 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
              validPageDb(rd1) && 
              validPageDb(rd2) && 
              SaneConstants()
-    requires atkr_entry(d11, d21, dispPg, atkr)
+    requires obs_entry(d11, d21, dispPg, atkr)
     requires validEnclaveExecutionStep'(s11,d11,s14,d14,r1,rd1,dispPg,retToEnclave1)
     requires validEnclaveExecutionStep'(s21,d21,s24,d24,r2,rd2,dispPg,retToEnclave2)
     requires OperandContents(s11, OLR) == OperandContents(s21, OLR)
@@ -1261,7 +1204,7 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
     requires mode_of_state(s11) != User && mode_of_state(s21) != User
     requires spsr_same(s11, s21)
     requires s11.conf.scr == s21.conf.scr;
-    ensures  atkr_entry(rd1, rd2, dispPg, atkr)
+    ensures  obs_entry(rd1, rd2, dispPg, atkr)
     ensures  loweq_pdb(rd1, rd2, atkr)
     ensures  InsecureMemInvariant(r1, r2)
     ensures  retToEnclave1 == retToEnclave2
@@ -1471,12 +1414,12 @@ dispPg: PageNr, atkr: PageNr)
     requires validDispatcherPage(d1, dispPg) && validDispatcherPage(d2, dispPg) 
     requires (r01, r11, d1') == exceptionHandled(s1, d1, dispPg)
     requires (r02, r12, d2') == exceptionHandled(s2, d2, dispPg)
-    requires atkr_entry(d1, d2, dispPg, atkr)
+    requires obs_entry(d1, d2, dispPg, atkr)
     requires loweq_pdb(d1, d2, atkr)
     requires user_regs(s1.regs) == user_regs(s2.regs)
     requires s1.conf.ex == s2.conf.ex
     ensures  loweq_pdb(d1', d2', atkr)
-    ensures  atkr_entry(d1', d2', dispPg, atkr)
+    ensures  obs_entry(d1', d2', dispPg, atkr)
     ensures  r01 == r02 && r11 == r12
 {
     reveal loweq_pdb();
@@ -1549,7 +1492,7 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
     requires pc1 == OperandContents(s11, OLR) && pc2 == OperandContents(s21, OLR);
     requires pt1 == ExtractAbsPageTable(s12) && pt2 == ExtractAbsPageTable(s22);
     requires nonStoppedL1(d1, l1p) && nonStoppedL1(d2, l1p)
-    requires atkr_entry(d1, d2, dispPg, atkr)
+    requires obs_entry(d1, d2, dispPg, atkr)
     requires l1pOfDispatcher(d1, dispPg) == l1pOfDispatcher(d2, dispPg) == l1p
     requires !stoppedAddrspace(d1[atkr]) && !stoppedAddrspace(d2[atkr])
     requires user_regs(s11.regs) == user_regs(s21.regs);
@@ -1617,7 +1560,7 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
     requires pc1 == OperandContents(s11, OLR) && pc2 == OperandContents(s21, OLR);
     requires pt1 == ExtractAbsPageTable(s12) && pt2 == ExtractAbsPageTable(s22);
     requires nonStoppedL1(d1, l1p) && nonStoppedL1(d2, l1p)
-    requires atkr_entry(d1, d2, dispPg, atkr)
+    requires obs_entry(d1, d2, dispPg, atkr)
     requires l1pOfDispatcher(d1, dispPg) == l1pOfDispatcher(d2, dispPg) == l1p
     requires !stoppedAddrspace(d1[atkr]) && !stoppedAddrspace(d2[atkr])
     requires user_regs(s11.regs) == user_regs(s21.regs);

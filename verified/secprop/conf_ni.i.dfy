@@ -21,15 +21,11 @@ lemma lemma_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
                     s2: state, d2: PageDb, s2': state, d2': PageDb,
                     atkr: PageNr)
     requires ni_reqs(s1, d1, s1', d1', s2, d2, s2', d2', atkr)
-    // If smchandler(s1, d1) => (s1', d1')
     requires smchandler(s1, d1, s1', d1')
-    // and smchandler(s2, d2) => (s2', d2')
     requires smchandler(s2, d2, s2', d2')
-    // s.t. (s1, d1) =_{os} (s2, d2)
     requires conf_loweq(s1, d1, s2, d2, atkr)
     requires same_cpsr(s1, s2)
     requires s1.conf.nondet == s2.conf.nondet
-    // then (s1', d1') =_{os} (s2', d2')
     ensures conf_loweq(s1', d1', s2', d2', atkr)
 {
     reveal ValidRegState();
@@ -47,16 +43,16 @@ lemma lemma_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         // assert s2'.m == s2.m;
     }
     else if(callno == KOM_SMC_INIT_ADDRSPACE){
-        lemma_initAddrspace_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, atkr);
+        lemma_initAddrspace_loweq_pdb(d1, d1', e1', d2, d2', e2', arg1, arg2, atkr);
         lemma_integrate_reg_equiv(s1', s2');
     }
     else if(callno == KOM_SMC_INIT_DISPATCHER){
-        lemma_initDispatcher_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, 
+        lemma_initDispatcher_loweq_pdb(d1, d1', e1', d2, d2', e2', arg1, arg2, 
             arg3, atkr);
         lemma_integrate_reg_equiv(s1', s2');
     }
     else if(callno == KOM_SMC_INIT_L2PTABLE){
-        lemma_initL2PTable_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, 
+        lemma_initL2PTable_loweq_pdb(d1, d1', e1', d2, d2', e2', arg1, arg2, 
             arg3, atkr);
         lemma_integrate_reg_equiv(s1', s2');
     }
@@ -67,23 +63,23 @@ lemma lemma_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
             { reveal loweq_pdb(); }
         lemma_maybeContents_insec_ni(s1, s2, c1, c2, arg4);
         assert c1 == c2;
-        lemma_mapSecure_conf_ni(d1, d1', e1', c1, d2, d2', e2', c2,
+        lemma_mapSecure_loweq_pdb(d1, d1', e1', c1, d2, d2', e2', c2,
             arg1, arg2, arg3, arg4, atkr);
         lemma_integrate_reg_equiv(s1', s2');
     }
     else if(callno == KOM_SMC_ALLOC_SPARE) {
-        lemma_allocSpare_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, atkr);
+        lemma_allocSpare_loweq_pdb(d1, d1', e1', d2, d2', e2', arg1, arg2, atkr);
     }
     else if(callno == KOM_SMC_MAP_INSECURE){
-        lemma_mapInsecure_conf_ni(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
+        lemma_mapInsecure_loweq_pdb(d1, d1', e1', d2, d2', e2', arg1, arg2, arg3, atkr);
         lemma_integrate_reg_equiv(s1', s2');
     }
     else if(callno == KOM_SMC_REMOVE){
-        lemma_remove_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
+        lemma_remove_loweq_pdb(d1, d1', e1', d2, d2', e2', arg1, atkr);
         lemma_integrate_reg_equiv(s1', s2');
     }
     else if(callno == KOM_SMC_FINALISE){
-        lemma_finalise_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
+        lemma_finalise_loweq_pdb(d1, d1', e1', d2, d2', e2', arg1, atkr);
         lemma_integrate_reg_equiv(s1', s2');
     }
     else if(callno == KOM_SMC_ENTER){
@@ -111,7 +107,7 @@ lemma lemma_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
         }
     }
     else if(callno == KOM_SMC_STOP){
-        lemma_stop_conf_ni(d1, d1', e1', d2, d2', e2', arg1, atkr);
+        lemma_stop_loweq_pdb(d1, d1', e1', d2, d2', e2', arg1, atkr);
         lemma_integrate_reg_equiv(s1', s2');
     }
     else {
@@ -223,7 +219,7 @@ lemma lemma_smchandlerInvariant_regs_ni(
 {
 }
 
-lemma lemma_initAddrspace_conf_ni(
+lemma lemma_initAddrspace_loweq_pdb(
     d1: PageDb, d1': PageDb, e1': word,
     d2: PageDb, d2': PageDb, e2': word,
     addrspacePage: word, l1PTPage: word, atkr: PageNr)
@@ -237,7 +233,7 @@ lemma lemma_initAddrspace_conf_ni(
     reveal loweq_pdb();
 }
 
-lemma lemma_initDispatcher_conf_ni(
+lemma lemma_initDispatcher_loweq_pdb(
     d1: PageDb, d1': PageDb, e1': word,
     d2: PageDb, d2': PageDb, e2': word,
     page:word, addrspacePage:word, entrypoint:word,
@@ -252,7 +248,7 @@ lemma lemma_initDispatcher_conf_ni(
     reveal loweq_pdb();
 }
 
-lemma lemma_initL2PTable_conf_ni(
+lemma lemma_initL2PTable_loweq_pdb(
     d1: PageDb, d1': PageDb, e1': word,
     d2: PageDb, d2': PageDb, e2': word,
     page: word, addrspacePage: word, l1index:word, atkr: PageNr)
@@ -266,7 +262,7 @@ lemma lemma_initL2PTable_conf_ni(
     reveal loweq_pdb();
 }
 
-lemma lemma_mapSecure_conf_ni(
+lemma lemma_mapSecure_loweq_pdb(
     d1: PageDb, d1': PageDb, e1': word, c1: Maybe<seq<word>>,
     d2: PageDb, d2': PageDb, e2': word, c2: Maybe<seq<word>>,
     page: word, addrspacePage: word,
@@ -317,7 +313,7 @@ lemma lemma_mapSecure_loweq_pdb_success(
         var ap2 := allocatePage(d2, page, addrspacePage, data);
         allocatePagePreservesPageDBValidity(d1, page, addrspacePage, data);
         allocatePagePreservesPageDBValidity(d2, page, addrspacePage, data);
-        lemma_allocatePage_conf_ni(d1, ap1.0, ap1.1, d2, ap2.0, ap2.1,
+        lemma_allocatePage_loweq_pdb(d1, ap1.0, ap1.1, d2, ap2.0, ap2.1,
             page, addrspacePage, data, atkr);
         assert ap1.1 == e1';
         assert ap2.1 == e2';
@@ -339,7 +335,7 @@ lemma lemma_mapSecure_loweq_pdb_success(
             lemma_allocatePageRefs(d2, addrspacePage, page, data, ap2.0, e1');
             lemma_updateL2PtePreservesPageDb(ap1.0,addrspacePage,abs_mapping,l2pte);
             lemma_updateL2PtePreservesPageDb(ap2.0,addrspacePage,abs_mapping,l2pte);
-            lemma_updateL2Pte_conf_ni(ap1.0, db1, ap2.0, db2, 
+            lemma_updateL2Pte_loweq_pdb(ap1.0, db1, ap2.0, db2, 
                 addrspacePage, abs_mapping, l2pte, atkr);
             contentsDivBlock(physPage, c1);
             contentsDivBlock(physPage, c2);
@@ -356,7 +352,7 @@ lemma lemma_mapSecure_loweq_pdb_success(
     }
 }
 
-lemma lemma_mapInsecure_conf_ni(
+lemma lemma_mapInsecure_loweq_pdb(
     d1: PageDb, d1': PageDb, e1': word,
     d2: PageDb, d2': PageDb, e2': word,
     addrspacePage: word, mapping: word, physPage: word, atkr:PageNr)
@@ -372,7 +368,7 @@ lemma lemma_mapInsecure_conf_ni(
     reveal loweq_pdb();
 }
 
-lemma lemma_allocSpare_conf_ni(
+lemma lemma_allocSpare_loweq_pdb(
     d1: PageDb, d1': PageDb, e1': word,
     d2: PageDb, d2': PageDb, e2': word,
     page: word, addrspacePage: word,
@@ -388,7 +384,7 @@ lemma lemma_allocSpare_conf_ni(
 }
 
 
-lemma lemma_remove_conf_ni(
+lemma lemma_remove_loweq_pdb(
     d1: PageDb, d1': PageDb, e1': word,
     d2: PageDb, d2': PageDb, e2': word,
     page: word, atkr: PageNr)
@@ -403,7 +399,7 @@ lemma lemma_remove_conf_ni(
     reveal validPageDb();
 }
 
-lemma lemma_finalise_conf_ni(
+lemma lemma_finalise_loweq_pdb(
     d1: PageDb, d1': PageDb, e1': word,
     d2: PageDb, d2': PageDb, e2': word,
     addrspacePage: word, atkr: PageNr)
@@ -417,7 +413,7 @@ lemma lemma_finalise_conf_ni(
     reveal loweq_pdb();
 }
 
-lemma lemma_stop_conf_ni(
+lemma lemma_stop_loweq_pdb(
     d1: PageDb, d1': PageDb, e1': word,
     d2: PageDb, d2': PageDb, e2': word,
     addrspacePage: word, atkr: PageNr)
@@ -431,7 +427,7 @@ lemma lemma_stop_conf_ni(
     reveal loweq_pdb();
 }
 
-lemma lemma_allocatePage_conf_ni(d1: PageDb, d1': PageDb, e1':word,
+lemma lemma_allocatePage_loweq_pdb(d1: PageDb, d1': PageDb, e1':word,
                                 d2: PageDb, d2': PageDb, e2':word,
                                 page: word, addrspacePage: PageNr,
                                 entry: PageDbEntryTyped, atkr: PageNr)
@@ -511,7 +507,7 @@ lemma lemma_allocatePage_conf_ni(d1: PageDb, d1': PageDb, e1':word,
     }
 }
 
-lemma lemma_updateL2Pte_conf_ni(d1: PageDb, d1': PageDb,
+lemma lemma_updateL2Pte_loweq_pdb(d1: PageDb, d1': PageDb,
                                d2: PageDb, d2': PageDb,
                                a: PageNr, mapping: Mapping, l2e: L2PTE,
                                atkr: PageNr)

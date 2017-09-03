@@ -1,7 +1,7 @@
 include "sec_prop.s.dfy"
 include "../pagedb.s.dfy"
 include "../entry.s.dfy"
-include "os_declass.s.dfy"
+include "declass.s.dfy"
 
 predicate contentsOk(physPage: word, contents: Maybe<seq<word>>)
 {
@@ -68,23 +68,6 @@ lemma lemma_unpack_validEnclaveExecution(s1:state, d1:PageDb,
             rs == s5 && rd == d5);
 }
 
-lemma lemma_enc_eqpdb_transitive(d1: PageDb, d2: PageDb, d3: PageDb, atkr: PageNr)
-    requires validPageDb(d1) && validPageDb(d2) && validPageDb(d3)
-    requires enc_eqpdb(d1, d2, atkr)
-    requires enc_eqpdb(d2, d3, atkr)
-    ensures  enc_eqpdb(d1, d3, atkr)
-{
-    reveal enc_eqpdb();
-}
-
-lemma lemma_enc_eqpdb_assoc(d1: PageDb, d2: PageDb, atkr: PageNr)
-    requires validPageDb(d1) && validPageDb(d2)
-    requires enc_eqpdb(d1, d2, atkr)
-    ensures enc_eqpdb(d2, d1, atkr)
-{
-    reveal enc_eqpdb();
-}
-
 lemma lemma_insecure_mem_userspace(
     s12: state, pc1: word, s13: state, expc1: word, ex1: exception,
     s22: state, pc2: word, s23: state, expc2: word, ex2: exception)
@@ -142,16 +125,58 @@ lemma contentsDivBlock(physPage: word, contents: Maybe<seq<word>>)
 {
 }
 
+lemma lemma_user_regs_domain(regs:map<ARMReg, word>, hr:map<ARMReg, word>)
+    requires ValidRegState(regs)
+    requires hr == user_regs(regs)
+    ensures  forall r :: r in hr <==> r in USER_REGS()
+{
+}
+
+lemma eqregs(x: map<ARMReg,word>, y: map<ARMReg,word>)
+	requires forall r :: r in x <==> r in y
+	requires forall r | r in x :: x[r] == y[r]
+	ensures x == y
+	{}
+
+lemma only_user_in_user_regs(r:ARMReg, m:mode)
+    requires r == LR(m) && m != User
+    ensures r !in USER_REGS() {}
+
+lemma lemma_exceptionTakenRegs(s3:state, ex:exception, expc:word, s4:state)
+    requires ValidState(s3) && ValidPsrWord(psr_of_exception(s3, ex))
+    requires ValidState(s4)
+    requires evalExceptionTaken(s3, ex, expc, s4)
+    ensures user_regs(s4.regs) == user_regs(s3.regs)
+    ensures OperandContents(s4, OLR) == expc
+{
+    lemma_evalExceptionTaken_Mode(s3, ex, expc, s4);
+}
+
+
 // Range used by InsecureMemInvariant
 predicate address_is_insecure(m:addr) 
 {
     KOM_DIRECTMAP_VBASE <= m < KOM_DIRECTMAP_VBASE + MonitorPhysBase()
 }
 
+predicate spsr_same(s1:state, s2:state)
+    requires ValidState(s1) && ValidState(s2)
+    requires mode_of_state(s1) != User
+    requires mode_of_state(s2) != User
+{
+    reveal ValidSRegState();
+    var spsr1 := spsr(mode_of_state(s1));
+    var spsr2 := spsr(mode_of_state(s2));
+    s1.sregs[spsr1] == s2.sregs[spsr2]
+}
 
-//-----------------------------------------------------------------------------
-// Enclave NI
-//-----------------------------------------------------------------------------
+predicate cpsr_same(s1:state, s2:state)
+    requires ValidState(s1) && ValidState(s2)
+{
+    reveal ValidSRegState();
+    s1.sregs[cpsr] == s2.sregs[cpsr] &&
+    s1.conf.cpsr == s2.conf.cpsr
+}
 
 predicate ni_reqs(s1: state, d1: PageDb, s1': state, d1': PageDb,
                   s2: state, d2: PageDb, s2': state, d2': PageDb,
@@ -186,7 +211,7 @@ predicate same_call_args(s1:state, s2: state)
     OperandContents(s1, OReg(R4))  == OperandContents(s2, OReg(R4))
 }
 
-predicate entering_atkr(d1: PageDb, d2: PageDb, disp: word, atkr: PageNr, is_resume:bool)
+predicate entering_obs(d1: PageDb, d2: PageDb, disp: word, atkr: PageNr, is_resume:bool)
     requires validPageDb(d1) && validPageDb(d2)
     requires valAddrPage(d1, atkr) && valAddrPage(d2, atkr)
 {
@@ -199,21 +224,17 @@ predicate entering_atkr(d1: PageDb, d2: PageDb, disp: word, atkr: PageNr, is_res
     smc_enter_err(d2, disp, is_resume) == KOM_ERR_SUCCESS
 }
 
-//-----------------------------------------------------------------------------
-// OS NI
-//-----------------------------------------------------------------------------
-
-predicate os_ni_reqs(s1: state, d1: PageDb, s1': state, d1': PageDb,
-                     s2: state, d2: PageDb, s2': state, d2': PageDb)
+predicate obs_entry(d1: PageDb, d2: PageDb, disp: word, atkr: PageNr)
 {
-    ValidState(s1) && validPageDb(d1) && ValidState(s1') && validPageDb(d1') &&
-    ValidState(s2) && validPageDb(d2) && ValidState(s2') && validPageDb(d2') &&
-    SaneConstants() && do_declassify()
+    validPageNr(disp) &&
+    validPageDb(d1) && validPageDb(d2) &&
+    valAddrPage(d1, atkr) && valAddrPage(d2, atkr) &&
+    d1[disp].PageDbEntryTyped? && d1[disp].entry.Dispatcher? &&
+    d2[disp].PageDbEntryTyped? && d2[disp].entry.Dispatcher? &&
+    finalDispatcher(d1, disp) && finalDispatcher(d2, disp) &&
+    d1[disp].addrspace == d2[disp].addrspace == atkr
 }
 
-//-----------------------------------------------------------------------------
-// Random Stuff
-//-----------------------------------------------------------------------------
 predicate validStates(states:set<state>)
 {
     forall s | s in states :: ValidState(s)
