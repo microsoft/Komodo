@@ -2,6 +2,7 @@ include "sec_prop.s.dfy"
 include "../pagedb.s.dfy"
 include "../entry.s.dfy"
 include "declass.s.dfy"
+include "../smcapi.i.dfy"
 
 predicate contentsOk(physPage: word, contents: Maybe<seq<word>>)
 {
@@ -17,7 +18,8 @@ predicate same_ret(s1:state, s2:state)
     s1.regs[R1] == s2.regs[R1]
 }
 
-lemma lemma_maybeContents_insec_ni(s1: state, s2: state, c1: Maybe<seq<word>>, 
+lemma {:timeLimitMultiplier 2}
+lemma_maybeContents_insec_ni(s1: state, s2: state, c1: Maybe<seq<word>>, 
         c2: Maybe<seq<word>>, physPage: word)
     requires ValidState(s1) && ValidState(s2) && SaneConstants()
     requires InsecureMemInvariant(s1, s2)
@@ -243,4 +245,35 @@ predicate validStates(states:set<state>)
 predicate validPageDbs(pagedbs:set<PageDb>)
 {
     forall d | d in pagedbs :: validPageDb(d)
+}
+
+function insecureUserspaceMem(s:state, pc:word, a:addr): word
+    requires ValidState(s)
+    requires ValidMem(a) && a in TheValidAddresses()
+    requires !addrIsSecure(a)
+    requires ExtractAbsPageTable(s).Just?
+{
+    var pt := ExtractAbsPageTable(s).v;
+    var user_state := user_visible_state(s, pc, pt);
+    var pages := WritablePagesInTable(pt);
+    if( PageBase(a) in pages ) then nondet_word(s.conf.nondet, a)
+    else MemContents(s.m, a)
+}
+
+lemma lemma_userspace_insecure_addr(s:state, pc: word, s3: state, a:addr)
+    requires validStates({s, s3})
+    requires mode_of_state(s) == User
+    requires ValidMem(a) && a in TheValidAddresses()
+    requires !addrIsSecure(a)
+    requires ExtractAbsPageTable(s).Just?
+    requires userspaceExecutionFn(s, pc).0 == s3
+    ensures  MemContents(s3.m, a) == insecureUserspaceMem(s, pc, a)
+{
+    var pt := ExtractAbsPageTable(s).v;
+    var user_state := user_visible_state(s, pc, pt);
+    var pages := WritablePagesInTable(pt);
+    var newpsr := nondet_psr(s.conf.nondet, user_state, s.conf.cpsr);
+    var hv := havocPages(pages, s, user_state);
+    assert s3.m.addresses == hv by
+        { reveal userspaceExecutionFn(); }
 }
