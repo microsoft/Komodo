@@ -26,7 +26,9 @@ lemma lemma_conf_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     requires conf_loweq(s1, d1, s2, d2, atkr)
     requires same_cpsr(s1, s2)
     requires s1.conf.nondet == s2.conf.nondet
-    ensures conf_loweq(s1', d1', s2', d2', atkr)
+    ensures !(var callno := s1.regs[R0]; var asp := s1.regs[R1];
+        callno == KOM_SMC_STOP && asp == atkr) ==>
+        conf_loweq(s1', d1', s2', d2', atkr)
 {
     reveal ValidRegState();
     var callno, arg1, arg2, arg3, arg4
@@ -421,10 +423,13 @@ lemma lemma_stop_loweq_pdb(
     requires smc_stop(d1, addrspacePage) == (d1', e1')
     requires smc_stop(d2, addrspacePage) == (d2', e2')
     requires loweq_pdb(d1, d2, atkr)
-    ensures  loweq_pdb(d1', d2', atkr)
+    ensures  addrspacePage != atkr ==> loweq_pdb(d1', d2', atkr)
     ensures  e1' == e2'
 {
     reveal loweq_pdb();
+    if(addrspacePage == atkr) {
+    } else {
+    }
 }
 
 lemma lemma_allocatePage_loweq_pdb(d1: PageDb, d1': PageDb, e1':word,
@@ -558,7 +563,7 @@ lemma lemma_updateMeasurement_ni(d1: PageDb, d2: PageDb, d1': PageDb, d2': PageD
     requires loweq_pdb(d1, d2, atkr)
     ensures loweq_pdb(d1', d2', atkr)
 {
-    reveal enc_eqpdb();
+    reveal loweq_pdb();
     if(atkr == addrsp) {
         reveal validPageDb();
         assert d1'[addrsp] == d2'[addrsp];
@@ -570,8 +575,8 @@ lemma lemma_updateMeasurement_ni(d1: PageDb, d2: PageDb, d1': PageDb, d2': PageD
             ensures pgInAddrSpc(d2, n, atkr) ==>
                 pgInAddrSpc(d2', n, atkr)
             {}
-        assert enc_eqpdb(d1', d2', atkr);
+        assert loweq_pdb(d1', d2', atkr);
     } else {
-        assert enc_eqpdb(d1', d2', atkr);
+        assert loweq_pdb(d1', d2', atkr);
     }
 }

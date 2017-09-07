@@ -2,8 +2,8 @@ include "sec_prop.s.dfy"
 include "../pagedb.s.dfy"
 include "../entry.s.dfy"
 include "sec_prop_util.i.dfy"
-include "enc_ni_entry.i.dfy"
 include "conf_ni.i.dfy"
+include "integ_ni_entry.i.dfy"
 
 //-----------------------------------------------------------------------------
 // NI proof of integriy
@@ -20,10 +20,9 @@ lemma lemma_enc_ni(s1: state, d1: PageDb, s1': state, d1': PageDb,
     requires InsecureMemInvariant(s1, s2) // public input to mapSecure.
     requires loweq_pdb(d1, d2, obs)
     requires s1.conf.nondet == s2.conf.nondet
-    ensures loweq_pdb(d1', d2', obs)
-    // ensures !(var callno := s1.regs[R0]; var asp := s1.regs[R1];
-    //     callno == KOM_SMC_STOP && asp == obs) ==>
-    //     loweq_pdb(d1', d2', obs)
+    ensures !(var callno := s1.regs[R0]; var asp := s1.regs[R1];
+        callno == KOM_SMC_STOP && asp == obs) ==>
+        loweq_pdb(d1', d2', obs)
 {
     reveal ValidRegState();
     var callno, arg1, arg2, arg3, arg4
