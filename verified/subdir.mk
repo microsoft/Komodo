@@ -13,7 +13,7 @@ DOS2UNIX := $(if $(shell which dos2unix 2>/dev/null),dos2unix)
 
 # top-level target
 .PHONY: verified
-verified: $(dir)/main.S $(dir)/secprop/os_ni.i.verified $(dir)/secprop/enc_ni.i.verified
+verified: $(dir)/main.S $(dir)/secprop/conf_ni.i.verified $(dir)/secprop/integ_ni.i.verified
 
 # We use .verified files as a timestamp/placeholder to indicate that
 # a given source has been verified.
@@ -46,7 +46,7 @@ $(dir)/main.S: $(dir)/main.exe
 
 # auto dependencies for Dafny/Vale code
 findsrc = $(wildcard $(1)/*.vad) $(filter-out %.gen.dfy,$(wildcard $(1)/*.dfy))
-DEPSRC = $(call findsrc,$(dir)) $(call findsrc,$(dir)/sha)
+DEPSRC = $(call findsrc,$(dir)) $(call findsrc,$(dir)/sha) $(call findsrc,$(dir)/secprop)
 $(dir)/dfydeps.d: $(dir)/mkdep.py $(DEPSRC)
 	python $(dir)/mkdep.py $(DEPSRC) > $(dir)/dfydeps.d
 include $(dir)/dfydeps.d
