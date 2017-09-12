@@ -162,11 +162,18 @@ function va_update_mem(sM:state, sK:state):state
 }
 function va_update_globals(sM:state, sK:state):state
     requires ValidMemState(sM.m) && ValidMemState(sK.m)
-    ensures ValidMemState(va_update_mem(sM, sK).m)
+    ensures ValidMemState(va_update_globals(sM, sK).m)
     ensures ValidGlobalStateOpaque(va_update_mem(sM, sK).m.globals)
 {
     reveal ValidMemState(); reveal_ValidGlobalStateOpaque();
     sK.(m := sK.m.(globals := sM.m.globals))
+}
+function va_update_rng(sM:state, sK:state):state
+    requires ValidRngState(sM.rng) && ValidRngState(sK.rng)
+    ensures ValidRngState(va_update_rng(sM, sK).rng)
+{
+    reveal ValidRngState();
+    sK.(rng := sM.rng)
 }
 function va_update_osp(sM:state, sK:state):state 
     requires ValidRegState(sK.regs) && ValidRegState(sM.regs)
@@ -270,6 +277,7 @@ predicate va_state_eq(s0:state, s1:state)
  && s0.sregs == s1.sregs
  && s0.m == s1.m
  && s0.conf == s1.conf
+ && s0.rng == s1.rng
  && s0.ok == s1.ok
 }
 

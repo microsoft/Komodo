@@ -1013,6 +1013,36 @@ lemma lemma_svc_returning_WordAlignedStack(s:state, stack_bytes:int)
 }
 #endverbatim
 
+procedure rng_read(out operand val:reg, out operand tmp:reg)
+    reads globals;
+    modifies rng;
+    requires/ensures
+        SaneState(this);
+    requires
+        @val != @tmp && @val != OSP && @tmp != OSP;
+    ensures
+        val == svcGetRandom(old(this));
+{
+    LDRglobaladdr(tmp, RngBaseOp());
+    LDRglobal(tmp, RngBaseOp(), tmp, 0);
+    MOV(val, 0);
+    while (val == 0)
+        invariant
+            SaneState(this);
+            tmp == RngBase();
+            val != 0 ==> this.rng.ready;
+            this.rng.entropy == old(this.rng.entropy);
+            this.rng.idx == old(this.rng.idx);
+        decreases *;
+    {
+        ghost var st := this;
+        LDRrng(val, tmp, const(WordsToBytes(RNG_STATUS_REG)));
+        LSR(val, val, const(RNG_STATUS_SHIFT));
+    }
+
+    LDRrng(val, tmp, const(WordsToBytes(RNG_DATA_REG)));
+}
+
 procedure {:frame false}{:timeLimitMultiplier 2} svc_returning(
     ghost exstate: state,
     ghost stack_bytes: int,
@@ -1025,7 +1055,7 @@ procedure {:frame false}{:timeLimitMultiplier 2} svc_returning(
         globals;
     modifies
          r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
-         spsr_mon; mem;
+         spsr_mon; mem; rng;
     requires/ensures
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
@@ -1107,6 +1137,13 @@ procedure {:frame false}{:timeLimitMultiplier 2} svc_returning(
     } else if (r0 == const(KOM_SVC_INIT_L2PTABLE)) {
         pagedb' := svc_init_l2ptable(pagedb, r0, r1, r2, dispPg);
         svc_return_epilog();
+        assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
+        assert BankedRegsInvariant(old(this), this);
+    } else if (r0 == const(KOM_SVC_GET_RANDOM)) {
+        svc_return_epilog();
+        rng_read(r1, r0);
+        MOV(r0, const(KOM_ERR_SUCCESS));
+        pagedb' := pagedb;
         assert preEntryReturn(exstate, this, retRegs, pagedb', dispPg);
         assert BankedRegsInvariant(old(this), this);
     } else {

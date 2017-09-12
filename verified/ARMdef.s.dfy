@@ -392,23 +392,32 @@ predicate ValidRngOffset(s:state, o:int)
     && (o == WordsToBytes(RNG_DATA_REG) ==> s.rng.ready)
 }
 
-function RngRead(s:state, offset:word): (state, word)
+function RngReadData(s:state, offset:word): word
     requires ValidState(s) && ValidRngOffset(s, offset)
-    ensures ValidState(RngRead(s, offset).0)
+{
+    reveal_ValidRngState();
+
+    if offset == WordsToBytes(RNG_DATA_REG) then
+        s.rng.entropy[s.rng.idx]
+    else
+        nondet_word(s.conf.nondet, NONDET_RNG(offset))
+}
+
+function RngReadState(s:state, offset:word): state
+    requires ValidState(s) && ValidRngOffset(s, offset)
+    ensures ValidState(RngReadState(s, offset))
 {
     reveal_ValidRngState();
 
     // reading the data register consumes a random number
     if offset == WordsToBytes(RNG_DATA_REG) then
-        (s.(rng := s.rng.(idx := s.rng.idx + 1, ready := false)), s.rng.entropy[s.rng.idx])
+        s.(rng := s.rng.(idx := s.rng.idx + 1, ready := false))
     // reading the status register sets the ready flag only if we have enough entropy
     else if offset == WordsToBytes(RNG_STATUS_REG) then
-        var val := nondet_word(s.conf.nondet, NONDET_RNG(offset));
-        var hwready := RightShift(val, RNG_STATUS_SHIFT) != 0;
-        (s.(rng := s.rng.(ready := hwready)), val)
-    // we don't model other registers
+        var val := RngReadData(s, offset);
+        s.(rng := s.rng.(ready := RightShift(val, RNG_STATUS_SHIFT) != 0))
     else
-        (s, nondet_word(s.conf.nondet, NONDET_RNG(offset)))
+        s
 }
 
 // XXX: ValidOperand is just the subset used in "normal" integer instructions
@@ -1166,8 +1175,8 @@ predicate evalIns'(ins:ins, s:state, r:state)
         case LDR_reloc(rd, name) =>
             evalUpdate(s, rd, AddressOfGlobal(name), r)
         case LDR_rng(rd, base, ofs) =>
-            var (s', val) := RngRead(s, OperandContents(s, ofs));
-            evalUpdate(s', rd, val, r)
+            var s' := RngReadState(s, OperandContents(s, ofs));
+            evalUpdate(s', rd, RngReadData(s, OperandContents(s, ofs)), r)
         case STR(rd, base, ofs) => 
             evalMemUpdate(s, OperandContents(s, base) +
                 OperandContents(s, ofs), OperandContents(s, rd), r)

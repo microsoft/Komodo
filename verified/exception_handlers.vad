@@ -174,7 +174,7 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
     reads
         globals; /* spsr_svc; spsr_abt; spsr_und; */ lr_svc; lr_abt; lr_und;
     modifies
-        mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; cpsr; lr; spsr_mon;
+        mem; r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; cpsr; lr; spsr_mon; rng;
     requires
         KomUserEntryPrecondition(this, pagedb_in, dispPg);
         InterruptContinuationPreconditionDef();

@@ -271,7 +271,7 @@ predicate preEntryReturn(exs:state, s:state, retregs:SvcReturnRegs, d:PageDb, di
 predicate equivStates(s1:state, s2:state)
 {
     s1.regs == s2.regs && s1.m == s2.m && s1.sregs == s2.sregs
-        && s1.conf == s2.conf && s1.ok == s2.ok
+        && s1.conf == s2.conf && s1.rng == s2.rng && s1.ok == s2.ok
 }
 
 predicate userspaceExecutionAndException'(s:state, s1:state, s2:state, r:state)
