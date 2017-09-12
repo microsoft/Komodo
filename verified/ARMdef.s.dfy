@@ -26,6 +26,10 @@ datatype PSR  = PSR(m:mode, f:bool, i:bool) // See B1.3.3
 datatype SCR  = SCRT(ns:world, irq:bool, fiq:bool) // See B4.1.129
 datatype TTBR = TTBR(ptbase:addr)      // See B4.1.154
 
+// Hardware RNG state
+// in lieu of an infinite sequence, we model entropy as an infinite map
+datatype RNG = RNG(entropy:imap<nat, word>, idx:nat, ready:bool)
+
 type shift_amount = s | 0 <= s < 32 // Some shifts allow s=32, but we'll be conservative for simplicity
 
 datatype Shift = LSLShift(amount_lsl:shift_amount)
@@ -48,6 +52,7 @@ datatype state = State(regs:map<ARMReg, word>,
                        sregs:map<SReg, word>,
                        m:memstate,
                        conf:config,
+                       rng:RNG,
                        ok:bool,
                        steps:nat)
 
@@ -113,6 +118,7 @@ function {:axiom} NONDET_PC():int
 function {:axiom} NONDET_EX():int
 function {:axiom} NONDET_REG(r:ARMReg):int
 function {:axiom} NONDET_STEPS():int
+function {:axiom} NONDET_RNG(o:int):int
 
 // user-visible state
 datatype UserState = UserState(regs:map<ARMReg, word>, pc:word, addresses:memmap)
@@ -303,6 +309,8 @@ datatype ins =
     // Only the special case where rd is pc and src is lr
     // (See armv7a ref manual A8.8.105 and B9.3.20)
     | MOVS_PCLR_TO_USERMODE_AND_CONTINUE
+    // read RNG status and data registers
+    | LDR_rng(rdLDR_rng:operand, baseLDR_rng:operand, ofsLDR_rng:operand)
 
 //-----------------------------------------------------------------------------
 // Code Representation
@@ -324,6 +332,7 @@ datatype code =
 predicate ValidState(s:state)
 {
     ValidRegState(s.regs) && ValidMemState(s.m) && ValidSRegState(s.sregs, s.conf)
+        && ValidRngState(s.rng)
 }
 
 predicate {:opaque} ValidRegState(regs:map<ARMReg, word>)
@@ -361,6 +370,45 @@ predicate ValidGlobalState(globals: globalsmap)
     (forall g :: g in TheGlobalDecls() <==> g in globals)
     && (forall g :: g in TheGlobalDecls()
         ==> |globals[g]| == BytesToWords(TheGlobalDecls()[g]))
+}
+
+// HW RNG model
+const RNG_STATUS_REG:int   := 1;
+const RNG_DATA_REG:int     := 2;
+const RNG_STATUS_SHIFT:int := 24;
+
+function {:axiom} RngBase():addr
+
+predicate {:opaque} ValidRngState(rng:RNG)
+{
+    forall n:nat :: n in rng.entropy
+}
+
+predicate ValidRngOffset(s:state, o:int)
+{
+    // valid offset
+    isUInt32(o) && WordAligned(o) && o <= WordsToBytes(RNG_DATA_REG)
+    // can only read data reg if you know there's data ready
+    && (o == WordsToBytes(RNG_DATA_REG) ==> s.rng.ready)
+}
+
+function RngRead(s:state, offset:word): (state, word)
+    requires ValidState(s) && ValidRngOffset(s, offset)
+    ensures ValidState(RngRead(s, offset).0)
+{
+    reveal_ValidRngState();
+
+    // reading the data register consumes a random number
+    if offset == WordsToBytes(RNG_DATA_REG) then
+        (s.(rng := s.rng.(idx := s.rng.idx + 1, ready := false)), s.rng.entropy[s.rng.idx])
+    // reading the status register sets the ready flag only if we have enough entropy
+    else if offset == WordsToBytes(RNG_STATUS_REG) then
+        var val := nondet_word(s.conf.nondet, NONDET_RNG(offset));
+        var hwready := RightShift(val, RNG_STATUS_SHIFT) != 0;
+        (s.(rng := s.rng.(ready := hwready)), val)
+    // we don't model other registers
+    else
+        (s, nondet_word(s.conf.nondet, NONDET_RNG(offset)))
 }
 
 // XXX: ValidOperand is just the subset used in "normal" integer instructions
@@ -1023,6 +1071,10 @@ predicate ValidInstruction(s:state, ins:ins)
             ValidGlobalAddr(global, OperandContents(s, base) + OperandContents(s, ofs))
         case LDR_reloc(rd, global) => 
             ValidRegOperand(rd) && ValidGlobal(global)
+        case LDR_rng(rd, base, ofs) =>
+            ValidRegOperand(rd) && ValidOperand(base) && ValidOperand(ofs) &&
+            OperandContents(s, base) == RngBase()
+            && ValidRngOffset(s, OperandContents(s, ofs))
         case STR(rd, base, ofs) =>
             ValidRegOperand(rd) &&
             ValidOperand(ofs) && ValidOperand(base) &&
@@ -1113,6 +1165,9 @@ predicate evalIns'(ins:ins, s:state, r:state)
                                AddressOfGlobal(global))), r)
         case LDR_reloc(rd, name) =>
             evalUpdate(s, rd, AddressOfGlobal(name), r)
+        case LDR_rng(rd, base, ofs) =>
+            var (s', val) := RngRead(s, OperandContents(s, ofs));
+            evalUpdate(s', rd, val, r)
         case STR(rd, base, ofs) => 
             evalMemUpdate(s, OperandContents(s, base) +
                 OperandContents(s, ofs), OperandContents(s, rd), r)

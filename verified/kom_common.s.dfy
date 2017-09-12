@@ -28,6 +28,7 @@ const KOM_SVC_VERIFY_STEP2:int      := 4;
 const KOM_SVC_MAP_DATA:int          := 10;
 const KOM_SVC_UNMAP_DATA:int        := 11;
 const KOM_SVC_INIT_L2PTABLE:int     := 12;
+const KOM_SVC_GET_RANDOM:int        := 20;
 
 //-----------------------------------------------------------------------------
 // Errors
@@ -99,6 +100,7 @@ function method {:opaque} CurDispatcherOp(): symbol { "g_cur_dispatcher" }
 function method {:opaque} PendingInterruptOp(): symbol { "g_pending_interrupt" }
 function method {:opaque} K_SHA256s(): symbol { "g_k_sha256" }
 function method {:opaque} AttestKeyOp(): symbol { "g_attestkey" }
+function method {:opaque} RngBaseOp(): symbol { "g_rngbase" }
 
 // XXX: workaround so dafny sees that these are distinct, despite the opaques
 predicate DistinctGlobals()
@@ -109,21 +111,28 @@ predicate DistinctGlobals()
     && PageDb() != PendingInterruptOp()
     && PageDb() != K_SHA256s()
     && PageDb() != AttestKeyOp()
+    && PageDb() != RngBaseOp()
     && MonitorPhysBaseOp() != SecurePhysBaseOp()
     && MonitorPhysBaseOp() != CurDispatcherOp()
     && MonitorPhysBaseOp() != PendingInterruptOp()
     && MonitorPhysBaseOp() != K_SHA256s()
     && MonitorPhysBaseOp() != AttestKeyOp()
+    && MonitorPhysBaseOp() != RngBaseOp()
     && SecurePhysBaseOp() != CurDispatcherOp()
     && SecurePhysBaseOp() != PendingInterruptOp()
     && SecurePhysBaseOp() != K_SHA256s()
     && SecurePhysBaseOp() != AttestKeyOp()
+    && SecurePhysBaseOp() != RngBaseOp()
     && CurDispatcherOp() != PendingInterruptOp()
     && CurDispatcherOp() != K_SHA256s()
     && CurDispatcherOp() != AttestKeyOp()
+    && CurDispatcherOp() != RngBaseOp()
     && PendingInterruptOp() != K_SHA256s()
     && PendingInterruptOp() != AttestKeyOp()
+    && PendingInterruptOp() != RngBaseOp()
     && K_SHA256s() != AttestKeyOp()
+    && K_SHA256s() != RngBaseOp()
+    && AttestKeyOp() != RngBaseOp()
 }
 
 lemma lemma_DistinctGlobals()
@@ -136,6 +145,7 @@ lemma lemma_DistinctGlobals()
     reveal PendingInterruptOp();
     reveal K_SHA256s();
     reveal AttestKeyOp();
+    reveal RngBaseOp();
 }
 
 // the phys bases are unknown, but never change
@@ -164,7 +174,8 @@ function method KomGlobalDecls(): globaldecls
         CurDispatcherOp() := WORDSIZE,
         PendingInterruptOp() := WORDSIZE,
         K_SHA256s() := K_SHA256_WORDS * WORDSIZE,
-        AttestKeyOp() := 8*WORDSIZE
+        AttestKeyOp() := 8*WORDSIZE,
+        RngBaseOp() := WORDSIZE
         ]
 }
 
@@ -195,7 +206,8 @@ predicate SaneMem(s:memstate)
     && GlobalFullContents(s, MonitorPhysBaseOp()) == [MonitorPhysBase()]
     && GlobalFullContents(s, SecurePhysBaseOp()) == [SecurePhysBase()]
     && GlobalFullContents(s, AttestKeyOp()) == AttestKey()
-    // SHA const table is valie
+    && GlobalFullContents(s, RngBaseOp()) == [RngBase()]
+    // SHA const table is valid
     && forall j :: 0 <= j < K_SHA256_WORDS
         ==> GlobalWord(s, K_SHA256s(), WordsToBytes(j)) == K_SHA256(j)
     // extra-tight requirement for SHA spec to avoid wraparound

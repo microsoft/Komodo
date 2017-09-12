@@ -185,6 +185,13 @@ function svcInitL2PTable(d:PageDb, asPg:PageNr, page:word, l1index:word) : (Page
         (d2, KOM_ERR_SUCCESS)
 }
 
+function svcGetRandom(s:state): word
+    requires ValidState(s)
+{
+    reveal_ValidRngState();
+    s.rng.entropy[s.rng.idx]
+}
+
 function svcHandled(s:state, d:PageDb, dispPg:PageNr): (SvcReturnRegs, PageDb)
     requires validPageDb(d) && finalDispatcher(d, dispPg)
     requires ValidState(s) && mode_of_state(s) != User
@@ -227,6 +234,8 @@ function svcHandled(s:state, d:PageDb, dispPg:PageNr): (SvcReturnRegs, PageDb)
     else if callno == KOM_SVC_INIT_L2PTABLE then
         var (retDb, retErr) := svcInitL2PTable(d, addrspace, s.regs[R1], s.regs[R2]);
         (success_regs.(0 := retErr), retDb)
+    else if callno == KOM_SVC_GET_RANDOM then
+        (success_regs.(1 := svcGetRandom(s)), d)
     else
         (success_regs.(0 := KOM_ERR_INVALID), d)
 }
