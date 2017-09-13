@@ -245,6 +245,7 @@ method printIns(ins:ins)
         case MVN(dest, src) => printIns2Op("MVN", dest, src);
         case LDR(rd, base, ofs) => printInsLdStr("LDR", rd, base, ofs);
         case LDR_global(rd, global, base, ofs) => printInsLdStr("LDR", rd, base, ofs);
+        case LDR_rng(rd, base, ofs) => printInsLdStr("LDR", rd, base, ofs);
         case LDR_reloc(rd, sym) => printInsReloc("LDR", rd, sym);
         case STR(rd, base, ofs) => printInsLdStr("STR", rd, base, ofs);
         case STR_global(rd, global, base, ofs) => printInsLdStr("STR", rd, base, ofs);

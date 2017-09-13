@@ -133,6 +133,7 @@ lemma lemma_SMCHandlerIsCorrect(s1:state, p1:PageDb, s2:state)
     reveal va_eval();
     var block := va_CCons(smc_handler(), va_CNil());
     assert va_eval(Block(block), s1, s2) by { assert evalBlock(block, s1, s2); }
+    assert ValidPsrWord(va_get_sreg(spsr(Monitor), s1)) by { reveal ValidSRegState(); }
     var _, _, p2' := va_lemma_smc_handler(block, s1, s2, stack_bytes, p1);
     assert smchandler(s1, p1, s2, p2');
     assert validPageDb(p2') && pageDbCorresponds(s2.m, p2');

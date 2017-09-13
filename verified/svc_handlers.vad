@@ -48,7 +48,7 @@ procedure svc_returning_default(
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
         !(set(KOM_SVC_ATTEST, KOM_SVC_VERIFY_STEP0, KOM_SVC_VERIFY_STEP1,
               KOM_SVC_VERIFY_STEP2, KOM_SVC_MAP_DATA, KOM_SVC_UNMAP_DATA,
-              KOM_SVC_INIT_L2PTABLE) ?[r0]);
+              KOM_SVC_INIT_L2PTABLE, KOM_SVC_GET_RANDOM) ?[r0]);
     ensures
         let tuple := svcHandled(exstate, pagedb, dispPg) in
         let retRegs := firstOf2(tuple) in
@@ -368,7 +368,11 @@ procedure get_cur_addrspace(out operand asva:reg,
     assert asva == G_PAGEDB_ENTRY(dispPg) + PAGEDB_ENTRY_ADDRSPACE;
     LDRglobaladdr(pagedb_base, PageDb());
     LDRglobal(asva, PageDb(), pagedb_base, asva);
-    reveal pageDbEntryCorresponds;
+    assert asva == page_monvaddr(pagedb[dispPg].addrspace)
+    by {
+        reveal pageDbEntryCorresponds;
+        extractPageDbToAbstractOne(this.m, dispPg, PAGEDB_ENTRY_ADDRSPACE);
+    }
 }
 
 procedure svc_map_data_zeropage(
@@ -1065,6 +1069,7 @@ procedure {:frame false}{:timeLimitMultiplier 2} svc_returning(
         isReturningSvc(exstate);
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
         OperandContents(this, OLR) == OperandContents(exstate, OLR);
+        exstate.rng == this.rng;
         preEntryCommon(this, pagedb, dispPg);
         this.conf.nondet == nondet_int(exstate.conf.nondet, NONDET_GENERATOR());
         this.conf.scr == exstate.conf.scr && this.conf.ttbr0 == exstate.conf.ttbr0;
@@ -1141,6 +1146,7 @@ procedure {:frame false}{:timeLimitMultiplier 2} svc_returning(
         assert BankedRegsInvariant(old(this), this);
     } else if (r0 == const(KOM_SVC_GET_RANDOM)) {
         svc_return_epilog();
+        assert this.rng == old(this).rng == exstate.rng;
         rng_read(r1, r0);
         MOV(r0, const(KOM_ERR_SUCCESS));
         pagedb' := pagedb;

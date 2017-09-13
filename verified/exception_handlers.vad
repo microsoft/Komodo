@@ -39,6 +39,7 @@ CPSID_IAF(operand mod:word)
             ==> old(this).regs[LR(m)] == this.regs[LR(m)]
               && old(this).regs[SP(m)] == this.regs[SP(m)];
         this.conf.nondet == nondet_int(old(this).conf.nondet, NONDET_GENERATOR());
+        this.rng == old(this).rng;
 {
     reveal va_eval;
     exists s' :: maybeHandleInterrupt(old(this), s') && evalIns'(CPSID_IAF(@mod), s', this);
@@ -77,6 +78,7 @@ procedure {:frame false} switch_to_monitor(inline oldmode:mode)
         this.conf.ttbr0 == old(this).conf.ttbr0;
         this.conf.scr == old(this).conf.scr;
         this.conf.nondet == nondet_int(old(this).conf.nondet, NONDET_GENERATOR());
+        this.rng == old(this).rng;
 {
     CPSID_IAF(const(encode_mode(Monitor)));
 
@@ -206,6 +208,7 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
         assert r12 == OperandContents(this, OReg(R12)) == old(r12);
         assert lr_usr == old(lr_usr) && sp_usr == old(sp_usr);
 
+        assert this.rng == old(this).rng;
         pagedb := svc_returning(old(this), EXCEPTION_STACK_BYTES, pagedb_in, dispPg);
         ghost var tuple;
         tuple := svcHandled(old(this), pagedb_in, dispPg);
