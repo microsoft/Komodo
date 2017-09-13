@@ -12,7 +12,7 @@ datatype ARMReg = R0|R1|R2|R3|R4|R5|R6|R7|R8|R9|R10|R11|R12| SP(spm:mode) | LR(l
 
 // Special register instruction operands
 // TODO (style nit): uppercase constructors
-datatype SReg = cpsr | spsr(m:mode) | SCR | SCTLR | VBAR | ttbr0 | TLBIASID
+datatype SReg = cpsr | spsr(m:mode) | SCR | SCTLR | VBAR | ttbr0 | TLBIALL
 
 // A model of the relevant configuration register state. References refer to armv7a spec
 // **NOTE** The configuration registers are stored in the state in two places:
@@ -20,7 +20,7 @@ datatype SReg = cpsr | spsr(m:mode) | SCR | SCTLR | VBAR | ttbr0 | TLBIASID
 // The abstract representation should be used for reasoning about the status of
 // the processor and the concrete representation should be used only for
 // ensuring that the correct values are stored/returned by instructions
-datatype config = Config(cpsr:PSR, scr:SCR, ttbr0:TTBR,
+datatype config = Config(cpsr:PSR, scr:SCR, ttbr0:TTBR, tlb_consistent:bool,
                          ex:exception, exstep:nat, nondet:int)
 datatype PSR  = PSR(m:mode, f:bool, i:bool) // See B1.3.3
 datatype SCR  = SCRT(ns:world, irq:bool, fiq:bool) // See B4.1.129
@@ -226,7 +226,8 @@ function update_config_from_sreg(s:state, sr:SReg, v:word): (c:config)
     reveal ValidSRegState();
     if sr == cpsr then s.conf.(cpsr := decode_psr(v))
     else if sr == SCR then s.conf.(scr := decode_scr(v))
-    else if sr == ttbr0 then s.conf.(ttbr0 := decode_ttbr(v))
+    else if sr == ttbr0 then s.conf.(ttbr0 := decode_ttbr(v), tlb_consistent := false)
+    else if sr == TLBIALL then s.conf.(tlb_consistent := true)
     else s.conf
 }
 
@@ -755,6 +756,29 @@ function ExtractAbsPageTable(s:state): Maybe<AbsPTable>
         Nothing
 }
 
+// is a given address somewhere within a L1 or L2 page table, so a
+// store to it might affect TLB consistency?
+predicate AddrInPageTable(s:state, a:addr)
+    requires ValidState(s)
+{
+    var pt := ExtractAbsPageTable(s);
+    if pt.Nothing? then true // we don't know, so be conservative
+    else
+        var vbase := s.conf.ttbr0.ptbase + PhysBase();
+        (vbase <= a < vbase + ARM_L1PTABLE_BYTES) // in L1
+        || AddrInL2PageTable(s.m, vbase, a)
+}
+
+predicate AddrInL2PageTable(m:memstate, vbase:int, a:addr)
+    requires ValidMemState(m) && ValidAbsL1PTable(m, vbase)
+{
+    exists i | 0 <= i < ARM_L1PTES :: (
+        var ptew := MemContents(m, WordOffset(vbase, i));
+        var ptem := ExtractAbsL1PTE(ptew);
+        ptem.Just? && var l2ptr:int := ptem.v + PhysBase();
+        l2ptr <= a < l2ptr + ARM_L2PTABLE_BYTES)
+}
+
 function AllPagesInTable(pt:AbsPTable): set<addr>
     requires WellformedAbsPTable(pt)
 {
@@ -985,8 +1009,12 @@ predicate evalMemUpdate(s:state, m:addr, v:word, r:state)
     requires ValidMem(m)
     ensures evalMemUpdate(s, m, v, r) ==> ValidState(r)
 {
-    reveal ValidMemState();
-    r == s.(m := s.m.(addresses := s.m.addresses[m := v]))
+    reveal ValidMemState(); reveal ValidSRegState();
+    // store updates memory and, if the address was inside the page
+    // table, sets the TLB as inconsistent
+    r == s.(m := s.m.(addresses := s.m.addresses[m := v]),
+        conf := s.conf.(tlb_consistent := s.conf.tlb_consistent
+                                        && !AddrInPageTable(s, m)))
 }
 
 predicate evalGlobalUpdate(s:state, g:symbol, offset:word, v:word, r:state)

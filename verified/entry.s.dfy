@@ -177,6 +177,7 @@ predicate preEntryCommon(s:state, d:PageDb, dispPage:PageNr)
         // and this is just the simplest way of specifying that
         && s.conf.scr == SCRT(Secure, true, true)
         && s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(d, dispPage))
+        && s.conf.tlb_consistent
 }
 
 predicate preEntryEnter(s:state,s':state,d:PageDb,
