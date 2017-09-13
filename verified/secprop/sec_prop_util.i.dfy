@@ -31,16 +31,22 @@ lemma_maybeContents_insec_ni(s1: state, s2: state, c1: Maybe<seq<word>>,
         assert c1 == c2;
     } else if( physPageIsInsecureRam(physPage) ) {
         var base := physPage * PAGESIZE + KOM_DIRECTMAP_VBASE;
-        forall( a: PageNr | base <= a < base + PAGESIZE)
-            ensures s1.m.addresses[a] == s2.m.addresses[a]
+        forall( a: addr | base <= a < base + PAGESIZE)
+            ensures MemContents(s1.m, a) == MemContents(s2.m, a)
         {
+            assert physPage * PAGESIZE < MonitorPhysBase();
+            assert KOM_DIRECTMAP_VBASE <= a < KOM_DIRECTMAP_VBASE + MonitorPhysBase()
+                by { reveal PageAligned(); }
+            assert InsecureMemInvariant(s1, s2);
         }
-        reveal addrRangeSeq();
-        reveal addrSeqToContents();
+        assert contentsOfPhysPage(s1, physPage)
+            == contentsOfPhysPage(s2, physPage) // seq equality
+        by {
+            reveal addrRangeSeq();
+            reveal addrSeqToContents();
+        }
         assert c1 == Just(contentsOfPhysPage(s1, physPage));
         assert c2 == Just(contentsOfPhysPage(s2, physPage));
-        assert contentsOfPhysPage(s1, physPage)
-            == contentsOfPhysPage(s2, physPage); // seq equality
         assert c1 == c2;
     } else {
         assert c1 == c2;
