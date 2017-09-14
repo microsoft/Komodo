@@ -4,6 +4,7 @@ var{:state ok()}  ok:bool;
 var{:state mem()} mem:memmap;
 var{:state globals()} globals:globalsmap;
 var{:state rng()} rng:RNG;
+var{:state tlb()} tlb:bool;
 
 var{:state osp()} sp:word;
 var{:state olr()} lr:word;
@@ -48,7 +49,7 @@ var{:state sreg(SCTLR)}            sctlr:word;
 var{:state sreg(SCR)}              scr:word;
 var{:state sreg(ttbr0)}            ttbr0:word;
 var{:state sreg(VBAR)}             vbar:word;
-var{:state sreg(TLBIASID)}         tlbiasid:word;
+var{:state sreg(TLBIALL)}          tlbiall:word;
 
 #verbatim
 function MaybeUpdateOk(s:va_state, r:va_state) : va_state
@@ -329,6 +330,25 @@ procedure {:bridge} {:refined} {:instruction Ins(STR(rd, base, ofs))}
 STR(operand rd:reg, operand base:word, operand ofs:word)
     modifies
         mem;
+    requires/ensures
+        ValidAddrMemStateOpaque(mem);
+    requires
+        ValidMem(base + ofs);
+    requires {:refined false}
+        !interrupts_enabled(this);
+        ValidMem(base + ofs) && !AddrInPageTable(this, base + ofs);
+    ensures
+        mem == AddrMemUpdate(old(mem), old(base + ofs), old(rd));
+{
+    reveal va_eval;
+    reveal ValidRegState;
+    this := MaybeUpdateOk(old(this), this);
+}
+
+procedure {:instruction Ins(STR(rd, base, ofs))}
+STRpte(operand rd:reg, operand base:word, operand ofs:word)
+    modifies
+        mem; tlb;
     requires/ensures
         ValidAddrMemStateOpaque(mem);
     requires

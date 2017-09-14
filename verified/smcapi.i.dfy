@@ -519,9 +519,12 @@ lemma mapInsecurePreservesPageDbValidity(pageDbIn: PageDb, addrspacePage: word,
                         assert forall i | 0 <= i < NR_L2PTES :: if i == mapping.l2index
                             then l2pt[i].InsecureMapping?
                             else l2pt[i] == pageDbIn[l1pte].entry.l2pt[i];
+                        assert dataPageRefs(pageDbIn, pageDbIn[n].addrspace, n)
+                            == dataPageRefs(pageDbOut, pageDbOut[n].addrspace, n);
+                    } else {
+                        assert dataPageRefs(pageDbIn, pageDbIn[n].addrspace, n)
+                            == dataPageRefs(pageDbOut, pageDbOut[n].addrspace, n);
                     }
-                    assert dataPageRefs(pageDbIn, pageDbIn[n].addrspace, n)
-                        == dataPageRefs(pageDbOut, pageDbOut[n].addrspace, n);
                 }
             }
         }

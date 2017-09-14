@@ -159,6 +159,11 @@ predicate NonStackMemPreserving(s:state, r:state)
     MemPreservingExcept(s, r, StackLimit(), StackBase())
 }
 
+predicate OnlySecureMemInPageTable(s:state)
+    requires ValidState(s)
+{
+    forall a:addr | AddrInPageTable(s, a) :: address_is_secure(a)
+}
 
 //-----------------------------------------------------------------------------
 // Common functions

@@ -175,6 +175,13 @@ function va_update_rng(sM:state, sK:state):state
     reveal ValidRngState();
     sK.(rng := sM.rng)
 }
+function va_update_tlb(sM:state, sK:state):state
+    requires ValidSRegState(sK.sregs, sK.conf)
+    ensures var r := va_update_tlb(sM, sK); ValidSRegState(r.sregs, r.conf)
+{
+    reveal ValidSRegState();
+    sK.(conf := sK.conf.(tlb_consistent := sM.conf.tlb_consistent))
+}
 function va_update_osp(sM:state, sK:state):state 
     requires ValidRegState(sK.regs) && ValidRegState(sM.regs)
     ensures ValidRegState(va_update_osp(sM, sK).regs)
