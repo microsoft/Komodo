@@ -109,6 +109,9 @@ function va_get_mem(s:state):memmap
     ensures ValidAddrMemStateOpaque(va_get_mem(s))
 { reveal ValidMemState(); reveal_ValidAddrMemStateOpaque(); s.m.addresses }
 
+function va_get_ttbr0(s:state):TTBR { s.conf.ttbr0 }
+function va_get_tlb(s:state):bool { s.conf.tlb_consistent }
+
 function va_get_globals(s:state):globalsmap
     requires ValidState(s)
     ensures ValidGlobalStateOpaque(va_get_globals(s))

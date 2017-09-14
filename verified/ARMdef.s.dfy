@@ -764,29 +764,43 @@ predicate WellformedAbsPTE(pte: Maybe<AbsPTE>)
     pte.Just? ==> PageAligned(pte.v.phys) && isUInt32(pte.v.phys + PhysBase())
 }
 
+function ExtractAbsPageTable'(m:memstate, ttbr:TTBR): Maybe<AbsPTable>
+    requires ValidMemState(m)
+    ensures var r := ExtractAbsPageTable'(m, ttbr);
+        r.Just? ==> WellformedAbsPTable(fromJust(r))
+{
+    var vbase := ttbr.ptbase + PhysBase();
+    if ValidAbsL1PTable(m, vbase) then
+        Just(ExtractAbsL1PTable(m, vbase))
+    else
+        Nothing
+}
+
 function ExtractAbsPageTable(s:state): Maybe<AbsPTable>
     requires ValidState(s)
     ensures var r := ExtractAbsPageTable(s);
         r.Just? ==> WellformedAbsPTable(fromJust(r))
 {
-    var vbase := s.conf.ttbr0.ptbase + PhysBase();
-    if ValidAbsL1PTable(s.m, vbase) then
-        Just(ExtractAbsL1PTable(s.m, vbase))
-    else
-        Nothing
+    ExtractAbsPageTable'(s.m, s.conf.ttbr0)
 }
 
 // is a given address somewhere within a L1 or L2 page table, so a
 // store to it might affect TLB consistency?
+predicate AddrInPageTable'(m:memstate, ttbr:TTBR, a:addr)
+    requires ValidMemState(m)
+{
+    var pt := ExtractAbsPageTable'(m, ttbr);
+    if pt.Nothing? then true // we don't know, so be conservative
+    else
+        var vbase := ttbr.ptbase + PhysBase();
+        (vbase <= a < vbase + ARM_L1PTABLE_BYTES) // in L1
+        || AddrInL2PageTable(m, vbase, a)
+}
+
 predicate AddrInPageTable(s:state, a:addr)
     requires ValidState(s)
 {
-    var pt := ExtractAbsPageTable(s);
-    if pt.Nothing? then true // we don't know, so be conservative
-    else
-        var vbase := s.conf.ttbr0.ptbase + PhysBase();
-        (vbase <= a < vbase + ARM_L1PTABLE_BYTES) // in L1
-        || AddrInL2PageTable(s.m, vbase, a)
+    AddrInPageTable'(s.m, s.conf.ttbr0, a)
 }
 
 predicate AddrInL2PageTable(m:memstate, vbase:int, a:addr)
