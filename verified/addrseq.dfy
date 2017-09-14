@@ -27,11 +27,11 @@ function addrsInPhysPage(physPage: word, base: addr) : seq<addr>
     requires physPageIsInsecureRam(physPage)
     requires base == physPage * PAGESIZE + KOM_DIRECTMAP_VBASE
     requires SaneConstants()
-    ensures forall a : addr | a in addrsInPhysPage(physPage, base) :: ValidMem(a)
+    ensures forall a : addr | a in addrsInPhysPage(physPage, base) :: ValidMemForRead(a)
 {
     assert PageAligned(base) by { reveal_PageAligned(); }
     var res := addrRangeSeq(base, base+PAGESIZE);
-    assert forall a | a in res :: ValidMem(a) by { reveal_PageAligned(); }
+    assert forall a | a in res :: ValidMemForRead(a) by { reveal_PageAligned(); }
     res
 }
 
@@ -45,7 +45,7 @@ function addrsInPage(page: PageNr, base: addr) : seq<addr>
 
 function {:opaque} addrSeqToContents(s:seq<addr>, ms:memstate) : seq<word>
     requires ValidMemState(ms)
-    requires forall a : addr | a in s :: ValidMem(a)
+    requires forall a : addr | a in s :: ValidMemForRead(a)
     ensures |addrSeqToContents(s, ms)| == |s|
     ensures forall i | 0 <= i < |s| :: addrSeqToContents(s, ms)[i] == MemContents(ms, s[i])
 {
