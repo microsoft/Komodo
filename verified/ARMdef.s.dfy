@@ -149,7 +149,7 @@ function user_mem(pt:AbsPTable, m:memstate): memmap
     reveal ValidMemState();
 
     // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
-    (map a:addr | ValidMem(a) && a in TheValidAddresses() && addrIsSecure(a)
+    (map a:addr | ValidMem(a) && a in TheValidAddressesRW() && addrIsSecure(a)
         && PageBase(a) in AllPagesInTable(pt) :: m.addresses[a])
 }
 
@@ -353,7 +353,11 @@ predicate {:opaque} ValidSRegState(sregs:map<SReg, word>, c:config)
 
 // All valid states have the same memory address domain, but we don't care what 
 // it is (at this level).
-function {:axiom} TheValidAddresses(): set<addr>
+function {:axiom} TheValidAddressesRO(): set<addr>
+function {:axiom} TheValidAddressesRW(): set<addr>
+
+function TheValidAddresses(): set<addr>
+{ TheValidAddressesRO() + TheValidAddressesRW() }
 
 predicate {:opaque} ValidMemState(s:memstate)
 {
@@ -466,9 +470,26 @@ predicate ValidAnySrcOperand(s:state, o:operand)
     || ValidBankedRegOperand(s,o) || ValidMrsMsrOperand(s,o) || ValidMcrMrcOperand(s,o)
 }
 
-predicate ValidMem(addr:int)
+predicate ValidAddr(addr:int)
 {
-    isUInt32(addr) && WordAligned(addr) && addr in TheValidAddresses()
+    isUInt32(addr) && WordAligned(addr)
+}
+
+predicate ValidMemForRead(addr:int) // refers to RO or RW mem
+{
+    ValidAddr(addr) && addr in TheValidAddresses()
+}
+
+predicate ValidMem(addr:int) // refers to RW mem
+    ensures ValidMem(addr) ==> ValidMemForRead(addr)
+{
+    ValidAddr(addr) && addr in TheValidAddressesRW()
+}
+
+predicate ValidMemRangeForRead(base:int, limit:int)
+{
+    ValidMemForRead(base) && WordAligned(limit)
+    && forall a:int :: base <= a < limit && WordAligned(a) ==> ValidMemForRead(a)
 }
 
 predicate ValidMemRange(base:int, limit:int)
@@ -651,8 +672,7 @@ function {:opaque} userspaceExecutionFn(s:state, pc:word): (state, word, excepti
 function havocPages(pages:set<addr>, s:state, us:UserState): memmap
     requires ValidState(s)
 {
-    // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
-    (map a:addr | ValidMem(a) && a in TheValidAddresses() ::
+    (map a:addr | a in TheValidAddresses() ::
      if PageBase(a) in pages then (
         if addrIsSecure(a) then nondet_private_word(s.conf.nondet, us, a)
         else nondet_word(s.conf.nondet, a)
@@ -951,7 +971,7 @@ function OperandContents(s:state, o:operand): word
 
 function MemContents(s:memstate, m:addr): word
     requires ValidMemState(s)
-    requires ValidMem(m)
+    requires ValidMemForRead(m)
 {
     reveal ValidMemState();
     s.addresses[m]
@@ -1100,8 +1120,7 @@ predicate ValidInstruction(s:state, ins:ins)
         case LDR(rd, base, ofs) => 
             ValidRegOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
-            WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
-            ValidMem(OperandContents(s, base) + OperandContents(s, ofs))
+            ValidMemForRead(OperandContents(s, base) + OperandContents(s, ofs))
         case LDR_global(rd, global, base, ofs) => 
             ValidRegOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
@@ -1115,7 +1134,6 @@ predicate ValidInstruction(s:state, ins:ins)
         case STR(rd, base, ofs) =>
             ValidRegOperand(rd) &&
             ValidOperand(ofs) && ValidOperand(base) &&
-            WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
             ValidMem(OperandContents(s, base) + OperandContents(s, ofs))
         case STR_global(rd, global, base, ofs) => 
             ValidRegOperand(rd) &&

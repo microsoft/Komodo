@@ -221,9 +221,9 @@ predicate SaneConstants()
     PhysBase() == KOM_DIRECTMAP_VBASE
     // stack
     && ValidMemRange(StackLimit(), StackBase())
-    // insecure phys mapping
-    && ValidMemRange(KOM_DIRECTMAP_VBASE,
-                    KOM_DIRECTMAP_VBASE + MonitorPhysBase())
+    // insecure phys mapping (read-only)
+    && ValidMemRangeForRead(KOM_DIRECTMAP_VBASE,
+                           KOM_DIRECTMAP_VBASE + MonitorPhysBase())
     // secure phys mapping
     && ValidMemRange(KOM_DIRECTMAP_VBASE + SecurePhysBase(),
                     KOM_DIRECTMAP_VBASE + SecurePhysBase() + KOM_SECURE_RESERVE)

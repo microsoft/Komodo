@@ -312,13 +312,13 @@ LDR(out operand dst:word, operand base:word, operand ofs:word)
         mem;
     requires
         ValidAddrMemStateOpaque(mem);
-        ValidMem(base + ofs);
+        ValidMemForRead(base + ofs);
     requires {:refined false}
         !interrupts_enabled(this);
     ensures
         dst == AddrMemContents(mem, old(base + ofs));
     ensures {:refined false}
-        this.ok ==> ValidMem(old(base + ofs))
+        this.ok ==> ValidMemForRead(old(base + ofs))
             && dst == MemContents(this.m, old(base + ofs));
 {
     reveal va_eval;

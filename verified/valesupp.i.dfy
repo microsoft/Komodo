@@ -295,7 +295,7 @@ predicate {:opaque} ValidAddrMemStateOpaque(mem: memmap)
 
 function AddrMemContents(m:memmap, a:int): word
     requires ValidAddrMemStateOpaque(m)
-    requires ValidMem(a)
+    requires ValidMemForRead(a)
 {
     reveal ValidAddrMemStateOpaque();
     m[a]
