@@ -96,7 +96,7 @@ lemma lemma_insecure_mem_userspace(
     var pt := ExtractAbsPageTable(s12).v;
     var pages := WritablePagesInTable(pt);
 
-    forall( a | ValidMem(a) && address_is_insecure(a) )
+    forall( a | ValidMemForRead(a) && address_is_insecure(a) )
         ensures s13.m.addresses[a] == s23.m.addresses[a]
     {
         var m1 := insecureUserspaceMem(s12, pc1, a);
@@ -255,7 +255,7 @@ predicate validPageDbs(pagedbs:set<PageDb>)
 
 function insecureUserspaceMem(s:state, pc:word, a:addr): word
     requires ValidState(s)
-    requires ValidMem(a) && a in TheValidAddresses()
+    requires ValidMemForRead(a)
     requires !addrIsSecure(a)
     requires ExtractAbsPageTable(s).Just?
 {
@@ -269,7 +269,7 @@ function insecureUserspaceMem(s:state, pc:word, a:addr): word
 lemma lemma_userspace_insecure_addr(s:state, pc: word, s3: state, a:addr)
     requires validStates({s, s3})
     requires mode_of_state(s) == User
-    requires ValidMem(a) && a in TheValidAddresses()
+    requires ValidMemForRead(a)
     requires !addrIsSecure(a)
     requires ExtractAbsPageTable(s).Just?
     requires userspaceExecutionFn(s, pc).0 == s3

@@ -249,7 +249,7 @@ predicate SaneState(s:state)
 predicate InsecureMemInvariant(s:state, r:state)
     requires ValidState(s) && ValidState(r);
 {
-    forall m:addr :: ValidMem(m)
+    forall m:addr :: ValidMemForRead(m)
         && KOM_DIRECTMAP_VBASE <= m < KOM_DIRECTMAP_VBASE + MonitorPhysBase()
         ==> MemContents(s.m, m) == MemContents(r.m, m)
 }
