@@ -1,7 +1,7 @@
 include "pagedb.i.dfy"
 include "bitvectors.i.dfy"
 
-lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
+lemma {:timeLimitMultiplier 2} lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
     requires PageAligned(pa) && isUInt32(pa + PhysBase())
     ensures ValidAbsL2PTEWord(ARM_L2PTE(pa, w, x))
     ensures ExtractAbsL2PTE(ARM_L2PTE(pa, w, x)) == Just(AbsPTE(pa, w, x))
@@ -44,6 +44,8 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
             BitsAsWord(BitAnd(WordAsBits(pa), 0xfff));
         }
     }
+
+    assert {:split_here} true;
 
     calc {
         PageBase(ptew);
