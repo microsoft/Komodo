@@ -313,7 +313,7 @@ LDR(out operand dst:word, operand base:word, operand ofs:word)
         mem;
     requires
         ValidAddrMemStateOpaque(mem);
-        ValidMemForRead(base + ofs);
+        ValidMem(base + ofs) || ValidMemForRead(base + ofs);
     requires {:refined false}
         !interrupts_enabled(this);
     ensures
@@ -337,7 +337,6 @@ STR(operand rd:reg, operand base:word, operand ofs:word)
         ValidMem(base + ofs);
     requires {:refined false}
         !interrupts_enabled(this);
-        ValidMem(base + ofs);
     ensures
         mem == AddrMemUpdate(old(mem), old(base + ofs), old(rd));
     ensures {:refined false}

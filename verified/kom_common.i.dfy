@@ -32,7 +32,7 @@ predicate AddrMemInvariant(s:state, s':state)
 predicate SRegsInvariant(s:state, s':state)
     requires ValidState(s) && ValidState(s')
 {
-    s.sregs == s'.sregs && s.conf == s'.conf
+    s.sregs == s'.sregs && s.conf.(tlb_consistent := s'.conf.tlb_consistent) == s'.conf
 }
 
 predicate SpsrsInvariant(s:state, r:state)

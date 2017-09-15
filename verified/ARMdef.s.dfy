@@ -786,7 +786,7 @@ function ExtractAbsPageTable(s:state): Maybe<AbsPTable>
 
 // is a given address somewhere within a L1 or L2 page table, so a
 // store to it might affect TLB consistency?
-predicate AddrInPageTable'(m:memstate, ttbr:TTBR, a:addr)
+predicate AddrInPageTable'(m:memstate, ttbr:TTBR, a:int)
     requires ValidMemState(m)
 {
     var pt := ExtractAbsPageTable'(m, ttbr);
@@ -797,13 +797,13 @@ predicate AddrInPageTable'(m:memstate, ttbr:TTBR, a:addr)
         || AddrInL2PageTable(m, vbase, a)
 }
 
-predicate AddrInPageTable(s:state, a:addr)
+predicate AddrInPageTable(s:state, a:int)
     requires ValidState(s)
 {
     AddrInPageTable'(s.m, s.conf.ttbr0, a)
 }
 
-predicate AddrInL2PageTable(m:memstate, vbase:int, a:addr)
+predicate AddrInL2PageTable(m:memstate, vbase:int, a:int)
     requires ValidMemState(m) && ValidAbsL1PTable(m, vbase)
 {
     exists i | 0 <= i < ARM_L1PTES :: (

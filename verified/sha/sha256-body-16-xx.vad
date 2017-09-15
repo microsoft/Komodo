@@ -36,7 +36,7 @@ procedure {:refined} {:timeLimitMultiplier 3} Body_16_XX(
 requires/ensures
     // Stack is accessible
     SaneStackPointer(sp);
-    ValidMemRange(sp, WordOffset(sp, 19));
+    ValidMemWords(sp, SHA_STACKSIZE);
 reads 
     sp; globals;
 modifies 
@@ -67,8 +67,8 @@ requires
 
     // K table adjusted properly
     SaneShaGlobal(globals);
-    lr == AddressOfGlobal(K_SHA256s()) + WordsToBytes(i);
-    //ValidGlobalAddr(K_SHA256s(), lr);
+    ValidWordOffset(AddressOfGlobal(K_SHA256s()), i);
+    lr == WordOffset(AddressOfGlobal(K_SHA256s()), i);
 
     SeqLength(input) == SHA_BLOCKSIZE;
 
@@ -110,7 +110,7 @@ ensures
      && trace_out.H == trace_in.H
      && trace_out.W == trace_in.W
      // t1 holds the next value of W
-     && t1 == (if i + 1 <= 64 then AddrMemContents(mem, sp + CheapMod16(i + 2)*WORDSIZE) else t1) 
+     && t1 == (if i + 1 <= 64 then AddrMemContents(mem, WordOffset(sp, CheapMod16(i + 2))) else t1)
 
      // Remaining Ws are laid out in memory
      && (i + 1 < 64 ==> (forall j :: i+1 - 16 <= j < i+1 ==> ValidMem(WordOffset(sp, CheapMod16(j))) && last(trace_out.W)[j] == AddrMemContents(mem, WordOffset(sp, CheapMod16(j)))))
@@ -156,7 +156,7 @@ ensures
 
     ghost var mid_a := a;
     ghost var mid_t2 := t2;
-    ghost var dummy_input_ptr:word;  // Body_00_15 only cares about the value for i < 16
+    ghost var dummy_input_ptr:word := 0; // Body_00_15 only cares about the value for i < 16
     ghost var trace_out:SHA256Trace;
     trace_out := Body_00_15(i, perm, input_slot, WordsToBytes(CheapMod16(i + 2)), WordsToBytes(CheapMod16(i + 15)),
                             dummy_input_ptr, trace_in, input,
@@ -186,20 +186,21 @@ predicate {:opaque} Body_16_XXLoopStateInvariantBreakdown(
     )
 {
     16 <= i <= 64
- && ValidMemRange(sp, sp + SHA_STACKSIZE * WORDSIZE)
- && ValidMem(sp + CheapMod16(i)*WORDSIZE)
- && ValidMem(sp + CheapMod16(i+9)*WORDSIZE)
+ && ValidMemWords(sp, SHA_STACKSIZE)
+ && ValidMem(WordOffset(sp, CheapMod16(i)))
+ && ValidMem(WordOffset(sp, CheapMod16(i+9)))
  && ValidAddrMemStateOpaque(mem)
  && ValidAddrMemStateOpaque(orig_mem)
 
     // K table adjusted properly
  && SaneShaGlobal(globals)
- && lr == AddressOfGlobal(K_SHA256s()) + i*WORDSIZE
+ && ValidWordOffset(AddressOfGlobal(K_SHA256s()), i)
+ && lr == WordOffset(AddressOfGlobal(K_SHA256s()), i)
 
  && SeqLength(input) == SHA_BLOCKSIZE
 
- && ValidMem(sp + CheapMod16(i +  2)*WORDSIZE)
- && ValidMem(sp + CheapMod16(i + 15)*WORDSIZE)
+ && ValidMem(WordOffset(sp, CheapMod16(i +  2)))
+ && ValidMem(WordOffset(sp, CheapMod16(i + 15)))
 
  && t3 == BitwiseXor(b, c)
 
@@ -221,8 +222,8 @@ predicate {:opaque} Body_16_XXLoopStateInvariantBreakdown(
  && (16 <= i < 64 ==> (forall j :: i - 16 <= j < i ==> last(current_trace.W)[j] == AddrMemContents(mem, sp + CheapMod16(j)*WORDSIZE)))
 
     // t1 and t4 should already hold previous W values
- && (i < 64 ==> t1 == AddrMemContents(mem, sp + CheapMod16(i+1)*WORDSIZE))
- && t4 == AddrMemContents(mem, sp + CheapMod16(i+14)*WORDSIZE)
+ && (i < 64 ==> t1 == AddrMemContents(mem, WordOffset(sp, CheapMod16(i+1))))
+ && t4 == AddrMemContents(mem, WordOffset(sp, CheapMod16(i+14)))
 }
 
 #endverbatim

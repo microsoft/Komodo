@@ -32,14 +32,14 @@ requires/ensures
     ValidAddrMemStateOpaque(mem);
 requires
     // Stack is accessible
-    ValidMemRange(sp, sp + SHA_STACKSIZE * WORDSIZE);
+    ValidMemWords(sp, SHA_STACKSIZE);
 
-    base_ptr == AddrMemContents(mem, sp + 16*WORDSIZE);
+    base_ptr == AddrMemContents(mem, WordOffset(sp, 16));
+    ValidMemWords(base_ptr, SHA_CTXSIZE);
 
     // Base_ptr doesn't alias the stack
-    base_ptr + SHA_CTXSIZE*WORDSIZE < sp || base_ptr > sp + SHA_STACKSIZE*WORDSIZE;
+    WordOffset(base_ptr, SHA_CTXSIZE) < sp || base_ptr > WordOffset(sp, SHA_STACKSIZE);
 
-    ValidMemRange(base_ptr, base_ptr + SHA_CTXSIZE * WORDSIZE);
 requires {:refined false}   // Using this style so I can give explicit names to all the registers.  Less confusing this way.
     !interrupts_enabled(this);
     @t0 == OReg(R0);
@@ -60,32 +60,32 @@ modifies
     mem; 
 ensures
     // Memory framing: We only touch 8 bytes pointed to by the base_ptr
-    AddrMemPreservingExcept(old(mem), mem, base_ptr, base_ptr + 8*WORDSIZE);
-    AddrMemContents(mem, base_ptr +  0*WORDSIZE) == a == BitwiseAdd32(AddrMemContents(old(mem), base_ptr +  0*WORDSIZE), old(a));
-    AddrMemContents(mem, base_ptr +  1*WORDSIZE) == b == BitwiseAdd32(AddrMemContents(old(mem), base_ptr +  1*WORDSIZE), old(b));
-    AddrMemContents(mem, base_ptr +  2*WORDSIZE) == c == BitwiseAdd32(AddrMemContents(old(mem), base_ptr +  2*WORDSIZE), old(c));
-    AddrMemContents(mem, base_ptr +  3*WORDSIZE) == d == BitwiseAdd32(AddrMemContents(old(mem), base_ptr +  3*WORDSIZE), old(d));
-    AddrMemContents(mem, base_ptr +  4*WORDSIZE) == e == BitwiseAdd32(AddrMemContents(old(mem), base_ptr +  4*WORDSIZE), old(e));
-    AddrMemContents(mem, base_ptr +  5*WORDSIZE) == f == BitwiseAdd32(AddrMemContents(old(mem), base_ptr +  5*WORDSIZE), old(f));
-    AddrMemContents(mem, base_ptr +  6*WORDSIZE) == g == BitwiseAdd32(AddrMemContents(old(mem), base_ptr +  6*WORDSIZE), old(g));
-    AddrMemContents(mem, base_ptr +  7*WORDSIZE) == h == BitwiseAdd32(AddrMemContents(old(mem), base_ptr +  7*WORDSIZE), old(h));
+    AddrMemPreservingExcept(old(mem), mem, base_ptr, WordOffset(base_ptr, 8));
+    AddrMemContents(mem, WordOffset(base_ptr, 0)) == a == BitwiseAdd32(AddrMemContents(old(mem), WordOffset(base_ptr, 0)), old(a));
+    AddrMemContents(mem, WordOffset(base_ptr, 1)) == b == BitwiseAdd32(AddrMemContents(old(mem), WordOffset(base_ptr, 1)), old(b));
+    AddrMemContents(mem, WordOffset(base_ptr, 2)) == c == BitwiseAdd32(AddrMemContents(old(mem), WordOffset(base_ptr, 2)), old(c));
+    AddrMemContents(mem, WordOffset(base_ptr, 3)) == d == BitwiseAdd32(AddrMemContents(old(mem), WordOffset(base_ptr, 3)), old(d));
+    AddrMemContents(mem, WordOffset(base_ptr, 4)) == e == BitwiseAdd32(AddrMemContents(old(mem), WordOffset(base_ptr, 4)), old(e));
+    AddrMemContents(mem, WordOffset(base_ptr, 5)) == f == BitwiseAdd32(AddrMemContents(old(mem), WordOffset(base_ptr, 5)), old(f));
+    AddrMemContents(mem, WordOffset(base_ptr, 6)) == g == BitwiseAdd32(AddrMemContents(old(mem), WordOffset(base_ptr, 6)), old(g));
+    AddrMemContents(mem, WordOffset(base_ptr, 7)) == h == BitwiseAdd32(AddrMemContents(old(mem), WordOffset(base_ptr, 7)), old(h));
 {
     // Load the ctx pointer that holds the Hs
-    LDR(t3, sp, 64);
+    LDR(t3, sp, const(WordsToBytes(16)));
     assert t3 == base_ptr;
     LDR(t0, t3, 0);
-    LDR(t1, t3, 4);
-    LDR(t2, t3, 8);
+    LDR(t1, t3, const(WordsToBytes(1)));
+    LDR(t2, t3, const(WordsToBytes(2)));
     ADDWrap(a, a, t0);
-    LDR(t0, t3, 12);
+    LDR(t0, t3, const(WordsToBytes(3)));
     ADDWrap(b, b, t1);
-    LDR(t1, t3, 16);
+    LDR(t1, t3, const(WordsToBytes(4)));
     ADDWrap(c, c, t2);
-    LDR(t2,t3,20);
+    LDR(t2,t3,const(WordsToBytes(5)));
     ADDWrap(d,d,t0);
-    LDR(t0,t3,24);
+    LDR(t0,t3,const(WordsToBytes(6)));
     ADDWrap(e,e,t1);
-    LDR(t1,t3,28);
+    LDR(t1,t3,const(WordsToBytes(7)));
     ADDWrap(f,f,t2);
     ADDWrap(g,g,t0);
     ADDWrap(h,h,t1);
