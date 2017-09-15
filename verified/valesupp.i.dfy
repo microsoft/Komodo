@@ -109,8 +109,8 @@ function va_get_mem(s:state):memmap
     ensures ValidAddrMemStateOpaque(va_get_mem(s))
 { reveal ValidMemState(); reveal_ValidAddrMemStateOpaque(); s.m.addresses }
 
-function va_get_ttbr0(s:state):TTBR { s.conf.ttbr0 }
-function va_get_tlb(s:state):bool { s.conf.tlb_consistent }
+//function va_get_ttbr0(s:state):TTBR { s.conf.ttbr0 }
+//function va_get_tlb(s:state):bool { s.conf.tlb_consistent }
 
 function va_get_globals(s:state):globalsmap
     requires ValidState(s)
@@ -161,7 +161,8 @@ function va_update_mem(sM:state, sK:state):state
     ensures ValidAddrMemStateOpaque(va_update_mem(sM, sK).m.addresses)
 {
     reveal ValidMemState(); reveal_ValidAddrMemStateOpaque();
-    sK.(m := sK.m.(addresses := sM.m.addresses))
+    sK.(m := sK.m.(addresses := sM.m.addresses),
+        conf := sK.conf.(tlb_consistent := sM.conf.tlb_consistent))
 }
 function va_update_globals(sM:state, sK:state):state
     requires ValidMemState(sM.m) && ValidMemState(sK.m)
@@ -177,13 +178,6 @@ function va_update_rng(sM:state, sK:state):state
 {
     reveal ValidRngState();
     sK.(rng := sM.rng)
-}
-function va_update_tlb(sM:state, sK:state):state
-    requires ValidSRegState(sK.sregs, sK.conf)
-    ensures var r := va_update_tlb(sM, sK); ValidSRegState(r.sregs, r.conf)
-{
-    reveal ValidSRegState();
-    sK.(conf := sK.conf.(tlb_consistent := sM.conf.tlb_consistent))
 }
 function va_update_osp(sM:state, sK:state):state 
     requires ValidRegState(sK.regs) && ValidRegState(sM.regs)
