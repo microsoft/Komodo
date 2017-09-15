@@ -91,7 +91,6 @@ procedure stack_nonvolatiles(ghost stack_bytes:int)
     requires
         stack_bytes >= WordsToBytes(10);
         StackBytesRemaining(this, stack_bytes);
-        OnlySecureMemInPageTable(this);
     ensures
         sp == WordAlignedSub(old(sp), WordsToBytes(10));
 
@@ -121,8 +120,6 @@ procedure stack_nonvolatiles(ghost stack_bytes:int)
 {
     SUB(sp, sp, const(WordsToBytes(10)));
 
-    // XXX: trigger OnlySecureMemInPageTable
-    assert !address_is_secure(WordOffset(sp, 9));
     STR(lr,  sp, const(WordsToBytes(9)));
     STR(r4,  sp, const(WordsToBytes(8)));
     STR(r5,  sp, const(WordsToBytes(7)));
@@ -328,7 +325,6 @@ procedure MRS_STR(
         SaneState(this);
     requires
         ValidMem(base + ofs);
-        !AddrInPageTable(this, base + ofs);
         @tmp != OSP && @tmp != @base && @tmp != @ofs;
     modifies
         mem;

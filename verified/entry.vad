@@ -159,7 +159,6 @@ procedure stack_banked_regs1(out operand tmp:reg)
         ValidMem(WordOffset(sp, 15));
         ValidMem(WordOffset(sp, 16));
         ValidMem(WordOffset(sp, 17));
-        OnlySecureMemInPageTable(this);
     reads
         sp;
         spsr_fiq; spsr_irq; spsr_svc; spsr_abt; spsr_und; spsr_mon;
@@ -175,9 +174,6 @@ procedure stack_banked_regs1(out operand tmp:reg)
         MemContents(this.m, WordOffset(sp, 16)) == spsr_und;
         MemContents(this.m, WordOffset(sp, 17)) == spsr_mon;
 {
-    // XXX: trigger OnlySecureMemInPageTable
-    assert !address_is_secure(WordOffset(sp, 12));
-
     MRS_STR(spsr_fiq, sp, const(WordsToBytes(12)), tmp);
     MRS_STR(spsr_irq, sp, const(WordsToBytes(13)), tmp);
     MRS_STR(spsr_svc, sp, const(WordsToBytes(14)), tmp);
@@ -198,7 +194,6 @@ procedure stack_banked_regs2(out operand tmp:reg)
         ValidMem(WordOffset(sp, 3));
         ValidMem(WordOffset(sp, 4));
         ValidMem(WordOffset(sp, 5));
-        OnlySecureMemInPageTable(this);
     reads
         sp;
         sp_usr; sp_fiq; sp_irq; sp_svc; sp_abt; sp_und;
@@ -214,9 +209,6 @@ procedure stack_banked_regs2(out operand tmp:reg)
         MemContents(this.m, WordOffset(sp, 4)) == sp_abt;
         MemContents(this.m, WordOffset(sp, 5)) == sp_und;
 {
-    // XXX: trigger OnlySecureMemInPageTable
-    assert !address_is_secure(WordOffset(sp, 0));
-
     MRS_STR(sp_usr, sp, const(WordsToBytes(0)), tmp);
     MRS_STR(sp_fiq, sp, const(WordsToBytes(1)), tmp);
     MRS_STR(sp_irq, sp, const(WordsToBytes(2)), tmp);
@@ -237,7 +229,6 @@ procedure stack_banked_regs3(out operand tmp:reg)
         ValidMem(WordOffset(sp, 9));
         ValidMem(WordOffset(sp, 10));
         ValidMem(WordOffset(sp, 11));
-        OnlySecureMemInPageTable(this);
     reads
         sp;
         lr_usr; lr_fiq; lr_irq; lr_svc; lr_abt; lr_und;
@@ -253,9 +244,6 @@ procedure stack_banked_regs3(out operand tmp:reg)
         MemContents(this.m, WordOffset(sp, 10)) == lr_abt;
         MemContents(this.m, WordOffset(sp, 11)) == lr_und;
 {
-    // XXX: trigger OnlySecureMemInPageTable
-    assert !address_is_secure(WordOffset(sp, 0));
-
     MRS_STR(lr_usr, sp, const(WordsToBytes(6)), tmp);
     MRS_STR(lr_fiq, sp, const(WordsToBytes(7)), tmp);
     MRS_STR(lr_irq, sp, const(WordsToBytes(8)), tmp);
@@ -272,7 +260,6 @@ procedure stack_banked_regs(out operand tmp:reg, ghost stack_bytes_in:int)
         @tmp != OSP;
         stack_bytes_in >= BANKED_FRAMESIZE;
         StackBytesRemaining(this, stack_bytes_in);
-        OnlySecureMemInPageTable(this);
     reads
         spsr_fiq; spsr_irq; spsr_svc; spsr_abt; spsr_und; spsr_mon;
         sp_usr; sp_fiq; sp_irq; sp_svc; sp_abt; sp_und;
@@ -1281,7 +1268,6 @@ procedure {:frame false} {:timeLimitMultiplier 2} smc_enterresume_success(
     assert finalDispatcher(pagedb, dispPg);
 
     ghost var stack_bytes_local;
-    lemma_OnlySecureMemInPageTable(pagedb, this);
     stack_bytes_local := stack_banked_regs(r0, stack_bytes);
     lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
 
