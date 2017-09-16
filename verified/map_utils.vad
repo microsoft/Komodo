@@ -55,28 +55,28 @@ procedure kom_smc_map_measure_zero(ghost input:seq(int))
     requires
         SeqLength(input) == 16;
         forall i :: 2 <= i < 16 ==> input[i] == 0;
-        ValidMemRange(sp + 2 * WORDSIZE, sp + 16 * WORDSIZE);
+        ValidMemWords(WordOffset(sp, 2), 14);
     ensures
-        forall i :: ValidMem(i) && !(sp + 2 * WORDSIZE <= i <= sp + 15 * WORDSIZE) ==>
+        sp == old(sp);
+        forall i :: ValidMemForRead(i) && !(WordOffset(sp, 2) <= i <= WordOffset(sp, 15)) ==>
             MemContents(this.m, i) == MemContents(old(this).m, i);
-        forall i :: 2 <= i < 16 ==>
-            ValidMem(sp + i * WORDSIZE) && AddrMemContents(mem, sp + i * WORDSIZE) == input[i];
+        forall i :: 2 <= i < 16 ==> AddrMemContents(mem, WordOffset(sp, i)) == input[i];
 {
     MOV(r12, 0);
-    STR(r12, sp, const(2 * WORDSIZE));
-    STR(r12, sp, const(3 * WORDSIZE));
-    STR(r12, sp, const(4 * WORDSIZE));
-    STR(r12, sp, const(5 * WORDSIZE));
-    STR(r12, sp, const(6 * WORDSIZE));
-    STR(r12, sp, const(7 * WORDSIZE));
-    STR(r12, sp, const(8 * WORDSIZE));
-    STR(r12, sp, const(9 * WORDSIZE));
-    STR(r12, sp, const(10 * WORDSIZE));
-    STR(r12, sp, const(11 * WORDSIZE));
-    STR(r12, sp, const(12 * WORDSIZE));
-    STR(r12, sp, const(13 * WORDSIZE));
-    STR(r12, sp, const(14 * WORDSIZE));
-    STR(r12, sp, const(15 * WORDSIZE));
+    STR(r12, sp, const(WordsToBytes(2)));
+    STR(r12, sp, const(WordsToBytes(3)));
+    STR(r12, sp, const(WordsToBytes(4)));
+    STR(r12, sp, const(WordsToBytes(5)));
+    STR(r12, sp, const(WordsToBytes(6)));
+    STR(r12, sp, const(WordsToBytes(7)));
+    STR(r12, sp, const(WordsToBytes(8)));
+    STR(r12, sp, const(WordsToBytes(9)));
+    STR(r12, sp, const(WordsToBytes(10)));
+    STR(r12, sp, const(WordsToBytes(11)));
+    STR(r12, sp, const(WordsToBytes(12)));
+    STR(r12, sp, const(WordsToBytes(13)));
+    STR(r12, sp, const(WordsToBytes(14)));
+    STR(r12, sp, const(WordsToBytes(15)));
 }
 
 #verbatim

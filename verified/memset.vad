@@ -11,7 +11,7 @@ procedure {:timeLimitMultiplier 2} memcpy_bare(operand dst:addr, operand src:add
         DistinctRegOperands(set(@dst, @src, @size, @tmp), 4);
         WordAligned(size);
         ValidMemRange(dst, dst + size);
-        ValidMemRange(src, src + size);
+        ValidMemRangeForRead(src, src + size);
         dst + size <= src || src + size <= dst;
     ensures
         MemPreservingExcept(old(this), this, old(dst), old(dst + size));
@@ -55,7 +55,7 @@ procedure memcpy(operand dst:addr, operand src:addr,
         DistinctRegOperands(set(@dst, @src, @size, @tmp), 4);
         WordAligned(size);
         ValidMemRange(dst, dst + size);
-        ValidMemRange(src, src + size);
+        ValidMemRangeForRead(src, src + size);
         dst + size <= src || src + size <= dst;
         dst >= StackBase() || dst + size <= StackLimit();
         // no writing to insecure mem

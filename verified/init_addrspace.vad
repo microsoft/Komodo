@@ -54,7 +54,7 @@ procedure{:timeLimitMultiplier 4} init_addrspace_mem(
         mem; r0; r1;
     ensures
         SmcProcedureInvariant(old(this), this);
-        forall i :: ValidMem(i)
+        forall i :: ValidMemForRead(i)
             && !(page_monvaddr(old(addrspace_page)) <= i < page_monvaddr(old(addrspace_page)) + PAGESIZE)
             && !(page_monvaddr(old(l1pt_page)) <= i < page_monvaddr(old(l1pt_page)) + PAGESIZE)
             ==> MemContents(this.m, i) == MemContents(old(this).m, i);

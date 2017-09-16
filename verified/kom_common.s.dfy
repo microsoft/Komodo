@@ -249,12 +249,7 @@ predicate SaneState(s:state)
 predicate InsecureMemInvariant(s:state, r:state)
     requires ValidState(s) && ValidState(r)
 {
-    /* forall m:addr {:trigger ValidMem(m)} {:trigger ValidMemForRead(m)} ::
-        KOM_DIRECTMAP_VBASE <= m < KOM_DIRECTMAP_VBASE + MonitorPhysBase()
-        ==> MemContents(s.m, m) == MemContents(r.m, m) */
-    // since there is now no way to write to insecure memory (it's
-    // read-only to ARMdef), there is no reason to prove that it's
-    // invariant
-    true
+    ValidMemRangeForRead(KOM_DIRECTMAP_VBASE, KOM_DIRECTMAP_VBASE + MonitorPhysBase())
+    && forall m:addr :: KOM_DIRECTMAP_VBASE <= m < KOM_DIRECTMAP_VBASE + MonitorPhysBase()
+        ==> MemContents(s.m, m) == MemContents(r.m, m)
 }
-

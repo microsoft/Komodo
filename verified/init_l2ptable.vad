@@ -51,7 +51,7 @@ lemma lemma_ARM_L1PTE_Dual_n(paddr: word, n: nat)
 #endverbatim
 
 // updates portion of install_l1ptes
-procedure install_l1ptes'(
+procedure {:timeLimitMultiplier 2} install_l1ptes'(
     operand l1base:addr,
     inout operand l2base:addr,
     inout operand l1index:reg,
@@ -204,7 +204,7 @@ procedure install_l1ptes(
     }
 }
 
-procedure init_l2ptable_success(
+procedure {:timeLimitMultiplier 3} init_l2ptable_success(
     inout operand l2_pg:reg, // trashed
     inout operand l1ptva:reg, // trashed
     inout operand l1index:reg, // trashed
@@ -253,6 +253,8 @@ procedure init_l2ptable_success(
     MOV(tmp, 0);
     MOV(l1ptva, const(PAGESIZE));
     memset(l2_pg, tmp, l1ptva);
+
+    assert {:split_here} true;
 
     ghost var pg := extractPage(this.m, old(l2_pg));
     ghost var newl2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));

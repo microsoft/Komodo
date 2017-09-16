@@ -149,7 +149,7 @@ predicate MemPreservingExcept(s:state, r:state, base:int, limit:int)
     requires ValidState(s) && ValidState(r);
     requires limit >= base;
 {
-    forall m:addr :: ValidMem(m) && !(base <= m < limit)
+    forall m:addr :: ValidMemForRead(m) && !(base <= m < limit)
         ==> MemContents(s.m, m) == MemContents(r.m, m)
 }
 

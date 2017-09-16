@@ -20,7 +20,7 @@ predicate AddrMemPreservingExcept(sm:memmap, rm:memmap, base:int, limit:int)
     requires ValidAddrMemStateOpaque(sm) && ValidAddrMemStateOpaque(rm);
     requires limit >= base;
 {
-    forall a:addr :: ValidMem(a) && !(base <= a < limit)
+    forall a:addr :: ValidMemForRead(a) && !(base <= a < limit)
         ==> AddrMemContents(sm, a) == AddrMemContents(rm, a)
 }
 
@@ -28,7 +28,7 @@ predicate AddrMemPreservingExcept2(sm:memmap, rm:memmap, base1:int, limit1:int, 
     requires ValidAddrMemStateOpaque(sm) && ValidAddrMemStateOpaque(rm);
     requires limit1 >= base1 && limit2 >= base2;
 {
-    forall a:addr :: ValidMem(a) && !(base1 <= a < limit1) && !(base2 <= a < limit2)
+    forall a:addr :: ValidMemForRead(a) && !(base1 <= a < limit1) && !(base2 <= a < limit2)
         ==> AddrMemContents(sm, a) == AddrMemContents(rm, a)
 }
 
@@ -39,7 +39,7 @@ predicate AddrMemPreservingExcept3(sm:memmap, rm:memmap,
     requires ValidAddrMemStateOpaque(sm) && ValidAddrMemStateOpaque(rm);
     requires limit1 >= base1 && limit2 >= base2 && limit3 >= base3;
 {
-    forall a:addr :: ValidMem(a) && !(base1 <= a < limit1) && !(base2 <= a < limit2) && !(base3 <= a < limit3)
+    forall a:addr :: ValidMemForRead(a) && !(base1 <= a < limit1) && !(base2 <= a < limit2) && !(base3 <= a < limit3)
         ==> AddrMemContents(sm, a) == AddrMemContents(rm, a)
 }
 
