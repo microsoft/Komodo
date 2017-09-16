@@ -1,7 +1,15 @@
 include "pagedb.i.dfy"
 include "bitvectors.i.dfy"
 
-lemma {:timeLimitMultiplier 2} lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
+lemma lemma_ARM_L2PTE_PageMask(x:bv32)
+    requires BitAnd(x, 0xfff) == 0
+    ensures BitAnd(x, 1) == 0
+    ensures BitAnd(x, 0x3) == 0
+    ensures BitAnd(x, 0x200) == 0
+    ensures BitAnd(x, 0xdfc) == 0
+{ reveal BitAnd(); }
+
+lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
     requires PageAligned(pa) && isUInt32(pa + PhysBase())
     ensures ValidAbsL2PTEWord(ARM_L2PTE(pa, w, x))
     ensures ExtractAbsL2PTE(ARM_L2PTE(pa, w, x)) == Just(AbsPTE(pa, w, x))
@@ -84,7 +92,7 @@ lemma {:timeLimitMultiplier 2} lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
             BitOr(BitAnd(WordAsBits(pa), 0x3), BitAnd(extrabits, 0x3));
             { calc {
                 BitAnd(WordAsBits(pa), 0x3);
-                { assert BitAnd(WordAsBits(pa), 0xfff) == 0; reveal BitAnd(); }
+                { lemma_ARM_L2PTE_PageMask(WordAsBits(pa)); }
                 0;
             } }
             BitOr(0, BitAnd(extrabits, 0x3));
@@ -94,6 +102,8 @@ lemma {:timeLimitMultiplier 2} lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
         reveal BitAnd();
     }
 
+    assert {:split_here} true;
+
     assert BitAnd(pteb, 0xdfc) == ARM_L2PTE_CONST_BITS by {
         calc {
             BitAnd(pteb, 0xdfc);
@@ -102,7 +112,7 @@ lemma {:timeLimitMultiplier 2} lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
             BitOr(BitAnd(WordAsBits(pa), 0xdfc), BitAnd(extrabits, 0xdfc));
             { calc {
                 BitAnd(WordAsBits(pa), 0xdfc);
-                { assert BitAnd(WordAsBits(pa), 0xfff) == 0; reveal BitAnd(); }
+                { lemma_ARM_L2PTE_PageMask(WordAsBits(pa)); }
                 0;
             } }
             BitOr(0, BitAnd(extrabits, 0xdfc));
@@ -114,15 +124,20 @@ lemma {:timeLimitMultiplier 2} lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
         }
     }
 
+    assert {:split_here} true;
+
     assert x == (BitAnd(pteb, ARM_L2PTE_NX_BIT) == 0) by {
         calc {
             BitAnd(pteb, ARM_L2PTE_NX_BIT);
             BitAnd(BitOr(WordAsBits(pa), extrabits), 1);
             { lemma_BitOrAndRelation(WordAsBits(pa), extrabits, 1); }
             BitOr(BitAnd(WordAsBits(pa), 1), BitAnd(extrabits, 1));
-            { calc {
+            { /* XXX: for inexplicable Z3 reasons, this step is
+               * extremely prone to timeouts. There's something
+               * horribly expensive about the number 1! */
+              calc {
                 BitAnd(WordAsBits(pa), 1);
-                { assert BitAnd(WordAsBits(pa), 0xfff) == 0; reveal BitAnd(); }
+                { lemma_ARM_L2PTE_PageMask(WordAsBits(pa)); }
                 0;
             } }
             BitOr(0, BitAnd(extrabits, 1));
@@ -133,6 +148,8 @@ lemma {:timeLimitMultiplier 2} lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
         }
     }
 
+    assert {:split_here} true;
+
     assert w == (BitAnd(pteb, ARM_L2PTE_RO_BIT) == 0) by {
         calc {
             BitAnd(pteb, ARM_L2PTE_RO_BIT);
@@ -141,7 +158,7 @@ lemma {:timeLimitMultiplier 2} lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
             BitOr(BitAnd(WordAsBits(pa), 0x200), BitAnd(extrabits, 0x200));
             { calc {
                 BitAnd(WordAsBits(pa), 0x200);
-                { assert BitAnd(WordAsBits(pa), 0xfff) == 0; reveal BitAnd(); }
+                { lemma_ARM_L2PTE_PageMask(WordAsBits(pa)); }
                 0;
             } }
             BitOr(0, BitAnd(extrabits, 0x200));
@@ -151,6 +168,8 @@ lemma {:timeLimitMultiplier 2} lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
             robit;
         }
     }
+
+    assert {:split_here} true;
 
     assert ValidAbsL2PTEWord(ARM_L2PTE(pa, w, x));
     assert ExtractAbsL2PTE(ARM_L2PTE(pa, w, x)) == Just(AbsPTE(pa, w, x));
