@@ -28,7 +28,7 @@ datatype TTBR = TTBR(ptbase:addr)      // See B4.1.154
 
 // Hardware RNG state
 // in lieu of an infinite sequence, we model entropy as an infinite map
-datatype RNG = RNG(entropy:imap<nat, word>, idx:nat, ready:bool)
+datatype RNG = RNG(entropy:word, consumed:bool, ready:bool)
 
 type shift_amount = s | 0 <= s < 32 // Some shifts allow s=32, but we'll be conservative for simplicity
 
@@ -333,7 +333,6 @@ datatype code =
 predicate ValidState(s:state)
 {
     ValidRegState(s.regs) && ValidMemState(s.m) && ValidSRegState(s.sregs, s.conf)
-        && ValidRngState(s.rng)
 }
 
 predicate {:opaque} ValidRegState(regs:map<ARMReg, word>)
@@ -384,39 +383,29 @@ const RNG_STATUS_SHIFT:int := 24;
 
 function {:axiom} RngBase():addr
 
-predicate {:opaque} ValidRngState(rng:RNG)
-{
-    forall n:nat :: n in rng.entropy
-}
-
 predicate ValidRngOffset(s:state, o:int)
 {
     // valid offset
-    isUInt32(o) && WordAligned(o) && o <= WordsToBytes(RNG_DATA_REG)
+    WordAligned(o) && 0 <= o <= WordsToBytes(RNG_DATA_REG)
     // can only read data reg if you know there's data ready
-    && (o == WordsToBytes(RNG_DATA_REG) ==> s.rng.ready)
+    && (o == WordsToBytes(RNG_DATA_REG) ==> (!s.rng.consumed && s.rng.ready))
 }
 
 function RngReadData(s:state, offset:word): word
     requires ValidState(s) && ValidRngOffset(s, offset)
 {
-    reveal_ValidRngState();
-
     if offset == WordsToBytes(RNG_DATA_REG) then
-        s.rng.entropy[s.rng.idx]
+        s.rng.entropy
     else
         nondet_word(s.conf.nondet, NONDET_RNG(offset))
 }
 
 function RngReadState(s:state, offset:word): state
     requires ValidState(s) && ValidRngOffset(s, offset)
-    ensures ValidState(RngReadState(s, offset))
 {
-    reveal_ValidRngState();
-
     // reading the data register consumes a random number
     if offset == WordsToBytes(RNG_DATA_REG) then
-        s.(rng := s.rng.(idx := s.rng.idx + 1, ready := false))
+        s.(rng := s.rng.(consumed := true, ready := false))
     // reading the status register sets the ready flag only if we have enough entropy
     else if offset == WordsToBytes(RNG_STATUS_REG) then
         var val := RngReadData(s, offset);
@@ -660,6 +649,9 @@ function {:opaque} userspaceExecutionFn(s:state, pc:word): (state, word, excepti
         m := s.m.(addresses := havocPages(pages, s, user_state)),
         regs := havocUserRegs(s.conf.nondet, user_state, s.regs),
         sregs := s.sregs[cpsr := newpsr],
+        // HW RNG generates one word of private entropy
+        rng := RNG(nondet_private_word(s.conf.nondet, user_state, NONDET_RNG(0)),
+                    false, false),
         steps := s.steps + nondet_private_nat(s.conf.nondet, user_state, NONDET_STEPS()));
     assert ValidMemState(rs.m) by { reveal_ValidMemState(); }
     assert ValidSRegState(rs.sregs, rs.conf) by { reveal_ValidSRegState(); }

@@ -1024,6 +1024,7 @@ procedure rng_read(out operand val:reg, out operand tmp:reg)
         SaneState(this);
     requires
         @val != @tmp && @val != OSP && @tmp != OSP;
+        !this.rng.consumed;
     ensures
         val == svcGetRandom(old(this));
 {
@@ -1036,7 +1037,7 @@ procedure rng_read(out operand val:reg, out operand tmp:reg)
             tmp == RngBase();
             val != 0 ==> this.rng.ready;
             this.rng.entropy == old(this.rng.entropy);
-            this.rng.idx == old(this.rng.idx);
+            !this.rng.consumed;
         decreases *;
     {
         ghost var st := this;
@@ -1069,7 +1070,7 @@ procedure {:frame false}{:timeLimitMultiplier 2} svc_returning(
         isReturningSvc(exstate);
         CoreRegPreservingExcept(exstate, this, set(OSP, OLR));
         OperandContents(this, OLR) == OperandContents(exstate, OLR);
-        exstate.rng == this.rng;
+        exstate.rng == this.rng && !this.rng.consumed;
         preEntryCommon(this, pagedb, dispPg);
         this.conf.nondet == nondet_int(exstate.conf.nondet, NONDET_GENERATOR());
         this.conf.scr == exstate.conf.scr && this.conf.ttbr0 == exstate.conf.ttbr0;

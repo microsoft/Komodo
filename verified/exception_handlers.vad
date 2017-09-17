@@ -183,6 +183,7 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
         InterruptContinuationInvariantDef();
         mode_of_state(this) == Supervisor && spsr_of_state(this).m == User;
         this.conf.ex == ExSVC;
+        !this.rng.consumed;
         interrupts_enabled(this);
         exists stack_bytes :: StackBytesRemaining(this, stack_bytes) && stack_bytes >= WordsToBytes(STACKSIZE_ATTEST + 14);
     ensures
