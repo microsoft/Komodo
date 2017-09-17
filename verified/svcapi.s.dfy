@@ -188,8 +188,7 @@ function svcInitL2PTable(d:PageDb, asPg:PageNr, page:word, l1index:word) : (Page
 function svcGetRandom(s:state): word
     requires ValidState(s)
 {
-    reveal_ValidRngState();
-    s.rng.entropy[s.rng.idx]
+    s.rng.entropy
 }
 
 function svcHandled(s:state, d:PageDb, dispPg:PageNr): (SvcReturnRegs, PageDb)

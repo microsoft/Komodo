@@ -169,10 +169,7 @@ function va_update_globals(sM:state, sK:state):state
     sK.(m := sK.m.(globals := sM.m.globals))
 }
 function va_update_rng(sM:state, sK:state):state
-    requires ValidRngState(sM.rng) && ValidRngState(sK.rng)
-    ensures ValidRngState(va_update_rng(sM, sK).rng)
 {
-    reveal ValidRngState();
     sK.(rng := sM.rng)
 }
 function va_update_osp(sM:state, sK:state):state 

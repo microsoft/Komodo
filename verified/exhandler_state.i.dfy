@@ -13,8 +13,8 @@ predicate ExceptionStateSideEffects(s:state)
     && if s.conf.ex == ExFIQ || s.conf.ex == ExIRQ
         then mode_of_state(s) == Monitor && !interrupts_enabled(s)
     else
-        interrupts_enabled(s) &&
-        mode_of_state(s) == (match s.conf.ex
+        interrupts_enabled(s) && !s.rng.consumed
+        && mode_of_state(s) == (match s.conf.ex
             case ExAbt => Abort
             case ExUnd => Undefined
             case ExSVC => Supervisor)
@@ -73,11 +73,11 @@ lemma lemma_UserExceptionStateSideEffects(s0:state, s2:state, r:state,
     } else {
         assert mode_of_state(r) != Monitor;
         assert ex != ExFIQ;
-        assert !s3.conf.cpsr.f by
+        assert !s3.conf.cpsr.f && !s3.rng.consumed by
             { reveal userspaceExecutionFn(); }
         lemma_update_psr(cpsr_of_state(s3),
             encode_mode(mode_of_state(r)), false, true);
-        assert !r.conf.cpsr.f;
+        assert !r.conf.cpsr.f && !r.rng.consumed;
         assert interrupts_enabled(r);
     }
     assert ExceptionStateSideEffects(r);
