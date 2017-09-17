@@ -34,6 +34,7 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
     requires d24 == updateUserPagesFromState(s24, d2, dispPg);
     ensures loweq_pdb(d14, d24, atkr)
     ensures obs_entry(d14, d24, dispPg, atkr)
+    ensures s14.rng.entropy == s24.rng.entropy
 {
     var pc1 := OperandContents(s11, OLR);
     var pc2 := OperandContents(s21, OLR);
@@ -107,6 +108,9 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
 
     reveal loweq_pdb();
     assert loweq_pdb(d14, d24, atkr);
+    assert s14.rng.entropy == s24.rng.entropy by {
+        reveal userspaceExecutionFn();
+    }
 }
 
 lemma lemma_enter_conf_ni(s1: state, d1: PageDb, s1':state, d1': PageDb,
@@ -1008,6 +1012,7 @@ lemma lemma_svcHandled_loweq_pdb(
     requires d1' == svcHandled(s1, d1, dispPg).1 
     requires d2' == svcHandled(s2, d2, dispPg).1
     requires user_regs(s1.regs) == user_regs(s2.regs)
+    requires s1.rng.entropy == s2.rng.entropy
     requires obs_entry(d1, d2, dispPg, atkr)
     requires loweq_pdb(d1, d2, atkr)
     ensures  obs_entry(d1', d2', dispPg, atkr)
@@ -1108,6 +1113,8 @@ lemma lemma_svcHandled_loweq_pdb(
     } else if (call == KOM_SVC_UNMAP_DATA) {
         reveal loweq_pdb();
     } else if (call == KOM_SVC_INIT_L2PTABLE) {
+        reveal loweq_pdb();
+    } else if (call == KOM_SVC_GET_RANDOM) {
         reveal loweq_pdb();
     } else {
         assert d1' == d1;
