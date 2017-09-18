@@ -24,8 +24,9 @@ requires/ensures
     ValidMem(r1 + offset);
 requires
     !interrupts_enabled(this);
+    r6 == 0x5c5c5c5c;
 reads 
-    r1;
+    r1; r6;
 modifies
     mem; r10;
 ensures
@@ -33,7 +34,7 @@ ensures
     AddrMemContents(mem, r1 + offset) == BitwiseXor(old(AddrMemContents(mem, r1 + offset)) , 0x5c5c5c5c);
 {
     LDR(r10, r1, offset);
-    EOR(r10, r10, 0x5c5c5c5c);
+    EOR(r10, r10, r6);
     STR(r10, r1, offset);
 }
 
@@ -46,7 +47,7 @@ requires
 reads
     r1;
 modifies
-    mem; r10;
+    mem; r6; r10;
 ensures
     AddrMemPreservingExcept(old(mem), mem, r1, r1 + HMAC_KEYSIZE_BYTES);
 //    forall a :: r1 <= a < r1 + HMAC_KEYSIZE_BYTES && WordAligned(a) 
@@ -54,6 +55,8 @@ ensures
     AddrMemContentsSeq(mem, r1, HMAC_KEYSIZE_WORDS) == 
       SeqXor(AddrMemContentsSeq(old(mem), r1, HMAC_KEYSIZE_WORDS), Opad(HMAC_KEYSIZE_WORDS));
 {
+    load_32_bit_const(r6, 0x5c5c5c5c);
+
     apply_one_opad(WordsToBytes(0));
     apply_one_opad(WordsToBytes(1));
     apply_one_opad(WordsToBytes(2));
@@ -72,8 +75,9 @@ requires/ensures
     ValidMem(r1 + offset);
 requires
     !interrupts_enabled(this);
+    r6 == 0x36363636;
 reads 
-    r1;
+    r1; r6;
 modifies
     mem; r10;
 ensures
@@ -81,7 +85,7 @@ ensures
     AddrMemContents(mem, r1 + offset) == BitwiseXor(old(AddrMemContents(mem, r1 + offset)) , 0x36363636);
 {
     LDR(r10, r1, offset);
-    EOR(r10, r10, 0x36363636);
+    EOR(r10, r10, r6);
     STR(r10, r1, offset);
 }
 
@@ -94,7 +98,7 @@ requires
 reads 
     r1;
 modifies
-    mem; r10;
+    mem; r6; r10;
 ensures
     AddrMemPreservingExcept(old(mem), mem, r1, r1 + HMAC_KEYSIZE_BYTES);
 //    forall a :: r1 <= a < r1 + HMAC_KEYSIZE_BYTES && WordAligned(a) 
@@ -102,6 +106,8 @@ ensures
     AddrMemContentsSeq(mem, r1, HMAC_KEYSIZE_WORDS) == 
       SeqXor(AddrMemContentsSeq(old(mem), r1, HMAC_KEYSIZE_WORDS), Ipad(HMAC_KEYSIZE_WORDS));
 {
+    load_32_bit_const(r6, 0x36363636);
+
     apply_one_ipad(WordsToBytes(0));
     apply_one_ipad(WordsToBytes(1));
     apply_one_ipad(WordsToBytes(2));
