@@ -36,6 +36,7 @@ procedure {:timeLimitMultiplier 2} compute_hmac(
          mem;
     requires/ensures
         SaneState(this);
+        this.conf.tlb_consistent;
         StackBytesRemaining(this, stack_bytes);
         ValidMemRange(old_sp - STACKSIZE_ATTEST * WORDSIZE, old_sp);
     requires
@@ -195,6 +196,7 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest_inner(
          mem;
     requires/ensures
         SaneState(this);
+        this.conf.tlb_consistent;
         StackBytesRemaining(this, stack_bytes);
     requires
         ValidState(exstate) && mode_of_state(exstate) != User;
@@ -327,7 +329,9 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest(
          spsr_mon; mem;
     requires/ensures
         SaneState(this);
+        this.conf.tlb_consistent;
         StackBytesRemaining(this, stack_bytes);
+        this.conf.tlb_consistent;
     requires
         ValidState(exstate) && mode_of_state(exstate) != User;
         stack_bytes >= WordsToBytes(STACKSIZE_ATTEST + 10);  // +10 to store volatile reigsters

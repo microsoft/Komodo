@@ -353,3 +353,25 @@ ensures
     MOVT(dst, const(TopHalfOfWord(c)));
     lemma_load_32_bit_const(c);
 }
+
+// version of STR better for reasoning about page table invariants
+// FIXME: can't be used in refined mode
+procedure STRx(operand rd:reg, operand base:word, operand ofs:word)
+    modifies
+        mem;
+    requires/ensures
+        ValidAddrMemStateOpaque(mem);
+    requires
+        ValidMem(base + ofs);
+    requires {:refined false}
+        !interrupts_enabled(this);
+        !AddrInPageTable(this, base + ofs);
+    ensures
+        mem == AddrMemUpdate(old(mem), old(base + ofs), old(rd));
+    ensures {:refined false}
+        this.conf == old(this.conf);
+        forall a :: AddrInPageTable(old(this), a) == AddrInPageTable(this, a);
+{
+    STR(rd, base, ofs);
+    lemma_AddrInPageTable_persists(old(this), this, old(base + ofs));
+}

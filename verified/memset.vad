@@ -113,8 +113,8 @@ procedure memset(operand base:addr, operand val:word, inout operand size:reg)
         assert forall p :: ValidMem(p) && p != base + size
             ==> MemContents(prevThis.m, p) == MemContents(this.m, p);
         ghost if (ValidMemRangeExPageTable(old(this), old(base), old(base + size)) && old(this.conf.tlb_consistent)) {
-            lemma_AddrInPageTable_persists(old(this), prevThis, old(base), old(WordAlignedAdd(base, size)));
-            lemma_AddrInPageTable_persists(prevThis, this, old(base), old(WordAlignedAdd(base, size)));
+            lemma_ValidMemRangeExPageTable_persists(old(this), prevThis, old(base), old(WordAlignedAdd(base, size)));
+            lemma_ValidMemRangeExPageTable_persists(prevThis, this, old(base), old(WordAlignedAdd(base, size)));
             assert prevThis.conf.tlb_consistent;
             assert !AddrInPageTable(prevThis, base + size);
             assert this.conf.tlb_consistent;
