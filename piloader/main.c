@@ -17,6 +17,7 @@
 #include "serial.h"
 #include "console.h"
 #include "atags.h"
+#include "rng.h"
 #include <komodo/armpte.h>
 #include <komodo/memregions.h>
 
@@ -34,7 +35,7 @@ extern char monitor_image_start, monitor_image_data, monitor_image_bss,
     monitor_image_end;
 // defined in monitor image
 extern char monitor_stack_base, _monitor_vectors, _secure_vectors,
-    g_monitor_physbase, g_secure_physbase;
+    g_monitor_physbase, g_secure_physbase, g_rngbase;
 
 void park_secondary_cores(void);
 void leave_secure_world(void);
@@ -96,9 +97,9 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar, uintptr_t mvbar,
     console_printf("Final secure SCTLR: %lx\n", reg);
 
     /* setup secure VBAR and MVBAR */
+    console_printf("Final secure VBAR: %lx; MVBAR: %lx\n", vbar, mvbar);
     __asm volatile("mcr p15, 0, %0, c12, c0, 0" :: "r" (vbar));
     __asm volatile("mcr p15, 0, %0, c12, c0, 1" :: "r" (mvbar));
-    console_printf("Final secure VBAR: %lx; MVBAR: %lx\n", vbar, mvbar);
 
     /* update monitor-mode's banked SP value for use in later SMCs */
     /* FIXME: this causes an undefined instruction exception on
@@ -136,8 +137,8 @@ static void map_section(armpte_short_l1 *l1pt, uintptr_t vaddr, uintptr_t paddr,
     l1pt[idx].raw = (armpte_short_l1) {
         .section = {
             .type = 1,
-            .b = 1, // write-back, write-allocate
-            .c = 0, // write-back, write-allocate
+            .b = 1, // shareable device / write-back, write-allocate
+            .c = 0, // shareable device / write-back, write-allocate
             .xn = 0,
             .domain = 0,
             .ap0 = 1, // access flag = 1 (already accessed)
@@ -153,7 +154,7 @@ static void map_section(armpte_short_l1 *l1pt, uintptr_t vaddr, uintptr_t paddr,
 }
 
 static void map_l2_pages(armpte_short_l2 *l2pt, uintptr_t vaddr, uintptr_t paddr,
-                         size_t bytes, bool exec)
+                         size_t bytes, bool exec, bool nocache)
 {
     assert((bytes & 0xfff) == 0);
     for (uintptr_t idx = (vaddr >> 12) & 0xff; bytes > 0; idx++) {
@@ -162,11 +163,11 @@ static void map_l2_pages(armpte_short_l2 *l2pt, uintptr_t vaddr, uintptr_t paddr
             .smallpage = {
                 .xn = exec ? 0 : 1,
                 .type = 1,
-                .b = 1, // write-back, write-allocate
-                .c = 0, // write-back, write-allocate
+                .b = 1, // shareable device / write-back, write-allocate
+                .c = 0, // shareable device / write-back, write-allocate
                 .ap0 = 1, // access flag = 1 (already accessed)
                 .ap1 = 0, // system
-                .tex = 5, // 0b101: cacheable, write-back, write-allocate
+                .tex = nocache ? 0 : 5, // 0b101: cacheable, write-back, write-allocate
                 .ap2 = exec ? 1 : 0,
                 .s = 1, // shareable
                 .ng = 0, // global (ASID doesn't apply)
@@ -175,6 +176,7 @@ static void map_l2_pages(armpte_short_l2 *l2pt, uintptr_t vaddr, uintptr_t paddr
         }.raw;
         bytes -= 0x1000;
         paddr += 0x1000;
+        assert(idx != 255);
     }
 }
 
@@ -227,10 +229,10 @@ void __attribute__((noreturn)) main(void)
     size_t monitor_mem_bytes = &monitor_image_end - &monitor_image_start;
     size_t monitor_mem_reserve = ROUND_UP(monitor_mem_bytes, ARM_L1_PTABLE_BYTES);
     
-    monitor_physbase = atags_reserve_physmem(monitor_mem_reserve
-                                             + ARM_L1_PTABLE_BYTES
-                                             + KOM_PAGE_SIZE
-                                             + KOM_SECURE_RESERVE);
+    monitor_physbase = atags_reserve_physmem(monitor_mem_reserve // image size
+                                             + ARM_L1_PTABLE_BYTES // L1 ptable
+                                             + KOM_PAGE_SIZE // L2 ptable
+                                             + KOM_SECURE_RESERVE); // secure mem
     
     /* copy the monitor image into place */
     console_printf("Copying monitor to %lx\n", monitor_physbase);
@@ -250,9 +252,11 @@ void __attribute__((noreturn)) main(void)
 
     console_printf("L1 %p L2 %p\n", l1pt, l2pt);
 
-    /* direct-map first 1MB of RAM and UART registers using section mappings */
+    /* direct-map first 1MB of RAM and UART registers using section mappings
+     * (will become inaccessible when the monitor switches TTBR0) */
     map_section(l1pt, 0, 0, false);
-    map_section(l1pt, 0x3f200000, 0x3f200000, true);
+    map_section(l1pt, 0x3f100000, 0x3f100000, true); // RNG base
+    map_section(l1pt, 0x3f200000, 0x3f200000, true); // UART base
 
     /* direct-map phys memory in the 2-4G region for the monitor to use */
     for (uintptr_t off = 0; off < KOM_DIRECTMAP_SIZE; off += ARM_L1_SECTION_SIZE) {
@@ -274,16 +278,22 @@ void __attribute__((noreturn)) main(void)
     console_printf("mapping monitor executable at %lx-%lx\n",
                    KOM_MON_VBASE, KOM_MON_VBASE + monitor_executable_size);
     map_l2_pages(l2pt, KOM_MON_VBASE, monitor_physbase,
-                 monitor_executable_size, true);
+                 monitor_executable_size, true, false);
 
     // data and bss
+    size_t monitor_mapped_size = ROUND_UP(monitor_mem_bytes, 0x1000);
+    size_t monitor_rw_size = monitor_mapped_size - monitor_executable_size;
     console_printf("mapping monitor RW at %lx-%lx\n",
                    KOM_MON_VBASE + monitor_executable_size,
-                   KOM_MON_VBASE + ROUND_UP(monitor_mem_bytes, 0x1000));
+                   KOM_MON_VBASE + monitor_mapped_size);
     map_l2_pages(l2pt, KOM_MON_VBASE + monitor_executable_size,
                  monitor_physbase + monitor_executable_size,
-                 ROUND_UP(monitor_mem_bytes, 0x1000) - monitor_executable_size,
-                 false);
+                 monitor_rw_size, false, false);
+
+    // RNG device regs
+    uintptr_t rngvbase = KOM_MON_VBASE + monitor_mapped_size;
+    console_printf("mapping RNG page %lx\n", rngvbase);
+    map_l2_pages(l2pt, rngvbase, 0x3f104000, 0x1000, false, true);
 
     uintptr_t monitor_stack
         = &monitor_stack_base - &monitor_image_start + KOM_MON_VBASE;
@@ -298,6 +308,9 @@ void __attribute__((noreturn)) main(void)
 
     secure_world_init(g_ptbase, g_vbar, g_mvbar, monitor_stack);
 
+    console_printf("RNG init...\n");
+    rng_init();
+    
     /* init the monitor by setting up the secure physbase */
     uintptr_t *monitor_monitor_physbase
         = (uintptr_t *)(&g_monitor_physbase - &monitor_image_start + KOM_MON_VBASE);
@@ -309,10 +322,15 @@ void __attribute__((noreturn)) main(void)
     console_printf("passing secure_physbase %lx to monitor (&%p)\n",
                    secure_physbase, monitor_secure_physbase);
     *monitor_secure_physbase = secure_physbase;
+    uintptr_t *monitor_rngbase
+        = (uintptr_t *)(&g_rngbase - &monitor_image_start + KOM_MON_VBASE);
+    console_printf("passing RNG vbase %lx to monitor (&%p)\n",
+                   rngvbase, monitor_rngbase);
+    *monitor_rngbase = rngvbase;
 
-    // this call will return in non-secure world (where MMUs are still off)
     __asm volatile("" : : : "memory");
 
+    // this call will return in non-secure world (where MMUs are still off)
     leave_secure_world();
 
     __asm volatile("mrc p15, 0, %0, c2, c0, 0" : "=r" (reg));

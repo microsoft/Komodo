@@ -1,4 +1,4 @@
-PILOADER_OBJS=$(dir)/entry.o $(dir)/main.o $(dir)/serial.o $(dir)/console.o $(dir)/atags.o
+PILOADER_OBJS=$(dir)/entry.o $(dir)/main.o $(dir)/serial.o $(dir)/console.o $(dir)/atags.o $(dir)/rng.o
 
 $(dir)/piloader.elf: $(PILOADER_OBJS) pdclib/pdclib.a
 	$(LD) $(LDFLAGS_ALL) -r -o $@ $^ $(LIBGCC)

@@ -106,7 +106,7 @@ method printAll()
 
     var bssglobals
         := map o | o in KomGlobalDecls() && o != K_SHA256s() :: KomGlobalDecls()[o];
-    print(".global g_monitor_physbase, g_secure_physbase"); nl();
+    print(".global g_monitor_physbase, g_secure_physbase, g_rngbase"); nl();
     printBss(bssglobals);
     printStack();
 }
