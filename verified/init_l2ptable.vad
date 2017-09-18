@@ -51,7 +51,7 @@ lemma lemma_ARM_L1PTE_Dual_n(paddr: word, n: nat)
 #endverbatim
 
 // updates portion of install_l1ptes
-procedure install_l1ptes'(
+procedure {:timeLimitMultiplier 2} install_l1ptes'(
     operand l1base:addr,
     inout operand l2base:addr,
     inout operand l1index:reg,
