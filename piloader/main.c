@@ -26,6 +26,7 @@
 #define ARM_SCTLR_M     0x1 /* MMU enable */
 #define ARM_SCTLR_V     0x2000 /* vectors base (high vs VBAR) */
 #define ARM_SCTLR_VE    0x1000000 /* interrupt vectors enable */
+#define ARM_SCTLR_TRE   (1UL << 28) /* TEX remap enable */
 #define ARM_SCTLR_AFE   (1UL << 29) /* access flag enable -- simplified PTEs */
 
 #define ARM_SCR_NS      0x01 // non-secure bit
@@ -64,7 +65,7 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar, uintptr_t mvbar,
     /* load the same page table base into both TTBR0 and TTBR1
      * TTBR0 will change in the monitor's context switching code */
     assert((ptbase & 0x3fff) == 0);
-    uintptr_t ttbr = ptbase | 0x6a; // XXX: cache pt walks, seems a good idea!
+    uintptr_t ttbr = ptbase | 0x4a; // PT walker uses cache
     __asm volatile("mcr p15, 0, %0, c2, c0, 0" :: "r" (ttbr));
     __asm volatile("mcr p15, 0, %0, c2, c0, 1" :: "r" (ttbr));
     console_printf("Final secure TTBR0/1: %lx\n", ttbr);
@@ -85,6 +86,10 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar, uintptr_t mvbar,
     __asm volatile("dsb");
     __asm volatile("isb");
     __asm volatile("mcr p15, 0, r0, c8, c7, 0"); // TLBIALL
+    __asm volatile ("isb");
+    __asm volatile("mcr p15, 0, r0, c7, c5, 0"); // ICIALLU
+    __asm volatile ("dsb");
+    __asm volatile ("isb");
 
     /* enable the MMU in the system control register
      * (this should be ok, since we have a 1:1 map for low RAM) */
@@ -92,7 +97,7 @@ static void secure_world_init(uintptr_t ptbase, uintptr_t vbar, uintptr_t mvbar,
     console_printf("initial secure SCTLR: %lx\n", reg);
     reg |= ARM_SCTLR_M | ARM_SCTLR_AFE;
     // while we're here, ensure that there's no funny business with the VBAR
-    reg &= ~(ARM_SCTLR_V | ARM_SCTLR_VE);
+    reg &= ~(ARM_SCTLR_V | ARM_SCTLR_VE | ARM_SCTLR_TRE);
     __asm volatile("mcr p15, 0, %0, c1, c0, 0" : : "r" (reg));
     console_printf("Final secure SCTLR: %lx\n", reg);
 
@@ -138,12 +143,12 @@ static void map_section(armpte_short_l1 *l1pt, uintptr_t vaddr, uintptr_t paddr,
         .section = {
             .type = 1,
             .b = 1, // shareable device / write-back, write-allocate
-            .c = 0, // shareable device / write-back, write-allocate
+            .c = nocache ? 0 : 1, // shareable device / write-back, write-allocate
             .xn = 0,
             .domain = 0,
             .ap0 = 1, // access flag = 1 (already accessed)
             .ap1 = 0, // system
-            .tex = nocache ? 0 : 5, // 0b101: cacheable, write-back, write-allocate
+            .tex = nocache ? 0 : 1, // cacheable, write-back, write-allocate
             .ap2 = 0,
             .s = 1, // shareable
             .ng = 0, // global (ASID doesn't apply)
@@ -164,10 +169,10 @@ static void map_l2_pages(armpte_short_l2 *l2pt, uintptr_t vaddr, uintptr_t paddr
                 .xn = exec ? 0 : 1,
                 .type = 1,
                 .b = 1, // shareable device / write-back, write-allocate
-                .c = 0, // shareable device / write-back, write-allocate
+                .c = nocache ? 0 : 1, // shareable device / write-back, write-allocate
                 .ap0 = 1, // access flag = 1 (already accessed)
                 .ap1 = 0, // system
-                .tex = nocache ? 0 : 5, // 0b101: cacheable, write-back, write-allocate
+                .tex = nocache ? 0 : 1, // cacheable, write-back, write-allocate
                 .ap2 = exec ? 1 : 0,
                 .s = 1, // shareable
                 .ng = 0, // global (ASID doesn't apply)
@@ -232,10 +237,11 @@ void __attribute__((noreturn)) main(void)
     monitor_physbase = atags_reserve_physmem(monitor_mem_reserve // image size
                                              + ARM_L1_PTABLE_BYTES // L1 ptable
                                              + KOM_PAGE_SIZE // L2 ptable
+                                             + ARM_L1_PTABLE_BYTES // alignment padding
                                              + KOM_SECURE_RESERVE); // secure mem
     
     /* copy the monitor image into place */
-    console_printf("Copying monitor to %lx\n", monitor_physbase);
+    console_printf("Copying monitor to %lx (BSS at %lx)\n", monitor_physbase, monitor_physbase + monitor_image_bytes);
     memcpy((void *)monitor_physbase, &monitor_image_start, monitor_image_bytes);
     memset((char *)monitor_physbase + monitor_image_bytes, 0,
            monitor_mem_bytes - monitor_image_bytes);
@@ -248,7 +254,11 @@ void __attribute__((noreturn)) main(void)
     armpte_short_l1 *l1pt = (void *)ptbase;
     armpte_short_l2 *l2pt = (void *)(ptbase + ARM_L1_PTABLE_BYTES);
 
-    uintptr_t secure_physbase = (uintptr_t)l2pt + KOM_PAGE_SIZE;
+    memset(l1pt, 0, ARM_L1_PTABLE_BYTES);
+    memset(l2pt, 0, KOM_PAGE_SIZE);
+
+    /* secure phys base must be 16kB-aligned for the same reason  as l1 alignment */
+    uintptr_t secure_physbase = ROUND_UP((uintptr_t)l2pt + KOM_PAGE_SIZE, ARM_L1_PTABLE_BYTES);
 
     console_printf("L1 %p L2 %p\n", l1pt, l2pt);
 
