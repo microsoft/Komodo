@@ -7,7 +7,7 @@
 #define ARM_SCR_NS      0x01 // non-secure bit
 
 static struct kom_pagedb_entry g_pagedb[KOM_SECURE_NPAGES];
-uintptr_t g_monitor_physbase, g_secure_physbase;
+uintptr_t g_monitor_physbase, g_secure_physbase, g_rngbase;
 static struct kom_addrspace *g_cur_addrspace;
 struct kom_dispatcher *g_cur_dispatcher;
 
@@ -259,7 +259,7 @@ kom_err_t kom_smc_init_l2table(kom_secure_pageno_t page,
         .pagetable = {
             .type = 1,
             .pxn = 0,
-            .ns = 0,
+            .ns = 1,
             .ptbase = page_paddr(page) >> 10,
         }
     };
@@ -330,7 +330,7 @@ static void map_page(struct kom_addrspace *addrspace, uint32_t mapping,
             .c = 0, // write-back, write-allocate
             .ap0 = 1, // access flag = 1 (already accessed)
             .ap1 = 1, // user
-            .tex = 5, // 0b101: cacheable, write-back, write-allocate
+            .tex = 0, //5, // 0b101: cacheable, write-back, write-allocate
             .ap2 = !(mapping & KOM_MAPPING_W),
             .s = 1, // shareable
             .ng = 1, // not global; TODO: ASID management!

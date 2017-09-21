@@ -258,7 +258,7 @@ _svc: /* Supervisor call, only taken from secure user-mode */
         //leave_secure_world r1
 
         /* return to SMC dispatch path */
-        mov     r1, r0 // return value from call
+        //mov     r1, r0 // return value from call
         mov     r0, #KOM_ERR_SUCCESS
         b       dispatch_return
 
