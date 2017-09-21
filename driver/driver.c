@@ -25,21 +25,80 @@ __asm (
     ".text                                      \n"
     ".arm                                       \n"
     "test_enclave:                              \n"
-    //"   mov     r1, #42                         \n"
-    //"   mov     r2, #0xa000                     \n"
-    //"   str     r1, [r2]                        \n"
-    "   mrc     p15, 0, r1, c9, c13, 0          \n" // always return cycles in r1
+#if 0 // trivial test code
+    "   mov     r1, #42                         \n"
+    "   mov     r2, #0xa000                     \n"
+    "   str     r1, [r2]                        \n"
+#endif
+    "   mrc     p15, 0, r9, c9, c13, 0          \n" // grab cycles for later
+    "   cmp     r0, #0                          \n"
+    "   beq     9f                              \n"
     "   cmp     r0, #1                          \n"
     "   beq     2f                              \n"
+    "   cmp     r0, #2                          \n"
+    "   beq     3f                              \n"
+    "   cmp     r0, #3                          \n"
+    "   beq     4f                              \n"
+    "   cmp     r0, #4                          \n"
+    "   beq     5f                              \n"
+
+    // straight exit
+    "9: mov     r1, r9                          \n" // cycle count
     "1: mov     r0, #0                          \n" // KOM_SVC_EXIT
     "   svc     #0                              \n"
     "   b       1b                              \n"
-    "2: mov     r2, r1                          \n"
-    "   mrc     p15, 0, r1, c9, c13, 0          \n" // while (1) {
-    "   sub     r3, r1, r2                      \n" // delta = rdcycles() - oldcycles;
+
+    // enter/resume tests: exec until interrupted
+    "2: mov     r2, r9                          \n"
+    "   mrc     p15, 0, r9, c9, c13, 0          \n" // while (1) {
+    "   sub     r3, r9, r2                      \n" // delta = rdcycles() - oldcycles;
     "   cmp     r3, #200                        \n" // if (delta > 200) break;
-    "   bgt     1b                              \n"
+    "   bgt     9b                              \n"
     "   b       2b                              \n"
+
+    // attest test
+    "3: mov     r0, #1                          \n" // KOM_SVC_ATTEST
+    "   mrc     p15, 0, r9, c9, c13, 0          \n" // r9 = start
+    "   svc     #0                              \n"
+    "   mrc     p15, 0, r10, c9, c13, 0         \n" // r10 = end
+    "   sub     r1, r10, r9                     \n" // retval = end - start
+    "   b       1b                              \n" // exit
+
+    // verify test
+    "4: mov     r0, #2                          \n" // KOM_SVC_VERIFY_STEP0
+    "   mrc     p15, 0, r9, c9, c13, 0          \n" // r9 = start
+    "   svc     #0                              \n"
+    "   mov     r0, #3                          \n" // KOM_SVC_VERIFY_STEP1
+    "   svc     #0                              \n"
+    "   mov     r0, #4                          \n" // KOM_SVC_VERIFY_STEP2
+    "   svc     #0                              \n"
+    "   mrc     p15, 0, r10, c9, c13, 0         \n" // r10 = end
+    "   sub     r1, r10, r9                     \n" // retval = end - start
+    "   b       1b                              \n" // exit
+
+    // map_data test
+    "5: mov     r0, #10                         \n" // KOM_SVC_MAP_DATA
+    // r1 = pageno, r2 = mapping
+    "   mov     r11, r1                         \n" // save pageno (from SVC args) for later
+    "   movw    r2, #0xd003                     \n" // RW page at 0xd000
+    "   mrc     p15, 0, r9, c9, c13, 0          \n" // r9 = start
+    "   svc     #0                              \n"
+    "   mrc     p15, 0, r10, c9, c13, 0         \n" // r10 = end
+    "   cmp     r0, #0                          \n" // bail on failure
+    "   bne     6f                              \n"
+    "   mov     r0, #11                         \n" // KOM_SVC_UNMAP_DATA
+    "   mov     r1, r11                         \n" //pageno
+    "   movw    r2, #0xd003                     \n" // map VA
+    "   svc     #0                              \n"
+    "   cmp     r0, #0                          \n" // bail on failure
+    "   bne     7f                              \n"
+    "   sub     r1, r10, r9                     \n" // retval = end - start
+    "   b       1b                              \n" // exit
+    "6: mov     r1, r0                          \n" // fail case 1
+    "   b       1b                              \n"
+    "7: add     r1, r0, #30                     \n" // fail case 2
+    "   b       1b                              \n"
+
     "test_enclave_end:                          \n"
 );
 
@@ -61,7 +120,7 @@ static inline uint32_t rdcycles(void)
     return r;
 }
 
-#define ITER 1000
+#define ITER 200
 
 static int bench_enter_resume(u32 disp)
 {
@@ -69,8 +128,15 @@ static int bench_enter_resume(u32 disp)
     bool interrupted = false;
     kom_multival_t ret;
 
+    ret = kom_smc_execute(disp, 0, 0, 0);
+    if (ret.x.err != KOM_ERR_SUCCESS) {
+        printk(KERN_DEBUG "error on enter/resume warmup: %u\n", ret.x.err);
+        return -EIO;
+    }
+    
     s0 = rdcycles();
     for (i = 0; i < ITER; i++) {
+        //printk(KERN_DEBUG "%u: %u\n", i, interrupted);
         if (interrupted) {
             resumecnt++;
             ret = kom_smc_resume(disp);
@@ -128,7 +194,7 @@ static int bench_enter_resume(u32 disp)
 
         if (s1 <= s0) {
             printk(KERN_DEBUG "bogus cycle count returned? %u %u\n", s0, s1);
-            return -EIO;
+            //return -EIO;
         }
         total += s1 - s0;
     }
@@ -162,7 +228,7 @@ static int bench_enter_resume(u32 disp)
         s1 = ret.x.val;
         if (s1 <= s0) {
             printk(KERN_DEBUG "bogus cycle count returned? %u %u\n", s0, s1);
-            return -EIO;
+            //return -EIO;
         }
         total += s1 - s0;
     }
@@ -172,12 +238,146 @@ static int bench_enter_resume(u32 disp)
     return 0;
 }
 
+static int bench_attest(u32 disp)
+{
+    u32 s0, s1, i, total = 0;
+    kom_multival_t ret;
+
+    ret = kom_smc_execute(disp, 2, 0, 0);
+    if (ret.x.err != KOM_ERR_SUCCESS) {
+        printk(KERN_DEBUG "error on attest warmup (!success): %u\n", ret.x.err);
+        return -EIO;
+    }
+
+    total = 0;
+    s0 = rdcycles();
+    for (i = 0; i < ITER; i++) {
+        ret = kom_smc_execute(disp, 2, 0, 0);
+        if (ret.x.err != KOM_ERR_SUCCESS) {
+            printk(KERN_DEBUG "error on attest iteration %u (!success): %u\n",
+                   i, ret.x.err);
+            return -EIO;
+        }
+        //printk(KERN_DEBUG "attest %u: %u cycles\n", i, (u32)ret.x.val);
+        total += ret.x.val;
+    }
+    s1 = rdcycles();
+
+    printk(KERN_DEBUG "%u attests took %u cycles (%u total time)\n", ITER, total, s1 - s0);
+
+    total = 0;
+
+    ret = kom_smc_execute(disp, 3, 0, 0);
+    if (ret.x.err != KOM_ERR_SUCCESS) {
+        printk(KERN_DEBUG "error on verify warmup (!success): %u\n", ret.x.err);
+        return -EIO;
+    }
+
+    total = 0;
+    s0 = rdcycles();
+    for (i = 0; i < ITER; i++) {
+        ret = kom_smc_execute(disp, 3, 0, 0);
+        if (ret.x.err != KOM_ERR_SUCCESS) {
+            printk(KERN_DEBUG "error on verify iteration %u (!success): %u\n",
+                   i, ret.x.err);
+            return -EIO;
+        }
+        //printk(KERN_DEBUG "verify %u: %u cycles\n", i, (u32)ret.x.val);
+        total += ret.x.val;
+    }
+    s1 = rdcycles();
+
+    printk(KERN_DEBUG "%u verifies took %u cycles (%u total time)\n", ITER, total, s1 - s0);
+
+    return 0;
+}
+
+static int bench_dynalloc(u32 addrsp, u32 disp, u32 sparepg)
+{
+    u32 s0, s1, i, total = 0;
+    kom_multival_t ret;
+    int r;
+
+    printk(KERN_DEBUG "spare page: %u\n", sparepg);
+    
+    r = kom_smc_alloc_spare(sparepg, addrsp);
+    if (r != KOM_ERR_SUCCESS) {
+        printk(KERN_DEBUG "kom_smc_alloc_spare warmup failed: %d\n", r);
+        goto cleanup;
+    }
+
+    r = kom_smc_remove(sparepg);
+    if (r != KOM_ERR_SUCCESS) {
+        printk(KERN_DEBUG "kom_smc_remove warmup failed: %d\n", r);
+        goto cleanup;
+    }
+
+    total = 0;
+    for (i = 0; i < ITER; i++) {
+        s0 = rdcycles();
+        r = kom_smc_alloc_spare(sparepg, addrsp);
+        s1 = rdcycles();
+        if (r != KOM_ERR_SUCCESS) {
+            printk(KERN_DEBUG "kom_smc_alloc_spare iter %u failed: %d\n", i, r);
+            goto cleanup;
+        }
+
+        if (i < ITER - 1) {
+            r = kom_smc_remove(sparepg);
+            if (r != KOM_ERR_SUCCESS) {
+                printk(KERN_DEBUG "kom_smc_remove iter %u failed: %d\n", i, r);
+                goto cleanup;
+            }
+        }
+
+        total += s1 - s0;
+    }
+
+    printk(KERN_DEBUG "%u alloc_spare took %u cycles\n", ITER, total);
+
+    ret = kom_smc_execute(disp, 4, sparepg, 0);
+    if (ret.x.err != KOM_ERR_SUCCESS) {
+        printk(KERN_DEBUG "error on map warmup (!success): %u\n", ret.x.err);
+        r = -EIO;
+        goto cleanup;
+    } else if (ret.x.val < 100) {
+        printk(KERN_DEBUG "error from map warmup svc: %u\n", (u32)ret.x.val);
+        r = -EIO;
+        goto cleanup;
+    }
+
+    total = 0;
+    s0 = rdcycles();
+    for (i = 0; i < ITER; i++) {
+        ret = kom_smc_execute(disp, 4, sparepg, 0);
+        if (ret.x.err != KOM_ERR_SUCCESS) {
+            printk(KERN_DEBUG "error on map iteration %u (!success): %u\n", i, ret.x.err);
+            r = -EIO;
+            goto cleanup;
+        } else if (ret.x.val < 100) {
+            printk(KERN_DEBUG "error from map iteration %u svc: %u\n", i, (u32)ret.x.val);
+            r = -EIO;
+            goto cleanup;
+        }
+        //printk(KERN_DEBUG "map %u: %u cycles\n", i, (u32)ret.x.val);
+        total += ret.x.val;
+    }
+    s1 = rdcycles();
+
+    printk(KERN_DEBUG "%u dynamic maps took %u cycles (%u total time)\n", ITER, total, s1 - s0);
+
+    r = 0;
+
+cleanup:
+    return r;
+}
 
 static int test(void)
 {
     int r = 0;
     kom_err_t err;
     u32 addrspace = -1, l1pt = -1, l2pt = -1, disp = -1, code = -1, data = -1;
+    u32 sparepg = -1;
     struct page *shared_page;
     u32 shared_phys;
     void *shared_virt;
@@ -197,7 +397,7 @@ static int test(void)
                total, ITER);
 
         s0 = rdcycles();
-        for (i = 0; i < ITER; i++) kom_smc_query();
+        for (i = 0; i < ITER; i++) kom_smc_get_phys_pages();
         s1 = rdcycles();
         printk(KERN_DEBUG "%u iterations of a null SMC took %u cycles\n",
                ITER, s1-s0);
@@ -276,9 +476,9 @@ static int test(void)
     /* Populate the page with our test code! */
     memcpy(shared_virt, &test_enclave, &test_enclave_end - &test_enclave);
 
-    /* Memory barrier prior to komodo fetching the memory from secure
-       world using an alias mapping */
+    /* XXX: make sure komodo's view of the page is consistent */
     asm volatile ("dsb");
+    flush_dcache_page(shared_page);
 
     err = kom_smc_map_secure(code, addrspace,
                              0x8000 | KOM_MAPPING_R | KOM_MAPPING_X,
@@ -288,7 +488,7 @@ static int test(void)
         r = -EIO;
         goto cleanup;
     }
-    
+
     err = kom_smc_map_secure(data, addrspace,
                              0x9000 | KOM_MAPPING_R | KOM_MAPPING_W, 0);
     printk(KERN_DEBUG "map_secure (data): %d\n", err);
@@ -321,7 +521,23 @@ static int test(void)
 
     printk(KERN_DEBUG "wrote: %x\n", *(u32 *)shared_virt);
 
+    r = bench_attest(disp);
+    if (r != 0) {
+        goto cleanup;
+    }
+
     r = bench_enter_resume(disp);
+    if (r != 0) {
+        goto cleanup;
+    }
+
+    r = pgalloc_alloc(&sparepg);
+    if (r != 0) {
+        printk(KERN_DEBUG "page alloc failed: %d\n", r);
+        goto cleanup;
+    }
+
+    r = bench_dynalloc(addrspace, disp, sparepg);
     if (r != 0) {
         goto cleanup;
     }
@@ -331,6 +547,11 @@ cleanup:
     printk(KERN_DEBUG "stop: %d\n", err);
     if (err != KOM_ERR_SUCCESS) {
         r = -EIO;
+    }
+
+    if (sparepg != -1) {
+        err = kom_smc_remove(sparepg);
+        printk(KERN_DEBUG "remove: %d\n", err);
     }
 
     if (disp != -1) {

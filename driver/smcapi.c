@@ -89,6 +89,14 @@ kom_err_t kom_smc_map_insecure(kom_secure_pageno_t addrspace,
     return ret.x.err;
 }
 
+kom_err_t kom_smc_alloc_spare(kom_secure_pageno_t page,
+                              kom_secure_pageno_t addrspace)
+{
+    kom_multival_t ret;
+    ret.raw = _invoke_smc(KOM_SMC_ALLOC_SPARE, page, addrspace, 0, 0);
+    return ret.x.err;
+}
+
 kom_err_t kom_smc_remove(kom_secure_pageno_t page)
 {
     kom_multival_t ret;

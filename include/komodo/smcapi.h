@@ -8,6 +8,7 @@
 #define KOM_SMC_INIT_L2PTABLE   12
 #define KOM_SMC_MAP_SECURE      13
 #define KOM_SMC_MAP_INSECURE    14
+#define KOM_SMC_ALLOC_SPARE     15
 #define KOM_SMC_REMOVE          20
 #define KOM_SMC_FINALISE        21
 #define KOM_SMC_ENTER           22
@@ -84,6 +85,9 @@ kom_err_t kom_smc_map_secure(kom_secure_pageno_t page,
 kom_err_t kom_smc_map_insecure(kom_secure_pageno_t addrspace,
                                uint32_t phys_pageno,
                                uint32_t mapping);
+
+kom_err_t kom_smc_alloc_spare(kom_secure_pageno_t page,
+                              kom_secure_pageno_t addrspace);
 
 // remove this page from its address space, or reclaim the address space (only possible once stopped)
 kom_err_t kom_smc_remove(kom_secure_pageno_t page);
