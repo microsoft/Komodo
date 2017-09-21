@@ -113,13 +113,6 @@ static void enable_pmccntr(void)
     asm volatile ("isb");
 }
 
-static inline uint32_t rdcycles(void)
-{
-    uint32_t r = 0;
-    asm volatile("mrc p15, 0, %0, c9, c13, 0" : "=r"(r));
-    return r;
-}
-
 #define ITER 200
 
 static int bench_enter_resume(u32 disp)
@@ -382,8 +375,6 @@ static int test(void)
     u32 shared_phys;
     void *shared_virt;
     kom_multival_t ret;
-
-    enable_pmccntr();
 
     {
         u32 s0, s1, i, total = 0;
@@ -659,10 +650,16 @@ static int __init driver_init(void)
         goto fail;
     }
 
+    enable_pmccntr();
+
     printk(KERN_DEBUG "komodo: running tests\n");
     r = test();
     printk(KERN_DEBUG "komodo: test complete: %d\n", r);
-    
+
+    printk(KERN_DEBUG "komodo: running more tests\n");
+    r = enclave_blob_test();
+    printk(KERN_DEBUG "komodo: test complete: %d\n", r);
+
     r = alloc_chrdev_region(&komodo_dev, 0, 1, "komodo");
     if (r != 0) {
         printk(KERN_ERR "komodo: alloc_chrdev_region failed: %x\n", r);

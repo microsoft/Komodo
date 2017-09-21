@@ -2,7 +2,7 @@ ifneq ($(KERNELRELEASE),)
 
 ccflags-y := -I$(M)/../include
 obj-m := komodo.o
-komodo-y := driver.o smc.o smcapi.o pgalloc.o
+komodo-y := driver.o smc.o smcapi.o pgalloc.o encloader.o enc.elfbin
 
 else
 
