@@ -367,6 +367,7 @@ procedure svc_returning_verify(
     requires/ensures
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
+        this.conf.tlb_consistent;
     requires
         ValidState(exstate) && mode_of_state(exstate) != User;
         stack_bytes >= WordsToBytes(STACKSIZE_ATTEST + 14);  // +14 to store reigsters
@@ -440,6 +441,9 @@ procedure svc_returning_verify(
     MOV(r6, 0);
     MOV(r7, 0);
     MOV(r8, 0);
+
+    // flush TLB
+    MCR(tlbiall, r0); // (r0 is irrelevant)
 
     // help with framing
     lemma_BankedRegsInvariant_framing(old(this), this);

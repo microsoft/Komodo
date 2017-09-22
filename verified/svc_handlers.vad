@@ -440,6 +440,22 @@ procedure svc_map_data_zeropage(
     }
 }
 
+#verbatim
+function HavocTLBIALL(s:state, s':state):(r:state)
+    ensures SaneState(s) ==> SaneState(r)
+{
+    reveal ValidSRegState();
+    if TLBIALL in s'.sregs then s.(sregs := s.sregs[TLBIALL := s'.sregs[TLBIALL]])
+    else s
+}
+
+predicate SmcProcedureInvariantH(s:state, r:state)
+    requires SaneState(s) && SaneState(r);
+{
+    SmcProcedureInvariant(HavocTLBIALL(s, r), r)
+}
+#endverbatim
+
 procedure svc_map_data_success(
     ghost pagedb: PageDb,
     inout operand page:reg, // r1
@@ -465,7 +481,7 @@ procedure svc_map_data_success(
                     wordToMapping(mapping).l1index].v);
     ensures
         this.conf.tlb_consistent;
-        SmcProcedureInvariant(old(this), this); // TODO
+        SmcProcedureInvariantH(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
         tuple(pagedb', KOM_ERR_SUCCESS)
             == svcMapData(pagedb, asPg, old(page), old(mapping));
@@ -513,7 +529,7 @@ procedure svc_map_data(
         finalDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
-        SmcProcedureInvariant(old(this), this);
+        SmcProcedureInvariantH(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
         tuple(pagedb', err)
             == svcMapData(pagedb, pagedb[dispPg].addrspace, old(page), old(mapping));
@@ -758,7 +774,7 @@ procedure svc_unmap_data_success(
         entryptr == AddressOfGlobal(PageDb()) + G_PAGEDB_ENTRY(page);
     ensures
         this.conf.tlb_consistent;
-        SmcProcedureInvariant(old(this), this); // TODO
+        SmcProcedureInvariantH(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
         pagedb' == firstOf2(svcUnmapData(pagedb, asPg, page, old(mapva)));
         wellFormedPageDb(pagedb') && pageDbCorresponds(this.m, pagedb');
@@ -826,7 +842,7 @@ procedure svc_unmap_data(
         finalDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
-        SmcProcedureInvariant(old(this), this);
+        SmcProcedureInvariantH(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
         tuple(pagedb', err)
             == svcUnmapData(pagedb, pagedb[dispPg].addrspace, old(page), old(mapva));
@@ -912,7 +928,7 @@ procedure svc_init_l2ptable(
         finalDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
-        SmcProcedureInvariant(old(this), this); // TODO
+        SmcProcedureInvariantH(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
         tuple(pagedb', err)
             == svcInitL2PTable(pagedb, pagedb[dispPg].addrspace, old(page), old(l1index));

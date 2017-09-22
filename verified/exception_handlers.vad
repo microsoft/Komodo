@@ -39,6 +39,7 @@ CPSID_IAF(operand mod:word)
             ==> old(this).regs[LR(m)] == this.regs[LR(m)]
               && old(this).regs[SP(m)] == this.regs[SP(m)];
         this.conf.nondet == nondet_int(old(this).conf.nondet, NONDET_GENERATOR());
+        this.conf.tlb_consistent == old(this).conf.tlb_consistent;
         this.rng == old(this).rng;
 {
     reveal va_eval;
@@ -67,7 +68,6 @@ procedure {:frame false} switch_to_monitor(inline oldmode:mode)
         interrupts_enabled(this);
     ensures
         SaneState(this);
-        SaneStack(this);
         StackPreserving(old(this), this);
         NonStackMemPreserving(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp()));
@@ -78,6 +78,7 @@ procedure {:frame false} switch_to_monitor(inline oldmode:mode)
         this.conf.ttbr0 == old(this).conf.ttbr0;
         this.conf.scr == old(this).conf.scr;
         this.conf.nondet == nondet_int(old(this).conf.nondet, NONDET_GENERATOR());
+        this.conf.tlb_consistent == old(this).conf.tlb_consistent;
         this.rng == old(this).rng;
 {
     CPSID_IAF(const(encode_mode(Monitor)));
@@ -132,12 +133,14 @@ procedure {:timeLimitMultiplier 2} fault_exit(
         validExceptionTransition(old(this), this);
         MemPreservingExcept(old(this), this, page_monvaddr(dispPg),
                             page_monvaddr(dispPg) + PAGESIZE);
+        old(this).conf.tlb_consistent ==> this.conf.tlb_consistent;
 {
     LDRglobaladdr(r2, CurDispatcherOp());
     LDRglobal(r2, CurDispatcherOp(), r2, 0);
     assert r2 == page_monvaddr(dispPg);
 
     MOV(r0, 0);
+    assert !AddrInPageTable(this, r2 + DISPATCHER_ENTERED); // TLB TODO
     STR(r0, r2, const(DISPATCHER_ENTERED));
     inline if (ex == ExSVC) {
         assert r0 == KOM_ERR_SUCCESS;
@@ -186,6 +189,8 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
         !this.rng.consumed;
         interrupts_enabled(this);
         exists stack_bytes :: StackBytesRemaining(this, stack_bytes) && stack_bytes >= WordsToBytes(STACKSIZE_ATTEST + 14);
+    requires/ensures
+        this.conf.tlb_consistent;
     ensures
         KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
         validPageDb(pagedb);
@@ -509,6 +514,8 @@ procedure {:frame false} {:timeLimitMultiplier 2} interrupt_handler(
 
     // push r0, r1
     SUB(sp, sp, const(2 * WORDSIZE));
+    assert !AddrInPageTable(this, sp); // TLB TODO
+    assert !AddrInPageTable(this, sp + WORDSIZE); // TLB TODO
     STR(r0, sp, 0);
     STR(r1, sp, const(WORDSIZE));
 
