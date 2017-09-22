@@ -656,7 +656,7 @@ static int __init driver_init(void)
     r = test();
     printk(KERN_DEBUG "komodo: test complete: %d\n", r);
 
-    printk(KERN_DEBUG "komodo: running more tests\n");
+    printk(KERN_DEBUG "komodo: running notary\n");
     r = enclave_blob_test();
     printk(KERN_DEBUG "komodo: test complete: %d\n", r);
 
