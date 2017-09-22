@@ -126,6 +126,7 @@ procedure {:timeLimitMultiplier 2} fault_exit(
         pageDbCorresponds(this.m, pagedb_in);
         finalDispatcher(pagedb_in, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+        this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb_in, dispPg));
     ensures
         tuple(r0, r1, pagedb) == exceptionHandled(exstate, pagedb_in, dispPg);
         validPageDb(pagedb);
@@ -140,7 +141,12 @@ procedure {:timeLimitMultiplier 2} fault_exit(
     assert r2 == page_monvaddr(dispPg);
 
     MOV(r0, 0);
-    assert !AddrInPageTable(this, r2 + DISPATCHER_ENTERED); // TLB TODO
+    assert !AddrInPageTable(this, r2 + DISPATCHER_ENTERED)
+    by {
+       lemma_OnlyPTPagesInHwPTable(pagedb_in, this, l1pOfDispatcher(pagedb_in, dispPg));
+       assert forall p:PageNr :: addrInPage(r2 + DISPATCHER_ENTERED, p) ==> p == dispPg;
+       assert !(validL1PTPage(pagedb_in, dispPg) || validL2PTPage(pagedb_in, dispPg));
+    }
     STR(r0, r2, const(DISPATCHER_ENTERED));
     inline if (ex == ExSVC) {
         assert r0 == KOM_ERR_SUCCESS;
@@ -514,10 +520,14 @@ procedure {:frame false} {:timeLimitMultiplier 2} interrupt_handler(
 
     // push r0, r1
     SUB(sp, sp, const(2 * WORDSIZE));
-    assert !AddrInPageTable(this, sp); // TLB TODO
-    assert !AddrInPageTable(this, sp + WORDSIZE); // TLB TODO
+    lemma_OnlySecureMemInPageTable(pagedb_in, this, l1pOfDispatcher(pagedb_in, dispPg));
+    assert !AddrInPageTable(this, sp);
+    ghost var this' := this;
     STR(r0, sp, 0);
+    lemma_AddrInPageTable_persists(this', this, sp);
+    assert !AddrInPageTable(this, sp + WORDSIZE);
     STR(r1, sp, const(WORDSIZE));
+    assert this.conf.tlb_consistent == old(this.conf.tlb_consistent);
 
     assert ParentStackPreserving(old(this), this);
 

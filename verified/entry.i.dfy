@@ -121,17 +121,8 @@ const EXCEPTION_STACK_BYTES:int := 150*WORDSIZE;
 
 predicate KomUserEntryPrecondition(s:state, pagedb:PageDb, dispPg:PageNr)
 {
-    SaneConstants() && ValidState(s) && s.ok && SaneStack(s) && SaneMem(s.m)
-    && s.conf.scr == SCRT(Secure, true, true)
-    && StackBytesRemaining(s, EXCEPTION_STACK_BYTES)
-    && validPageDb(pagedb) && pageDbCorresponds(s.m, pagedb)
-    && finalDispatcher(pagedb, dispPg)
-    && GlobalWord(s.m, CurDispatcherOp(), 0) == page_monvaddr(dispPg)
-    && s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, dispPg))    
-    && mode_of_state(s) != User
+    PrivKomUserEntryPrecondition(s, pagedb, dispPg)
     && !spsr_of_state(s).f && !spsr_of_state(s).i
-    // && (!(s.conf.ex == ExFIQ || s.conf.ex == ExIRQ) ==>
-    //     !spsr_of_state(s).f && !spsr_of_state(s).i)
 }
 
 predicate PrivKomUserEntryPrecondition(s:state, pagedb:PageDb, dispPg:PageNr)
@@ -143,10 +134,8 @@ predicate PrivKomUserEntryPrecondition(s:state, pagedb:PageDb, dispPg:PageNr)
     && finalDispatcher(pagedb, dispPg)
     && GlobalWord(s.m, CurDispatcherOp(), 0) == page_monvaddr(dispPg)
     && s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, dispPg))    
+    && s.conf.tlb_consistent
     && mode_of_state(s) != User
-    // && !spsr_of_state(s).f && !spsr_of_state(s).i
-    // && (!(s.conf.ex == ExFIQ || s.conf.ex == ExIRQ) ==>
-    //     !spsr_of_state(s).f && !spsr_of_state(s).i)
 }
 
 predicate UsermodeContinuationPreconditionDefInner()
