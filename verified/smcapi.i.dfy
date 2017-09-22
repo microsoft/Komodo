@@ -218,7 +218,10 @@ lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
             assert validPageDbEntry(pageDbIn, n);
             assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
             var a := pageDbIn[n].addrspace;
-            assert dataPageRefs(pageDbOut, a, n) == dataPageRefs(pageDbIn, a, n);
+            if pageDbOut[n].entry.DataPage? && !hasStoppedAddrspace(pageDbOut, n) {
+                var a := pageDbIn[n].addrspace;
+                assert dataPageRefs(pageDbOut, a, n) == dataPageRefs(pageDbIn, a, n);
+            }
         }
               
         assert pageDbEntriesValid(pageDbOut);
