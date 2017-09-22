@@ -63,8 +63,7 @@ procedure load_attestion_key_inner()
         mem; r2; r3; 
     requires/ensures
         SaneState(this);
-        this.conf.tlb_consistent;
-        ValidMemWordsExPageTable(this, r4, SHA_CTXSIZE);
+        ValidMemWords(r4, SHA_CTXSIZE);
     ensures
         AddrMemPreservingExcept(old(mem), mem, r4, WordOffset(r4, SHA_CTXSIZE));
         //ValidMemRange(AddressOfGlobal(AttestKeyOp()), AddressOfGlobal(AttestKeyOp()) + SHA_CTXSIZE * WORDSIZE);
@@ -127,8 +126,7 @@ procedure load_attestion_key() returns (ghost key:seq(word))
         mem; r0; r2; r3; 
     requires/ensures
         SaneState(this);
-        this.conf.tlb_consistent;
-        ValidMemWordsExPageTable(this, r4, SHA_CTXSIZE);
+        ValidMemWords(r4, SHA_CTXSIZE);
     ensures
         AddrMemPreservingExcept(old(mem), mem, r4, WordOffset(r4, SHA_CTXSIZE));
         AddrMemContentsSeq(mem, r4, SHA_CTXSIZE) == key == AttestKey();
@@ -205,8 +203,7 @@ procedure zero_pad_memory()
         mem; r2; 
     requires/ensures
         SaneState(this);
-        this.conf.tlb_consistent;
-        ValidMemWordsExPageTable(this, r1, SHA_CTXSIZE);
+        ValidMemWords(r1, SHA_CTXSIZE);
     ensures
         AddrMemPreservingExcept(old(mem), mem, r1, WordOffset(r1, SHA_CTXSIZE));
         AddrMemContentsSeq(mem, r1, SHA_CTXSIZE) == SeqRepeat(8, 0);
@@ -336,7 +333,6 @@ procedure stack_all_regs(ghost stack_bytes:int)
         sp; mem;
     requires/ensures
         SaneState(this);
-        this.conf.tlb_consistent;
     requires
         stack_bytes >= WordsToBytes(14);
         StackBytesRemaining(this,stack_bytes);
@@ -392,7 +388,6 @@ procedure unstack_all_regs(ghost stack_bytes:int)
         r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr; sp;
     requires/ensures
         SaneState(this);
-        this.conf.tlb_consistent;
     requires
         isUInt32(sp + WordsToBytes(14));
         sp + WordsToBytes(14) <= StackBase();

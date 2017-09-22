@@ -123,7 +123,7 @@ procedure svc_returning_verify_step0(
         globals; lr;
     modifies
          r0; r1; r2; r3; r4; r5; r6; r7; r8; 
-         spsr_mon; mem;
+         spsr_mon; tlbiall; mem;
     requires/ensures
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
@@ -168,6 +168,9 @@ procedure svc_returning_verify_step0(
     assert firstOf2(svcHandled(exstate, pagedb, dispPg)) == tuple(KOM_ERR_SUCCESS,0,0,0,0,0,0,0,0);
     svc_return_epilog();
     MOV(r0, const(KOM_ERR_SUCCESS));
+
+    // flush TLB
+    MCR(tlbiall, r0); // (r0 is irrelevant)
 
     ghost var disp := pagedb'[dispPg].entry;
     ghost var pg := extractPage(this.m, dispPg);
@@ -248,7 +251,7 @@ procedure svc_returning_verify_step1(
     reads
         globals; lr; 
     modifies
-         r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; spsr_mon;
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; spsr_mon; tlbiall;
     requires/ensures
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
@@ -294,6 +297,9 @@ procedure svc_returning_verify_step1(
             == tuple(KOM_ERR_SUCCESS,0,0,0,0,0,0,0,0);
     MOV(r0, const(KOM_ERR_SUCCESS));
     svc_return_epilog();
+
+    // flush TLB
+    MCR(tlbiall, r0); // (r0 is irrelevant)
 
     ghost var disp := pagedb'[dispPg].entry;
     ghost var pg := extractPage(this.m, dispPg);
@@ -459,7 +465,7 @@ procedure svc_map_data_success(
                     wordToMapping(mapping).l1index].v);
     ensures
         this.conf.tlb_consistent;
-        SmcProcedureInvariant(old(this), this);
+        SmcProcedureInvariant(old(this), this); // TODO
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
         tuple(pagedb', KOM_ERR_SUCCESS)
             == svcMapData(pagedb, asPg, old(page), old(mapping));
@@ -752,7 +758,7 @@ procedure svc_unmap_data_success(
         entryptr == AddressOfGlobal(PageDb()) + G_PAGEDB_ENTRY(page);
     ensures
         this.conf.tlb_consistent;
-        SmcProcedureInvariant(old(this), this);
+        SmcProcedureInvariant(old(this), this); // TODO
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
         pagedb' == firstOf2(svcUnmapData(pagedb, asPg, page, old(mapva)));
         wellFormedPageDb(pagedb') && pageDbCorresponds(this.m, pagedb');
@@ -906,7 +912,7 @@ procedure svc_init_l2ptable(
         finalDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
-        SmcProcedureInvariant(old(this), this);
+        SmcProcedureInvariant(old(this), this); // TODO
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
         tuple(pagedb', err)
             == svcInitL2PTable(pagedb, pagedb[dispPg].addrspace, old(page), old(l1index));

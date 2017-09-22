@@ -62,6 +62,7 @@ CLEAN := $(CLEAN) $(dir)/*.exe $(dir)/*.dll $(dir)/*.pdb $(dir)/*.S $(dir)/*.o $
 # file-specific flags (besides /noNLarith)
 DAFNYFLAGS_bit-vector-lemmas.i = /proverOpt:OPTIMIZE_FOR_BV=true
 DAFNYFLAGS_bitvectors.s = /proverOpt:OPTIMIZE_FOR_BV=true
+DAFNYFLAGS_bitvectors_primitive.i = /proverOpt:OPTIMIZE_FOR_BV=true
 DAFNYFLAGS_bitvectors.i = /proverOpt:OPTIMIZE_FOR_BV=true
 DAFNYFLAGS_ptebits.i = /proverOpt:OPTIMIZE_FOR_BV=true
 DAFNYFLAGS_psrbits.i = /proverOpt:OPTIMIZE_FOR_BV=true

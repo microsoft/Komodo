@@ -36,7 +36,6 @@ procedure {:timeLimitMultiplier 2} compute_hmac(
          mem;
     requires/ensures
         SaneState(this);
-        this.conf.tlb_consistent;
         StackBytesRemaining(this, stack_bytes);
         ValidMemRange(old_sp - STACKSIZE_ATTEST * WORDSIZE, old_sp);
     requires
@@ -196,7 +195,6 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest_inner(
          mem;
     requires/ensures
         SaneState(this);
-        this.conf.tlb_consistent;
         StackBytesRemaining(this, stack_bytes);
     requires
         ValidState(exstate) && mode_of_state(exstate) != User;
@@ -326,10 +324,9 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest(
         globals;
     modifies
          r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
-         spsr_mon; mem;
+         spsr_mon; tlbiall; mem;
     requires/ensures
         SaneState(this);
-        this.conf.tlb_consistent;
         StackBytesRemaining(this, stack_bytes);
         this.conf.tlb_consistent;
     requires
@@ -398,4 +395,7 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest(
     assert pageDbCorresponds(this.m, pagedb) by {
         lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
     }
+
+    // flush TLB
+    MCR(tlbiall, r0); // (r0 is irrelevant)
 }

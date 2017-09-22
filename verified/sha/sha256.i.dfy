@@ -567,14 +567,14 @@ lemma lemma_SHA256FinalHelper1(
         WordSeqToBytes(ConcatenateSeqs(z.M));
         processed_bytes;
         message + unprocessed_bytes;
-            { lemma_ArrayOffsetConcatenation(unprocessed_bytes, 0, 1, 64);
-              assert unprocessed_bytes[0] == 0x80; }
+//            { lemma_ArrayOffsetConcatenation(unprocessed_bytes, 0, 1, 64);
+//              assert unprocessed_bytes[0] == 0x80; }
         message + ([0x80] + unprocessed_bytes[1..64]);
-            { lemma_SeqConcatenationIsAssociative(message, [0x80], unprocessed_bytes[1..64]); }
+//            { lemma_SeqConcatenationIsAssociative(message, [0x80], unprocessed_bytes[1..64]); }
         message + [0x80] + unprocessed_bytes[1..64];
-            { lemma_ArrayOffsetConcatenation(unprocessed_bytes, 1, 56, 64); }
+//            { lemma_ArrayOffsetConcatenation(unprocessed_bytes, 1, 56, 64); }
         message + [0x80] + (RepeatByte(0, 55) + unprocessed_bytes[56..64]);
-            { lemma_SeqConcatenationIsAssociative(message + [0x80], RepeatByte(0, 55), unprocessed_bytes[56..64]); }
+//            { lemma_SeqConcatenationIsAssociative(message + [0x80], RepeatByte(0, 55), unprocessed_bytes[56..64]); }
         message + [0x80] + RepeatByte(0, 55) + unprocessed_bytes[56..64];
         message + [0x80] + RepeatByte(0, 55) + Uint64ToBytes(|message| * 8);
         message + [0x80] + RepeatByte(0, (119 - (|message| % 64)) % 64) + Uint64ToBytes(|message| * 8);

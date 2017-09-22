@@ -2,6 +2,7 @@ include "Maybe.dfy"
 include "Seq.dfy"
 include "types.s.dfy"
 include "bitvectors.s.dfy"
+include "bitvector_words.s.dfy"
 include "words_and_bytes.s.dfy"
 
 //-----------------------------------------------------------------------------
@@ -29,8 +30,6 @@ datatype TTBR = TTBR(ptbase:addr)      // See B4.1.154
 // Hardware RNG state
 // in lieu of an infinite sequence, we model entropy as an infinite map
 datatype RNG = RNG(entropy:word, consumed:bool, ready:bool)
-
-type shift_amount = s | 0 <= s < 32 // Some shifts allow s=32, but we'll be conservative for simplicity
 
 datatype Shift = LSLShift(amount_lsl:shift_amount)
                | LSRShift(amount_lsr:shift_amount)
@@ -913,39 +912,6 @@ function ExtractAbsL2PTE(pteword:word): Maybe<AbsPTE>
     assert PageAligned(pagebase) by { reveal_PageAligned(); }
     // if the type is zero, it's an invalid entry, which is fine (maps nothing)
     if typebits == 0 then Nothing else Just(AbsPTE(pagebase, write, exec))
-}
-
-//-----------------------------------------------------------------------------
-// Functions for bitwise operations
-//-----------------------------------------------------------------------------
-
-function BitwiseXor(x:word, y:word): word
-    { BitsAsWord(BitXor(WordAsBits(x), WordAsBits(y))) }
-
-function BitwiseAnd(x:word, y:word): word
-    { BitsAsWord(BitAnd(WordAsBits(x), WordAsBits(y))) }
-
-function BitwiseOr(x:word, y:word): word
-    { BitsAsWord(BitOr(WordAsBits(x), WordAsBits(y))) }
-
-function BitwiseNot(x:word): word
-    { BitsAsWord(BitNot(WordAsBits(x))) }
-
-function LeftShift(x:word, amount:word): word
-    requires 0 <= amount < 32;
-    { BitsAsWord(BitShiftLeft(WordAsBits(x), amount)) }
-
-function RightShift(x:word, amount:word): word
-    requires 0 <= amount < 32;
-    { BitsAsWord(BitShiftRight(WordAsBits(x), amount)) }
-
-function RotateRight(x:word, amount:shift_amount): word
-    requires 0 <= amount < 32;
-    { BitsAsWord(BitRotateRight(WordAsBits(x), amount)) }
-
-function {:opaque} UpdateTopBits(origval:word, newval:word): word
-{
-    BitwiseOr(LeftShift(newval, 16), BitwiseMaskLow(origval, 16))
 }
 
 //-----------------------------------------------------------------------------

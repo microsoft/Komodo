@@ -80,7 +80,7 @@ function method va_get_whileCond(c:code):obool requires c.While? { c.whileCond }
 function method va_get_whileBody(c:code):code requires c.While? { c.whileBody }
 
 //-----------------------------------------------------------------------------
-// Spartan-to-Dafny connections needed for refined mode
+// Vale-to-Dafny connections needed for refined mode
 //-----------------------------------------------------------------------------
 function method va_op_operand_osp():operand { OSP }
 function method va_op_operand_olr():operand { OLR }
