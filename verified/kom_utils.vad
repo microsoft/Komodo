@@ -331,6 +331,8 @@ procedure MRS_STR(
     ensures
         MemPreservingExcept(old(this), this, old(base+ofs), old(base+ofs+WORDSIZE));
         MemContents(this.m, old(base+ofs)) == old(reg);
+        mem == old(mem)[old(base + ofs) := old(reg)];
+        !AddrInPageTable(this, old(base + ofs)) && old(this.conf.tlb_consistent) ==> this.conf.tlb_consistent;
 {
     MRS(tmp, reg);
     STR(tmp, base, ofs);

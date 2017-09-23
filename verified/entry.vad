@@ -1068,6 +1068,7 @@ procedure {:frame false} enclaveexecution_loop(
         finalDispatcher(pagedb_in, dispPg);
         spsr_of_state(this).m == User;
         this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb_in, dispPg));
+        this.conf.tlb_consistent;
         GlobalWord(this.m, CurDispatcherOp(), 0) == page_monvaddr(dispPg);
     modifies
         sp; globals;
@@ -1101,6 +1102,7 @@ procedure {:frame false} enclaveexecution_loop(
             finalDispatcher(pagedb, dispPg);
             this.conf.scr == old(this).conf.scr;
             this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, dispPg));
+            this.conf.tlb_consistent;
             retToEnclave ==> spsr_of_state(this).m == User;
             if retToEnclave then sp == old(sp) else sp == BitwiseOr(old(sp), 1);
             partialEnclaveExecution(states, dispPg, steps);
