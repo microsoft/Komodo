@@ -11,7 +11,7 @@ procedure {:timeLimitMultiplier 2} memcpy_bare(operand dst:addr, operand src:add
         DistinctRegOperands(set(@dst, @src, @size, @tmp), 4);
         WordAligned(size);
         ValidMemRange(dst, dst + size);
-        ValidMemRange(src, src + size);
+        ValidMemRangeForRead(src, src + size);
         dst + size <= src || src + size <= dst;
     ensures
         MemPreservingExcept(old(this), this, old(dst), old(dst + size));
@@ -55,7 +55,7 @@ procedure memcpy(operand dst:addr, operand src:addr,
         DistinctRegOperands(set(@dst, @src, @size, @tmp), 4);
         WordAligned(size);
         ValidMemRange(dst, dst + size);
-        ValidMemRange(src, src + size);
+        ValidMemRangeForRead(src, src + size);
         dst + size <= src || src + size <= dst;
         dst >= StackBase() || dst + size <= StackLimit();
         // no writing to insecure mem
@@ -77,11 +77,13 @@ procedure memset(operand base:addr, operand val:word, inout operand size:reg)
     requires
         DistinctRegOperands(set(@base, @val, @size), 3);
         WordAligned(size);
+        isUInt32(base + size);
         ValidMemRange(base, base + size);
         base >= StackBase() || base + size <= StackLimit();
         // no writing to insecure mem
         base >= KOM_DIRECTMAP_VBASE + MonitorPhysBase() || base + size <= KOM_DIRECTMAP_VBASE;
     ensures
+        ValidMemRangeExPageTable(old(this), old(base), old(base + size)) && old(this.conf.tlb_consistent) ==> this.conf.tlb_consistent;
         SmcProcedureInvariant(old(this),this);
         MemPreservingExcept(old(this), this, old(base), old(base + size));
         forall a:addr :: old(base) <= a < old(base + size)
@@ -95,6 +97,8 @@ procedure memset(operand base:addr, operand val:word, inout operand size:reg)
             RegPreservingExcept(old(this), this, set(@size));
             WordAligned(size) && 0 <= size <= old(size);
             MemPreservingExcept(old(this), this, base + size, base + old(size));
+            this.conf.ttbr0 == old(this.conf.ttbr0);
+            ValidMemRangeExPageTable(old(this), old(base), old(base + size)) && old(this.conf.tlb_consistent) ==> this.conf.tlb_consistent;
             forall a:addr :: old(base) + size <= a < old(base + size)
                 ==> MemContents(this.m, a) == val;
         decreases
@@ -108,5 +112,12 @@ procedure memset(operand base:addr, operand val:word, inout operand size:reg)
         assert MemContents(this.m, WordAlignedAdd(base, size)) == val;
         assert forall p :: ValidMem(p) && p != base + size
             ==> MemContents(prevThis.m, p) == MemContents(this.m, p);
+        ghost if (ValidMemRangeExPageTable(old(this), old(base), old(base + size)) && old(this.conf.tlb_consistent)) {
+            lemma_ValidMemRangeExPageTable_persists(old(this), prevThis, old(base), old(WordAlignedAdd(base, size)));
+            lemma_ValidMemRangeExPageTable_persists(prevThis, this, old(base), old(WordAlignedAdd(base, size)));
+            assert prevThis.conf.tlb_consistent;
+            assert !AddrInPageTable(prevThis, base + size);
+            assert this.conf.tlb_consistent;
+        }
     }
 }

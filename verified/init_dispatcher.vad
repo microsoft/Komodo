@@ -14,18 +14,18 @@ procedure init_dispatcher_page_zero(operand ptr:reg, operand tmp:reg)
     modifies
         mem;
     requires
-        ValidMemRange(ptr, ptr + 8 * WORDSIZE);
+        ValidMemWords(ptr, 8);
     ensures
-        forall i :: ValidMem(i) && !(ptr <= i <= ptr + 7 * WORDSIZE) ==>
+        forall i :: ValidMemForRead(i) && !(old(ptr) <= i <= WordOffset(old(ptr), 7)) ==>
             MemContents(this.m, i) == MemContents(old(this).m, i);
-        ValidMem(ptr + 0 * WORDSIZE) && AddrMemContents(mem, ptr + 0 * WORDSIZE) == tmp;
-        ValidMem(ptr + 1 * WORDSIZE) && AddrMemContents(mem, ptr + 1 * WORDSIZE) == tmp;
-        ValidMem(ptr + 2 * WORDSIZE) && AddrMemContents(mem, ptr + 2 * WORDSIZE) == tmp;
-        ValidMem(ptr + 3 * WORDSIZE) && AddrMemContents(mem, ptr + 3 * WORDSIZE) == tmp;
-        ValidMem(ptr + 4 * WORDSIZE) && AddrMemContents(mem, ptr + 4 * WORDSIZE) == tmp;
-        ValidMem(ptr + 5 * WORDSIZE) && AddrMemContents(mem, ptr + 5 * WORDSIZE) == tmp;
-        ValidMem(ptr + 6 * WORDSIZE) && AddrMemContents(mem, ptr + 6 * WORDSIZE) == tmp;
-        ValidMem(ptr + 7 * WORDSIZE) && AddrMemContents(mem, ptr + 7 * WORDSIZE) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr), 0)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr), 1)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr), 2)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr), 3)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr), 4)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr), 5)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr), 6)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr), 7)) == tmp;
 {
     STR(tmp, ptr, const(0 * WORDSIZE));
     STR(tmp, ptr, const(1 * WORDSIZE));
@@ -43,33 +43,33 @@ procedure{:timeLimitMultiplier 2} init_dispatcher_page_zeros(inout operand ptr:r
     modifies
         mem;
     requires
-        ValidMemRange(ptr + DISP_CTXT_USER_WORDS, ptr + DISP_CTXT_USER_WORDS + 8 * WORDSIZE);
-        ValidMemRange(ptr + DISP_CTXT_VERIFY_MEASUREMENT, ptr + DISP_CTXT_VERIFY_MEASUREMENT + 8 * WORDSIZE);
+        ValidMemWords(ptr + DISP_CTXT_USER_WORDS, 8);
+        ValidMemWords(ptr + DISP_CTXT_VERIFY_MEASUREMENT, 8);
         @ptr != @tmp;
         @ptr != OSP;
         @tmp != OSP;
     ensures
-        forall i :: ValidMem(i)
-            && !(old(ptr) + DISP_CTXT_USER_WORDS <= i <= old(ptr) + DISP_CTXT_USER_WORDS + 7 * WORDSIZE)
-            && !(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT <= i <= old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 7 * WORDSIZE)
+        forall i :: ValidMemForRead(i)
+            && !(old(ptr) + DISP_CTXT_USER_WORDS <= i <= WordOffset(old(ptr) + DISP_CTXT_USER_WORDS, 7))
+            && !(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT <= i <= WordOffset(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT, 7))
             ==>
             MemContents(this.m, i) == MemContents(old(this).m, i);
-        ValidMem(old(ptr) + DISP_CTXT_USER_WORDS + 0 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_USER_WORDS + 0 * WORDSIZE) == tmp;
-        ValidMem(old(ptr) + DISP_CTXT_USER_WORDS + 1 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_USER_WORDS + 1 * WORDSIZE) == tmp;
-        ValidMem(old(ptr) + DISP_CTXT_USER_WORDS + 2 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_USER_WORDS + 2 * WORDSIZE) == tmp;
-        ValidMem(old(ptr) + DISP_CTXT_USER_WORDS + 3 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_USER_WORDS + 3 * WORDSIZE) == tmp;
-        ValidMem(old(ptr) + DISP_CTXT_USER_WORDS + 4 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_USER_WORDS + 4 * WORDSIZE) == tmp;
-        ValidMem(old(ptr) + DISP_CTXT_USER_WORDS + 5 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_USER_WORDS + 5 * WORDSIZE) == tmp;
-        ValidMem(old(ptr) + DISP_CTXT_USER_WORDS + 6 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_USER_WORDS + 6 * WORDSIZE) == tmp;
-        ValidMem(old(ptr) + DISP_CTXT_USER_WORDS + 7 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_USER_WORDS + 7 * WORDSIZE) == tmp;
-        ValidMem(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 0 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 0 * WORDSIZE) == tmp;
-        ValidMem(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 1 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 1 * WORDSIZE) == tmp;
-        ValidMem(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 2 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 2 * WORDSIZE) == tmp;
-        ValidMem(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 3 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 3 * WORDSIZE) == tmp;
-        ValidMem(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 4 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 4 * WORDSIZE) == tmp;
-        ValidMem(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 5 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 5 * WORDSIZE) == tmp;
-        ValidMem(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 6 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 6 * WORDSIZE) == tmp;
-        ValidMem(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 7 * WORDSIZE) && AddrMemContents(mem, old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT + 7 * WORDSIZE) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr) + DISP_CTXT_USER_WORDS, 0)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr) + DISP_CTXT_USER_WORDS, 1)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr) + DISP_CTXT_USER_WORDS, 2)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr) + DISP_CTXT_USER_WORDS, 3)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr) + DISP_CTXT_USER_WORDS, 4)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr) + DISP_CTXT_USER_WORDS, 5)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr) + DISP_CTXT_USER_WORDS, 6)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr) + DISP_CTXT_USER_WORDS, 7)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT, 0)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT, 1)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT, 2)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT, 3)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT, 4)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT, 5)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT, 6)) == tmp;
+        AddrMemContents(mem, WordOffset(old(ptr) + DISP_CTXT_VERIFY_MEASUREMENT, 7)) == tmp;
 {
     ADD(ptr, ptr, const(DISP_CTXT_USER_WORDS));
     init_dispatcher_page_zero(ptr, tmp);

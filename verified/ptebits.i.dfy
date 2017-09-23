@@ -9,17 +9,26 @@ lemma lemma_ARM_L2PTE_PageMask(x:bv32)
     ensures BitAnd(x, 0xdfc) == 0
 { reveal BitAnd(); }
 
-lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
+lemma lemma_ARM_L2PTE_helper(pa: word, w: bool, x: bool, ptew: word,
+    nxbit: bv32, robit: bv32, extrabits: bv32, pteb: bv32)
     requires PageAligned(pa) && isUInt32(pa + PhysBase())
-    ensures ValidAbsL2PTEWord(ARM_L2PTE(pa, w, x))
-    ensures ExtractAbsL2PTE(ARM_L2PTE(pa, w, x)) == Just(AbsPTE(pa, w, x))
+    requires ptew == ARM_L2PTE(pa, w, x)
+    requires nxbit == if x then 0 else ARM_L2PTE_NX_BIT
+    requires robit == if w then 0 else ARM_L2PTE_RO_BIT
+    requires extrabits == BitOr(BitOr(0xd76, nxbit), robit)
+    requires pteb == BitOr(WordAsBits(pa), extrabits)
+    ensures extrabits == (
+        if x && w then 0xd76
+        else if x && !w then 0xf76
+        else if !x && w then 0xd77
+        else 0xf77)
+    ensures ptew == BitsAsWord(pteb)
+    ensures BitAnd(extrabits, 0xfffff000) == 0
+    ensures BitAnd(WordAsBits(pa), 0xfff) == 0
+    ensures PageBase(ptew) == pa;
+    ensures BitAnd(pteb, 0x3) == 2 || BitAnd(pteb, 0x3) == 3
+    ensures BitAnd(pteb, 0xdfc) == ARM_L2PTE_CONST_BITS
 {
-    var ptew := ARM_L2PTE(pa, w, x);
-    var nxbit:bv32 := if x then 0 else ARM_L2PTE_NX_BIT;
-    var robit:bv32 := if w then 0 else ARM_L2PTE_RO_BIT;
-    var extrabits := BitOr(BitOr(0xd76, nxbit), robit);
-    var pteb := BitOr(WordAsBits(pa), extrabits);
-
     assert extrabits == (
         if x && w then 0xd76
         else if x && !w then 0xf76
@@ -123,8 +132,21 @@ lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
             ARM_L2PTE_CONST_BITS;
         }
     }
+}
 
-    assert {:split_here} true;
+lemma lemma_ARM_L2PTE(pa: word, w: bool, x: bool)
+    requires PageAligned(pa) && isUInt32(pa + PhysBase())
+    ensures ValidAbsL2PTEWord(ARM_L2PTE(pa, w, x))
+    ensures ExtractAbsL2PTE(ARM_L2PTE(pa, w, x)) == Just(AbsPTE(pa, w, x))
+{
+    var ptew := ARM_L2PTE(pa, w, x);
+    var nxbit:bv32 := if x then 0 else ARM_L2PTE_NX_BIT;
+    var robit:bv32 := if w then 0 else ARM_L2PTE_RO_BIT;
+    var extrabits := BitOr(BitOr(0xd76, nxbit), robit);
+    var pteb := BitOr(WordAsBits(pa), extrabits);
+
+    lemma_ARM_L2PTE_helper(pa, w, x, ptew, nxbit, robit, extrabits, pteb);
+    lemma_WordBitEquiv(ptew, pteb);
 
     assert x == (BitAnd(pteb, ARM_L2PTE_NX_BIT) == 0) by {
         calc {
@@ -354,6 +376,7 @@ lemma lemma_ARM_L1PTE_Dual(paddr: word)
         paddr % 0x400 == 0;
         paddr % 2 == 0;
     }
+    assert {:split_here} true;
     lemma_BitOrOneIsLikePlus(paddr);
 }
 

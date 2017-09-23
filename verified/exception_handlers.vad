@@ -39,6 +39,7 @@ CPSID_IAF(operand mod:word)
             ==> old(this).regs[LR(m)] == this.regs[LR(m)]
               && old(this).regs[SP(m)] == this.regs[SP(m)];
         this.conf.nondet == nondet_int(old(this).conf.nondet, NONDET_GENERATOR());
+        this.conf.tlb_consistent == old(this).conf.tlb_consistent;
         this.rng == old(this).rng;
 {
     reveal va_eval;
@@ -67,7 +68,6 @@ procedure {:frame false} switch_to_monitor(inline oldmode:mode)
         interrupts_enabled(this);
     ensures
         SaneState(this);
-        SaneStack(this);
         StackPreserving(old(this), this);
         NonStackMemPreserving(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PendingInterruptOp()));
@@ -78,6 +78,7 @@ procedure {:frame false} switch_to_monitor(inline oldmode:mode)
         this.conf.ttbr0 == old(this).conf.ttbr0;
         this.conf.scr == old(this).conf.scr;
         this.conf.nondet == nondet_int(old(this).conf.nondet, NONDET_GENERATOR());
+        this.conf.tlb_consistent == old(this).conf.tlb_consistent;
         this.rng == old(this).rng;
 {
     CPSID_IAF(const(encode_mode(Monitor)));
@@ -125,6 +126,7 @@ procedure {:timeLimitMultiplier 2} fault_exit(
         pageDbCorresponds(this.m, pagedb_in);
         finalDispatcher(pagedb_in, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+        this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb_in, dispPg));
     ensures
         tuple(r0, r1, pagedb) == exceptionHandled(exstate, pagedb_in, dispPg);
         validPageDb(pagedb);
@@ -132,12 +134,19 @@ procedure {:timeLimitMultiplier 2} fault_exit(
         validExceptionTransition(old(this), this);
         MemPreservingExcept(old(this), this, page_monvaddr(dispPg),
                             page_monvaddr(dispPg) + PAGESIZE);
+        old(this).conf.tlb_consistent ==> this.conf.tlb_consistent;
 {
     LDRglobaladdr(r2, CurDispatcherOp());
     LDRglobal(r2, CurDispatcherOp(), r2, 0);
     assert r2 == page_monvaddr(dispPg);
 
     MOV(r0, 0);
+    assert !AddrInPageTable(this, r2 + DISPATCHER_ENTERED)
+    by {
+       lemma_OnlyPTPagesInHwPTable(pagedb_in, this, l1pOfDispatcher(pagedb_in, dispPg));
+       assert forall p:PageNr :: addrInPage(r2 + DISPATCHER_ENTERED, p) ==> p == dispPg;
+       assert !(validL1PTPage(pagedb_in, dispPg) || validL2PTPage(pagedb_in, dispPg));
+    }
     STR(r0, r2, const(DISPATCHER_ENTERED));
     inline if (ex == ExSVC) {
         assert r0 == KOM_ERR_SUCCESS;
@@ -186,6 +195,8 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
         !this.rng.consumed;
         interrupts_enabled(this);
         exists stack_bytes :: StackBytesRemaining(this, stack_bytes) && stack_bytes >= WordsToBytes(STACKSIZE_ATTEST + 14);
+    requires/ensures
+        this.conf.tlb_consistent;
     ensures
         KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
         validPageDb(pagedb);
@@ -250,6 +261,8 @@ procedure {:frame false} abort_handler(
 procedure save_disp_context_helper(operand base:reg, ghost dispPg:PageNr)
     requires/ensures
         SaneState(this);
+        this.conf.tlb_consistent;
+        forall a:addr :: base <= a < base + PAGESIZE ==> !AddrInPageTable(this, a);
     requires
         @base == OReg(R0);
         base == page_monvaddr(dispPg);
@@ -279,23 +292,87 @@ procedure save_disp_context_helper(operand base:reg, ghost dispPg:PageNr)
             && pg[old(base) + DISP_CTXT_PC] == old(lr)
             && pg[old(base) + DISP_CTXT_PSR] == old(spsr_mon);
 {
+    ghost var prev := this;
+    lemma_WordAlignedAdd(base, DISP_CTXT_R1);
     STR(r1, base, const(DISP_CTXT_R1));
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_R1);
+    prev := this;
+    assert this.conf.tlb_consistent;
+    lemma_WordAlignedAdd(base, DISP_CTXT_R2);
     STR(r2, base, const(DISP_CTXT_R2));
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_R2);
+    prev := this;
+    assert this.conf.tlb_consistent;
+    lemma_WordAlignedAdd(base, DISP_CTXT_R3);
     STR(r3, base, const(DISP_CTXT_R3));
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_R3);
+    prev := this;
+    assert this.conf.tlb_consistent;
+    lemma_WordAlignedAdd(base, DISP_CTXT_R4);
     STR(r4, base, const(DISP_CTXT_R4));
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_R4);
+    prev := this;
+    assert this.conf.tlb_consistent;
+    lemma_WordAlignedAdd(base, DISP_CTXT_R5);
     STR(r5, base, const(DISP_CTXT_R5));
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_R5);
+    prev := this;
+    assert this.conf.tlb_consistent;
+    lemma_WordAlignedAdd(base, DISP_CTXT_R6);
     STR(r6, base, const(DISP_CTXT_R6));
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_R6);
+    prev := this;
+    assert this.conf.tlb_consistent;
+    lemma_WordAlignedAdd(base, DISP_CTXT_R7);
     STR(r7, base, const(DISP_CTXT_R7));
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_R7);
+    prev := this;
+    assert this.conf.tlb_consistent;
+    lemma_WordAlignedAdd(base, DISP_CTXT_R8);
     STR(r8, base, const(DISP_CTXT_R8));
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_R8);
+    prev := this;
+    assert this.conf.tlb_consistent;
+    lemma_WordAlignedAdd(base, DISP_CTXT_R9);
     STR(r9, base, const(DISP_CTXT_R9));
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_R9);
+    prev := this;
+    assert this.conf.tlb_consistent;
+    lemma_WordAlignedAdd(base, DISP_CTXT_R10);
     STR(r10, base, const(DISP_CTXT_R10));
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_R10);
+    prev := this;
+    assert this.conf.tlb_consistent;
+    lemma_WordAlignedAdd(base, DISP_CTXT_R11);
     STR(r11, base, const(DISP_CTXT_R11));
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_R11);
+    prev := this;
+    assert this.conf.tlb_consistent;
+    lemma_WordAlignedAdd(base, DISP_CTXT_R12);
     STR(r12, base, const(DISP_CTXT_R12));
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_R12);
+    prev := this;
+    assert this.conf.tlb_consistent;
+    lemma_WordAlignedAdd(base, DISP_CTXT_LR);
     MRS_STR(lr_usr, base, const(DISP_CTXT_LR), r1);
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_LR);
+    prev := this;
+    assert this.conf.tlb_consistent;
+    lemma_WordAlignedAdd(base, DISP_CTXT_SP);
     MRS_STR(sp_usr, base, const(DISP_CTXT_SP), r1);
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_SP);
+    prev := this;
+    assert this.conf.tlb_consistent;
+    lemma_WordAlignedAdd(base, DISP_CTXT_PC);
     STR(lr, base, const(DISP_CTXT_PC));
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_PC);
+    prev := this;
+    assert this.conf.tlb_consistent;
     lemma_WordAlignedAdd(base, DISP_CTXT_PSR);
+    assert !AddrInPageTable(this, base + DISP_CTXT_PSR);
     MRS_STR(spsr_mon, base, const(DISP_CTXT_PSR), r1);
+    assert this.conf.tlb_consistent;
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_PSR);
 }
 
 #verbatim
@@ -355,6 +432,7 @@ procedure {:timeLimitMultiplier 2} save_disp_context(inout operand base: reg,
                         returns  (ghost pagedb:PageDb)
     requires/ensures
         SaneState(this);
+        this.conf.tlb_consistent;
     requires
         @base == OReg(R0);
         base == page_monvaddr(dispPg);
@@ -371,6 +449,7 @@ procedure {:timeLimitMultiplier 2} save_disp_context(inout operand base: reg,
         ValidMem(sp) && va_get_reg(R0, exstate) == MemContents(this.m, sp);
         lr == TruncateWord(OperandContents(exstate, OLR) - 4);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
+        this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb_in, dispPg));
     reads
         globals;
         r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; lr_usr; sp_usr; lr; sp; spsr_mon;
@@ -394,11 +473,27 @@ procedure {:timeLimitMultiplier 2} save_disp_context(inout operand base: reg,
         reveal pageDbDispatcherCorresponds;
     }
 
+    forall a:addr :| base <= a < base + PAGESIZE :: !AddrInPageTable(this, a)
+    {
+       lemma_OnlyPTPagesInHwPTable(pagedb_in, this, l1pOfDispatcher(pagedb_in, dispPg));
+       assert forall p:PageNr :: addrInPage(a, p) ==> p == dispPg;
+       assert !(validL1PTPage(pagedb_in, dispPg) || validL2PTPage(pagedb_in, dispPg));
+    }
+
     save_disp_context_helper(base, dispPg);
+    assert !AddrInPageTable(this, base + DISP_CTXT_R0);
+    ghost var prev := this;
     LDR(r1,sp,0);
+    lemma_AddrInPageTable_persists(prev, this, base); /* bogus update */
     assert r1 == gr0;
+    assert this.conf.tlb_consistent;
+    assert !AddrInPageTable(this, base + DISP_CTXT_R0);
+    prev := this;
     STR(r1, base, const(DISP_CTXT_R0));
+    lemma_AddrInPageTable_persists(prev, this, base + DISP_CTXT_R0);
+    assert this.conf.tlb_consistent;
     MOV(r1, 1);
+    assert !AddrInPageTable(this, base);
     STR(r1, base, const(DISPATCHER_ENTERED));
 
     assert MemPreservingExcept(old(this), this, old(base),
@@ -509,8 +604,14 @@ procedure {:frame false} {:timeLimitMultiplier 2} interrupt_handler(
 
     // push r0, r1
     SUB(sp, sp, const(2 * WORDSIZE));
+    lemma_OnlySecureMemInPageTable(pagedb_in, this, l1pOfDispatcher(pagedb_in, dispPg));
+    assert !AddrInPageTable(this, sp);
+    ghost var this' := this;
     STR(r0, sp, 0);
+    lemma_AddrInPageTable_persists(this', this, sp);
+    assert !AddrInPageTable(this, sp + WORDSIZE);
     STR(r1, sp, const(WORDSIZE));
+    assert this.conf.tlb_consistent;
 
     assert ParentStackPreserving(old(this), this);
 

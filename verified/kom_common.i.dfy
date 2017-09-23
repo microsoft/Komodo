@@ -32,7 +32,7 @@ predicate AddrMemInvariant(s:state, s':state)
 predicate SRegsInvariant(s:state, s':state)
     requires ValidState(s) && ValidState(s')
 {
-    s.sregs == s'.sregs && s.conf == s'.conf
+    s.sregs == s'.sregs && s.conf.(tlb_consistent := s'.conf.tlb_consistent) == s'.conf
 }
 
 predicate SpsrsInvariant(s:state, r:state)
@@ -149,7 +149,7 @@ predicate MemPreservingExcept(s:state, r:state, base:int, limit:int)
     requires ValidState(s) && ValidState(r);
     requires limit >= base;
 {
-    forall m:addr :: ValidMem(m) && !(base <= m < limit)
+    forall m:addr :: ValidMemForRead(m) && !(base <= m < limit)
         ==> MemContents(s.m, m) == MemContents(r.m, m)
 }
 
@@ -159,6 +159,25 @@ predicate NonStackMemPreserving(s:state, r:state)
     MemPreservingExcept(s, r, StackLimit(), StackBase())
 }
 
+predicate OnlySecureMemInPageTable(s:state)
+    requires ValidState(s)
+{
+    forall a:addr | AddrInPageTable(s, a) :: address_is_secure(a)
+}
+
+predicate ValidMemRangeExPageTable(s:state, base:int, limit:int)
+    requires ValidState(s)
+{
+    ExtractAbsPageTable(s).Just? && ValidMemRange(base, limit)
+    && forall a:addr | base <= a < limit :: !AddrInPageTable(s, a)
+}
+
+predicate ValidMemWordsExPageTable(s:state, base:int, nwords:int)
+    requires ValidState(s)
+{
+    isUInt32(base) && ValidWordOffset(base, nwords)
+        && ValidMemRangeExPageTable(s, base, WordOffset(base, nwords))
+}
 
 //-----------------------------------------------------------------------------
 // Common functions
@@ -202,3 +221,74 @@ lemma lemma_WordAlignedSub(x1:int, x2:int)
     requires WordAligned(x1) && WordAligned(x2) && x1 >= x2
     ensures WordAligned(x1 - x2)
 { reveal WordAligned(); }
+
+lemma lemma_AddrInPageTable_persists(s1:state, s2:state, a:addr)
+    requires ValidState(s1) && ValidState(s2) && ValidMem(a)
+    requires !AddrInPageTable(s1, a)
+    requires s1.conf.ttbr0 == s2.conf.ttbr0
+    requires s2.m.addresses == (reveal_ValidMemState(); s1.m.addresses[a := s2.m.addresses[a]])
+    ensures forall x :: AddrInPageTable(s1, x) == AddrInPageTable(s2, x)
+{
+    var vbase := WordAlignedAdd(s1.conf.ttbr0.ptbase, PhysBase());
+    assert ValidAbsL1PTable(s1.m, vbase);
+
+    assert !(vbase <= a < vbase + ARM_L1PTABLE_BYTES);
+    assert !AddrInL2PageTable(s1.m, vbase, a);
+
+    forall i, ptew | 0 <= i < ARM_L1PTES && ptew == MemContents(s1.m, WordOffset(vbase, i))
+        ensures MemContents(s1.m, WordOffset(vbase, i)) == MemContents(s2.m, WordOffset(vbase, i))
+        ensures ptew == MemContents(s2.m, WordOffset(vbase, i))
+        ensures ExtractAbsL1PTE(ptew).Just? ==> ValidAbsL2PTable(s2.m, ExtractAbsL1PTE(ptew).v + PhysBase())
+    {
+        assert vbase <= WordOffset(vbase, i) < vbase + ARM_L1PTABLE_BYTES;
+
+        if ExtractAbsL1PTE(ptew).Just? {
+            var vbase2 := ExtractAbsL1PTE(ptew).v + PhysBase();
+            forall i2 | 0 <= i2 < ARM_L2PTES
+                ensures ValidAbsL2PTEWord(MemContents(s2.m, WordOffset(vbase2, i2)))
+            {
+                assert ValidAbsL2PTEWord(MemContents(s1.m, WordOffset(vbase2, i2)));
+                assert MemContents(s1.m, WordOffset(vbase2, i2)) == MemContents(s2.m, WordOffset(vbase2, i2));
+            }
+        }
+    }
+
+    assert ExtractAbsPageTable(s2).Just?;
+}
+
+lemma lemma_ValidMemRangeExPageTable_persists(s1:state, s2:state, base:addr, limit:addr)
+    requires ValidState(s1) && ValidState(s2) && limit >= base
+    requires ValidMemRangeExPageTable(s1, base, limit)
+    requires s1.conf.ttbr0 == s2.conf.ttbr0
+    requires MemPreservingExcept(s1, s2, base, limit)
+    ensures ValidMemRangeExPageTable(s2, base, limit)
+{
+    var vbase := WordAlignedAdd(s1.conf.ttbr0.ptbase, PhysBase());
+    assert ValidAbsL1PTable(s1.m, vbase);
+
+    forall a:addr | base <= a < limit
+        ensures !(vbase <= a < vbase + ARM_L1PTABLE_BYTES)
+        ensures !AddrInL2PageTable(s1.m, vbase, a)
+    {
+        assert !AddrInPageTable(s1, a);
+    }
+
+    forall i, ptew | 0 <= i < ARM_L1PTES && ptew == MemContents(s1.m, WordOffset(vbase, i))
+        ensures ptew == MemContents(s2.m, WordOffset(vbase, i))
+        ensures ExtractAbsL1PTE(ptew).Just? ==> ValidAbsL2PTable(s2.m, ExtractAbsL1PTE(ptew).v + PhysBase())
+    {
+        assert vbase <= WordOffset(vbase, i) < vbase + ARM_L1PTABLE_BYTES;
+
+        if ExtractAbsL1PTE(ptew).Just? {
+            var vbase2 := ExtractAbsL1PTE(ptew).v + PhysBase();
+            forall i2 | 0 <= i2 < ARM_L2PTES
+                ensures ValidAbsL2PTEWord(MemContents(s2.m, WordOffset(vbase2, i2)))
+            {
+                assert ValidAbsL2PTEWord(MemContents(s1.m, WordOffset(vbase2, i2)));
+                assert MemContents(s1.m, WordOffset(vbase2, i2)) == MemContents(s2.m, WordOffset(vbase2, i2));
+            }
+        }
+    }
+
+    assert ExtractAbsPageTable(s2).Just?;
+}

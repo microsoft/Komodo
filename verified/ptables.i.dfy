@@ -17,7 +17,7 @@ lemma lemma_PageAlignedAdd(x:nat, y:nat)
 // instability when verifying it later in the file
 lemma lemma_ptablesmatch(s:memstate, d:PageDb, l1p:PageNr)
     requires SaneMem(s)
-    requires PhysBase() == KOM_DIRECTMAP_VBASE
+    //requires PhysBase() == KOM_DIRECTMAP_VBASE
     requires validPageDb(d)
     requires nonStoppedL1(d, l1p)
     requires pageDbCorresponds(s, d)
@@ -156,7 +156,7 @@ predicate {:opaque} l2tablesmatch_opaque(s:memstate, p:PageNr, e:PageDbEntryType
 
 lemma lemma_l2tablesmatch(s:memstate, p:PageNr, e:PageDbEntryTyped)
     requires SaneMem(s)
-    requires PhysBase() == KOM_DIRECTMAP_VBASE
+    //requires PhysBase() == KOM_DIRECTMAP_VBASE
     requires e.L2PTable? && wellFormedPageDbEntryTyped(e)
     requires pageDbL2PTableCorresponds(p, e, extractPage(s, p))
     ensures l2tablesmatch_opaque(s, p, e)
@@ -300,4 +300,73 @@ lemma lemma_bitMaskAddrInPage(a:addr, p:PageNr)
     }
     assert securebase <= pagebase <= a by { reveal_PageAligned(); }
     assert address_is_secure(pagebase);
+}
+
+predicate OnlyPTPagesInHwPTable(d:PageDb, s:state)
+    requires ValidState(s) && validPageDb(d)
+{
+    forall a:addr | AddrInPageTable(s, a) :: (
+        address_is_secure(a) && (exists p:PageNr :: addrInPage(a, p)
+        && (validL1PTPage(d, p) || validL2PTPage(d, p))))
+}
+
+lemma lemma_OnlyPTPagesInHwPTable(d:PageDb, s:state, l1p:PageNr)
+    requires ValidState(s) && SaneMem(s.m)
+    requires validPageDb(d) && pageDbCorresponds(s.m, d)
+    requires nonStoppedL1(d, l1p) && s.conf.ttbr0.ptbase == page_paddr(l1p)
+    ensures OnlyPTPagesInHwPTable(d, s)
+{
+    var l1vbase := page_monvaddr(l1p);
+
+    lemma_ptablesmatch(s.m, d, l1p);
+    assert ExtractAbsPageTable(s) == Just(mkAbsPTable(d, l1p));
+
+    forall a:addr | AddrInPageTable(s, a)
+    ensures address_is_secure(a)
+    ensures exists p:PageNr :: addrInPage(a, p) && (validL1PTPage(d, p) || validL2PTPage(d, p))
+    {
+        if l1vbase <= a < l1vbase + ARM_L1PTABLE_BYTES {
+            assert addrInPage(a, l1p);
+            assert validL1PTPage(d, l1p);
+            assert address_is_secure(a);
+        } else { // in an L2
+            assert AddrInL2PageTable(s.m, page_monvaddr(l1p), a);
+            forall i, pte | 0 <= i < ARM_L1PTES && (
+                var ptew := MemContents(s.m, WordOffset(l1vbase, i));
+                var ptem := ExtractAbsL1PTE(ptew);
+                ptem.Just? && pte == ptem.v &&
+                    var l2ptr:int := pte + PhysBase();
+                    l2ptr <= a < l2ptr + ARM_L2PTABLE_BYTES)
+            ensures address_is_secure(a)
+            ensures exists p:PageNr :: addrInPage(a, p) && validL2PTPage(d, p)
+            {
+                var l1pt := d[l1p].entry.l1pt;
+                assert Just(pte) == mkAbsL1PTE(l1pt[i / 4], i % 4)
+                by {
+                    assert pageDbL1PTableCorresponds(l1p, d[l1p].entry,
+                                                     extractPage(s.m, l1p))
+                        by { reveal_pageContentsCorresponds(); }
+                    reveal pageDbL1PTableCorresponds();
+                    lemma_l1ptesmatch(l1pt[i / 4], i % 4);
+                }
+                var l2p := l1pt[i / 4].v;
+                assert pte == page_paddr(l2p) + (i%4) * ARM_L2PTABLE_BYTES;
+                assert addrInPage(a, l2p);
+                assert validL2PTPage(d, l2p)
+                by {
+                    reveal validPageDb();
+                    assert validL1PTable(d, d[l1p].addrspace, l1pt);
+                }
+            }
+        }
+    }
+}
+
+lemma lemma_OnlySecureMemInPageTable(d:PageDb, s:state, l1p:PageNr)
+    requires ValidState(s) && SaneMem(s.m)
+    requires validPageDb(d) && pageDbCorresponds(s.m, d)
+    requires nonStoppedL1(d, l1p) && s.conf.ttbr0.ptbase == page_paddr(l1p)
+    ensures OnlySecureMemInPageTable(s)
+{
+    lemma_OnlyPTPagesInHwPTable(d, s, l1p);
 }

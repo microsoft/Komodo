@@ -204,7 +204,8 @@ method printMcr(instr:string, sro:operand, op:operand)
             case SCR => print(", c1, c1, 0");
             case VBAR => print(", c12, c0, 0");
             case ttbr0 => print(", c2, c0, 0");
-            case TLBIASID => print(", c8, c7, 2");
+            case TLBIALL => print(", c8, c7, 0");
+            //case TLBIASID => print(", c8, c7, 2");
         }
     } else {
         print("XXX-invalid-sreg");
@@ -257,10 +258,6 @@ method printIns(ins:ins)
         case MRC(dst, src) => printMcr("MRC", src, dst);
         case MCR(dst,src) => {
             printMcr("MCR", dst, src);
-            if dst == OSReg(ttbr0) {
-                // if we just wrote to the page-table base, flush the TLB
-                printInsFixed("MCR", "p15, 0, r0, c8, c7, 0"); // TLBIALL
-            }
             printInsFixed("ISB", "");
         }
         case CPSID_IAF(mod) => printIns1Op("CPSID iaf,", mod);

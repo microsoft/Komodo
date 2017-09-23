@@ -221,9 +221,9 @@ predicate SaneConstants()
     PhysBase() == KOM_DIRECTMAP_VBASE
     // stack
     && ValidMemRange(StackLimit(), StackBase())
-    // insecure phys mapping
-    && ValidMemRange(KOM_DIRECTMAP_VBASE,
-                    KOM_DIRECTMAP_VBASE + MonitorPhysBase())
+    // insecure phys mapping (read-only)
+    && ValidMemRangeForRead(KOM_DIRECTMAP_VBASE,
+                           KOM_DIRECTMAP_VBASE + MonitorPhysBase())
     // secure phys mapping
     && ValidMemRange(KOM_DIRECTMAP_VBASE + SecurePhysBase(),
                     KOM_DIRECTMAP_VBASE + SecurePhysBase() + KOM_SECURE_RESERVE)
@@ -247,10 +247,9 @@ predicate SaneState(s:state)
 // Stack/procedure invariants
 //-----------------------------------------------------------------------------
 predicate InsecureMemInvariant(s:state, r:state)
-    requires ValidState(s) && ValidState(r);
+    requires ValidState(s) && ValidState(r)
 {
-    forall m:addr :: ValidMem(m)
-        && KOM_DIRECTMAP_VBASE <= m < KOM_DIRECTMAP_VBASE + MonitorPhysBase()
+    ValidMemRangeForRead(KOM_DIRECTMAP_VBASE, KOM_DIRECTMAP_VBASE + MonitorPhysBase())
+    && forall m:addr :: KOM_DIRECTMAP_VBASE <= m < KOM_DIRECTMAP_VBASE + MonitorPhysBase()
         ==> MemContents(s.m, m) == MemContents(r.m, m)
 }
-

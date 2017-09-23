@@ -90,7 +90,7 @@ procedure stack_nonvolatiles(ghost stack_bytes:int)
         SaneState(this);
     requires
         stack_bytes >= WordsToBytes(10);
-        StackBytesRemaining(this,stack_bytes);
+        StackBytesRemaining(this, stack_bytes);
     ensures
         sp == WordAlignedSub(old(sp), WordsToBytes(10));
 
@@ -331,6 +331,8 @@ procedure MRS_STR(
     ensures
         MemPreservingExcept(old(this), this, old(base+ofs), old(base+ofs+WORDSIZE));
         MemContents(this.m, old(base+ofs)) == old(reg);
+        mem == old(mem)[old(base + ofs) := old(reg)];
+        !AddrInPageTable(this, old(base + ofs)) && old(this.conf.tlb_consistent) ==> this.conf.tlb_consistent;
 {
     MRS(tmp, reg);
     STR(tmp, base, ofs);
@@ -352,4 +354,26 @@ ensures
     MOVW(dst, const(c % 0x10000));
     MOVT(dst, const(TopHalfOfWord(c)));
     lemma_load_32_bit_const(c);
+}
+
+// version of STR better for reasoning about page table invariants
+// FIXME: can't be used in refined mode
+procedure STRx(operand rd:reg, operand base:word, operand ofs:word)
+    modifies
+        mem;
+    requires/ensures
+        ValidAddrMemStateOpaque(mem);
+    requires
+        ValidMem(base + ofs);
+    requires {:refined false}
+        !interrupts_enabled(this);
+        !AddrInPageTable(this, base + ofs);
+    ensures
+        mem == AddrMemUpdate(old(mem), old(base + ofs), old(rd));
+    ensures {:refined false}
+        this.conf == old(this.conf);
+        forall a :: AddrInPageTable(old(this), a) == AddrInPageTable(this, a);
+{
+    STR(rd, base, ofs);
+    lemma_AddrInPageTable_persists(old(this), this, old(base + ofs));
 }

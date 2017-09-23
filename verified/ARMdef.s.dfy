@@ -2,6 +2,7 @@ include "Maybe.dfy"
 include "Seq.dfy"
 include "types.s.dfy"
 include "bitvectors.s.dfy"
+include "bitvector_words.s.dfy"
 include "words_and_bytes.s.dfy"
 
 //-----------------------------------------------------------------------------
@@ -12,7 +13,7 @@ datatype ARMReg = R0|R1|R2|R3|R4|R5|R6|R7|R8|R9|R10|R11|R12| SP(spm:mode) | LR(l
 
 // Special register instruction operands
 // TODO (style nit): uppercase constructors
-datatype SReg = cpsr | spsr(m:mode) | SCR | SCTLR | VBAR | ttbr0 | TLBIASID
+datatype SReg = cpsr | spsr(m:mode) | SCR | SCTLR | VBAR | ttbr0 | TLBIALL
 
 // A model of the relevant configuration register state. References refer to armv7a spec
 // **NOTE** The configuration registers are stored in the state in two places:
@@ -20,7 +21,7 @@ datatype SReg = cpsr | spsr(m:mode) | SCR | SCTLR | VBAR | ttbr0 | TLBIASID
 // The abstract representation should be used for reasoning about the status of
 // the processor and the concrete representation should be used only for
 // ensuring that the correct values are stored/returned by instructions
-datatype config = Config(cpsr:PSR, scr:SCR, ttbr0:TTBR,
+datatype config = Config(cpsr:PSR, scr:SCR, ttbr0:TTBR, tlb_consistent:bool,
                          ex:exception, exstep:nat, nondet:int)
 datatype PSR  = PSR(m:mode, f:bool, i:bool) // See B1.3.3
 datatype SCR  = SCRT(ns:world, irq:bool, fiq:bool) // See B4.1.129
@@ -29,8 +30,6 @@ datatype TTBR = TTBR(ptbase:addr)      // See B4.1.154
 // Hardware RNG state
 // in lieu of an infinite sequence, we model entropy as an infinite map
 datatype RNG = RNG(entropy:word, consumed:bool, ready:bool)
-
-type shift_amount = s | 0 <= s < 32 // Some shifts allow s=32, but we'll be conservative for simplicity
 
 datatype Shift = LSLShift(amount_lsl:shift_amount)
                | LSRShift(amount_lsr:shift_amount)
@@ -149,7 +148,7 @@ function user_mem(pt:AbsPTable, m:memstate): memmap
     reveal ValidMemState();
 
     // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
-    (map a:addr | ValidMem(a) && a in TheValidAddresses() && addrIsSecure(a)
+    (map a:addr | ValidMem(a) && a in TheValidAddressesRW() && addrIsSecure(a)
         && PageBase(a) in AllPagesInTable(pt) :: m.addresses[a])
 }
 
@@ -226,7 +225,8 @@ function update_config_from_sreg(s:state, sr:SReg, v:word): (c:config)
     reveal ValidSRegState();
     if sr == cpsr then s.conf.(cpsr := decode_psr(v))
     else if sr == SCR then s.conf.(scr := decode_scr(v))
-    else if sr == ttbr0 then s.conf.(ttbr0 := decode_ttbr(v))
+    else if sr == ttbr0 then s.conf.(ttbr0 := decode_ttbr(v), tlb_consistent := false)
+    else if sr == TLBIALL then s.conf.(tlb_consistent := true)
     else s.conf
 }
 
@@ -351,7 +351,11 @@ predicate {:opaque} ValidSRegState(sregs:map<SReg, word>, c:config)
 
 // All valid states have the same memory address domain, but we don't care what 
 // it is (at this level).
-function {:axiom} TheValidAddresses(): set<addr>
+function {:axiom} TheValidAddressesRO(): set<addr>
+function {:axiom} TheValidAddressesRW(): set<addr>
+
+function TheValidAddresses(): set<addr>
+{ TheValidAddressesRO() + TheValidAddressesRW() }
 
 predicate {:opaque} ValidMemState(s:memstate)
 {
@@ -454,9 +458,26 @@ predicate ValidAnySrcOperand(s:state, o:operand)
     || ValidBankedRegOperand(s,o) || ValidMrsMsrOperand(s,o) || ValidMcrMrcOperand(s,o)
 }
 
-predicate ValidMem(addr:int)
+predicate ValidAddr(addr:int)
 {
-    isUInt32(addr) && WordAligned(addr) && addr in TheValidAddresses()
+    isUInt32(addr) && WordAligned(addr)
+}
+
+predicate ValidMemForRead(addr:int) // refers to RO or RW mem
+{
+    ValidAddr(addr) && addr in TheValidAddresses()
+}
+
+predicate ValidMem(addr:int) // refers to RW mem
+    ensures ValidMem(addr) ==> ValidMemForRead(addr)
+{
+    ValidAddr(addr) && addr in TheValidAddressesRW()
+}
+
+predicate ValidMemRangeForRead(base:int, limit:int)
+{
+    ValidMemForRead(base) && WordAligned(limit)
+    && forall a:int :: base <= a < limit && WordAligned(a) ==> ValidMemForRead(a)
 }
 
 predicate ValidMemRange(base:int, limit:int)
@@ -642,8 +663,7 @@ function {:opaque} userspaceExecutionFn(s:state, pc:word): (state, word, excepti
 function havocPages(pages:set<addr>, s:state, us:UserState): memmap
     requires ValidState(s)
 {
-    // XXX: inlined part of ValidMem to help Dafny's heuristics see a bounded set
-    (map a:addr | ValidMem(a) && a in TheValidAddresses() ::
+    (map a:addr | a in TheValidAddresses() ::
      if PageBase(a) in pages then (
         if addrIsSecure(a) then nondet_private_word(s.conf.nondet, us, a)
         else nondet_word(s.conf.nondet, a)
@@ -735,16 +755,53 @@ predicate WellformedAbsPTE(pte: Maybe<AbsPTE>)
     pte.Just? ==> PageAligned(pte.v.phys) && isUInt32(pte.v.phys + PhysBase())
 }
 
+function ExtractAbsPageTable'(m:memstate, ttbr:TTBR): Maybe<AbsPTable>
+    requires ValidMemState(m)
+    ensures var r := ExtractAbsPageTable'(m, ttbr);
+        r.Just? ==> WellformedAbsPTable(fromJust(r))
+{
+    var vbase := ttbr.ptbase + PhysBase();
+    if ValidAbsL1PTable(m, vbase) then
+        Just(ExtractAbsL1PTable(m, vbase))
+    else
+        Nothing
+}
+
 function ExtractAbsPageTable(s:state): Maybe<AbsPTable>
     requires ValidState(s)
     ensures var r := ExtractAbsPageTable(s);
         r.Just? ==> WellformedAbsPTable(fromJust(r))
 {
-    var vbase := s.conf.ttbr0.ptbase + PhysBase();
-    if ValidAbsL1PTable(s.m, vbase) then
-        Just(ExtractAbsL1PTable(s.m, vbase))
+    ExtractAbsPageTable'(s.m, s.conf.ttbr0)
+}
+
+// is a given address somewhere within a L1 or L2 page table, so a
+// store to it might affect TLB consistency?
+predicate AddrInPageTable'(m:memstate, ttbr:TTBR, a:int)
+    requires ValidMemState(m)
+{
+    var pt := ExtractAbsPageTable'(m, ttbr);
+    if pt.Nothing? then true // we don't know, so be conservative
     else
-        Nothing
+        var vbase := ttbr.ptbase + PhysBase();
+        (vbase <= a < vbase + ARM_L1PTABLE_BYTES) // in L1
+        || AddrInL2PageTable(m, vbase, a)
+}
+
+predicate AddrInPageTable(s:state, a:int)
+    requires ValidState(s)
+{
+    AddrInPageTable'(s.m, s.conf.ttbr0, a)
+}
+
+predicate AddrInL2PageTable(m:memstate, vbase:int, a:int)
+    requires ValidMemState(m) && ValidAbsL1PTable(m, vbase)
+{
+    exists i | 0 <= i < ARM_L1PTES :: (
+        var ptew := MemContents(m, WordOffset(vbase, i));
+        var ptem := ExtractAbsL1PTE(ptew);
+        ptem.Just? && var l2ptr:int := ptem.v + PhysBase();
+        l2ptr <= a < l2ptr + ARM_L2PTABLE_BYTES)
 }
 
 function AllPagesInTable(pt:AbsPTable): set<addr>
@@ -858,39 +915,6 @@ function ExtractAbsL2PTE(pteword:word): Maybe<AbsPTE>
 }
 
 //-----------------------------------------------------------------------------
-// Functions for bitwise operations
-//-----------------------------------------------------------------------------
-
-function BitwiseXor(x:word, y:word): word
-    { BitsAsWord(BitXor(WordAsBits(x), WordAsBits(y))) }
-
-function BitwiseAnd(x:word, y:word): word
-    { BitsAsWord(BitAnd(WordAsBits(x), WordAsBits(y))) }
-
-function BitwiseOr(x:word, y:word): word
-    { BitsAsWord(BitOr(WordAsBits(x), WordAsBits(y))) }
-
-function BitwiseNot(x:word): word
-    { BitsAsWord(BitNot(WordAsBits(x))) }
-
-function LeftShift(x:word, amount:word): word
-    requires 0 <= amount < 32;
-    { BitsAsWord(BitShiftLeft(WordAsBits(x), amount)) }
-
-function RightShift(x:word, amount:word): word
-    requires 0 <= amount < 32;
-    { BitsAsWord(BitShiftRight(WordAsBits(x), amount)) }
-
-function RotateRight(x:word, amount:shift_amount): word
-    requires 0 <= amount < 32;
-    { BitsAsWord(BitRotateRight(WordAsBits(x), amount)) }
-
-function {:opaque} UpdateTopBits(origval:word, newval:word): word
-{
-    BitwiseOr(LeftShift(newval, 16), BitwiseMaskLow(origval, 16))
-}
-
-//-----------------------------------------------------------------------------
 // Evaluation
 //-----------------------------------------------------------------------------
 
@@ -919,7 +943,7 @@ function OperandContents(s:state, o:operand): word
 
 function MemContents(s:memstate, m:addr): word
     requires ValidMemState(s)
-    requires ValidMem(m)
+    requires ValidMemForRead(m)
 {
     reveal ValidMemState();
     s.addresses[m]
@@ -977,8 +1001,12 @@ predicate evalMemUpdate(s:state, m:addr, v:word, r:state)
     requires ValidMem(m)
     ensures evalMemUpdate(s, m, v, r) ==> ValidState(r)
 {
-    reveal ValidMemState();
-    r == s.(m := s.m.(addresses := s.m.addresses[m := v]))
+    reveal ValidMemState(); reveal ValidSRegState();
+    // store updates memory and, if the address was inside the page
+    // table, sets the TLB as inconsistent
+    r == s.(m := s.m.(addresses := s.m.addresses[m := v]),
+        conf := s.conf.(tlb_consistent := s.conf.tlb_consistent
+                                        && !AddrInPageTable(s, m)))
 }
 
 predicate evalGlobalUpdate(s:state, g:symbol, offset:word, v:word, r:state)
@@ -1064,8 +1092,7 @@ predicate ValidInstruction(s:state, ins:ins)
         case LDR(rd, base, ofs) => 
             ValidRegOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
-            WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
-            ValidMem(OperandContents(s, base) + OperandContents(s, ofs))
+            ValidMemForRead(OperandContents(s, base) + OperandContents(s, ofs))
         case LDR_global(rd, global, base, ofs) => 
             ValidRegOperand(rd) &&
             ValidOperand(base) && ValidOperand(ofs) &&
@@ -1079,7 +1106,6 @@ predicate ValidInstruction(s:state, ins:ins)
         case STR(rd, base, ofs) =>
             ValidRegOperand(rd) &&
             ValidOperand(ofs) && ValidOperand(base) &&
-            WordAligned(OperandContents(s, base) + OperandContents(s, ofs)) &&
             ValidMem(OperandContents(s, base) + OperandContents(s, ofs))
         case STR_global(rd, global, base, ofs) => 
             ValidRegOperand(rd) &&

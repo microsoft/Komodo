@@ -324,10 +324,11 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest(
         globals;
     modifies
          r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
-         spsr_mon; mem;
+         spsr_mon; tlbiall; mem;
     requires/ensures
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
+        this.conf.tlb_consistent;
     requires
         ValidState(exstate) && mode_of_state(exstate) != User;
         stack_bytes >= WordsToBytes(STACKSIZE_ATTEST + 10);  // +10 to store volatile reigsters
@@ -394,4 +395,7 @@ procedure {:timeLimitMultiplier 2} svc_returning_attest(
     assert pageDbCorresponds(this.m, pagedb) by {
         lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb);
     }
+
+    // flush TLB
+    MCR(tlbiall, r0); // (r0 is irrelevant)
 }

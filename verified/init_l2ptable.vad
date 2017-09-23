@@ -204,7 +204,32 @@ procedure install_l1ptes(
     }
 }
 
-procedure init_l2ptable_success(
+procedure zero_l2_page(
+    inout operand l2_pg:reg, // trashed
+    out operand tmp1:reg,
+    out operand tmp2:reg,
+    ghost pg:PageNr)
+    requires/ensures
+        SaneState(this);
+    requires
+        @l2_pg != @tmp1 && @l2_pg != @tmp2 && @tmp1 != @tmp2;
+        @l2_pg != OSP && @tmp1 != OSP && @tmp2 != OSP;
+        l2_pg == page_paddr(pg);
+    modifies
+        mem;
+    ensures
+        SmcProcedureInvariant(old(this), this);
+        MemPreservingExcept(old(this), this, page_monvaddr(pg), page_monvaddr(pg) + PAGESIZE);
+        forall a:addr :: page_monvaddr(pg) <= a < page_monvaddr(pg) + PAGESIZE ==> MemContents(this.m, a) == 0;
+{
+    ADD(l2_pg, l2_pg, const(KOM_DIRECTMAP_VBASE));
+    assert l2_pg == page_monvaddr(pg);
+    MOV(tmp1, 0);
+    MOV(tmp2, const(PAGESIZE));
+    memset(l2_pg, tmp1, tmp2);
+}
+
+procedure {:timeLimitMultiplier 3} init_l2ptable_success(
     inout operand l2_pg:reg, // trashed
     inout operand l1ptva:reg, // trashed
     inout operand l1index:reg, // trashed
@@ -248,11 +273,9 @@ procedure init_l2ptable_success(
 
     // update L2 page contents
     assert l2_pg == page_paddr(old(l2_pg));
-    ADD(l2_pg, l2_pg, const(KOM_DIRECTMAP_VBASE));
-    assert l2_pg == page_monvaddr(old(l2_pg));
-    MOV(tmp, 0);
-    MOV(l1ptva, const(PAGESIZE));
-    memset(l2_pg, tmp, l1ptva);
+    zero_l2_page(l2_pg, tmp, l1ptva, old(l2_pg));
+
+    assert {:split_here} true;
 
     ghost var pg := extractPage(this.m, old(l2_pg));
     ghost var newl2pt := L2PTable(SeqRepeat(NR_L2PTES, NoMapping));

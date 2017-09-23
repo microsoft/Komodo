@@ -1539,7 +1539,7 @@ dispPg: PageNr, atkr: PageNr, l1p: PageNr)
 
     lemma_eqpdb_pt_coresp(d1, d2, s12, s22, l1p, atkr);
 
-    forall a:addr | ValidMem(a) && a in TheValidAddresses() && addrIsSecure(a)
+    forall a:addr | ValidMem(a) && addrIsSecure(a)
             && PageBase(a) in AllPagesInTable(pt1.v)
         ensures a in s12.m.addresses
         ensures a in s22.m.addresses
@@ -1635,7 +1635,6 @@ a:addr, atkr:PageNr, l1p: PageNr)
     requires ExtractAbsPageTable(s1).Just?
     requires ExtractAbsPageTable(s2).Just?
     requires ValidMem(a)
-    requires a in TheValidAddresses()
     requires addrIsSecure(a)
     requires PageBase(a) in AllPagesInTable(ExtractAbsPageTable(s1).v)
     requires PageBase(a) in AllPagesInTable(ExtractAbsPageTable(s2).v)

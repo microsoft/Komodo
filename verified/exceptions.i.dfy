@@ -64,6 +64,7 @@ predicate KomInterruptHandlerInvariant(s:state, sd:PageDb, r:state, dispPg:PageN
         && NonStackMemPreserving(s, r)
         && SaneStack(r)
         && s.conf.nondet == r.conf.nondet
+        && s.conf.tlb_consistent == r.conf.tlb_consistent
         && s.rng == r.rng
     ) else (
         mode_of_state(s) != User
@@ -101,6 +102,7 @@ lemma lemma_InterruptContinuationInvariantDef(s:state, r:state)
     requires InterruptContinuationInvariant(s, r)
     ensures KomInterruptHandlerInvariant(s, dummyPageDb(), r, dummyPageNr())
     ensures s.conf.nondet == r.conf.nondet
+    ensures s.conf.tlb_consistent == r.conf.tlb_consistent
 {
     reveal InterruptContinuationInvariantDef();
     if priv_of_mode(spsr_of_state(s).m) == PL1 {
@@ -116,6 +118,7 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
     requires SaneStack(s)
     ensures mode_of_state(r) == mode_of_state(s)
     ensures r.conf.ttbr0 == s.conf.ttbr0 && r.conf.scr == s.conf.scr
+    ensures r.conf.tlb_consistent == s.conf.tlb_consistent
     ensures r.rng == s.rng
     ensures SaneStack(r)
     ensures StackPreserving(s, r)

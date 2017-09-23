@@ -123,10 +123,11 @@ procedure svc_returning_verify_step0(
         globals; lr;
     modifies
          r0; r1; r2; r3; r4; r5; r6; r7; r8; 
-         spsr_mon; mem;
+         spsr_mon; tlbiall; mem;
     requires/ensures
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
+        this.conf.tlb_consistent;
     requires
         ValidState(exstate) && mode_of_state(exstate) != User;
         isReturningSvc(exstate);
@@ -167,6 +168,9 @@ procedure svc_returning_verify_step0(
     assert firstOf2(svcHandled(exstate, pagedb, dispPg)) == tuple(KOM_ERR_SUCCESS,0,0,0,0,0,0,0,0);
     svc_return_epilog();
     MOV(r0, const(KOM_ERR_SUCCESS));
+
+    // flush TLB
+    MCR(tlbiall, r0); // (r0 is irrelevant)
 
     ghost var disp := pagedb'[dispPg].entry;
     ghost var pg := extractPage(this.m, dispPg);
@@ -247,10 +251,11 @@ procedure svc_returning_verify_step1(
     reads
         globals; lr; 
     modifies
-         r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; spsr_mon;
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; spsr_mon; tlbiall;
     requires/ensures
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
+        this.conf.tlb_consistent;
     requires
         ValidState(exstate) && mode_of_state(exstate) != User;
         isReturningSvc(exstate);
@@ -292,6 +297,9 @@ procedure svc_returning_verify_step1(
             == tuple(KOM_ERR_SUCCESS,0,0,0,0,0,0,0,0);
     MOV(r0, const(KOM_ERR_SUCCESS));
     svc_return_epilog();
+
+    // flush TLB
+    MCR(tlbiall, r0); // (r0 is irrelevant)
 
     ghost var disp := pagedb'[dispPg].entry;
     ghost var pg := extractPage(this.m, dispPg);
@@ -432,6 +440,22 @@ procedure svc_map_data_zeropage(
     }
 }
 
+#verbatim
+function HavocTLBIALL(s:state, s':state):(r:state)
+    ensures SaneState(s) ==> SaneState(r)
+{
+    reveal ValidSRegState();
+    if TLBIALL in s'.sregs then s.(sregs := s.sregs[TLBIALL := s'.sregs[TLBIALL]])
+    else s
+}
+
+predicate SmcProcedureInvariantH(s:state, r:state)
+    requires SaneState(s) && SaneState(r);
+{
+    SmcProcedureInvariant(HavocTLBIALL(s, r), r)
+}
+#endverbatim
+
 procedure svc_map_data_success(
     ghost pagedb: PageDb,
     inout operand page:reg, // r1
@@ -441,7 +465,7 @@ procedure svc_map_data_success(
     ghost asPg: PageNr)
     returns (ghost pagedb': PageDb)
     modifies
-         r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; globals;
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; globals; tlbiall;
     requires/ensures
         SaneState(this);
     requires
@@ -456,7 +480,8 @@ procedure svc_map_data_success(
         l1pte == page_monvaddr(pagedb[pagedb[asPg].entry.l1ptnr].entry.l1pt[
                     wordToMapping(mapping).l1index].v);
     ensures
-        SmcProcedureInvariant(old(this), this);
+        this.conf.tlb_consistent;
+        SmcProcedureInvariantH(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
         tuple(pagedb', KOM_ERR_SUCCESS)
             == svcMapData(pagedb, asPg, old(page), old(mapping));
@@ -480,6 +505,9 @@ procedure svc_map_data_success(
                             pagedb', abs_mapping, l2pte);
     AllButOnePagePreserving(l1pte_abs, tmpst, this);
     assert pageDbCorresponds(this.m, pagedb');
+
+    // flush TLB
+    MCR(tlbiall, r0); // (r0 is irrelevant)
 }
 
 procedure svc_map_data(
@@ -490,9 +518,10 @@ procedure svc_map_data(
     ghost dispPg: PageNr)
     returns (ghost pagedb': PageDb)
     modifies
-         r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; globals;
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; globals; tlbiall;
     requires/ensures
         SaneState(this);
+        this.conf.tlb_consistent;
     requires
         @err == OReg(R0) && @page == OReg(R1) && @mapping == OReg(R2);
         validPageDb(pagedb);
@@ -500,7 +529,7 @@ procedure svc_map_data(
         finalDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
-        SmcProcedureInvariant(old(this), this);
+        SmcProcedureInvariantH(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
         tuple(pagedb', err)
             == svcMapData(pagedb, pagedb[dispPg].addrspace, old(page), old(mapping));
@@ -729,7 +758,7 @@ procedure svc_unmap_data_success(
     operand entryptr:reg)
     returns (ghost pagedb': PageDb)
     modifies
-         r4; r7; mem; globals;
+         r4; r7; mem; globals; tlbiall;
     requires/ensures
         SaneState(this);
     requires
@@ -744,7 +773,8 @@ procedure svc_unmap_data_success(
         l1pte == page_monvaddr(l1pt[l1indexFromMapping(mapva)].v);
         entryptr == AddressOfGlobal(PageDb()) + G_PAGEDB_ENTRY(page);
     ensures
-        SmcProcedureInvariant(old(this), this);
+        this.conf.tlb_consistent;
+        SmcProcedureInvariantH(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
         pagedb' == firstOf2(svcUnmapData(pagedb, asPg, page, old(mapva)));
         wellFormedPageDb(pagedb') && pageDbCorresponds(this.m, pagedb');
@@ -788,6 +818,9 @@ procedure svc_unmap_data_success(
             assert extractPageDbEntry(tmp.m, p) == extractPageDbEntry(this.m, p);
         }
     }
+
+    // flush TLB
+    MCR(tlbiall, r4);
 }
 
 procedure svc_unmap_data(
@@ -798,9 +831,10 @@ procedure svc_unmap_data(
     ghost dispPg: PageNr)
     returns (ghost pagedb': PageDb)
     modifies
-         r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; globals;
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; globals; tlbiall;
     requires/ensures
         SaneState(this);
+        this.conf.tlb_consistent;
     requires
         @err == OReg(R0) && @page == OReg(R1) && @mapva == OReg(R2);
         validPageDb(pagedb);
@@ -808,7 +842,7 @@ procedure svc_unmap_data(
         finalDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
-        SmcProcedureInvariant(old(this), this);
+        SmcProcedureInvariantH(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
         tuple(pagedb', err)
             == svcUnmapData(pagedb, pagedb[dispPg].addrspace, old(page), old(mapva));
@@ -866,8 +900,6 @@ procedure svc_unmap_data(
                     pagedb' := svc_unmap_data_success(pagedb, asPg, old(page),
                                                      mapva, r6, r3);
                     assert err == specErr && pagedb' == specDb;
-
-                    // TODO: flush TLB
                 } else {
                     assert !isExistingVAForDataPage(pagedb, asPg, old(mapva), old(page));
                     assert err == KOM_ERR_INVALID_MAPPING;
@@ -885,9 +917,10 @@ procedure svc_init_l2ptable(
     ghost dispPg: PageNr)
     returns (ghost pagedb': PageDb)
     modifies
-         r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; globals;
+         r0; r1; r2; r3; r4; r5; r6; r7; r8; mem; globals; tlbiall;
     requires/ensures
         SaneState(this);
+        this.conf.tlb_consistent;
     requires
         @err == OReg(R0) && @page == OReg(R1) && @l1index == OReg(R2);
         validPageDb(pagedb);
@@ -895,7 +928,7 @@ procedure svc_init_l2ptable(
         finalDispatcher(pagedb, dispPg);
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
     ensures
-        SmcProcedureInvariant(old(this), this);
+        SmcProcedureInvariantH(old(this), this);
         GlobalsPreservingExcept(old(this), this, set(PageDb()));
         tuple(pagedb', err)
             == svcInitL2PTable(pagedb, pagedb[dispPg].addrspace, old(page), old(l1index));
@@ -1000,6 +1033,9 @@ procedure svc_init_l2ptable(
                                                      pagedb1, asPg, l1pg);
                     MOV(err, const(KOM_ERR_SUCCESS));
                     assert pagedb' == specDb && err == specErr;
+
+                    // flush TLB
+                    MCR(tlbiall, r0);
                 }
             }
         }
@@ -1060,10 +1096,11 @@ procedure {:frame false}{:timeLimitMultiplier 2} svc_returning(
         globals;
     modifies
          r0; r1; r2; r3; r4; r5; r6; r7; r8; r9; r10; r11; r12; sp; lr;
-         spsr_mon; mem; rng;
+         spsr_mon; mem; rng; tlbiall;
     requires/ensures
         SaneState(this);
         StackBytesRemaining(this, stack_bytes);
+        this.conf.tlb_consistent;
     requires
         stack_bytes >= WordsToBytes(STACKSIZE_ATTEST + 14);
         ValidState(exstate) && mode_of_state(exstate) != User;
@@ -1096,6 +1133,7 @@ procedure {:frame false}{:timeLimitMultiplier 2} svc_returning(
     ghost var retRegs := firstOf2(svcHandled(exstate, pagedb, dispPg));
 
     lemma_svc_returning_WordAlignedStack(this, stack_bytes);
+    lemma_OnlySecureMemInPageTable(pagedb, this, l1pOfDispatcher(pagedb, dispPg));
 
     if (r0 == const(KOM_SVC_ATTEST)) {
         // Create an attestation

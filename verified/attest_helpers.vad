@@ -1,4 +1,4 @@
-include {:verbatim} "kom_common.i.dfy"
+include {:verbatim} "svc_common.i.dfy"
 include {:verbatim} "pagedb.i.dfy"
 
 include "valedecls.vad"
@@ -56,7 +56,7 @@ procedure addrspace_va_for_page_va(
     extractPageDbToAbstractOne(this.m, pagenr, PAGEDB_ENTRY_ADDRSPACE);
 }
 
-procedure load_attestion_key_inner() 
+procedure load_attestion_key_inner()
     reads
         globals; r4;
     modifies 

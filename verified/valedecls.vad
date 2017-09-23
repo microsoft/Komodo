@@ -4,6 +4,8 @@ var{:state ok()}  ok:bool;
 var{:state mem()} mem:memmap;
 var{:state globals()} globals:globalsmap;
 var{:state rng()} rng:RNG;
+//var{:state ttbr0()} ttbr0_abs:word;
+//var{:state tlb()} tlb:bool;
 
 var{:state osp()} sp:word;
 var{:state olr()} lr:word;
@@ -48,7 +50,7 @@ var{:state sreg(SCTLR)}            sctlr:word;
 var{:state sreg(SCR)}              scr:word;
 var{:state sreg(ttbr0)}            ttbr0:word;
 var{:state sreg(VBAR)}             vbar:word;
-var{:state sreg(TLBIASID)}         tlbiasid:word;
+var{:state sreg(TLBIALL)}          tlbiall:word;
 
 #verbatim
 function MaybeUpdateOk(s:va_state, r:va_state) : va_state
@@ -311,13 +313,13 @@ LDR(out operand dst:word, operand base:word, operand ofs:word)
         mem;
     requires
         ValidAddrMemStateOpaque(mem);
-        ValidMem(base + ofs);
+        ValidMem(base + ofs) || ValidMemForRead(base + ofs);
     requires {:refined false}
         !interrupts_enabled(this);
     ensures
         dst == AddrMemContents(mem, old(base + ofs));
     ensures {:refined false}
-        this.ok ==> ValidMem(old(base + ofs))
+        this.ok ==> ValidMemForRead(old(base + ofs))
             && dst == MemContents(this.m, old(base + ofs));
 {
     reveal va_eval;
@@ -328,7 +330,7 @@ LDR(out operand dst:word, operand base:word, operand ofs:word)
 procedure {:bridge} {:refined} {:instruction Ins(STR(rd, base, ofs))}
 STR(operand rd:reg, operand base:word, operand ofs:word)
     modifies
-        mem;
+        mem; //tlb;
     requires/ensures
         ValidAddrMemStateOpaque(mem);
     requires
@@ -337,6 +339,9 @@ STR(operand rd:reg, operand base:word, operand ofs:word)
         !interrupts_enabled(this);
     ensures
         mem == AddrMemUpdate(old(mem), old(base + ofs), old(rd));
+    ensures {:refined false}
+        // if the addr is not in the page table, tlb consistency is preserved
+        !AddrInPageTable(old(this), old(base + ofs)) ==> this.conf == old(this.conf);
 {
     reveal va_eval;
     reveal ValidRegState;

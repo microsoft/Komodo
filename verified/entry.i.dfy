@@ -121,17 +121,8 @@ const EXCEPTION_STACK_BYTES:int := 150*WORDSIZE;
 
 predicate KomUserEntryPrecondition(s:state, pagedb:PageDb, dispPg:PageNr)
 {
-    SaneConstants() && ValidState(s) && s.ok && SaneStack(s) && SaneMem(s.m)
-    && s.conf.scr == SCRT(Secure, true, true)
-    && StackBytesRemaining(s, EXCEPTION_STACK_BYTES)
-    && validPageDb(pagedb) && pageDbCorresponds(s.m, pagedb)
-    && finalDispatcher(pagedb, dispPg)
-    && GlobalWord(s.m, CurDispatcherOp(), 0) == page_monvaddr(dispPg)
-    && s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, dispPg))    
-    && mode_of_state(s) != User
+    PrivKomUserEntryPrecondition(s, pagedb, dispPg)
     && !spsr_of_state(s).f && !spsr_of_state(s).i
-    // && (!(s.conf.ex == ExFIQ || s.conf.ex == ExIRQ) ==>
-    //     !spsr_of_state(s).f && !spsr_of_state(s).i)
 }
 
 predicate PrivKomUserEntryPrecondition(s:state, pagedb:PageDb, dispPg:PageNr)
@@ -143,10 +134,8 @@ predicate PrivKomUserEntryPrecondition(s:state, pagedb:PageDb, dispPg:PageNr)
     && finalDispatcher(pagedb, dispPg)
     && GlobalWord(s.m, CurDispatcherOp(), 0) == page_monvaddr(dispPg)
     && s.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb, dispPg))    
+    && s.conf.tlb_consistent
     && mode_of_state(s) != User
-    // && !spsr_of_state(s).f && !spsr_of_state(s).i
-    // && (!(s.conf.ex == ExFIQ || s.conf.ex == ExIRQ) ==>
-    //     !spsr_of_state(s).f && !spsr_of_state(s).i)
 }
 
 predicate UsermodeContinuationPreconditionDefInner()
@@ -213,6 +202,7 @@ predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr)
     && SaneStackPointer(ssp)
     && ParentStackPreserving(s, r)
     && s.conf.ttbr0 == r.conf.ttbr0 && s.conf.scr == r.conf.scr
+    && s.conf.tlb_consistent == r.conf.tlb_consistent
     && InsecureMemInvariant(s, r)
     && GlobalsPreservingExcept(s, r, {PendingInterruptOp(), PageDb()})
     && pageDbCorresponds(r.m, rd)
@@ -510,6 +500,7 @@ lemma lemma_userExecutionPreservesPrivState(s:state, r:state)
     ensures mode_of_state(r) != User && spsr_of_state(r).m == User
     ensures r.conf.scr == s.conf.scr
     ensures r.conf.ttbr0 == s.conf.ttbr0
+    ensures s.conf.tlb_consistent == r.conf.tlb_consistent
     ensures r.ok == s.ok
 {
     var (s2, s3, expc, ex, s4) := userExecutionModelSteps(s);
@@ -554,6 +545,7 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
     ensures d4 == updateUserPagesFromState(s4, d, dp) && pageDbCorresponds(s4.m, d4)
     ensures KomExceptionHandlerInvariant(s4, d4, r, dp)
     ensures s.conf.ttbr0 == r.conf.ttbr0
+    ensures s.conf.tlb_consistent == r.conf.tlb_consistent
     ensures s.conf.scr == r.conf.scr
     ensures !spsr_of_state(s4).f && !spsr_of_state(s4).i
 {
@@ -654,6 +646,7 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
             then OperandContents(r, OSP) == OperandContents(s, OSP)
             else OperandContents(r, OSP) == BitwiseOr(OperandContents(s, OSP), 1)
     ensures s.conf.ttbr0 == r.conf.ttbr0
+    ensures s.conf.tlb_consistent == r.conf.tlb_consistent
     ensures s.conf.scr == r.conf.scr
     ensures validPageDb(rd) && SaneMem(r.m) && pageDbCorresponds(r.m, rd)
     ensures validEnclaveExecutionStep(s, sd, r, rd, dispPg, retToEnclave)

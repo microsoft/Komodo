@@ -80,7 +80,7 @@ function method va_get_whileCond(c:code):obool requires c.While? { c.whileCond }
 function method va_get_whileBody(c:code):code requires c.While? { c.whileBody }
 
 //-----------------------------------------------------------------------------
-// Spartan-to-Dafny connections needed for refined mode
+// Vale-to-Dafny connections needed for refined mode
 //-----------------------------------------------------------------------------
 function method va_op_operand_osp():operand { OSP }
 function method va_op_operand_olr():operand { OLR }
@@ -108,6 +108,9 @@ function va_get_mem(s:state):memmap
     requires ValidState(s)
     ensures ValidAddrMemStateOpaque(va_get_mem(s))
 { reveal ValidMemState(); reveal_ValidAddrMemStateOpaque(); s.m.addresses }
+
+//function va_get_ttbr0(s:state):TTBR { s.conf.ttbr0 }
+//function va_get_tlb(s:state):bool { s.conf.tlb_consistent }
 
 function va_get_globals(s:state):globalsmap
     requires ValidState(s)
@@ -158,7 +161,8 @@ function va_update_mem(sM:state, sK:state):state
     ensures ValidAddrMemStateOpaque(va_update_mem(sM, sK).m.addresses)
 {
     reveal ValidMemState(); reveal_ValidAddrMemStateOpaque();
-    sK.(m := sK.m.(addresses := sM.m.addresses))
+    sK.(m := sK.m.(addresses := sM.m.addresses),
+        conf := sK.conf.(tlb_consistent := sM.conf.tlb_consistent))
 }
 function va_update_globals(sM:state, sK:state):state
     requires ValidMemState(sM.m) && ValidMemState(sK.m)
@@ -285,7 +289,7 @@ predicate {:opaque} ValidAddrMemStateOpaque(mem: memmap)
 
 function AddrMemContents(m:memmap, a:int): word
     requires ValidAddrMemStateOpaque(m)
-    requires ValidMem(a)
+    requires ValidMemForRead(a) || ValidMem(a)
 {
     reveal ValidAddrMemStateOpaque();
     m[a]
