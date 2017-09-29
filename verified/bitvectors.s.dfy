@@ -143,6 +143,10 @@ lemma {:axiom} lemma_BitCmpEquiv(x:word, y:word)
     ensures x < y ==> WordAsBits(x) < WordAsBits(y)
     ensures x == y ==> WordAsBits(x) == WordAsBits(y)
 
+lemma {:axiom} lemma_BitRotatesRightSum(x: bv32, a: nat, b: nat)
+    requires 0 <= a + b < 32
+    ensures BitRotateRight(x, a + b) == BitRotateRight(BitRotateRight(x, a), b)
+
 /* ================ Higher-level operations (needed for spec) ================ */
 
 function {:opaque} pow2(n:nat): nat

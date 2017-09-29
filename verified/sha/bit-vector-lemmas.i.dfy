@@ -30,6 +30,14 @@ lemma lemma_RotateRightCommutesXorSpecific(x:word, y:word, a:shift_amount)
     lemma_BitsAndWordConversions();
 }
 
+lemma lemma_RotateRightAdds(x:word, a0:shift_amount, a1:shift_amount)
+    requires a0 + a1 < 32;
+    ensures  RotateRight(RotateRight(x, a0), a1) == RotateRight(x, a0 + a1);
+{
+    lemma_BitRotatesRightSum(WordAsBits(x), a0, a1);
+    lemma_BitsAndWordConversions();
+}
+
 // Used for BSIG calculations
 lemma lemma_BSIGOptimization(x:word, amt_0:shift_amount, amt_1:shift_amount, amt_2:shift_amount)
     requires amt_1 - amt_0 >= 0 && amt_2-amt_0 >= 0;
