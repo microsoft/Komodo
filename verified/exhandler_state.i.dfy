@@ -117,7 +117,7 @@ lemma lemma_evalHandler(s:state, r:state, pagedb:PageDb, dispPg: PageNr)
     } else if s.conf.ex == ExAbt || s.conf.ex == ExUnd {
         var _, _, p := va_lemma_abort_handler(block, s, r, s.conf.ex, pagedb, dispPg);
     } else if s.conf.ex == ExSVC {
-        assert s.conf.tlb_consistent; // TLB TODO
+        assert s.conf.tlb_consistent;
         var _, _, p := va_lemma_svc_handler(block, s, r, pagedb, dispPg);
     }
 }

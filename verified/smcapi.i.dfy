@@ -213,7 +213,6 @@ lemma initAddrspacePreservesPageDBValidity(pageDbIn : PageDb,
                           && n != addrspacePage && n != l1PTPage)
             ensures validPageDbEntry(pageDbOut, n)
         {
-// TLB TODO
             assert pageDbOut[n] == pageDbIn[n];
             assert validPageDbEntry(pageDbIn, n);
             assert addrspaceRefs(pageDbOut, n) == addrspaceRefs(pageDbIn, n);
