@@ -1015,34 +1015,6 @@ procedure pre_entry_resume(
 }
 
 #verbatim
-lemma lemma_sp_bit_helper1(x:word, y:word)
-    requires OpaqueEven(x)
-    requires y == x || y == BitwiseOr(x, 1)
-    requires BitwiseAnd(y, 1) == 0
-    ensures x == y
-{
-    assert BitsAsWord(1) == 1 by { reveal BitsAsWord(); }
-    lemma_BitsAndWordConversions();
-    reveal BitAnd();
-    reveal BitOr();
-}
-
-lemma lemma_sp_bit_helper(x:word, y:word)
-    requires OpaqueEven(x)
-    requires y == x || y == BitwiseOr(x, 1)
-    requires BitwiseAnd(y, 1) != 0
-    ensures y - 1 == x
-{
-    reveal OpaqueEven();
-    assert BitsAsWord(1) == 1 && BitsAsWord(2) == 2 by { reveal BitsAsWord(); }
-    lemma_BitsAndWordConversions();
-
-    assert BitwiseAnd(y, 1) == 1 by { reveal BitAnd(); }
-    assert BitMod(WordAsBits(x), 2) == 0 by { lemma_BitModEquiv(x, 2); }
-    assert y != x by { reveal BitAnd(); reveal BitMod(); }
-    lemma_BitOrOneIsLikePlus(x);
-}
-
 lemma lemma_aligned_sp(s:state)
     requires SaneState(s)
     ensures OpaqueEven(va_get_osp(s))
@@ -1185,7 +1157,7 @@ procedure {:frame false} enclaveexecution_loop(
     // clear lower bit of SP, which was set to exit the loop
     lemma_sp_bit_helper(old(sp), sp);
     assert !retToEnclave;
-    SUB(sp, sp, 1);
+    EOR(sp, sp, 1);
     assert sp == old(sp);
 
     lemma_validEnclaveExecutionPost(old(this), pagedb_in, loop1, pagedb, this,

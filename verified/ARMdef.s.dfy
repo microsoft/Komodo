@@ -449,7 +449,10 @@ predicate ValidMcrMrcOperand(s:state,o:operand)
 {
     // to simplify the spec, we only consider secure PL1 modes
     o.OSReg? && priv_of_state(s) == PL1 && world_of_state(s) == Secure
+    // CPSR and SPSR are accessed via MRS/MSR
     && !(o.sr.cpsr? || o.sr.spsr?)
+    // we only model secure-world TTBR0, which is banked depending on the NS bit
+    && (o.sr.ttbr0? ==> s.conf.scr.ns.Secure?)
 }
 
 predicate ValidAnySrcOperand(s:state, o:operand)
@@ -847,14 +850,16 @@ function {:opaque} ExtractAbsL1PTable(m:memstate, vbase:addr): AbsPTable
     IMapSeqToSeq(indices, f)
 }
 
+const ARM_L1PTE_CONST_MASK: bv32 := 0x3fc
+const ARM_L1PTE_CONST_BITS: bv32 := 8 // pxn = 0, ns = 1, domain = 0
+
 /* ARM ref B3.5.1 short descriptor format for first-level page table */
 predicate ValidAbsL1PTEWord(pte:word)
 {
     var typebits := BitwiseAnd(pte, 0x3);
-    var lowbits := BitwiseAnd(pte, 0x3fc);
-    // for now, we just consider secure L1 tables in domain zero
-    // (i.e., no other bits set)
-    typebits == 0 || (typebits == 1 && lowbits == 0)
+    var lowbits := BitAnd(WordAsBits(pte), ARM_L1PTE_CONST_MASK);
+    // for now, we just consider non-secure L1 tables in domain zero
+    typebits == 0 || (typebits == 1 && lowbits == ARM_L1PTE_CONST_BITS)
 }
 
 function ExtractAbsL1PTE(pte:word): Maybe<addr>
@@ -889,7 +894,7 @@ function ExtractAbsL2PTable(m:memstate, vbase:addr): AbsL2PTable
 
 const ARM_L2PTE_NX_BIT: bv32 := 0x1; // XN
 const ARM_L2PTE_RO_BIT: bv32 := 0x200; // AP2
-const ARM_L2PTE_CONST_BITS: bv32 := 0xd74; // B, AP0, AP1, TEX, S, NG
+const ARM_L2PTE_CONST_BITS: bv32 := 0x7c; // B, C, AP0, AP1, TEX
 
 predicate ValidAbsL2PTEWord(pteword:word)
 {

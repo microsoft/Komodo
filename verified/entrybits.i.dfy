@@ -1,5 +1,6 @@
 include "ARMdef.s.dfy"
 include "bitvectors.i.dfy"
+include "entry.i.dfy"
 
 lemma lemma_scr_entry(pre: word, post: word)
     requires post == BitwiseOr(BitwiseAnd(pre, 0xfffffffe), 6)
@@ -93,4 +94,37 @@ lemma lemma_scr_exit(pre: word, post: word)
         { reveal BitAnd(); reveal_BitOr(); }
         BitsAsWord(0);
     }
+}
+
+lemma lemma_sp_bit_helper1(x:word, y:word)
+    requires OpaqueEven(x)
+    requires y == x || y == BitwiseOr(x, 1)
+    requires BitwiseAnd(y, 1) == 0
+    ensures x == y
+{
+    assert BitsAsWord(1) == 1 by { reveal BitsAsWord(); }
+    lemma_BitsAndWordConversions();
+    reveal BitAnd();
+    reveal BitOr();
+}
+
+lemma lemma_sp_bit_helper(x:word, y:word)
+    requires OpaqueEven(x)
+    requires y == x || y == BitwiseOr(x, 1)
+    requires BitwiseAnd(y, 1) != 0
+    ensures y != x && BitwiseXor(y, 1) == x
+{
+    var xb := WordAsBits(x);
+    var yb := WordAsBits(y);
+
+    assert BitsAsWord(1) == 1 && BitsAsWord(2) == 2 by { reveal BitsAsWord(); }
+    lemma_BitsAndWordConversions();
+
+    assert BitAnd(yb, 1) == 1 by { reveal BitAnd(); }
+    assert BitMod(xb, 2) == 0 by { reveal OpaqueEven(); lemma_BitModEquiv(x, 2); }
+    assert BitAnd(xb, 1) == 0 by { reveal BitAnd(); reveal BitMod(); }
+    assert yb != xb by { reveal BitAnd(); }
+    assert yb == BitOr(xb, 1);
+    assert BitAnd(BitXor(yb, 1), 1) == BitAnd(xb, 1) by { reveal BitXor(); reveal BitAnd(); }
+    assert BitXor(yb, 1) == xb by { reveal BitXor(); reveal BitOr(); }
 }

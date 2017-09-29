@@ -117,7 +117,7 @@ procedure update_l2pte(
     assert l1pte == page_monvaddr(l1pte_abs);
 
     LSR(tmp, mapping, 12);
-    AND(tmp, tmp, 0xff);
+    AND(tmp, tmp, 0x3ff);
     assert tmp == abs_mapping.l2index
     by {
         reveal wordToMapping;
@@ -210,14 +210,14 @@ procedure fetch_l2pte(
     ghost var l2pt := d[l1pte_abs].entry.l2pt;
     ghost var l2index := l2indexFromMapping(old(mapping));
     lemma_ARM_L1PTE_Dual(page_paddr(l1pte_abs));
-    SUB(l1pte, l1pte, 1);
+    SUB(l1pte, l1pte, 9);
     assert l1pte == page_paddr(l1pte_abs);
     ADD(l1pte, l1pte, const(KOM_DIRECTMAP_VBASE));
     assert l1pte == page_monvaddr(l1pte_abs);
 
     assert mapping == old(mapping);
     LSR(l2pte, mapping, 12);
-    AND(l2pte, l2pte, 0xff);
+    AND(l2pte, l2pte, 0x3ff);
     assert l2pte == abs_mapping.l2index by {
         reveal wordToMapping;
         assert l2pte == l2indexFromMapping(mapping);
@@ -340,10 +340,10 @@ procedure{:timeLimitMultiplier 2} is_valid_mapping_target'(
     } else {
         ghost var abs_mapping := wordToMapping(mapping);
         reveal wordToMapping;
-        LSR(r7,mapping,20); 
+        LSR(r7,mapping,22); 
         assert r7 == abs_mapping.l1index by { reveal wordToMapping; }
         LSR(r8,mapping,12);
-        AND(r8,r8,0xff);
+        AND(r8,r8,0x3ff);
         assert r8 == abs_mapping.l2index
         by {
             reveal wordToMapping;
@@ -516,9 +516,6 @@ procedure init_secure_page(
 }
 
 #verbatim
-function method L2PTE_CONST_WORD():word
-    { (ARM_L2PTE_CONST_BITS | 0x2) as word }
-
 lemma lemma_extract_kom_mapping_w(mapping:word, res:word)
     requires res == BitwiseXor(BitwiseAnd(mapping,KOM_MAPPING_W),KOM_MAPPING_W)
     ensures res == KOM_MAPPING_W || res == 0
@@ -627,11 +624,8 @@ procedure {:bridge}{:refined} ARM_L2PTE_impl(
 {
     ghost var pa := pte;
 
-    MOVW(tmp, 0xd76);
-    assert tmp == L2PTE_CONST_WORD();
-
     // OR in const bits
-    ORR(pte, pte, tmp);
+    ORR(pte, pte, const(L2PTE_CONST_WORD()));
     assert pte == BitwiseOr(pa, L2PTE_CONST_WORD());
 
     // compute nxbit

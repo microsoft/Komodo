@@ -249,11 +249,17 @@ predicate {:opaque} pageDbDispatcherCorresponds(p:PageNr, e:PageDbEntryTyped, pa
     && pageDbDispatcherVerifyStateCorresponds(p, e, page)
 }
 
+function method L1PTE_CONST_BITS(): bv32
+    { ARM_L1PTE_CONST_BITS | 0x1 } // type = 1
+
+function method L1PTE_CONST_WORD(): word
+    { L1PTE_CONST_BITS() as word }
+
 function ARM_L1PTE(paddr: word): word
     //requires paddr % ARM_L2PTABLE_BYTES == 0
     //ensures ValidAbsL1PTEWord(ARM_L1PTE(paddr))
 {
-    BitwiseOr(paddr, 1) // type = 1, pxn = 0, ns = 0, domain = 0
+    BitwiseOr(paddr, L1PTE_CONST_WORD())
 }
 
 function ARM_L2PTE(paddr: word, write: bool, exec: bool): word

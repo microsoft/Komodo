@@ -380,10 +380,10 @@ predicate validMapping(m:Mapping, d:PageDb, a:PageNr)
 }
 
 function l1indexFromMapping(arg:word) : word
-    { RightShift(arg,20) }
+    { RightShift(arg,22) }
 
 function l2indexFromMapping(arg:word) : word
-    { BitwiseAnd(RightShift(arg,12),0xff) }
+    { BitwiseAnd(RightShift(arg,12),0x3ff) }
 
 function permFromMapping(arg:word) : Perm
 {

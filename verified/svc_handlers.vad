@@ -701,12 +701,12 @@ procedure existing_va_ok(
 
     MOV(err, const(KOM_ERR_INVALID_MAPPING));
 
-    LSR(l1, mapva, 20); 
+    LSR(l1, mapva, 22); 
     assert l1 == l1index by { reveal wordToMapping; }
 
     if (l1 < const(NR_L1PTES)) {
         LSR(l2, mapva, 12);
-        AND(l2, l2, 0xff);
+        AND(l2, l2, 0x3ff);
         assert l2 == l2index
             by { reveal wordToMapping; assert l2 == l2indexFromMapping(mapva); }
         if (l2 < const(NR_L2PTES)) {

@@ -42,7 +42,7 @@ lemma lemma_ARM_L1PTE_Dual_n(paddr: word, n: nat)
     requires 0 <= n < 4
     ensures isUInt32(paddr + n * ARM_L2PTABLE_BYTES)
     ensures ARM_L1PTE(paddr + n * ARM_L2PTABLE_BYTES)
-        == paddr + n * ARM_L2PTABLE_BYTES + 1
+        == paddr + n * ARM_L2PTABLE_BYTES + 9
 {
     assert paddr % PAGESIZE == 0 by { reveal PageAligned(); }
     lemma_PageAlignedImplies1KAligned(paddr);
@@ -84,7 +84,7 @@ procedure {:timeLimitMultiplier 2} install_l1ptes'(
     assert l1index == baseoffset;
 
     lemma_ARM_L1PTE_Dual_n(old(l2base), 0);
-    ORR(l2base, l2base, 1);
+    ORR(l2base, l2base, 9);
     assert l2base == mkL1Pte(Just(l2pg), 0);
     lemma_WordAlignedAdd(l1base, l1index);
     STR(l2base, l1base, l1index);

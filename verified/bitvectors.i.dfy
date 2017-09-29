@@ -44,28 +44,6 @@ lemma lemma_BitPos12()
     lemma_pow2_properties(12);
 }
 
-lemma lemma_BitOrOneIsLikePlus'(b: bv32)
-    requires BitMod(b, 2) == 0
-    ensures BitAdd(b, 1) == BitOr(b, 1)
-{
-    reveal BitMod();
-    reveal BitOr();
-    reveal BitAdd();
-}
-
-lemma lemma_BitOrOneIsLikePlus(i: word)
-    requires i < 0xffffffff
-    requires i % 2 == 0
-    ensures i + 1 == BitwiseOr(i, 1)
-{
-    var b := WordAsBits(i);
-    reveal WordAsBits();
-    reveal BitsAsWord();
-    lemma_BitModEquiv(i, 2);
-    lemma_BitOrOneIsLikePlus'(b);
-    lemma_BitAddEquiv(i, 1);
-}
-
 lemma lemma_BitShiftLeft1(x: bv32)
     requires x < 0x80000000
     ensures BitShiftLeft(x, 1) == BitMul(x, 2)
