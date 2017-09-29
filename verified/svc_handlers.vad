@@ -705,10 +705,13 @@ procedure existing_va_ok(
     assert l1 == l1index by { reveal wordToMapping; }
 
     if (l1 < const(NR_L1PTES)) {
-        LSR(l2, mapva, 12);
-        AND(l2, l2, 0x3ff);
-        assert l2 == l2index
-            by { reveal wordToMapping; assert l2 == l2indexFromMapping(mapva); }
+        LSL(l2, mapva, 10); // discard top bits
+        LSR(l2, l2, 22);
+        assert l2 == l2index == l2indexFromMapping(mapva)
+        by {
+            lemma_l2indexFromMapping_shifts(mapva);
+            reveal wordToMapping;
+        }
         if (l2 < const(NR_L2PTES)) {
             LDR(r8, asva, const(ADDRSPACE_L1PT));
 

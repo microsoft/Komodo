@@ -116,15 +116,15 @@ procedure update_l2pte(
     d' := updateL2Pte(d, as_page, abs_mapping, l2pte_abs);
     assert l1pte == page_monvaddr(l1pte_abs);
 
-    LSR(tmp, mapping, 12);
-    AND(tmp, tmp, 0x3ff);
+    LSL(tmp, mapping, 10); // discard top bits
+    LSR(tmp, tmp, 22);
     assert tmp == abs_mapping.l2index
     by {
+        lemma_l2indexFromMapping_shifts(mapping);
         reveal wordToMapping;
-        assert tmp == l2indexFromMapping(mapping);
     }
     lemma_LeftShift2(tmp);
-    LSL(tmp, tmp, 2);
+    LSL(tmp, tmp, 2); // TODO: optimise into previous shift
     assert tmp == WordsToBytes(abs_mapping.l2index);
     assert addrInPage(l1pte + tmp, l1pte_abs);
 
@@ -216,14 +216,15 @@ procedure fetch_l2pte(
     assert l1pte == page_monvaddr(l1pte_abs);
 
     assert mapping == old(mapping);
-    LSR(l2pte, mapping, 12);
-    AND(l2pte, l2pte, 0x3ff);
-    assert l2pte == abs_mapping.l2index by {
+    LSL(l2pte, mapping, 10); // discard top bits
+    LSR(l2pte, l2pte, 22);
+    assert l2pte == abs_mapping.l2index == l2indexFromMapping(mapping) && l2pte < NR_L2PTES
+    by {
+        lemma_l2indexFromMapping_shifts(mapping);
         reveal wordToMapping;
-        assert l2pte == l2indexFromMapping(mapping);
     }
     lemma_LeftShift2(l2pte);
-    LSL(l2pte, l2pte, 2);
+    LSL(l2pte, l2pte, 2); // TODO: optimise into previous shift
     assert l2pte == WordsToBytes(abs_mapping.l2index);
     assert addrInPage(l1pte + l2pte, l1pte_abs);
     LDR(l2pte, l1pte, l2pte);
@@ -342,12 +343,12 @@ procedure{:timeLimitMultiplier 2} is_valid_mapping_target'(
         reveal wordToMapping;
         LSR(r7,mapping,22); 
         assert r7 == abs_mapping.l1index by { reveal wordToMapping; }
-        LSR(r8,mapping,12);
-        AND(r8,r8,0x3ff);
+        LSL(r8, mapping, 10); // discard top bits
+        LSR(r8, r8, 22);
         assert r8 == abs_mapping.l2index
         by {
+            lemma_l2indexFromMapping_shifts(mapping);
             reveal wordToMapping;
-            assert r8 == l2indexFromMapping(mapping);
         }
         //if(!perm.r) then KOM_ERR_INVALID_MAPPING
         AND(r6,mapping,const(KOM_MAPPING_R));

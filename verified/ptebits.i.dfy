@@ -420,3 +420,21 @@ function mkAbsL1PTE(e: Maybe<PageNr>, subpage:int): Maybe<addr>
         case Just(pgNr) =>
             Just(page_paddr(pgNr) + subpage * ARM_L2PTABLE_BYTES)
 }
+
+lemma lemma_l2indexFromMapping_shifts(x:word)
+    ensures l2indexFromMapping(x) == RightShift(LeftShift(x, 10), 22)
+{
+    assert WordAsBits(0x3ff) == 0x3ff by { reveal WordAsBits(); }
+    var xb := WordAsBits(x);
+
+    calc {
+        l2indexFromMapping(x);
+        BitwiseAnd(RightShift(x, 12), 0x3ff);
+        { lemma_BitsAndWordConversions(); }
+        BitsAsWord(BitAnd(BitShiftRight(xb, 12), 0x3ff));
+        { reveal BitAnd(); reveal BitShiftRight(); reveal BitShiftLeft(); }
+        BitsAsWord(BitShiftRight(BitShiftLeft(xb, 10), 22));
+        { lemma_BitsAndWordConversions(); }
+        RightShift(LeftShift(x, 10), 22);
+    }
+}
