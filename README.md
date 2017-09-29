@@ -1,12 +1,11 @@
-Project Komodo
-==============
+# Project Komodo
 
-Komodo is a research project that implements an SGX-like enclave
-protection model in trusted but formally-verified privileged software,
-for an ARMv7 TrustZone environment.
+Komodo is a research project that implements an SGX-like enclave protection
+model in formally-verified privileged software, for an ARMv7 TrustZone
+environment.
 
-Components
-----------
+
+## Components
 
 Komodo consists of a number of different components:
 
@@ -14,24 +13,25 @@ Komodo consists of a number of different components:
     monitor in secure world, and then boots an existing OS image
     (typically Linux) in normal world.
  
- 2. A secure-world monitor program which implements the Komodo
-    protection model. There are two implementations: a complete, unverified
-    C/assembly implementation (in the `monitor` directory), and a formally
-    verified implementation (in the `verified` directory).
+ 2. A secure-world monitor program which implements the Komodo protection
+    model. There are two implementations: an early, unverified C/assembly
+    implementation (in the `monitor` directory), and a formally verified
+    implementation (in the `verified` directory). The verified implemetnation is
+    built and linked by default.
  
- 3. A Linux kernel driver (`driver`) which interacts with the monitor
-    using secure monitor calls (SMCs), and implements an `ioctl`
-    interface for user applications to create and execute protected
-    regions.
+ 3. A Linux kernel driver (`driver`) which interacts with the monitor using
+    secure monitor calls (SMCs). In the future, it should implement an `ioctl`
+    interface for user applications to create and execute protected regions, but
+    at present it contains hard-coded test code.
 
-The loader, monitor and kernel are all linked together into a single
-bootable image (`piimage/piimage.img`).
+The loader, monitor and kernel are all linked together into a single bootable
+image (`piimage/piimage.img`).
 
-Building
---------
 
-Komodo builds on a Linux-like environment, which includes Cygwin and
-Windows Subsystem for Linux (WSL).
+## Building
+
+Komodo builds on a Linux-like environment, which includes Cygwin and Windows
+Subsystem for Linux (WSL).
 
 Required tools:
  * GNU make
@@ -54,8 +54,7 @@ The supported platform is currently Raspberry Pi 2, either a real
 board, or a custom QEMU, available from [this GitHub
 branch](https://github.com/0xabu/qemu/commits/raspi-tzkludges).
 
-To build the unverified components of komodo (loader, unverified
-monitor, and Linux driver):
+To build komodo (loader, monitor, and Linux driver):
 
  1. Adjust your environment to taste (e.g. create/edit config.mk and
     set the variables at the top of the Makefile)
@@ -63,8 +62,8 @@ monitor, and Linux driver):
  2. Obtain a suitable Linux kernel image (e.g. from Raspbian), and set
     `GUEST_KERNEL` to point to it.
 
- 3. Run `make` in the top-level directory. Assuming all goes well,
-    this will build the monitor and loader, then combine them with the
+ 3. Run `make` in the top-level directory. Assuming all goes well, this will
+    verify and build the monitor, build the loader, then combine them with the
     kernel image to create a new bootable blob.
 
  4. You can use either `make install` to copy the blob to
@@ -89,10 +88,31 @@ monitor, and Linux driver):
     must be manually loaded via `insmod` / `modprobe` to execute its
     functionality.
 
+To just run verification:
 
-To build the verified components:
+ * There's a top-level Makefile target `make verified` which verifies and (if
+   verification succeeds) prints the code for the verified monitor. This also
+   runs verification of noninterference properties (Dafny files under
+   `verified/secprop`).
 
- * At present, there's a top-level Makefile target `make verified` which
-   verifies and (if verification succeeds) builds the verified
-   monitor. Build system support to use the verified monitor in place
-   of the unverified one is presently lacking.
+
+## License
+
+Komodo is licensed under the MIT license included in the `LICENSE.txt` file.
+
+
+## Contributing
+
+This project welcomes contributions and suggestions.  Most contributions require
+you to agree to a Contributor License Agreement (CLA) declaring that you have
+the right to, and actually do, grant us the rights to use your contribution. For
+details, visit https://cla.microsoft.com.
+
+When you submit a pull request, a CLA-bot will automatically determine whether
+you need to provide a CLA and decorate the PR appropriately (e.g., label,
+comment). Simply follow the instructions provided by the bot. You will only need
+to do this once across all repos using our CLA.
+
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
+For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
+contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
