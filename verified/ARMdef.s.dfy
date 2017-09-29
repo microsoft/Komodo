@@ -691,6 +691,11 @@ predicate EssentialContinuationInvariantProperties(s:state, r:state)
     (ValidState(s) ==> ValidState(r)) && (s.ok ==> r.ok)
 }
 
+predicate EssentialInterruptContinuationInvariantProperties(s:state, r:state)
+{
+    EssentialContinuationInvariantProperties(s, r) && !interrupts_enabled(r)
+}
+
 predicate {:axiom} UsermodeContinuationPrecondition(s:state)
     requires ValidState(s)
 
@@ -705,7 +710,7 @@ predicate {:axiom} InterruptContinuationPrecondition(s:state)
 predicate {:axiom} InterruptContinuationInvariant(s:state, r:state)
     requires ValidState(s)
     ensures InterruptContinuationInvariant(s, r)
-    ==> (EssentialContinuationInvariantProperties(s, r)
+    ==> (EssentialInterruptContinuationInvariantProperties(s, r)
         // B1.8.3 "Link values saved on exception entry"
         // these are necessary to get MOVS PC, LR to restore the same PC
         // (this is needed here, because we don't model the PC explicitly)
@@ -1219,11 +1224,9 @@ predicate evalIns'(ins:ins, s:state, r:state)
         case MOVS_PCLR_TO_USERMODE_AND_CONTINUE => evalMOVSPCLRUC(s, r)
 }
 
-/* FIXME: this spec allows at most one interrupt prior to instruction execution,
- * however, on real hardware we can take an unbounded number of interrupts if
- * the handler re-enables them... to fix this, we should either call evalIns
- * recursively, or require the handler to leave interrupts disabled.
- */
+/* NB: this spec models at most one interrupt prior to instruction execution,
+ * since we require (via EssentialInterruptContinuationInvariantProperties) that
+ * the handler leaves interrupts disabled */
 predicate evalIns(ins:ins, s:state, r:state)
 {
     if !s.ok || !ValidInstruction(s, ins) then !r.ok

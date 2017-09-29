@@ -73,13 +73,13 @@ predicate KomInterruptHandlerInvariant(s:state, sd:PageDb, r:state, dispPg:PageN
 }
 
 // this lemma is trivial, but justifies the soundness of the ARMdef assumptions
-// ("EssentialContinuationInvariantProperties") about the handler
+// ("EssentialInterruptContinuationInvariantProperties") about the handler
 lemma lemma_KomInterruptHandlerInvariant_soundness(s:state, r:state)
     requires ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
     requires s.conf.ex == ExFIQ || s.conf.ex == ExIRQ
     requires priv_of_mode(spsr_of_state(s).m) == PL1
     requires KomInterruptHandlerInvariant(s, dummyPageDb(), r, dummyPageNr())
-    ensures EssentialContinuationInvariantProperties(s, r)
+    ensures EssentialInterruptContinuationInvariantProperties(s, r)
 {
 }
 
