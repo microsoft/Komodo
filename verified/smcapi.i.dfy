@@ -790,6 +790,7 @@ lemma lemma_sha256_concat(m:seq<seq<word>>, input:seq<word>)
     {
         var m' := m[1..];
         var input' := input[SHA_BLOCKSIZE..];
+        assert forall i | 0 <= i < |m'| :: m'[i] == m[i + 1];
         lemma_sha256_concat(m', input');
         assert m == [m[0]] + m';
         assert ConcatSha([m[0]]) == m[0] by { reveal ConcatSha(); }
