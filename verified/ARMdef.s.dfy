@@ -1153,16 +1153,23 @@ predicate handleInterrupt(s:state, ex:exception, r:state)
         && evalMOVSPCLR(s2, r)
 }
 
+predicate stateTakesFiq(s:state)
+{
+    !s.conf.cpsr.f && nondet_word(s.conf.nondet, NONDET_EX()) == 0
+}
+
+predicate stateTakesIrq(s:state)
+{
+    !s.conf.cpsr.i && nondet_word(s.conf.nondet, NONDET_EX()) == 1
+}
+
 predicate maybeHandleInterrupt(s:state, r:state)
     requires ValidState(s)
     ensures !interrupts_enabled(s) && maybeHandleInterrupt(s, r) ==> r == takestep(s)
 {
-    if !interrupts_enabled(s)
-        then r == takestep(s)
-    else if !s.conf.cpsr.f && nondet_word(s.conf.nondet, NONDET_EX()) == 0
-        then handleInterrupt(reseed_nondet_state(s), ExFIQ, r)
-    else if !s.conf.cpsr.i && nondet_word(s.conf.nondet, NONDET_EX()) == 1
-        then handleInterrupt(reseed_nondet_state(s), ExIRQ, r)
+    if !interrupts_enabled(s) then r == takestep(s)
+    else if stateTakesFiq(s) then handleInterrupt(reseed_nondet_state(s), ExFIQ, r)
+    else if stateTakesIrq(s) then handleInterrupt(reseed_nondet_state(s), ExIRQ, r)
     else r == takestep(reseed_nondet_state(s))
 }
 
