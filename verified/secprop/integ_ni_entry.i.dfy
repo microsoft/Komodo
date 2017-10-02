@@ -130,7 +130,7 @@ lemma lemma_validEnclaveEx_enc_not_obs(s1: state, d1: PageDb, s1':state, d1': Pa
     requires mode_of_state(s1) != User && mode_of_state(s2) != User
     requires !spsr_of_state(s1).f && !spsr_of_state(s1).i
     requires !spsr_of_state(s2).f && !spsr_of_state(s2).i
-    requires s1.conf.scr == s2.conf.scr;
+    requires s1.conf.scr == s2.conf.scr == SCRT(Secure, true, true)
     // requires InsecureMemInvariant(s1, s2)
     ensures  loweq_pdb(d1', d2', obs)
     ensures  same_ret(s1', s2')
@@ -189,7 +189,7 @@ lemma lemma_validEnclaveStep_enc_not_obs(s1: state, d1: PageDb, s1':state, d1': 
     requires mode_of_state(s1) != User && mode_of_state(s2) != User
     requires !spsr_of_state(s1).f && !spsr_of_state(s1).i
     requires !spsr_of_state(s2).f && !spsr_of_state(s2).i
-    requires s1.conf.scr == s2.conf.scr;
+    requires s1.conf.scr == s2.conf.scr == SCRT(Secure, true, true)
     ensures  loweq_pdb(d1', d2', obs)
     ensures  ret1 == ret2
     ensures  ret1 ==> s1'.conf.nondet == s2'.conf.nondet;
@@ -244,11 +244,13 @@ asp: PageNr, obs: PageNr)
     requires s11.conf.nondet == s21.conf.nondet
     requires mode_of_state(s11) != User && mode_of_state(s21) != User
     // requires spsr_same(s11, s21)
-    requires s11.conf.scr == s21.conf.scr;
+    requires spsr_of_state(s11).f == spsr_of_state(s21).f
+    requires s11.conf.scr == s21.conf.scr == SCRT(Secure, true, true)
     ensures  loweq_pdb(rd1, rd2, obs)
     // ensures  InsecureMemInvariant(r1, r2)
     ensures  retToEnclave1 == retToEnclave2
-    ensures  retToEnclave1 ==> r1.conf.scr == r2.conf.scr
+    ensures  retToEnclave1 ==> (r1.conf.scr == r2.conf.scr == SCRT(Secure, true, true))
+    ensures  retToEnclave1 ==> spsr_of_state(r1).f == spsr_of_state(r2).f
     ensures  retToEnclave1 ==> r1.conf.nondet == r2.conf.nondet
     ensures  !retToEnclave1 ==> same_ret(r1, r2)
     ensures  valAddrPage(rd1, asp)  && valAddrPage(rd2, asp)
@@ -284,6 +286,9 @@ asp: PageNr, obs: PageNr)
     var (s13, expc1, ex1) := userspaceExecutionFn(s12, pc1);
     var (s23, expc2, ex2) := userspaceExecutionFn(s22, pc2);
   
+    lemma_evalExceptionTaken_Mode(s13, ex1, expc1, s14);
+    lemma_evalExceptionTaken_Mode(s23, ex2, expc2, s24);
+
     /*
     assert InsecureMemInvariant(s12, s22) by {
         assert InsecureMemInvariant(s11, s12);
@@ -327,11 +332,32 @@ asp: PageNr, obs: PageNr)
         assert s23.conf.nondet == nondet_int(s22.conf.nondet, NONDET_GENERATOR());
     }
     
+    assert s11.conf.scr == s14.conf.scr == s24.conf.scr == SCRT(Secure, true, true)
+        by { reveal userspaceExecutionFn(); }
+
+    assert s12.conf.cpsr.f == s22.conf.cpsr.f;
+    assert s13.conf.cpsr.f == s23.conf.cpsr.f
+        by { reveal userspaceExecutionFn(); }
+
     assert s14.conf.nondet == s24.conf.nondet;
 
     assert ex1 == ex2 && s14.conf.ex == s24.conf.ex by {
         lemma_decl_ex(s1', s12, s14, s2', s22, s24);
     }
+
+    assert s14.conf.cpsr.f == s24.conf.cpsr.f by {
+        assert s14.conf.scr.irq && s24.conf.scr.irq;
+        if ex1 == ExIRQ || ex1 == ExFIQ {
+            assert mode_of_exception(s13.conf, ex1) == Monitor || mode_of_exception(s13.conf, ex1) == FIQ;
+            assert mode_of_exception(s23.conf, ex1) == Monitor || mode_of_exception(s23.conf, ex1) == FIQ;
+            assert s14.conf.cpsr.f && s24.conf.cpsr.f;
+        } else {
+            assert mode_of_exception(s13.conf, ex1) == mode_of_exception(s23.conf, ex2);
+            assert s13.conf.cpsr.f == s23.conf.cpsr.f;
+            assert s14.conf.cpsr.f == s24.conf.cpsr.f;
+        }
+    }
+    assert stateTakesFiq(s14) == stateTakesFiq(s24);
 
     assert loweq_pdb(d14, d24, obs) by
     {
@@ -508,7 +534,7 @@ lemma lemma_validEnclaveEx_enc(s1: state, d1: PageDb, s1':state, d1': PageDb,
     requires !spsr_of_state(s1).f && !spsr_of_state(s1).i
     requires !spsr_of_state(s2).f && !spsr_of_state(s2).i
     requires spsr_same(s1, s2)
-    requires s1.conf.scr == s2.conf.scr;
+    requires s1.conf.scr == s2.conf.scr == SCRT(Secure, true, true)
     ensures  obs_entry(d1', d2', dispPg, obs)
     ensures  loweq_pdb(d1', d2', obs)
     decreases steps1, steps2
@@ -559,11 +585,11 @@ lemma lemma_validEnclaveStep_enc(s1: state, d1: PageDb, s1':state, d1': PageDb,
     requires user_regs(s1.regs) == user_regs(s2.regs)
     requires mode_of_state(s1) != User && mode_of_state(s2) != User
     requires spsr_same(s1, s2)
-    requires s1.conf.scr == s2.conf.scr;
+    requires s1.conf.scr == s2.conf.scr == SCRT(Secure, true, true)
     ensures  obs_entry(d1', d2', dispPage, obs)
     ensures  loweq_pdb(d1', d2', obs)
     ensures  ret1 == ret2
-    ensures  ret1 ==> s1'.conf.scr == s2'.conf.scr;
+    ensures  ret1 ==> s1'.conf.scr == s2'.conf.scr == SCRT(Secure, true, true)
     ensures  ret1 ==> s1'.conf.nondet == s2'.conf.nondet
     ensures  ret1 ==> OperandContents(s1', OLR) == OperandContents(s2', OLR)
     ensures  ret1 ==> user_regs(s1'.regs) == user_regs(s2'.regs)
@@ -605,13 +631,13 @@ s22: state, pc2:word, expc2:word, ex2:exception, s23:state)
     requires user_visible_state(s12, pc1, ExtractAbsPageTable(s12).v) ==
         user_visible_state(s22, pc2, ExtractAbsPageTable(s22).v)
     requires s12.conf.nondet == s22.conf.nondet
-    requires s12.conf.scr == s22.conf.scr
+    requires s12.conf.scr == s22.conf.scr == SCRT(Secure, true, true)
     requires s12.conf.cpsr.f == s22.conf.cpsr.f;
     requires s12.conf.cpsr.i == s22.conf.cpsr.i;
     ensures  ex1 == ex2
     ensures  user_regs(s13.regs) == user_regs(s23.regs)
     ensures  expc1 == expc2
-    ensures  s13.conf.scr == s23.conf.scr
+    ensures  s13.conf.scr == s23.conf.scr == SCRT(Secure, true, true)
     ensures s13.conf.nondet == s23.conf.nondet
     ensures mode_of_exception(s13.conf, ex1) == mode_of_exception(s23.conf, ex2)
     ensures cpsr in s13.sregs && cpsr in s23.sregs &&
@@ -675,11 +701,11 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, obs: PageNr
     requires s11.conf.nondet == s21.conf.nondet
     requires mode_of_state(s11) != User && mode_of_state(s21) != User
     requires spsr_same(s11, s21)
-    requires s11.conf.scr == s21.conf.scr;
+    requires s11.conf.scr == s21.conf.scr == SCRT(Secure, true, true)
     ensures  obs_entry(rd1, rd2, dispPg, obs)
     ensures  loweq_pdb(rd1, rd2, obs)
     ensures  retToEnclave1 == retToEnclave2
-    ensures  retToEnclave1 ==> r1.conf.scr == r2.conf.scr
+    ensures  retToEnclave1 ==> r1.conf.scr == r2.conf.scr == SCRT(Secure, true, true)
     ensures  retToEnclave1 ==> r1.conf.nondet == r2.conf.nondet
     ensures  retToEnclave1 ==> OperandContents(r1, OLR) == OperandContents(r2, OLR)
     ensures  retToEnclave1 ==> user_regs(r1.regs) == user_regs(r2.regs)
@@ -761,10 +787,12 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, obs: PageNr
     }
 
     assert retToEnclave1 == retToEnclave2 by {
-        assert retToEnclave1 == isReturningSvc(s14);
-        assert retToEnclave2 == isReturningSvc(s24);
+        assert retToEnclave1 == (isReturningSvc(s14) && !(stateTakesFiq(s14) || stateTakesIrq(s14)));
+        assert retToEnclave2 == (isReturningSvc(s24) && !(stateTakesFiq(s24) || stateTakesIrq(s24)));
         reveal ValidRegState();
         assert s14.conf.ex == s24.conf.ex;
+        assert s14.conf.nondet == s24.conf.nondet;
+        assert s14.conf.scr == s24.conf.scr == SCRT(Secure, true, true);
         assert R0 in USER_REGS();
         assert R0 in user_regs(s14.regs) && R0 in user_regs(s24.regs);
         assert user_regs(s14.regs) == user_regs(s24.regs);
@@ -772,7 +800,7 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, obs: PageNr
 
     }
 
-    assert s14.conf.scr == s24.conf.scr;
+    assert s14.conf.scr == s24.conf.scr == SCRT(Secure, true, true);
 
     var retToEnclave := retToEnclave1;
 

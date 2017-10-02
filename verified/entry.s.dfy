@@ -93,7 +93,6 @@ predicate validEnclaveExecutionStep'(s1:state, d1:PageDb,
     requires ValidState(s1) && validPageDb(d1) && SaneConstants()
     requires finalDispatcher(d1, dispPg)
 {
-    assert ValidOperand(OLR); // XXX: dafny gets lost on this below; NFI why
     var l1p := l1pOfDispatcher(d1, dispPg);
     assert nonStoppedL1(d1, l1p) by { reveal_validPageDb(); }
 
@@ -102,7 +101,8 @@ predicate validEnclaveExecutionStep'(s1:state, d1:PageDb,
         && userspaceExecutionAndException(s1, s4)
         && d4 == updateUserPagesFromState(s4, d1, dispPg)
         && validExceptionTransition(s4, rs)
-        && isReturningSvc(s4) == retToEnclave
+        // if we take an interrupt from the exception state, we don't return to the enclave
+        && retToEnclave == (isReturningSvc(s4) && !(stateTakesFiq(s4) || stateTakesIrq(s4)))
         && (if retToEnclave then
             var (retRegs, rd') := svcHandled(s4, d4, dispPg);
             rd == rd' && preEntryReturn(s4, rs, retRegs, rd, dispPg)
@@ -296,13 +296,12 @@ predicate {:opaque} userspaceExecutionAndException(s:state, r:state)
 function exceptionHandled(s:state, d:PageDb, dispPg:PageNr): (word, word, PageDb)
     requires validPageDb(d) && validDispatcherPage(d, dispPg)
     requires ValidState(s) && mode_of_state(s) != User
-    //requires !isReturningSvc(s)
     ensures var (r0, r1, d') := exceptionHandled(s, d, dispPg);
         wellFormedPageDb(d')
 {
     reveal validPageDb();
     reveal ValidRegState();
-    if s.conf.ex.ExSVC? || s.conf.ex.ExAbt? || s.conf.ex.ExUnd? then (
+    if s.conf.ex.ExAbt? || s.conf.ex.ExUnd? || (s.conf.ex.ExSVC? && !isReturningSvc(s)) then (
         // voluntary exit / fault
         var p := dispPg;
         var d' := d[ p := d[p].(entry := d[p].entry.(entered := false))];
@@ -311,11 +310,12 @@ function exceptionHandled(s:state, d:PageDb, dispPg:PageNr): (word, word, PageDb
         else
             (KOM_ERR_FAULT, 0, d')
     ) else (
-        assert s.conf.ex.ExIRQ? || s.conf.ex.ExFIQ?;
+        // model the fact that an SVC _might_ be treated as an opportunity to interrupt execution
+        assert s.conf.ex.ExIRQ? || s.conf.ex.ExFIQ? || isReturningSvc(s);
         reveal ValidSRegState();
         var p := dispPg;
         // ARM spec B1.8.3 "Link values saved on exception entry"
-        var pc := TruncateWord(OperandContents(s, OLR) - 4);
+        var pc := if s.conf.ex.ExIRQ? || s.conf.ex.ExFIQ? then TruncateWord(OperandContents(s, OLR) - 4) else OperandContents(s, OLR);
         var psr := s.sregs[spsr(mode_of_state(s))];
         var ctxt' := DispatcherContext(user_regs(s.regs), pc, psr);
         var disp' := d[p].entry.(entered:=true, ctxt:=ctxt');

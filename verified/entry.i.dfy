@@ -192,7 +192,7 @@ predicate KomExceptionHandlerInvariant(s:state, sd:PageDb, r:state, dp:PageNr)
     requires finalDispatcher(sd, dp)
 {
     reveal ValidRegState();
-    var retToEnclave := isReturningSvc(s);
+    var retToEnclave := isReturningSvc(s) && !stateTakesFiq(s);
     var rd := if retToEnclave    then svcHandled(s, sd, dp).1
                                 else exceptionHandled(s, sd, dp).2;
     validExceptionTransition(s, r)
@@ -498,6 +498,7 @@ lemma lemma_userExecutionPreservesPrivState(s:state, r:state)
     ensures GlobalsInvariant(s,r)
     ensures (reveal ValidRegState(); s.regs[SP(Monitor)] == r.regs[SP(Monitor)])
     ensures mode_of_state(r) != User && spsr_of_state(r).m == User
+    ensures r.conf.cpsr.i
     ensures r.conf.scr == s.conf.scr
     ensures r.conf.ttbr0 == s.conf.ttbr0
     ensures s.conf.tlb_consistent == r.conf.tlb_consistent
@@ -548,6 +549,7 @@ lemma lemma_evalMOVSPCLRUC_inner(s:state, r:state, d:PageDb, dp:PageNr)
     ensures s.conf.tlb_consistent == r.conf.tlb_consistent
     ensures s.conf.scr == r.conf.scr
     ensures !spsr_of_state(s4).f && !spsr_of_state(s4).i
+    ensures s4.conf.cpsr.i
 {
     // XXX: prove some obvious things about OSP early, to stop Z3 getting lost
     assert ValidOperand(OSP);
@@ -659,8 +661,9 @@ lemma lemma_evalMOVSPCLRUC(s:state, sd:PageDb, r:state, dispPg:PageNr)
     assert rsp == r.regs[SP(Monitor)];
 
     assert !spsr_of_state(s4).f && !spsr_of_state(s4).i;
+    assert !stateTakesIrq(s4);
 
-    retToEnclave := isReturningSvc(s4);
+    retToEnclave := isReturningSvc(s4) && !stateTakesFiq(s4);
     if retToEnclave {
         assert ssp == rsp;
         var (regs, d4') := svcHandled(s4, d4, dispPg);
@@ -741,6 +744,8 @@ lemma lemma_evalExceptionTaken_Mode(s:state, e:exception, expc:word, r:state)
     requires ValidState(s) && evalExceptionTaken(s, e, expc, r)
     ensures mode_of_state(r) == mode_of_exception(s.conf, e)
     ensures spsr_of_state(r) == s.conf.cpsr
+    ensures r.conf.cpsr.i
+    ensures r.conf.cpsr.f == (s.conf.cpsr.f || e.ExFIQ? || mode_of_exception(s.conf, e).Monitor?)
 {
     var newmode := mode_of_exception(s.conf, e);
     assert newmode != User;
@@ -754,6 +759,20 @@ lemma lemma_evalExceptionTaken_Mode(s:state, e:exception, expc:word, r:state)
         decode_mode(encode_mode(newmode));
         { mode_encodings_are_sane(); }
         newmode;
+    }
+
+    calc {
+        r.conf.cpsr.i;
+        decode_psr(psr_of_exception(s, e)).i;
+        { lemma_update_psr(s.sregs[cpsr], encode_mode(newmode), f, true); }
+        true;
+    }
+
+    calc {
+        r.conf.cpsr.f;
+        decode_psr(psr_of_exception(s, e)).f;
+        { lemma_update_psr(s.sregs[cpsr], encode_mode(newmode), f, true); }
+        s.conf.cpsr.f || f;
     }
 }
 
