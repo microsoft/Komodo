@@ -44,7 +44,8 @@ function {:opaque} dummyPageNr(): PageNr { 0 }
 predicate KomInterruptHandlerInvariant(s:state, sd:PageDb, r:state, dispPg:PageNr)
     requires ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
     requires s.conf.ex == ExFIQ || s.conf.ex == ExIRQ
-    requires priv_of_mode(spsr_of_state(s).m) == PL0 ==> (
+    requires (priv_of_mode(spsr_of_state(s).m) == PL0
+              || spsr_of_state(s).m == Supervisor) ==> (
         validPageDb(sd) && pageDbCorresponds(s.m, sd)
         && finalDispatcher(sd, dispPg))
 {
@@ -53,8 +54,9 @@ predicate KomInterruptHandlerInvariant(s:state, sd:PageDb, r:state, dispPg:PageN
     && ParentStackPreserving(s, r)
     && GlobalsPreservingExcept(s, r, {PendingInterruptOp()})
     && s.conf.ttbr0 == r.conf.ttbr0 && s.conf.scr == r.conf.scr
-    && if priv_of_mode(spsr_of_state(s).m) == PL1 then (
-        // if interrupted in privileged mode, we just set the pending flag
+    && if (priv_of_mode(spsr_of_state(s).m) == PL1
+          && spsr_of_state(s).m != Supervisor) then (
+        // if interrupted in privileged !SVC mode, we just set the pending flag
         mode_of_state(r) == mode_of_state(s)
         && spsr_of_state(r) == spsr_of_state(s)
         && CoreRegPreservingExcept(s, r, {OLR})
@@ -66,9 +68,11 @@ predicate KomInterruptHandlerInvariant(s:state, sd:PageDb, r:state, dispPg:PageN
         && s.conf.nondet == r.conf.nondet
         && s.conf.tlb_consistent == r.conf.tlb_consistent
         && s.rng == r.rng
+    ) else if (spsr_of_state(s).m == Supervisor) then (
+        exists s':state :: ValidState(s') && evalExceptionTaken(s', ExFIQ, nondet_word(s'.conf.nondet, NONDET_PC()), s)
+        && mode_of_state(s') != User && KomExceptionHandlerInvariant(s', sd, r, dispPg)
     ) else (
-        mode_of_state(s) != User
-        && KomExceptionHandlerInvariant(s, sd, r, dispPg)
+        KomExceptionHandlerInvariant(s, sd, r, dispPg)
     )
 }
 
@@ -77,7 +81,7 @@ predicate KomInterruptHandlerInvariant(s:state, sd:PageDb, r:state, dispPg:PageN
 lemma lemma_KomInterruptHandlerInvariant_soundness(s:state, r:state)
     requires ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
     requires s.conf.ex == ExFIQ || s.conf.ex == ExIRQ
-    requires priv_of_mode(spsr_of_state(s).m) == PL1
+    requires priv_of_mode(spsr_of_state(s).m) == PL1 && spsr_of_state(s).m != Supervisor
     requires KomInterruptHandlerInvariant(s, dummyPageDb(), r, dummyPageNr())
     ensures EssentialInterruptContinuationInvariantProperties(s, r)
 {
@@ -90,6 +94,7 @@ predicate {:opaque} InterruptContinuationInvariantDef()
         | ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
           && (s.conf.ex == ExFIQ || s.conf.ex == ExIRQ)
           && priv_of_mode(spsr_of_state(s).m) == PL1
+          && spsr_of_state(s).m != Supervisor
         :: InterruptContinuationInvariant(s, r)
         ==> KomInterruptHandlerInvariant(s, dummyPageDb(), r, dummyPageNr())
 }
@@ -98,7 +103,7 @@ lemma lemma_InterruptContinuationInvariantDef(s:state, r:state)
     requires InterruptContinuationInvariantDef()
     requires ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
     requires s.conf.ex == ExFIQ || s.conf.ex == ExIRQ
-    requires priv_of_mode(spsr_of_state(s).m) == PL1
+    requires priv_of_mode(spsr_of_state(s).m) == PL1 && spsr_of_state(s).m != Supervisor
     requires InterruptContinuationInvariant(s, r)
     ensures KomInterruptHandlerInvariant(s, dummyPageDb(), r, dummyPageNr())
     ensures s.conf.nondet == r.conf.nondet
@@ -114,6 +119,7 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
     requires InterruptContinuationInvariantDef()
     requires ValidState(s) && SaneMem(s.m)
     requires priv_of_state(s) == PL1
+    requires (mode_of_state(s) == Supervisor) ==> s.conf.cpsr.i && !stateTakesFiq(s)
     requires maybeHandleInterrupt(s, r)
     requires SaneStack(s)
     ensures mode_of_state(r) == mode_of_state(s)
@@ -135,7 +141,7 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
     var nondet := nondet_word(s.conf.nondet, NONDET_EX());
     if !interrupts_enabled(s) {
         assert r == takestep(s);
-    } else if (!s.conf.cpsr.f && nondet == 0) || (!s.conf.cpsr.i && nondet == 1) {
+    } else if stateTakesFiq(s) || stateTakesIrq(s) {
         var ex := if nondet == 0 then ExFIQ else ExIRQ;
         var s' := reseed_nondet_state(s);
         assert handleInterrupt(s', ex, r);

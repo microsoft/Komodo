@@ -13,7 +13,7 @@ predicate ExceptionStateSideEffects(s:state)
     && if s.conf.ex == ExFIQ || s.conf.ex == ExIRQ
         then mode_of_state(s) == Monitor && !interrupts_enabled(s)
     else
-        interrupts_enabled(s) && !s.rng.consumed
+        s.conf.cpsr.i && !s.conf.cpsr.f && !s.rng.consumed
         && mode_of_state(s) == (match s.conf.ex
             case ExAbt => Abort
             case ExUnd => Undefined
@@ -113,7 +113,8 @@ lemma lemma_evalHandler(s:state, r:state, pagedb:PageDb, dispPg: PageNr)
     reveal va_eval();
     assert va_eval(Block(block), s, r) by { assert evalBlock(block, s, r); }
     if s.conf.ex == ExIRQ || s.conf.ex == ExFIQ {
-        var _, _, p := va_lemma_interrupt_handler(block, s, r, s.conf.ex, pagedb, dispPg);
+        var dummy:state :| true;
+        var _, _, p := va_lemma_interrupt_handler(block, s, r, s.conf.ex, dummy, pagedb, dispPg);
     } else if s.conf.ex == ExAbt || s.conf.ex == ExUnd {
         var _, _, p := va_lemma_abort_handler(block, s, r, s.conf.ex, pagedb, dispPg);
     } else if s.conf.ex == ExSVC {
@@ -156,15 +157,38 @@ lemma lemma_UserModeExceptionHandlersAreCorrect(s0:state, s1:state, s3:state, r:
     lemma_evalHandler(s3, r, pagedb', dispPg);
 }
 
+lemma lemma_SVCFIQNestedExceptionIsCorrect(s0:state, s1:state, s2:state, r:state)
+    requires GlobalAssumptions() && ValidState(s0) && s0.ok
+        && UsermodeContinuationPrecondition(s0)
+        && mode_of_state(s0) == User && interrupts_enabled(s0)
+        && (exists upc:word :: evalExceptionTaken(s0, ExSVC, upc, s1))
+        && evalExceptionTaken(s1, ExFIQ, nondet_word(s1.conf.nondet, NONDET_PC()), s2)
+        && evalCode(exHandler(ExFIQ), s2, r)
+    ensures mode_of_state(s2) != User && SaneMem(s2.m)
+    ensures priv_of_mode(spsr_of_state(s2).m) == PL1
+    ensures exists p0, dp:PageNr :: validPageDb(p0) && pageDbCorresponds(s2.m, p0)
+        && finalDispatcher(p0, dp) && KomInterruptHandlerInvariant(s2, p0, r, dp)
+{
+    var pagedb, dispPg := lemma_UsermodeContinuationPreconditionDef(s0);
+    lemma_PrivExceptionStateSideEffects(s1, s2, ExFIQ, pagedb, dispPg);
+    reveal va_eval();
+    var block := va_CCons(exHandler(ExFIQ), va_CNil());
+    assert va_eval(Block(block), s2, r) by { assert evalBlock(block, s2, r); }
+    var _, _, _ := va_lemma_interrupt_handler(block, s2, r, ExFIQ, s1, pagedb, dispPg);
+    assert KomInterruptHandlerInvariant(s2, pagedb, r, dispPg);
+}
+
 lemma lemma_PrivModeExceptionHandlersAreCorrect(s0:state, ex:exception, s1:state, r:state)
     requires GlobalAssumptions() && ValidState(s0) && s0.ok
         && UsermodeContinuationPrecondition(s0)
         && priv_of_state(s0) == PL1 && interrupts_enabled(s0)
+        && mode_of_state(s0) != Supervisor
         && (ex == ExFIQ || ex == ExIRQ)
         && evalExceptionTaken(s0, ex, nondet_word(s0.conf.nondet, NONDET_PC()), s1)
         && evalCode(exHandler(ex), s1, r)
     ensures mode_of_state(s1) != User && SaneMem(s1.m)
     ensures priv_of_mode(spsr_of_state(s1).m) == PL1
+    ensures spsr_of_state(s1).m != Supervisor
     ensures exists p0, dp:PageNr :: KomInterruptHandlerInvariant(s1, p0, r, dp)
 {
     var pagedb, dispPg := lemma_UsermodeContinuationPreconditionDef(s0);
@@ -172,6 +196,7 @@ lemma lemma_PrivModeExceptionHandlersAreCorrect(s0:state, ex:exception, s1:state
     reveal va_eval();
     var block := va_CCons(exHandler(ex), va_CNil());
     assert va_eval(Block(block), s1, r) by { assert evalBlock(block, s1, r); }
-    var _, _, p := va_lemma_interrupt_handler(block, s1, r, ex, pagedb, dispPg);
+    var dummy:state :| true; // irrelevant
+    var _, _, _ := va_lemma_interrupt_handler(block, s1, r, ex, dummy, pagedb, dispPg);
     assert KomInterruptHandlerInvariant(s1, pagedb, r, dispPg);
 }

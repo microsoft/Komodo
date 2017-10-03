@@ -21,16 +21,28 @@ method Main()
         ensures exists p2, dp :: KomExceptionHandlerInvariant(s3, p2, r, dp)
     { lemma_UserModeExceptionHandlersAreCorrect(s0, s1, s3, r); }
 
-    // prove that interrupts taken from PL1 modes maintain the invariant
+    // prove that interrupts taken from non-SVC PL1 modes maintain the invariant
     forall s0:state, ex:exception, s1:state, r:state
         | GlobalAssumptions() && ValidState(s0) && s0.ok
         && UsermodeContinuationPrecondition(s0)
         && priv_of_state(s0) == PL1 && interrupts_enabled(s0)
+        && mode_of_state(s0) != Supervisor
         && (ex == ExFIQ || ex == ExIRQ)
         && evalExceptionTaken(s0, ex, nondet_word(s0.conf.nondet, NONDET_PC()), s1)
         && evalCode(exHandler(ex), s1, r)
         ensures exists p0, dp :: KomInterruptHandlerInvariant(s1, p0, r, dp)
     { lemma_PrivModeExceptionHandlersAreCorrect(s0, ex, s1, r); }
+
+    // prove the special-case User -> SVC -> FIQ nested interrupt path
+    forall s0:state, s1:state, s2:state, r:state
+        | GlobalAssumptions() && ValidState(s0) && s0.ok
+        && UsermodeContinuationPrecondition(s0)
+        && mode_of_state(s0) == User && interrupts_enabled(s0)
+        && (exists upc:word :: evalExceptionTaken(s0, ExSVC, upc, s1))
+        && evalExceptionTaken(s1, ExFIQ, nondet_word(s1.conf.nondet, NONDET_PC()), s2)
+        && evalCode(exHandler(ExFIQ), s2, r)
+        ensures exists p0, dp :: KomInterruptHandlerInvariant(s2, p0, r, dp)
+    { lemma_SVCFIQNestedExceptionIsCorrect(s0, s1, s2, r); }
 
     printAll();
 }

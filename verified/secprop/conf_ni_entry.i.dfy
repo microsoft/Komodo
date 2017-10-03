@@ -569,6 +569,7 @@ asp: PageNr, atkr: PageNr
     requires loweq_pdb(d14, d24, atkr)
     requires retToEnclave1 == retToEnclave2
     requires s14.conf.ex == s24.conf.ex;
+    requires stateTakesInterrupt(s14) == stateTakesInterrupt(s24)
     requires (s14.conf.ex == ExSVC) ==>
             s14.regs[R0] == s24.regs[R0];
     requires (s14.conf.ex == ExSVC && (s14.regs[R0] == KOM_SVC_EXIT ||
@@ -724,8 +725,8 @@ lemma lemma_exceptionHandled_conf_not_atkr(
     requires s14.conf.ex == s24.conf.ex
     requires loweq_pdb(d14, d24, atkr)
     requires R1 in s14.regs && R1 in s24.regs
-    requires s14.conf.ex.ExSVC? ==> (isReturningSvc(s14) == isReturningSvc(s24))
-    requires (s14.conf.ex.ExSVC? && !isReturningSvc(s14))
+    requires s14.conf.ex.ExSVC? ==> (stateTakesInterrupt(s14) == stateTakesInterrupt(s24))
+    requires (s14.conf.ex.ExSVC? && !stateTakesInterrupt(s14))
             ==> (s14.regs[R1] == s24.regs[R1])
     ensures  loweq_pdb(rd1, rd2, atkr)
     ensures  r01 == r02 && r11 == r12
@@ -1327,8 +1328,8 @@ dispPg:PageNr, retToEnclave1:bool, retToEnclave2:bool, atkr: PageNr
     }
 
     assert retToEnclave1 == retToEnclave2 by {
-        assert retToEnclave1 == (isReturningSvc(s14) && !(stateTakesFiq(s14) || stateTakesIrq(s14)));
-        assert retToEnclave2 == (isReturningSvc(s24) && !(stateTakesFiq(s24) || stateTakesIrq(s24)));
+        assert retToEnclave1 == (isReturningSvc(s14) && !stateTakesInterrupt(s14));
+        assert retToEnclave2 == (isReturningSvc(s24) && !stateTakesInterrupt(s24));
         reveal ValidRegState();
         assert s14.conf.ex == s24.conf.ex;
         assert s14.conf.nondet == s24.conf.nondet;
@@ -1433,8 +1434,10 @@ predicate lr_spsr_same(s1:state, s2:state)
 {
     reveal ValidRegState();
     reveal ValidSRegState();
-    s1.regs[LR(mode_of_state(s1))] == s2.regs[LR(mode_of_state(s2))] &&
-    s1.sregs[spsr(mode_of_state(s1))] == s2.sregs[spsr(mode_of_state(s2))]
+    s1.regs[LR(mode_of_state(s1))] == s2.regs[LR(mode_of_state(s2))]
+        && s1.sregs[spsr(mode_of_state(s1))] == s2.sregs[spsr(mode_of_state(s2))]
+        && s1.conf.cpsr.f == s2.conf.cpsr.f
+        && s1.conf.cpsr.i == s2.conf.cpsr.i
 }
 
 lemma lemma_exceptionHandled_atkr(
@@ -1480,7 +1483,8 @@ dispPg: PageNr, atkr: PageNr)
     {
     }
 
-    if( ex.ExSVC? ) {
+    assert stateTakesInterrupt(s1) == stateTakesInterrupt(s2);
+    if( ex.ExSVC? && !stateTakesInterrupt(s1) ) {
         assert d1'[dispPg].entry == d2'[dispPg].entry;
         assert r01 == r02;
         assert R1 in USER_REGS();

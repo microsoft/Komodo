@@ -301,7 +301,8 @@ function exceptionHandled(s:state, d:PageDb, dispPg:PageNr): (word, word, PageDb
 {
     reveal validPageDb();
     reveal ValidRegState();
-    if s.conf.ex.ExAbt? || s.conf.ex.ExUnd? || (s.conf.ex.ExSVC? && !isReturningSvc(s)) then (
+    var interrupted := stateTakesFiq(s) || stateTakesIrq(s);
+    if s.conf.ex.ExAbt? || s.conf.ex.ExUnd? || (s.conf.ex.ExSVC? && !interrupted) then (
         // voluntary exit / fault
         var p := dispPg;
         var d' := d[ p := d[p].(entry := d[p].entry.(entered := false))];
@@ -310,12 +311,14 @@ function exceptionHandled(s:state, d:PageDb, dispPg:PageNr): (word, word, PageDb
         else
             (KOM_ERR_FAULT, 0, d')
     ) else (
-        // model the fact that an SVC _might_ be treated as an opportunity to interrupt execution
-        assert s.conf.ex.ExIRQ? || s.conf.ex.ExFIQ? || isReturningSvc(s);
+        // model the fact that an SVC _might_ be treated as an interrupt
+        assert s.conf.ex.ExIRQ? || s.conf.ex.ExFIQ? || s.conf.ex.ExSVC?;
         reveal ValidSRegState();
         var p := dispPg;
         // ARM spec B1.8.3 "Link values saved on exception entry"
-        var pc := if s.conf.ex.ExIRQ? || s.conf.ex.ExFIQ? then TruncateWord(OperandContents(s, OLR) - 4) else OperandContents(s, OLR);
+        var pc := if s.conf.ex.ExIRQ? || s.conf.ex.ExFIQ?
+            then TruncateWord(OperandContents(s, OLR) - 4)
+            else OperandContents(s, OLR);
         var psr := s.sregs[spsr(mode_of_state(s))];
         var ctxt' := DispatcherContext(user_regs(s.regs), pc, psr);
         var disp' := d[p].entry.(entered:=true, ctxt:=ctxt');

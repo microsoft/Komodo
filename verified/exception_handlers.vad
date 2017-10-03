@@ -21,6 +21,7 @@ CPSID_IAF(operand mod:word)
         @mod is OConst;
         ValidModeEncoding(mod);
         priv_of_state(this) == PL1;
+        mode_of_state(this) == Supervisor ==> this.conf.cpsr.i;
         ValidModeChange'(this, decode_mode(mod));
         interrupts_enabled(this);
     modifies
@@ -41,8 +42,14 @@ CPSID_IAF(operand mod:word)
         this.conf.nondet == nondet_int(old(this).conf.nondet, NONDET_GENERATOR());
         this.conf.tlb_consistent == old(this).conf.tlb_consistent;
         this.rng == old(this).rng;
+        (mode_of_state(old(this)) == Supervisor) ==> !stateTakesFiq(old(this));
 {
     reveal va_eval;
+    ghost if (mode_of_state(old(this)) == Supervisor) {
+        // TODO: if we're executing here after the instruction, it can only be
+        // because we didn't take a FIQ. But how to prove this?
+        assume !stateTakesFiq(old(this));
+    }
     exists s' :: maybeHandleInterrupt(old(this), s') && evalIns'(CPSID_IAF(@mod), s', this);
     lemma_PrivInterruptInvariants(old(this), s');
     assert mode_of_state(s') == mode_of_state(old(this))
@@ -64,6 +71,7 @@ procedure {:frame false} switch_to_monitor(inline oldmode:mode)
         priv_of_state(this) == PL1 && world_of_state(this) == Secure;
         mode_of_state(this) == oldmode;
         oldmode == Supervisor || oldmode == Abort || oldmode == Undefined;
+        oldmode == Supervisor ==> this.conf.cpsr.i;
         this.ok;
         interrupts_enabled(this);
     ensures
@@ -80,6 +88,7 @@ procedure {:frame false} switch_to_monitor(inline oldmode:mode)
         this.conf.nondet == nondet_int(old(this).conf.nondet, NONDET_GENERATOR());
         this.conf.tlb_consistent == old(this).conf.tlb_consistent;
         this.rng == old(this).rng;
+        oldmode == Supervisor ==> !stateTakesFiq(old(this));
 {
     CPSID_IAF(const(encode_mode(Monitor)));
 
@@ -117,7 +126,7 @@ procedure {:timeLimitMultiplier 2} fault_exit(
         mode_of_state(exstate) != User && spsr_of_state(exstate).m == User;
         !spsr_of_state(exstate).f && !spsr_of_state(exstate).i;
         exstate.conf.ex == ex;
-        ex == ExSVC || ex == ExAbt || ex == ExUnd;
+        (ex == ExSVC && !(stateTakesFiq(exstate) || stateTakesIrq(exstate))) || ex == ExAbt || ex == ExUnd;
         r1 == OperandContents(exstate, OReg(R1));
         //this.conf.scr.ns == Secure;
         validPageDb(pagedb_in);
@@ -192,6 +201,7 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
         InterruptContinuationInvariantDef();
         mode_of_state(this) == Supervisor && spsr_of_state(this).m == User;
         this.conf.ex == ExSVC;
+        this.conf.cpsr.i;
         !this.rng.consumed;
         interrupts_enabled(this);
         exists stack_bytes :: StackBytesRemaining(this, stack_bytes) && stack_bytes >= WordsToBytes(STACKSIZE_ATTEST + 14);
@@ -202,9 +212,11 @@ procedure {:frame false} svc_handler(ghost pagedb_in: PageDb, ghost dispPg: Page
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
+    assert !stateTakesIrq(this);
     lemma_Establish_InterruptContinuationPrecondition(this, pagedb_in, dispPg);
     switch_to_monitor(Supervisor);
     lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb_in);
+    assert !stateTakesFiq(old(this)); // we wouldn't be here if it did
 
     if (r0 == const(KOM_SVC_EXIT)) {
         assert !isReturningSvc(old(this));
@@ -439,15 +451,17 @@ procedure {:timeLimitMultiplier 2} save_disp_context(inout operand base: reg,
         validPageDb(pagedb_in);
         pageDbCorresponds(this.m, pagedb_in);
         finalDispatcher(pagedb_in, dispPg);
-        ex == exstate.conf.ex && (ex == ExFIQ || ex == ExIRQ);
-        ValidState(exstate) && mode_of_state(exstate) == Monitor
+        ValidState(exstate) && mode_of_state(exstate) != User
             && spsr_of_state(exstate).m == User;
+        ex == exstate.conf.ex;
+        ex == ExFIQ || ex == ExIRQ
+            || (ex == ExSVC && (stateTakesFiq(exstate) || stateTakesIrq(exstate)));
         !spsr_of_state(exstate).f && !spsr_of_state(exstate).i;
-        va_get_sreg(spsr(Monitor), exstate) == spsr_mon;
+        va_get_sreg(spsr(mode_of_state(exstate)), exstate) == spsr_mon;
         forall r :: USER_REGS() ?[r] && r != R0
             ==> va_get_reg(r, exstate) == va_get_reg(r, this);
         ValidMem(sp) && va_get_reg(R0, exstate) == MemContents(this.m, sp);
-        lr == TruncateWord(OperandContents(exstate, OLR) - 4);
+        lr == (if ex == ExSVC then OperandContents(exstate, OLR) else TruncateWord(OperandContents(exstate, OLR) - 4));
         GlobalFullContents(this.m, CurDispatcherOp()) == seq(page_monvaddr(dispPg));
         this.conf.ttbr0.ptbase == page_paddr(l1pOfDispatcher(pagedb_in, dispPg));
     reads
@@ -519,7 +533,9 @@ procedure {:timeLimitMultiplier 2} save_disp_context(inout operand base: reg,
             calc {
                 pg[pgbase + DISP_CTXT_PC];
                 old(lr);
-                TruncateWord(OperandContents(exstate, OLR) - 4);
+                if ex == ExIRQ || ex == ExFIQ
+                    then TruncateWord(OperandContents(exstate, OLR) - 4)
+                    else OperandContents(exstate, OLR);
             }
             calc {
                 pg[pgbase + DISP_CTXT_PSR];
@@ -580,6 +596,7 @@ procedure {:timeLimitMultiplier 2} save_disp_context(inout operand base: reg,
 
 procedure {:frame false} {:timeLimitMultiplier 2} interrupt_handler(
     inline ex: exception,
+    ghost prior_exstate: state,
     ghost pagedb_in: PageDb,
     ghost dispPg: PageNr) returns (ghost pagedb: PageDb)
     reads
@@ -592,8 +609,17 @@ procedure {:frame false} {:timeLimitMultiplier 2} interrupt_handler(
         this.conf.ex == ex && (ex == ExFIQ || ex == ExIRQ);
         mode_of_state(this) == Monitor;
         !interrupts_enabled(this);
-        spsr_of_state(this).m  == User ==>
+        spsr_of_state(this).m == User ==>
             !spsr_of_state(this).f && !spsr_of_state(this).i;
+        // we might have taken an exception from the SVC handler, in which case
+        // we also need to care about the prior exception
+        spsr_of_state(this).m == Supervisor ==> (
+            ValidState(prior_exstate) && mode_of_state(prior_exstate) == Supervisor
+            && prior_exstate.conf.ex == ExSVC
+            && stateTakesFiq(prior_exstate) && ex == ExFIQ
+            && evalExceptionTaken(prior_exstate, ExFIQ, nondet_word(prior_exstate.conf.nondet, NONDET_PC()), this)
+            && decode_psr(spsr_svc).m == User
+            && !decode_psr(spsr_svc).f && !decode_psr(spsr_svc).i);
     ensures
         KomInterruptHandlerInvariant(old(this), pagedb_in, this, dispPg);
         validPageDb(pagedb);
@@ -634,24 +660,27 @@ procedure {:frame false} {:timeLimitMultiplier 2} interrupt_handler(
     assert forall r :: r != R0 && r != R1 && r != LR(Monitor) && r != SP(Monitor)
         ==> va_get_reg(r, old(this)) == va_get_reg(r, this);
 
-    if (r0 == const(encode_mode(User))) { // we came from user-mode
-        assert spsr_of_state(old(this)).m == User by { reveal ValidSRegState; }
-        // assert psr_mask_fiq(r0) == 0 && psr_mask_irq(r0) == 0 by {
-        //     assert r0 == 0x10;
-        //     assert BitwiseAnd(0x10, ARM_PSR_FIQ) == 0x00 by {
-        //         assert WordAsBits(0x10) == 0x10 && WordAsBits(0x40) == 0x40
-        //             by { reveal WordAsBits; }
-        //         assert BitAnd(0x10, 0x40) == 0x00 by { reveal BitAnd; }
-        //         lemma_WordBitEquiv(0x00, 0x00);
-        //     }
-        //     assert BitwiseAnd(0x10, ARM_PSR_IRQ) == 0x00 by {
-        //         assert WordAsBits(0x10) == 0x10 && WordAsBits(0x80) == 0x80
-        //             by { reveal WordAsBits; }
-        //         assert BitAnd(0x10, 0x80) == 0x00 by { reveal BitAnd; }
-        //         lemma_WordBitEquiv(0x00, 0x00);
-        //     }
-        // }
-        assert !spsr_of_state(old(this)).f && !spsr_of_state(old(this)).i;
+    ghost var old_spsr_abs := spsr_of_state(old(this));
+
+    if (r0 == const(encode_mode(Supervisor))) {
+        assert old_spsr_abs.m == Supervisor by { reveal ValidSRegState; }
+        // we came from (the first instruction of) the SVC handler
+        // ignore the SVC; we'll re-issue and handle it next time
+        MRS(lr, spsr_svc); // copy user PSR to monitor's PSR
+        MSR(spsr_mon, lr);
+        MRS(lr, lr_svc); // copy user IP
+        MOV(r0, const(encode_mode(User))); // take user-mode path below
+        assert spsr_mon == old(spsr_svc);
+        assert lr == old(lr_svc);
+    }
+
+    if (r0 == const(encode_mode(User))) { // we came from user or supervisor mode
+        ghost var spsr_abs := spsr_of_state(this);
+        assert old_spsr_abs.m == User || old_spsr_abs.m == Supervisor
+            by { reveal ValidSRegState; }
+        assert spsr_abs == (if old_spsr_abs.m == User then old_spsr_abs
+                            else decode_psr(old(spsr_svc)));
+        assert spsr_abs.m == User && !spsr_abs.f && !spsr_abs.i;
 
         // save dispatcher context
         LDRglobaladdr(r0, CurDispatcherOp());
@@ -659,18 +688,21 @@ procedure {:frame false} {:timeLimitMultiplier 2} interrupt_handler(
         LDR(r1, sp, const(WORDSIZE));
         assert r1 == old(r1);
         lemma_SameMemAndGlobalsPreservesPageDb(old(this), this, pagedb_in);
-        pagedb := save_disp_context(r0, ex, old(this), dispPg, pagedb_in);
+        ghost var firstex := if old_spsr_abs.m == User then ex else ExSVC;
+        ghost var exstate := if firstex == ExSVC then prior_exstate else old(this);
+        pagedb := save_disp_context(r0, firstex, exstate, dispPg, pagedb_in);
+        assert pageDbCorresponds(this.m, pagedb);
 
         MOV(r0, const(KOM_ERR_INTERRUPTED));
         MOV(r1, 0);
-        assert tuple(r0, r1, pagedb) == exceptionHandled(old(this), pagedb_in, dispPg);
+        assert tuple(r0, r1, pagedb) == exceptionHandled(exstate, pagedb_in, dispPg);
 
         ADD(sp, sp, const(2 * WORDSIZE));
         assert sp == old(sp);
         assert StackPreserving(old(this), this);
         ORR(sp, sp, 1);
 
-        assert KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg);
+        assert KomExceptionHandlerInvariant(exstate, pagedb_in, this, dispPg);
     } else { // we came from another exception handler
         assert spsr_of_state(old(this)).m != User by { reveal ValidSRegState; }
         assert priv_of_mode(spsr_of_state(old(this)).m) == PL1;

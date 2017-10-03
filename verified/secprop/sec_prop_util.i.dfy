@@ -283,3 +283,8 @@ lemma lemma_userspace_insecure_addr(s:state, pc: word, s3: state, a:addr)
     assert s3.m.addresses == hv by
         { reveal userspaceExecutionFn(); }
 }
+
+predicate stateTakesInterrupt(s:state)
+{
+    stateTakesFiq(s) || stateTakesIrq(s)
+}
