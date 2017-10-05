@@ -42,14 +42,9 @@ CPSID_IAF(operand mod:word)
         this.conf.nondet == nondet_int(old(this).conf.nondet, NONDET_GENERATOR());
         this.conf.tlb_consistent == old(this).conf.tlb_consistent;
         this.rng == old(this).rng;
-        (mode_of_state(old(this)) == Supervisor) ==> !stateTakesFiq(old(this));
+        mode_of_state(old(this)) == Supervisor ==> !stateTakesFiq(old(this));
 {
     reveal va_eval;
-    ghost if (mode_of_state(old(this)) == Supervisor) {
-        // TODO: if we're executing here after the instruction, it can only be
-        // because we didn't take a FIQ. But how to prove this?
-        assume !stateTakesFiq(old(this));
-    }
     exists s' :: maybeHandleInterrupt(old(this), s') && evalIns'(CPSID_IAF(@mod), s', this);
     lemma_PrivInterruptInvariants(old(this), s');
     assert mode_of_state(s') == mode_of_state(old(this))
@@ -621,7 +616,11 @@ procedure {:frame false} {:timeLimitMultiplier 2} interrupt_handler(
             && decode_psr(spsr_svc).m == User
             && !decode_psr(spsr_svc).f && !decode_psr(spsr_svc).i);
     ensures
-        KomInterruptHandlerInvariant(old(this), pagedb_in, this, dispPg);
+        if spsr_of_state(old(this)).m == User
+            then KomExceptionHandlerInvariant(old(this), pagedb_in, this, dispPg)
+        else if spsr_of_state(old(this)).m == Supervisor
+            then KomExceptionHandlerInvariant(prior_exstate, pagedb_in, this, dispPg)
+        else KomInterruptHandlerInvariant(old(this), this);
         validPageDb(pagedb);
         pageDbCorresponds(this.m, pagedb);
 {
@@ -744,6 +743,6 @@ procedure {:frame false} {:timeLimitMultiplier 2} interrupt_handler(
             TruncateWord(old(lr) - 4);
             TruncateWord(OperandContents(old(this), OLR) - 4);
         }
-        assert KomInterruptHandlerInvariant(old(this), pagedb_in, this, dispPg);
+        assert KomInterruptHandlerInvariant(old(this), this);
     }
 }

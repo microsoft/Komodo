@@ -1,13 +1,19 @@
 include "kom_common.i.dfy"
 include "entry.i.dfy"
 
+// for now, we only take interrupts at the beginning of another exception handler
+// when the user-entry precondition still holds, so this is simplest...
+predicate KomInterruptHandlerPrecondition(s:state)
+{
+    ValidState(s)
+        && exists pagedb, dispPg:PageNr :: KomUserEntryPrecondition(s, pagedb, dispPg)
+}
+
 predicate InterruptContinuationPreconditionDefInner()
 {
-    // for now, we only take interrupts at the beginning of another exception handler
-    // when the user-entry precondition still holds, so this is simplest...
     forall s:state {:trigger InterruptContinuationPrecondition(s)} ::
         ValidState(s) && InterruptContinuationPrecondition(s)
-        <==> (exists pagedb, dispPg:PageNr :: KomUserEntryPrecondition(s, pagedb, dispPg))
+        <==> KomInterruptHandlerPrecondition(s)
 }
 
 // XXX: the charade of inner/outer def and lemmas here are workarounds
@@ -38,53 +44,50 @@ lemma lemma_Establish_InterruptContinuationPrecondition(s:state, pagedb:PageDb, 
     lemma_InterruptContinuationPreconditionDefInner();
 }
 
-function {:opaque} dummyPageDb(): PageDb { imap[] }
-function {:opaque} dummyPageNr(): PageNr { 0 }
-
-predicate KomInterruptHandlerInvariant(s:state, sd:PageDb, r:state, dispPg:PageNr)
+predicate KomInterruptHandlerInvariant(s:state, r:state)
     requires ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
     requires s.conf.ex == ExFIQ || s.conf.ex == ExIRQ
-    requires (priv_of_mode(spsr_of_state(s).m) == PL0
-              || spsr_of_state(s).m == Supervisor) ==> (
-        validPageDb(sd) && pageDbCorresponds(s.m, sd)
-        && finalDispatcher(sd, dispPg))
 {
-    ValidState(r) && (s.ok ==> r.ok)
+    // this definition tells us nothing about interrupts from user or svc modes,
+    // except that they set the low bit of SP
+    if spsr_of_state(s).m == User || spsr_of_state(s).m == Supervisor
+    then ValidState(r) ==> !evalOBool(r, OCmp(OTstEq, OSP, OConst(1)))
+    else ValidState(r) && (s.ok ==> r.ok)
     && SaneStateAfterException(r)
     && ParentStackPreserving(s, r)
     && GlobalsPreservingExcept(s, r, {PendingInterruptOp()})
     && s.conf.ttbr0 == r.conf.ttbr0 && s.conf.scr == r.conf.scr
-    && if (priv_of_mode(spsr_of_state(s).m) == PL1
-          && spsr_of_state(s).m != Supervisor) then (
-        // if interrupted in privileged !SVC mode, we just set the pending flag
-        mode_of_state(r) == mode_of_state(s)
-        && spsr_of_state(r) == spsr_of_state(s)
-        && CoreRegPreservingExcept(s, r, {OLR})
-        // see B1.8.3 "Link values saved on exception entry"
-        && OperandContents(r, OLR) == TruncateWord(OperandContents(s, OLR) - 4)
-        && BankedRegsInvariant(s, r)
-        && NonStackMemPreserving(s, r)
-        && SaneStack(r)
-        && s.conf.nondet == r.conf.nondet
-        && s.conf.tlb_consistent == r.conf.tlb_consistent
-        && s.rng == r.rng
-    ) else if (spsr_of_state(s).m == Supervisor) then (
-        exists s':state :: ValidState(s') && evalExceptionTaken(s', ExFIQ, nondet_word(s'.conf.nondet, NONDET_PC()), s)
-        && mode_of_state(s') != User && KomExceptionHandlerInvariant(s', sd, r, dispPg)
-    ) else (
-        KomExceptionHandlerInvariant(s, sd, r, dispPg)
-    )
+    && mode_of_state(r) == mode_of_state(s)
+    && spsr_of_state(r) == spsr_of_state(s)
+    && CoreRegPreservingExcept(s, r, {OLR})
+    // see B1.8.3 "Link values saved on exception entry"
+    && OperandContents(r, OLR) == TruncateWord(OperandContents(s, OLR) - 4)
+    && BankedRegsInvariant(s, r)
+    && NonStackMemPreserving(s, r)
+    && SaneStack(r)
+    && s.conf.nondet == r.conf.nondet
+    && s.conf.tlb_consistent == r.conf.tlb_consistent
+    && s.rng == r.rng
 }
 
-// this lemma is trivial, but justifies the soundness of the ARMdef assumptions
-// ("EssentialInterruptContinuationInvariantProperties") about the handler
+// this lemma justifies the ARMdef-level assumptions
+// ("EssentialInterruptContinuationInvariantProperties") about the
+// state after the handler returns
 lemma lemma_KomInterruptHandlerInvariant_soundness(s:state, r:state)
     requires ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
     requires s.conf.ex == ExFIQ || s.conf.ex == ExIRQ
     requires priv_of_mode(spsr_of_state(s).m) == PL1 && spsr_of_state(s).m != Supervisor
-    requires KomInterruptHandlerInvariant(s, dummyPageDb(), r, dummyPageNr())
+    requires KomInterruptHandlerInvariant(s, r)
     ensures EssentialInterruptContinuationInvariantProperties(s, r)
 {
+    var sp := OperandContents(r, OSP);
+    assert sp == OperandContents(s, OSP);
+    assert WordAligned(sp);
+    assert BitsAsWord(1) == 1 && BitsAsWord(2) == 2 by { reveal BitsAsWord(); }
+    lemma_BitsAndWordConversions();
+    assert BitMod(WordAsBits(sp), 2) == 0
+        by { reveal WordAligned(); lemma_BitModEquiv(sp, 2); }
+    assert BitwiseAnd(sp, 1) == 0 by { reveal BitAnd(); reveal BitMod(); }
 }
 
 predicate {:opaque} InterruptContinuationInvariantDef()
@@ -93,40 +96,34 @@ predicate {:opaque} InterruptContinuationInvariantDef()
     forall s:state, r:state
         | ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
           && (s.conf.ex == ExFIQ || s.conf.ex == ExIRQ)
-          && priv_of_mode(spsr_of_state(s).m) == PL1
-          && spsr_of_state(s).m != Supervisor
         :: InterruptContinuationInvariant(s, r)
-        ==> KomInterruptHandlerInvariant(s, dummyPageDb(), r, dummyPageNr())
+        ==> KomInterruptHandlerInvariant(s, r)
 }
 
 lemma lemma_InterruptContinuationInvariantDef(s:state, r:state)
     requires InterruptContinuationInvariantDef()
     requires ValidState(s) && mode_of_state(s) != User && SaneMem(s.m)
     requires s.conf.ex == ExFIQ || s.conf.ex == ExIRQ
-    requires priv_of_mode(spsr_of_state(s).m) == PL1 && spsr_of_state(s).m != Supervisor
     requires InterruptContinuationInvariant(s, r)
-    ensures KomInterruptHandlerInvariant(s, dummyPageDb(), r, dummyPageNr())
-    ensures s.conf.nondet == r.conf.nondet
-    ensures s.conf.tlb_consistent == r.conf.tlb_consistent
+    ensures KomInterruptHandlerInvariant(s, r)
+    //ensures s.conf.nondet == r.conf.nondet
+    //ensures s.conf.tlb_consistent == r.conf.tlb_consistent
 {
     reveal InterruptContinuationInvariantDef();
-    if priv_of_mode(spsr_of_state(s).m) == PL1 {
-        assert s.conf.nondet == r.conf.nondet;
-    }
 }
 
 lemma lemma_PrivInterruptInvariants(s:state, r:state)
     requires InterruptContinuationInvariantDef()
-    requires ValidState(s) && SaneMem(s.m)
+    requires ValidState(s) && SaneMem(s.m) && s.ok
     requires priv_of_state(s) == PL1
-    requires (mode_of_state(s) == Supervisor) ==> s.conf.cpsr.i && !stateTakesFiq(s)
+    requires (mode_of_state(s) == Supervisor) ==> s.conf.cpsr.i
     requires maybeHandleInterrupt(s, r)
     requires SaneStack(s)
     ensures mode_of_state(r) == mode_of_state(s)
     ensures r.conf.ttbr0 == s.conf.ttbr0 && r.conf.scr == s.conf.scr
     ensures r.conf.tlb_consistent == s.conf.tlb_consistent
     ensures r.rng == s.rng
-    ensures SaneStack(r)
+    ensures ValidState(r) && SaneStack(r)
     ensures StackPreserving(s, r)
     ensures NonStackMemPreserving(s, r)
     ensures GlobalsPreservingExcept(s, r, {PendingInterruptOp()})
@@ -137,6 +134,7 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
                 && s.regs[SP(m)] == r.regs[SP(m)]
     ensures interrupts_enabled(s) ==>
         r.conf.nondet == nondet_int(s.conf.nondet, NONDET_GENERATOR())
+    ensures (mode_of_state(s) == Supervisor) ==> !stateTakesFiq(s)
 {
     var nondet := nondet_word(s.conf.nondet, NONDET_EX());
     if !interrupts_enabled(s) {
@@ -151,6 +149,22 @@ lemma lemma_PrivInterruptInvariants(s:state, r:state)
             && evalMOVSPCLR(s2, r);
         lemma_evalExceptionTaken_Mode(s', ex, expc, s1);
         lemma_InterruptContinuationInvariantDef(s1, s2);
+
+        if mode_of_state(s) == Supervisor && stateTakesFiq(s) {
+            // proof by contradiction that if the handler returned, then we
+            // mustn't have taken a FIQ, so we don't need to consider that case
+            assert ex == ExFIQ;
+            assert InterruptContinuationPrecondition(s');
+            assert spsr_of_state(s1).m == Supervisor;
+            assert !evalOBool(s2, OCmp(OTstEq, OSP, OConst(1)));
+            assert EssentialInterruptContinuationInvariantProperties(s1, s2);
+            assert ValidState(s2);
+            assert s1.ok;
+            assert s2.ok;
+            assert evalOBool(s2, OCmp(OTstEq, OSP, OConst(1)));
+            assert false;
+        }
+
         forall m | m != mode_of_exception(s'.conf, ex)
             ensures s.regs[LR(m)] == r.regs[LR(m)]
             ensures s.regs[SP(m)] == r.regs[SP(m)]

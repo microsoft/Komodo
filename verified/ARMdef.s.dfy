@@ -686,14 +686,19 @@ function havocUserRegs(nondet:int, us:UserState, regs:map<ARMReg, word>): map<AR
 // To be defined/established by "application" code (i.e. komodo exception handlers)
 // XXX: for soundness, application must prove the essential properties
 
+// essential properties for the usermode continuation (must return)
 predicate EssentialContinuationInvariantProperties(s:state, r:state)
 {
     (ValidState(s) ==> ValidState(r)) && (s.ok ==> r.ok)
 }
 
+// essential properties for the interrupt-handler continuation (might not return)
 predicate EssentialInterruptContinuationInvariantProperties(s:state, r:state)
 {
     EssentialContinuationInvariantProperties(s, r) && !interrupts_enabled(r)
+    // this is needed for the special-case return in printInterruptHandlerReturn
+    // (the continuation only returns if SP & 1 == 0)
+    && (ValidState(r) && r.ok ==> evalOBool(r, OCmp(OTstEq, OSP, OConst(1))))
 }
 
 predicate {:axiom} UsermodeContinuationPrecondition(s:state)
@@ -714,7 +719,7 @@ predicate {:axiom} InterruptContinuationInvariant(s:state, r:state)
         // B1.8.3 "Link values saved on exception entry"
         // these are necessary to get MOVS PC, LR to restore the same PC
         // (this is needed here, because we don't model the PC explicitly)
-        && OperandContents(r, OLR) == TruncateWord(OperandContents(s, OLR) - 4))
+        && (ValidState(r) ==> OperandContents(r, OLR) == TruncateWord(OperandContents(s, OLR) - 4)))
 
 //-----------------------------------------------------------------------------
 // Model of page tables for userspace execution
@@ -1055,7 +1060,7 @@ function evalOBool(s:state, o:obool):bool
 predicate evalGuard(s:state, o:obool, r:state)
     requires ValidState(s) && ValidOperand(o.o1) && ValidOperand(o.o2)
 {
-    // TODO: this is where we havoc the flags for the comparison, once we model them
+    // this is where we would havoc flags for comparisons, if we modelled them
     maybeHandleInterrupt(s, r)
 }
 
