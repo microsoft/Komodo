@@ -13,9 +13,17 @@ def main(args):
                           universal_newlines=True) as p:
 
         # decompress the query into stdin
+        first = True
         while True:
             buf = gzin.read(64*1024)
             if buf:
+                if first:
+                    first = False
+                    # XXX: sometimes, for unclear reasons, we get a bunch of junk in
+                    # the input stream at startup (maybe a badly-encoded BOM?)
+                    if buf[3] == '(':
+                        # strip junk prior to query
+                        buf = buf[3:]
                 p.stdin.write(buf)
             else:
                 break
