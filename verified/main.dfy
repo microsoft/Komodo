@@ -30,7 +30,7 @@ method Main()
         && (ex == ExFIQ || ex == ExIRQ)
         && evalExceptionTaken(s0, ex, nondet_word(s0.conf.nondet, NONDET_PC()), s1)
         && evalCode(exHandler(ex), s1, r)
-        ensures exists p0, dp :: KomInterruptHandlerInvariant(s1, p0, r, dp)
+        ensures KomInterruptHandlerInvariant(s1, r)
     { lemma_PrivModeExceptionHandlersAreCorrect(s0, ex, s1, r); }
 
     // prove the special-case User -> SVC -> FIQ nested interrupt path
@@ -41,7 +41,7 @@ method Main()
         && (exists upc:word :: evalExceptionTaken(s0, ExSVC, upc, s1))
         && evalExceptionTaken(s1, ExFIQ, nondet_word(s1.conf.nondet, NONDET_PC()), s2)
         && evalCode(exHandler(ExFIQ), s2, r)
-        ensures exists p0, dp :: KomInterruptHandlerInvariant(s2, p0, r, dp)
+        ensures exists p0, dp :: KomExceptionHandlerInvariant(s2, p0, r, dp)
     { lemma_SVCFIQNestedExceptionIsCorrect(s0, s1, s2, r); }
 
     printAll();

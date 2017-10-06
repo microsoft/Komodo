@@ -167,7 +167,8 @@ lemma lemma_SVCFIQNestedExceptionIsCorrect(s0:state, s1:state, s2:state, r:state
     ensures mode_of_state(s2) != User && SaneMem(s2.m)
     ensures priv_of_mode(spsr_of_state(s2).m) == PL1
     ensures exists p0, dp:PageNr :: validPageDb(p0) && pageDbCorresponds(s2.m, p0)
-        && finalDispatcher(p0, dp) && KomInterruptHandlerInvariant(s2, p0, r, dp)
+            && finalDispatcher(p0, dp) && KomExceptionHandlerInvariant(s2, p0, r, dp)
+    ensures !evalOBool(r, OCmp(OTstEq, OSP, OConst(1)))
 {
     var pagedb, dispPg := lemma_UsermodeContinuationPreconditionDef(s0);
     lemma_PrivExceptionStateSideEffects(s1, s2, ExFIQ, pagedb, dispPg);
@@ -175,7 +176,6 @@ lemma lemma_SVCFIQNestedExceptionIsCorrect(s0:state, s1:state, s2:state, r:state
     var block := va_CCons(exHandler(ExFIQ), va_CNil());
     assert va_eval(Block(block), s2, r) by { assert evalBlock(block, s2, r); }
     var _, _, _ := va_lemma_interrupt_handler(block, s2, r, ExFIQ, s1, pagedb, dispPg);
-    assert KomInterruptHandlerInvariant(s2, pagedb, r, dispPg);
 }
 
 lemma lemma_PrivModeExceptionHandlersAreCorrect(s0:state, ex:exception, s1:state, r:state)
@@ -189,7 +189,7 @@ lemma lemma_PrivModeExceptionHandlersAreCorrect(s0:state, ex:exception, s1:state
     ensures mode_of_state(s1) != User && SaneMem(s1.m)
     ensures priv_of_mode(spsr_of_state(s1).m) == PL1
     ensures spsr_of_state(s1).m != Supervisor
-    ensures exists p0, dp:PageNr :: KomInterruptHandlerInvariant(s1, p0, r, dp)
+    ensures KomInterruptHandlerInvariant(s1, r)
 {
     var pagedb, dispPg := lemma_UsermodeContinuationPreconditionDef(s0);
     lemma_PrivExceptionStateSideEffects(s0, s1, ex, pagedb, dispPg);
@@ -198,5 +198,5 @@ lemma lemma_PrivModeExceptionHandlersAreCorrect(s0:state, ex:exception, s1:state
     assert va_eval(Block(block), s1, r) by { assert evalBlock(block, s1, r); }
     var dummy:state :| true; // irrelevant
     var _, _, _ := va_lemma_interrupt_handler(block, s1, r, ex, dummy, pagedb, dispPg);
-    assert KomInterruptHandlerInvariant(s1, pagedb, r, dispPg);
+    assert KomInterruptHandlerInvariant(s1, r);
 }
