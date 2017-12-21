@@ -92,11 +92,14 @@ static int test( enum tag_t s, ... )
             }
             case TAG_END:
             {
-                va_end( ap );
-                return 0;
+                goto cleanup;
             }
         }
     }
+
+cleanup:
+    va_end( ap );
+    return 0;
 }
 
 int main( void )
