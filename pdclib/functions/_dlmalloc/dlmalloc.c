@@ -5014,7 +5014,10 @@ static void** ialloc(mstate m,
   if (mem == 0)
     return 0;
 
-  if (PREACTION(m)) return 0;
+  if (PREACTION(m)) {
+    internal_free(m, mem);
+    return 0;
+  }
   p = mem2chunk(mem);
   remainder_size = chunksize(p);
 
@@ -5069,6 +5072,7 @@ static void** ialloc(mstate m,
 #endif /* DEBUG */
 
   POSTACTION(m);
+  internal_free(m, mem);
   return marray;
 }
 
