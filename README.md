@@ -98,7 +98,7 @@ To just run verification:
 
 ## License
 
-Komodo is licensed under the MIT license included in the `LICENSE.txt` file.
+Komodo is licensed under the MIT license included in the `LICENSE` file.
 
 
 ## Contributing
